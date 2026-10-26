@@ -44,3 +44,40 @@ def trigger_paths(lfl_vol_pct):
         assert 0 < p < 100 and v < lfl_vol_pct
     gov = min(out.values(), key=lambda t: t[2])
     return out, gov
+
+
+def setpoints_for(mix, lfl, screens):
+    """Mixture LFL plus one setpoint per caller-supplied percent.
+
+    screens: list of {name, pct, basis} with basis "fuel" or "diluted".
+    An empty list returns the mixture only. This function does not choose pct.
+    It does not return an election or a duration.
+    """
+    fuel = lfl_mix(mix, lfl)
+    diluted = lfl_with_diluent(mix, lfl)
+    rows = []
+    for screen in screens or []:
+        basis = screen.get("basis")
+        if basis == "fuel":
+            base = fuel
+        elif basis == "diluted":
+            base = diluted
+        else:
+            raise ValueError("basis must be fuel or diluted")
+        pct = float(screen["pct"])
+        vol, ppm = setpoint(base, pct)
+        rows.append({
+            "name": screen.get("name") or screen.get("id") or "",
+            "pct": pct,
+            "basis": basis,
+            "lfl_vol_pct": base,
+            "vol_pct": vol,
+            "ppm": ppm,
+        })
+    return {
+        "lfl_fuel_vol_pct": fuel,
+        "lfl_diluted_vol_pct": diluted,
+        "setpoints": rows,
+        "election": None,
+        "duration": None,
+    }

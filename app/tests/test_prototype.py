@@ -289,6 +289,9 @@ class ChatRequestTests(unittest.TestCase):
         self.assertEqual(parse_slash_command("/sample-di"), ("sample-di", ""))
         self.assertEqual(parse_slash_command("  /SAMPLE_DI  "), ("sample-di", ""))
         self.assertEqual(parse_slash_command("/sampledi"), ("sample-di", ""))
+        self.assertEqual(parse_slash_command("/sample-bess"), ("sample-bess", ""))
+        self.assertEqual(parse_slash_command("/sample_bess"), ("sample-bess", ""))
+        self.assertEqual(parse_slash_command("/SAMPLEBESS"), ("sample-bess", ""))
         self.assertEqual(parse_slash_command("/run now"), ("run", "now"))
         self.assertEqual(parse_slash_command("/new Hall zone"), ("new", "Hall zone"))
         self.assertEqual(parse_slash_command("/help"), ("help", ""))
@@ -297,6 +300,7 @@ class ChatRequestTests(unittest.TestCase):
         self.assertIsNone(parse_slash_command("/"))
         help_text = slash_help_text()
         self.assertIn("/sample-di", help_text)
+        self.assertIn("/sample-bess", help_text)
         self.assertIn(DRAFT_SECTION, help_text)
         self.assertIn("ASSUMED", help_text)
         self.assertIn("Ctrl+S", help_text)
@@ -577,16 +581,19 @@ class KeyAndSkillTests(unittest.TestCase):
         """Saturday step 6: the in-repo pack is the index. Corpus search stays unwired."""
         skills_readme = (REPO / "skills" / "README.md").read_text(encoding="utf-8")
         tier_a = _bullet_slugs(skills_readme, "Tier A methods", "Tier B methods")
-        tier_b = _bullet_slugs(skills_readme, "Tier B methods", "Specialist role prompts")
+        tier_b = _bullet_slugs(skills_readme, "Tier B methods", "Pilot method")
+        pilot = _bullet_slugs(skills_readme, "Pilot method", "Specialist role prompts")
         self.assertEqual(len(tier_a), 18)
         self.assertEqual(len(tier_b), 24)
+        self.assertEqual(pilot, ["ess-isolation-venting-and-duration"])
         self.assertEqual(len(set(tier_a + tier_b)), 42)
+        self.assertNotIn(pilot[0], tier_a + tier_b)
         disk = sorted(
             path.name
             for path in (REPO / "skills").iterdir()
             if (path / "SKILL.md").is_file()
         )
-        self.assertEqual(disk, sorted(tier_a + tier_b))
+        self.assertEqual(disk, sorted(tier_a + tier_b + pilot))
 
         corpus_indexed = re.findall(
             r"(?m)^\| `([^`]+\.md)`",
@@ -979,6 +986,11 @@ class ModeBehaviorTests(unittest.TestCase):
             text = path.read_text(encoding="utf-8")
             self.assertNotIn("This mode explores options.", text, path.name)
             self.assertNotIn("This mode writes the draft narrative after a zone tool plan.", text, path.name)
+            self.assertNotIn(
+                "An explosion-control starter quotes the LFL tool plan and does not recompute it.",
+                text,
+                path.name,
+            )
 
     def test_everyday_loop_can_read_a_mode(self):
         from fpfa.claude_client import MODEL_ID
@@ -2502,6 +2514,275 @@ class JobInboxTests(unittest.TestCase):
                 title="late",
                 work=lambda _job_id: None,
             )
+
+
+class BessStarterTests(unittest.TestCase):
+    def setUp(self):
+        _isolate_data()
+        from fpfa.paths import content_root
+
+        self.root = content_root()
+
+    def test_starter_quotes_the_lfl_tool_and_labels_the_open_points(self):
+        from fpfa.bess import BESS_SKILL, run_bess_plan
+        from fpfa.sample_data import EXAMPLE_BESS, EXAMPLE_BESS_BASIS, EXAMPLE_BASIS, EXAMPLE_DI
+        from fpfa.skills_loader import read_starter_cites
+        from fpfa.workflow import run_di_zone
+
+        cites = read_starter_cites(self.root, BESS_SKILL)
+        self.assertEqual([screen["pct"] for screen in cites["screens"]], [25.0, 25.0, 10.0])
+        result = run_bess_plan(self.root, EXAMPLE_BESS, EXAMPLE_BESS_BASIS)
+        tool = result["tools"]["lfl_setpoints"]
+        self.assertIsNone(tool["election"])
+        self.assertIsNone(tool["duration"])
+        self.assertAlmostEqual(tool["lfl_fuel_vol_pct"], 4.11, places=2)
+        self.assertAlmostEqual(tool["lfl_diluted_vol_pct"], 5.26, places=2)
+        self.assertEqual(result["source"], "tool-plan")
+        self.assertEqual(result["mode"], "synthesis")
+        self.assertTrue(result["narrative_checks"]["quotes_all"])
+        narrative = result["narrative"]
+        self.assertIn("Mixture LFL 4.11 vol% is calculated (fuel-only).", narrative)
+        self.assertIn("Mixture LFL with diluent 5.26 vol% is calculated.", narrative)
+        self.assertIn("Edition year ASSUMED unpinned for NFPA 69 8.3.1.", narrative)
+        self.assertIn("NFPA 855-2023 9.6.5.6.7(1)", narrative)
+        self.assertIn("NFPA 855-2023 9.6.5.6.7(4)", narrative)
+        self.assertIn("Explosion-control election ASSUMED:", narrative)
+        self.assertIn("No tool returned an election.", narrative)
+        self.assertIn("Duration ASSUMED: 24 h standby and 2 h alarm", narrative)
+        self.assertIn("No tool returned a duration.", narrative)
+        self.assertIn("does not elect foam", narrative)
+        self.assertIn("use best judgment", narrative)
+        self.assertIn("did not invent gallons or seconds", narrative)
+        self.assertNotIn("21 13 16", narrative)
+        self.assertNotIn("election is calculated", narrative.lower())
+        self.assertNotIn("duration is calculated", narrative.lower())
+        zone = run_di_zone(self.root, EXAMPLE_DI, EXAMPLE_BASIS)
+        self.assertIn("281.3", zone["narrative"])
+        self.assertIn("38.1", zone["narrative"])
+        before = zone["tools"]["zone_trapped_volume"]["zone_gal"]
+        joined = run_bess_plan(
+            self.root, EXAMPLE_BESS, EXAMPLE_BESS_BASIS, zone_result=zone
+        )
+        self.assertIn(
+            "Zone total 281.3 gal and t_total 38.1 s stay on the zone tool plan.",
+            joined["narrative"],
+        )
+        self.assertNotIn("did not invent gallons", joined["narrative"])
+        self.assertEqual(zone["tools"]["zone_trapped_volume"]["zone_gal"], before)
+        self.assertAlmostEqual(before, 281.3, places=1)
+        from fpfa.ui import chat_request_text
+
+        follow = chat_request_text([], {}, {}, "revise the setpoint", zone, "synthesis", joined)
+        self.assertIn("Mixture LFL 4.11 vol% is calculated (fuel-only).", follow)
+        self.assertIn("Governing zone total text: 281.3.", follow)
+        self.assertIn("An explosion-control tool plan already ran.", follow)
+        self.assertIn("No tool returned an election.", follow)
+
+    def test_model_draft_is_kept_only_when_it_quotes_the_tool_plan(self):
+        from fpfa.bess import run_bess_plan
+        from fpfa.everyday import assemble_system
+        from fpfa.sample_data import EXAMPLE_BASIS, EXAMPLE_BESS, EXAMPLE_BESS_BASIS, EXAMPLE_DI
+        from fpfa.workflow import run_di_zone
+
+        zone = run_di_zone(self.root, EXAMPLE_DI, EXAMPLE_BASIS)
+        seen = {}
+
+        def agree(system, user, _tools, _execute):
+            seen["system"] = system
+            seen["user"] = user
+            return {"text": user, "tool_calls": []}
+
+        kept = run_bess_plan(
+            self.root,
+            EXAMPLE_BESS,
+            EXAMPLE_BESS_BASIS,
+            zone_result=zone,
+            narrator=agree,
+            mode="synthesis",
+        )
+        self.assertEqual(kept["source"], "claude")
+        self.assertIn("281.3", kept["narrative"])
+        self.assertIn("38.1", kept["narrative"])
+        self.assertIn("Active mode: synthesis.", seen["user"])
+        self.assertNotIn("The desktop starter reads the starter block", seen["user"])
+        self.assertIn(
+            "An explosion-control starter quotes the LFL tool plan and does not recompute it.",
+            seen["system"],
+        )
+        self.assertEqual(seen["system"], assemble_system(self.root, "synthesis"))
+        self.assertNotIn("8.3.1", seen["system"])
+
+        def disagree(_system, _user, _tools, _execute):
+            return {
+                "text": "Mixture LFL is 9.99 vol%. Zone total 999.0 gal. t_total 1.0 s.",
+                "tool_calls": [],
+            }
+
+        rejected = run_bess_plan(
+            self.root,
+            EXAMPLE_BESS,
+            EXAMPLE_BESS_BASIS,
+            zone_result=zone,
+            narrator=disagree,
+        )
+        self.assertEqual(rejected["source"], "tool-plan")
+        head, _, tail = rejected["narrative"].partition("Model draft")
+        self.assertIn("4.11", head)
+        self.assertIn("281.3", head)
+        self.assertIn("38.1", head)
+        self.assertNotIn("999.0", head)
+        self.assertIn("9.99", tail)
+        self.assertTrue(any("did not quote the LFL tool plan" in item for item in rejected["warnings"]))
+
+    def test_method_stays_in_the_skill_file(self):
+        from fpfa.skills_loader import read_starter_cites
+
+        body = (REPO / "skills" / "ess-isolation-venting-and-duration" / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("The desktop starter reads the starter block in this file", body)
+        cites = read_starter_cites(self.root, "ess-isolation-venting-and-duration")
+        self.assertEqual(cites["election"]["value"], "combustible concentration reduction")
+        self.assertIn("24 h standby", cites["duration"]["value"])
+        banned = ("8.3.1", "9.6.5.6.7", "NFPA 69", "The desktop starter reads the starter block", "does not elect foam")
+        for path in (REPO / "app" / "fpfa").rglob("*.py"):
+            text = path.read_text(encoding="utf-8")
+            for token in banned:
+                self.assertNotIn(token, text, path.name)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            folder = root / "skills" / "ess-isolation-venting-and-duration"
+            folder.mkdir(parents=True)
+            (folder / "SKILL.md").write_text("---\nname: x\ndescription: y\n---\n\nno block\n", encoding="utf-8")
+            with self.assertRaises(ValueError):
+                read_starter_cites(root, "ess-isolation-venting-and-duration")
+            (folder / "SKILL.md").write_text(
+                "---\nname: x\ndescription: y\n---\n\n```starter\n"
+                "screen: only\nbasis: diluted\nsection: somewhere\n"
+                "election: a method\nduration: some hours\n```\n",
+                encoding="utf-8",
+            )
+            with self.assertRaises(ValueError):
+                read_starter_cites(root, "ess-isolation-venting-and-duration")
+
+    def test_sample_bess_slash_and_chip_run_the_starter(self):
+        if not os.environ.get("DISPLAY"):
+            self.skipTest("no display")
+        import tkinter as tk
+
+        from fpfa.projects import load_project
+        from fpfa.ui import App
+
+        root = tk.Tk()
+        try:
+            app = App(root)
+            root.update()
+            app.chat_entry.insert(0, "/mode calculator")
+            app.send_chat()
+            app.density.set("not-a-number")
+            old_id = app.project["id"]
+            app.chat_entry.insert(0, "/sample-bess")
+            app.send_chat()
+            chat = app.chat_view.get("1.0", "end")
+            self.assertIn("/sample-bess", chat)
+            self.assertIn("Mixture LFL 4.11 vol% is calculated (fuel-only).", chat)
+            self.assertIn("Explosion-control election ASSUMED:", chat)
+            self.assertIn("Duration ASSUMED:", chat)
+            self.assertIn("Edition year ASSUMED unpinned", chat)
+            self.assertIn("| bess |", chat)
+            self.assertEqual(app.mode_slug.get(), "synthesis")
+            self.assertEqual(app.project["mode"], "synthesis")
+            self.assertEqual(app.project["name"], "Sample Li-ion BESS room")
+            self.assertIsNone(app.project.get("last_run"))
+            self.assertEqual(app.project["bess_run"]["source"], "tool-plan")
+            self.assertEqual(app.project["bess_run"]["kind"], "bess")
+            self.assertEqual(app.pipes.get_children(), ())
+            self.assertIn("NFPA 69 8.3.1", app.results.get("1.0", "end"))
+            saved_old = load_project(old_id)
+            self.assertEqual(saved_old["mode"], "calculator")
+            self.assertNotIn("not-a-number", json.dumps(saved_old.get("di")))
+            app.chat_entry.insert(0, "still typing")
+            self.assertEqual(app.chat_entry.get(), "still typing")
+            kinds = [job.kind for job in app.jobs.snapshot()]
+            self.assertIn("bess", kinds)
+        finally:
+            root.destroy()
+
+        root = tk.Tk()
+        try:
+            app = App(root)
+            root.update()
+            app.sample_bess_button.invoke()
+            chat = app.chat_view.get("1.0", "end")
+            self.assertIn("/sample-bess", chat)
+            self.assertIn("4.11", chat)
+            self.assertEqual(app.project["mode"], "synthesis")
+            self.assertIsNone(app.project.get("last_run"))
+        finally:
+            root.destroy()
+
+    def test_bess_job_that_calls_claude_stays_off_the_ui_thread(self):
+        if not os.environ.get("DISPLAY"):
+            self.skipTest("no display")
+        import threading
+        import time
+        import tkinter as tk
+        from unittest.mock import patch
+
+        from fpfa.keystore import save_api_key
+        from fpfa.ui import App
+
+        save_api_key("sk-ant-local-test")
+        started = threading.Event()
+        release = threading.Event()
+        seen = []
+
+        class Blocking:
+            def __init__(self, _key):
+                pass
+
+            def create(self, **kwargs):
+                seen.append(kwargs)
+                started.set()
+                release.wait(3)
+                return SimpleNamespace(
+                    stop_reason="end_turn",
+                    content=[SimpleNamespace(type="text", text="short draft without the tool figures")],
+                )
+
+        root = tk.Tk()
+        try:
+            app = App(root)
+            root.update()
+            app.ask_claude.set(True)
+            app.chat_entry.insert(0, "/sample-bess")
+            with patch("fpfa.ui.AnthropicMessages", Blocking):
+                app.send_chat()
+                self.assertTrue(started.wait(2))
+                self.assertNotIn("4.11", app.chat_view.get("1.0", "end"))
+                app.chat_entry.insert(0, "still typing")
+                self.assertEqual(app.chat_entry.get(), "still typing")
+                app.chat_entry.delete(0, "end")
+                self.assertEqual(seen[0]["model"], "claude-opus-5-5")
+                self.assertNotIn("tool_choice", seen[0])
+                self.assertNotIn("temperature", seen[0])
+                self.assertNotIn("top_p", seen[0])
+                self.assertNotIn("top_k", seen[0])
+                self.assertNotIn("thinking", seen[0])
+                release.set()
+                deadline = time.time() + 2
+                while time.time() < deadline:
+                    app._poll()
+                    if "4.11" in app.chat_view.get("1.0", "end"):
+                        break
+                    time.sleep(0.02)
+            chat = app.chat_view.get("1.0", "end")
+            self.assertIn("4.11", chat)
+            self.assertIn("| bess |", chat)
+            self.assertIn("did not quote the LFL tool plan", app.results.get("1.0", "end"))
+            self.assertIsNone(app.project.get("last_run"))
+            self.assertEqual(app.project["bess_run"]["source"], "tool-plan")
+        finally:
+            release.set()
+            root.destroy()
 
 
 if __name__ == "__main__":

@@ -21,7 +21,7 @@ The delivery-time functions are an optimistic screen (trip time plus volume over
 
 ## `calcs/fa`
 
-`lib/` holds the fire-alarm modules (15 in this pack: airflow, audibility, battery, voltage drop, intelligibility, ASD, Class N, separation, and the rest). A curation note described 16 libraries; the non-backup set that was moved is these 15. Tests live in `tests/` and run with:
+`lib/` holds the fire-alarm modules (15 in this pack: airflow, audibility, battery, voltage drop, intelligibility, ASD, Class N, separation, and the rest). A curation note described 16 libraries; the non-backup set that was moved is these 15. `lib/lfl.py` computes a mixture LFL and a setpoint at a caller-supplied percent. `setpoints_for` does not choose a code threshold and does not return an election or a duration. `trigger_paths` still applies the two NFPA 855 percents already in that file. Do not add an NFPA 69 threshold there. Tests live in `tests/` and run with:
 
 ```bash
 python -m unittest discover -s tests

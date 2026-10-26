@@ -43,3 +43,45 @@ EXAMPLE_DI = {
         {"role": "main", "nps": "6", "schedule": "sch10", "length_ft": 48},
     ],
 }
+
+# Generic Li-ion off-gas sample for the explosion-control starter.
+# Component LFL values are inputs. The mixture LFL is calculated by lfl.py.
+# Percents and section cites stay in the skill starter block.
+EXAMPLE_BESS_BASIS = {
+    "ahj": "Local fire marshal (sample)",
+    "nfpa_13": "2025",
+    "nfpa_72": "2025",
+    "insurer": "FM",
+    "hazard_notes": (
+        "Sample Li-ion BESS room. Explosion-control starter. "
+        "Numbers are for the prototype workflow, not a constructed building."
+    ),
+}
+
+EXAMPLE_BESS = {
+    "room_id": "BESS-1",
+    "composition_assumed": True,
+    "composition_why": "generic sample mix, not a cell test report",
+    "mix": {
+        "H2": 58.0,
+        "CO": 9.0,
+        "CO2": 22.0,
+        "CH4": 5.5,
+        "C2H4": 2.5,
+        "C2H6": 1.2,
+        "C3H6": 0.6,
+        "EMC": 0.9,
+        "DMC": 0.3,
+    },
+    "lfl": {
+        "H2": 4.0,
+        "CO": 10.9,
+        "CO2": None,
+        "CH4": 4.4,
+        "C2H4": 2.4,
+        "C2H6": 2.4,
+        "C3H6": 1.8,
+        "EMC": 2.0,
+        "DMC": 3.1,
+    },
+}

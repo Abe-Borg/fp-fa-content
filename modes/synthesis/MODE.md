@@ -19,4 +19,6 @@ A sentence that is the designer's judgment, and that no tool returned, is labele
 
 The double-interlock draft section string is 21 13 19. Do not put another sprinkler section number on this export.
 
+An explosion-control starter quotes the LFL tool plan and does not recompute it. Mixture LFL and setpoints are calculated. An election or a duration the tool did not return is ASSUMED. Do not describe that ASSUMED value as calculated. When the request names a zone total and a t_total, quote those texts. The zone tool plan still governs gallons and seconds when the narrative disagrees. This starter does not change section 21 13 19.
+
 Read spec-draft, and read the sprinkler or releasing role when that part of the draft needs it. Read the skill you apply. Do not name a catalog number. The narrative is a draft for the engineer of record to verify.
