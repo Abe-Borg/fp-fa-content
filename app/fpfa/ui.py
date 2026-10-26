@@ -311,11 +311,19 @@ class App:
     def _poll(self) -> None:
         try:
             while True:
-                callback = self.queue.get_nowait()
-                callback()
-        except queue.Empty:
-            pass
-        self.root.after(100, self._poll)
+                try:
+                    callback = self.queue.get_nowait()
+                except queue.Empty:
+                    break
+                try:
+                    callback()
+                except Exception as exc:
+                    self.status.set("Update failed. " + safe_error(exc))
+        finally:
+            try:
+                self.root.after(100, self._poll)
+            except tk.TclError:
+                pass
 
     def _sync_claude_default(self) -> None:
         self.ask_claude.set(bool(load_api_key()))
@@ -485,6 +493,15 @@ class App:
         project["di"] = self.collect_di()
         project["chat"] = self.chat_log
 
+    def _save_form_or_chat(self, project: dict) -> str | None:
+        """Write the form onto the project. A bad number does not drop the chat or the run."""
+        try:
+            self._write_form(project)
+        except ValueError as exc:
+            project["chat"] = self.chat_log
+            return str(exc)
+        return None
+
     def save_current(self) -> None:
         if not self.project:
             messagebox.showinfo("Save", "Create or open a project first.")
@@ -639,7 +656,7 @@ class App:
             return
         if still_here:
             self.project["last_run"] = result
-            self._write_form(self.project)
+            form_error = self._save_form_or_chat(self.project)
             save_project(self.project)
             self._show_result(result)
             self.tabs.select(2)
@@ -653,7 +670,9 @@ class App:
             save_project(project)
             self.status.set("DI zone finished on another project. Open it to see the results.")
             return
-        if result["source"] == "claude":
+        if form_error:
+            self.status.set(form_error)
+        elif result["source"] == "claude":
             self.status.set(f"Tool plan plus {MODEL_ID}. Tables use the tool plan.")
         else:
             note = "Tool plan only."
@@ -787,9 +806,9 @@ class App:
     def _finish_chat(self, origin_id: str, reply: str) -> None:
         if self.project is not None and self.project.get("id") == origin_id:
             self._append_chat("assistant", reply)
-            self._write_form(self.project)
+            form_error = self._save_form_or_chat(self.project)
             save_project(self.project)
-            self.status.set("Chat updated.")
+            self.status.set(form_error or "Chat updated.")
             return
         try:
             project = load_project(origin_id)

@@ -34,7 +34,10 @@ def write_docx(path: Path | str, project: dict, result: dict) -> Path:
     nitrogen = tools["nitrogen_gate"]
     density = tools["density_area"]
     hose = tools["hose_duration"]
-    basis = project.get("basis") or result.get("basis") or {}
+    if result.get("basis") is not None:
+        basis = result["basis"]
+    else:
+        basis = project.get("basis") or {}
     di = result.get("inputs") or project.get("di") or {}
 
     doc = Document()
@@ -51,6 +54,7 @@ def write_docx(path: Path | str, project: dict, result: dict) -> Path:
     )
 
     doc.add_heading("Basis of design", level=2)
+    doc.add_paragraph("Recorded with this calculation.")
     doc.add_paragraph(
         f"AHJ: {basis.get('ahj') or '—'}. "
         f"NFPA 13: {basis.get('nfpa_13') or '—'}. "

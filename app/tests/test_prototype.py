@@ -116,6 +116,41 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn("Design Hazen-Williams C is 100", text)
         self.assertNotIn("sk-ant-", text)
 
+    def test_docx_uses_the_basis_stored_on_the_run(self):
+        from docx import Document
+
+        from fpfa.spec_docx import write_docx
+
+        result = self.run(self.root, self.di, self.basis)
+        result["basis"] = {
+            "ahj": "Authority on the run",
+            "nfpa_13": "2025",
+            "nfpa_72": "2025",
+            "insurer": "FM",
+            "hazard_notes": "Notes from the run.",
+        }
+        project = {
+            "name": "Sample data hall DI zone",
+            "basis": {
+                "ahj": "Authority edited later",
+                "nfpa_13": "2019",
+                "nfpa_72": "2019",
+                "insurer": "Later insurer",
+                "hazard_notes": "Notes edited after the run.",
+            },
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "section.docx"
+            write_docx(path, project, result)
+            doc = Document(path)
+            text = "\n".join(paragraph.text for paragraph in doc.paragraphs)
+        self.assertIn("Authority on the run", text)
+        self.assertIn("Insurer: FM", text)
+        self.assertIn("Notes from the run.", text)
+        self.assertNotIn("Authority edited later", text)
+        self.assertNotIn("Later insurer", text)
+        self.assertNotIn("Notes edited after the run.", text)
+
     def test_nfpa_exemption_uses_zone_total_not_pipe_only(self):
         import math
 
@@ -369,6 +404,64 @@ class UiSmokeTests(unittest.TestCase):
             self.assertEqual(saved[-1]["text"], "El/El holds the prime with the solenoid.")
             self.assertEqual(app.chat_log[-1]["text"], "unrelated")
             self.assertNotIn("solenoid", app.chat_view.get("1.0", "end"))
+        finally:
+            root.destroy()
+
+    def test_poll_continues_after_a_callback_raises(self):
+        if not os.environ.get("DISPLAY"):
+            self.skipTest("no display")
+        _isolate_data()
+        import tkinter as tk
+
+        from fpfa.projects import new_project
+        from fpfa.ui import App
+
+        root = tk.Tk()
+        try:
+            app = App(root)
+            for after_id in list(root.tk.call("after", "info")):
+                root.after_cancel(after_id)
+            seen = []
+
+            def bad():
+                seen.append("bad")
+                raise ValueError("density must be a number")
+
+            def good():
+                seen.append("good")
+
+            app.queue.put(bad)
+            app.queue.put(good)
+            app._poll()
+            self.assertEqual(seen, ["bad", "good"])
+            self.assertIn("ValueError", app.status.get())
+            self.assertTrue(root.tk.call("after", "info"))
+
+            origin = new_project("Poll job")
+            app.open_project(origin["id"])
+            app.density.set("-")
+            result = {
+                "source": "tool-plan",
+                "narrative": "KEPT",
+                "warnings": [],
+                "flags": [],
+                "basis": {"ahj": "Kept AHJ", "insurer": "FM", "nfpa_13": "2025", "nfpa_72": "2025"},
+                "tools": {
+                    "zone_trapped_volume": {"zone_gal": 10.0},
+                    "di_trip_to_water": {"t_total_s": 12.0, "passes_screen": True},
+                    "elect_di_trim": {"family": "El/El"},
+                },
+            }
+            for after_id in list(root.tk.call("after", "info")):
+                root.after_cancel(after_id)
+            seen.clear()
+            app.queue.put(lambda: app._finish_run(origin["id"], result, None))
+            app.queue.put(lambda: seen.append("after-run"))
+            app._poll()
+            self.assertEqual(seen, ["after-run"])
+            self.assertTrue(root.tk.call("after", "info"))
+            self.assertEqual(app.project["last_run"]["narrative"], "KEPT")
+            self.assertIn("KEPT", app.results.get("1.0", "end"))
         finally:
             root.destroy()
 
