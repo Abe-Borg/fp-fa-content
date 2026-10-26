@@ -27,6 +27,33 @@ Tier A methods in this folder:
 - `containment-ceiling-and-obstruction-coverage`
 - `blind-claim-check`
 
+Tier B methods in this folder (v1, after Tier A). Tier C is not in this pack:
+
+- `hydrant-supply-curve`
+- `pump-envelope`
+- `fire-pump-controller-configuration-and-supervision`
+- `fp-seismic-bracing-and-restraint`
+- `campus-looped-main-sizing`
+- `needed-fire-flow-method-election`
+- `standpipe-class-i-election-and-demand`
+- `freeze-heat-trace-fp-piping`
+- `itm-design-for-testability`
+- `commissioning-ist-acceptance-packet`
+- `fa-integrated-systems-test-matrix`
+- `fa-nac-voltage-drop-check`
+- `fa-speaker-circuit-loss-check`
+- `fa-nec-table-8-wire-sizing`
+- `fa-pathway-survivability-election`
+- `fa-code-edition-delta-check`
+- `fa-spot-smoke-spacing-airflow-and-beams`
+- `fa-supervising-station-signal-schedule`
+- `fa-voice-evac-ads-audibility-screen`
+- `fa-hvac-door-and-lock-interfaces`
+- `fa-elevator-recall-and-shunt-trip`
+- `power-isolation-disconnect-control`
+- `fire-area-compartmentation-schedule`
+- `combustion-air-and-hall-free-area`
+
 The double-interlock zone screen asks for these slugs when they are present:
 
 - `sprinkler-system-volume-takeoff`
