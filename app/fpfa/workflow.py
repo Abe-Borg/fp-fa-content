@@ -12,8 +12,10 @@ from pathlib import Path
 from typing import Any, Callable
 
 from fpfa.calc_tools import REQUIRED_DI_TOOLS, SCHEMAS, ToolSession
-from fpfa.claude_client import MODEL_ID, SYSTEM_PROMPT, safe_error
-from fpfa.skills_loader import list_skills, spec_notes
+from fpfa.claude_client import MODEL_ID, safe_error
+from fpfa.everyday import EVERYDAY_ROLE, SPECIALIST_ROLES, assemble_system
+from fpfa.roles_loader import list_roles
+from fpfa.skills_loader import list_skills
 
 # Methods this workflow asks the model to read. Bodies stay in skills/<slug>/SKILL.md.
 DI_SKILL_SLUGS = [
@@ -32,17 +34,8 @@ def fmt1(value: Any) -> str:
 
 
 def system_prompt(content_root: Path) -> str:
-    lines = [SYSTEM_PROMPT, "", "Skills in this content pack:"]
-    for skill in list_skills(content_root):
-        lines.append(f"- {skill['slug']}: {skill['description']}")
-    notes = spec_notes(content_root)
-    if notes:
-        lines.append("")
-        lines.append("Spec notes from the content pack. They are draft language. Verify before issuing.")
-        for note in notes:
-            lines.append(f"## {note['name']}")
-            lines.append(note["text"])
-    return "\n".join(lines)
+    """Shell and indexes from the content pack. Specialist bodies stay in ROLE.md."""
+    return assemble_system(content_root)
 
 
 def _blank(value: Any) -> bool:
@@ -245,6 +238,27 @@ def form_assumption_lines(trim_text: str, basis: str, content_root: Path) -> lis
     return [trim_line, limit_line]
 
 
+def govern_note(result: dict | None) -> str:
+    """Remind a later chat turn that the tool plan still owns the tables and the docx."""
+    if not isinstance(result, dict):
+        return ""
+    tools = result.get("tools") or {}
+    volume = tools.get("zone_trapped_volume") or {}
+    trip = tools.get("di_trip_to_water") or {}
+    if "zone_gal" not in volume or "t_total_s" not in trip:
+        return ""
+    return "\n".join([
+        "A tool plan already ran for this zone. Tables and the docx use that plan when a narrative disagrees.",
+        f"Governing zone total text: {fmt1(volume['zone_gal'])}.",
+        f"Governing t_total text: {fmt1(trip['t_total_s'])}.",
+        trim_assumption_text(volume),
+        screen_limit_assumption_text(trip),
+        "Do not replace those figures with a number you computed.",
+        "A delivery time from dry_delivery_screen or di_trip_to_water is an optimistic screen, "
+        "not a listed water-delivery-time calculation.",
+    ])
+
+
 def template_narrative(di: dict, tools: dict[str, Any]) -> str:
     volume = tools["zone_trapped_volume"]
     screen = tools["dry_delivery_screen"]
@@ -353,6 +367,8 @@ def _user_message(
     """Ask Claude to quote the tool plan. The plan already ran; its figures govern."""
     known = {item["slug"] for item in list_skills(content_root)}
     present = [slug for slug in DI_SKILL_SLUGS if slug in known]
+    known_roles = {item["slug"] for item in list_roles(content_root)}
+    present_roles = [slug for slug in SPECIALIST_ROLES if slug in known_roles]
     volume = tools["zone_trapped_volume"]
     trip = tools["di_trip_to_water"]
     governing = {
@@ -367,11 +383,13 @@ def _user_message(
         "Pipe gallons and t_total are calculated. "
         "If the notes below say ASSUMED for trim or the screen limit, write ASSUMED next to that figure. "
         "Do not describe an ASSUMED value as calculated.\n"
+        "Read a listed role with read_role before you answer as that specialist. "
         "Read a listed skill with read_skill when you apply that method. "
         "You can call several tools in one reply. "
         "If you call a calc tool, use tool_plan_inputs. Do not invent gallons, seconds, gpm, or scfm.\n\n"
         + json.dumps(
             {
+                "roles_to_read": present_roles,
                 "skills_to_read": present,
                 "basis": basis,
                 "inputs": di,
@@ -406,6 +424,10 @@ def run_di_zone(
     missing = [slug for slug in DI_SKILL_SLUGS if slug not in known]
     if missing:
         warnings.append("Content pack is missing skills: " + ", ".join(missing))
+    known_roles = {item["slug"] for item in list_roles(content_root)}
+    missing_roles = [slug for slug in (EVERYDAY_ROLE, *SPECIALIST_ROLES) if slug not in known_roles]
+    if missing_roles:
+        warnings.append("Content pack is missing roles: " + ", ".join(missing_roles))
     if narrator is not None:
         model = MODEL_ID
         try:
