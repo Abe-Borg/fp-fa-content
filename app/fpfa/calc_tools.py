@@ -7,6 +7,7 @@ import json
 import sys
 from pathlib import Path
 
+from fpfa.roles_loader import list_roles, read_role
 from fpfa.skills_loader import list_skills, read_skill
 
 _MODULES: dict[str, object] = {}
@@ -40,6 +41,16 @@ SCHEMAS = [
     {
         "name": "read_skill",
         "description": "Return the full SKILL.md for one slug. Use this instead of inventing a method.",
+        "input_schema": _obj({"slug": {"type": "string"}}, ["slug"]),
+    },
+    {
+        "name": "list_roles",
+        "description": "List specialist roles in the content pack (roles/<slug>/ROLE.md). Read a role before you apply it.",
+        "input_schema": _obj({}, []),
+    },
+    {
+        "name": "read_role",
+        "description": "Return the full ROLE.md for one specialist slug. Use this instead of inventing a role.",
         "input_schema": _obj({"slug": {"type": "string"}}, ["slug"]),
     },
     {
@@ -187,6 +198,13 @@ class ToolSession:
             return {"skills": list_skills(self.root)}
         if name == "read_skill":
             text = read_skill(self.root, str(args.get("slug", "")))
+            if len(text) > 100_000:
+                text = text[:100_000] + "\n\n[truncated]"
+            return {"slug": args.get("slug"), "text": text}
+        if name == "list_roles":
+            return {"roles": list_roles(self.root)}
+        if name == "read_role":
+            text = read_role(self.root, str(args.get("slug", "")))
             if len(text) > 100_000:
                 text = text[:100_000] + "\n\n[truncated]"
             return {"slug": args.get("slug"), "text": text}

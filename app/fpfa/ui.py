@@ -17,8 +17,9 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
 from fpfa import sample_data
-from fpfa.calc_tools import SCHEMAS, ToolSession
+from fpfa.calc_tools import ToolSession
 from fpfa.claude_client import MODEL_ID, AnthropicMessages, run_tool_loop, safe_error
+from fpfa.everyday import run_everyday
 from fpfa.keystore import clear_api_key, key_status, key_storage_help, load_api_key, save_api_key
 from fpfa.paths import content_root, read_config, write_config
 from fpfa.projects import delete_project, list_projects, load_project, new_project, save_project
@@ -26,9 +27,9 @@ from fpfa.spec_docx import DRAFT_SECTION, write_docx
 from fpfa.workflow import (
     form_assumption_lines,
     format_transcript,
+    govern_note,
     run_di_zone,
     screen_limit_assumption_text,
-    system_prompt,
     trim_assumption_text,
 )
 
@@ -50,6 +51,21 @@ def format_chat_request(prior_turns: list[dict], basis: dict, di: dict, latest: 
     )
 
 
+def chat_request_text(
+    prior_turns: list[dict],
+    basis: dict,
+    di: dict,
+    latest: str,
+    last_run: dict | None = None,
+) -> str:
+    """Everyday-path request. A finished tool plan is repeated so chat cannot replace it."""
+    text = format_chat_request(prior_turns, basis, di, latest)
+    note = govern_note(last_run)
+    if note:
+        return text + "\n\n" + note
+    return text
+
+
 _SLASH_ALIASES = {
     "sample_di": "sample-di",
     "sampledi": "sample-di",
@@ -63,7 +79,9 @@ THREAD_HINT = (
     "Ctrl+S saves the open job. Closing the window saves it too.\n"
     "Settings holds your Anthropic key. Export writes draft Section 21 13 19 after a run.\n"
     "Blank trim and the screen-limit seconds stay labeled ASSUMED. "
-    "Pipe gallons and trip time come from the calc tools."
+    "Pipe gallons and trip time come from the calc tools.\n"
+    "A typed question uses the everyday path. Specialist roles and skills are files "
+    "in the content pack, and numbers come from the calc tools."
 )
 
 
@@ -95,7 +113,9 @@ def slash_help_text() -> str:
         "Settings holds your Anthropic key. Export writes draft Section "
         f"{DRAFT_SECTION} after a run.\n"
         "Blank trim and the screen-limit seconds stay labeled ASSUMED. "
-        "Pipe gallons and trip time come from the calc tools."
+        "Pipe gallons and trip time come from the calc tools.\n"
+        "A typed question uses the everyday path. Specialist roles and skills are files "
+        "in the content pack, and numbers come from the calc tools."
     )
 
 
@@ -1179,7 +1199,7 @@ class App:
                 "This message uses the last saved zone. " + str(exc)
             )
         prior = [dict(turn) for turn in self.chat_log[:-1]]
-        request = format_chat_request(prior, basis, di, text)
+        request = chat_request_text(prior, basis, di, text, self.project.get("last_run"))
         if form_note:
             request = form_note + "\n\n" + request
 
@@ -1187,16 +1207,7 @@ class App:
             try:
                 pack = content_root()
                 client = AnthropicMessages(key)
-                session = ToolSession(pack)
-                out = run_tool_loop(
-                    client.create,
-                    system=system_prompt(pack),
-                    user_text=request,
-                    tools=SCHEMAS,
-                    execute=session.execute,
-                    required=[],
-                    max_tokens=16000,
-                )
+                out = run_everyday(pack, client.create, request)
                 reply = out.get("text") or "(Claude returned no text.)"
             except Exception as exc:
                 reply = safe_error(exc)
@@ -1209,7 +1220,11 @@ class App:
             self._append_chat("assistant", reply)
             form_error = self._save_form_or_chat(self.project)
             save_project(self.project)
-            self.status.set(form_error or "Chat updated.")
+            if self.project.get("last_run"):
+                note = f"Chat updated. Tables and Section {DRAFT_SECTION} stay on the tool plan."
+            else:
+                note = "Chat updated."
+            self.status.set(form_error or note)
             return
         try:
             project = load_project(origin_id)
@@ -1286,7 +1301,10 @@ class App:
         ttk.Button(row, text="Clear key", command=clear).pack(side="left", padx=6)
         ttk.Button(row, text="Check key", command=check).pack(side="left")
 
-        ttk.Label(frame, text="Content pack folder (skills/ and calcs/ at the top level)").pack(anchor="w", pady=(16, 4))
+        ttk.Label(
+            frame,
+            text="Content pack folder (skills/, roles/, and calcs/ at the top level)",
+        ).pack(anchor="w", pady=(16, 4))
         try:
             current = str(content_root())
         except FileNotFoundError:

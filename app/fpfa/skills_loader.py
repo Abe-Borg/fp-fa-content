@@ -55,6 +55,11 @@ def spec_notes(content_root: Path, limit: int = 3, chars: int = 4000) -> list[di
     return notes
 
 
+def frontmatter(text: str) -> dict[str, str]:
+    """name and description from a SKILL.md or ROLE.md frontmatter block."""
+    return _frontmatter(text)
+
+
 def _frontmatter(text: str) -> dict[str, str]:
     if not text.startswith("---"):
         return {}

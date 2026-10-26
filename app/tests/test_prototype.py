@@ -559,7 +559,7 @@ class KeyAndSkillTests(unittest.TestCase):
             r"\bAbe\b|DC FP Lead|stay dark|Hyperion|Abraham|\bNovva\b|NEEDS PE REVIEW|/workspace/"
         )
         hits = []
-        for folder in (REPO / "skills", REPO / "calcs"):
+        for folder in (REPO / "skills", REPO / "calcs", REPO / "roles"):
             for path in folder.rglob("*"):
                 if path.suffix.lower() not in {".py", ".md"} or "__pycache__" in path.parts:
                     continue
@@ -578,6 +578,189 @@ class KeyAndSkillTests(unittest.TestCase):
             self.assertNotIn(banned, text, path.name)
             if path.name == "spec_docx.py":
                 self.assertIn("21 13 19", text)
+        for path in (REPO / "roles").rglob("*.md"):
+            text = path.read_text(encoding="utf-8")
+            self.assertNotIn(banned, text, path.name)
+
+
+class EverydayPathTests(unittest.TestCase):
+    def setUp(self):
+        _isolate_data()
+        from fpfa.paths import content_root
+
+        self.root = content_root()
+
+    def test_roles_load_like_skills(self):
+        from fpfa.roles_loader import list_roles, read_role
+
+        slugs = [item["slug"] for item in list_roles(self.root)]
+        self.assertEqual(slugs, ["everyday", "fa-releasing", "fp-sprinkler", "spec-draft"])
+        text = read_role(self.root, "fp-sprinkler")
+        self.assertIn("Pipe-only volume is not the exemption volume.", text)
+        self.assertIn("ASSUMED", text)
+        with self.assertRaises(ValueError):
+            read_role(self.root, "../skills/occupancy-hazard-fork/SKILL.md")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            folder = root / "roles" / "fp-sprinkler"
+            folder.mkdir(parents=True)
+            (folder / "ROLE.md").write_text(
+                "---\nname: FP\ndescription: sprinkler specialist\n---\n\nBODY-MARKER\n",
+                encoding="utf-8",
+            )
+            (root / "roles" / "README.md").write_text("guide, not a role\n", encoding="utf-8")
+            found = list_roles(root)
+            self.assertEqual([item["slug"] for item in found], ["fp-sprinkler"])
+            self.assertEqual(found[0]["description"], "sprinkler specialist")
+            self.assertIn("BODY-MARKER", read_role(root, "fp-sprinkler"))
+
+    def test_system_prompt_points_at_role_files(self):
+        from fpfa.everyday import assemble_system
+        from fpfa.workflow import system_prompt
+
+        marker = "Call list_roles and read_role before you answer as that specialist."
+        body_only = "Pipe-only volume is not the exemption volume."
+        releasing = "Do not invent a releasing row the truth-table tool did not return."
+        everyday = (REPO / "roles" / "everyday" / "ROLE.md").read_text(encoding="utf-8")
+        self.assertIn(marker, everyday)
+        system = system_prompt(self.root)
+        self.assertEqual(system, assemble_system(self.root))
+        self.assertIn(marker, system)
+        self.assertIn("ASSUMED", system)
+        self.assertIn("- fp-sprinkler:", system)
+        self.assertIn("- fa-releasing:", system)
+        self.assertIn("- spec-draft:", system)
+        self.assertIn("sprinkler-system-volume-takeoff", system)
+        self.assertNotIn(body_only, system)
+        self.assertNotIn(releasing, system)
+        for path in (REPO / "app" / "fpfa").rglob("*.py"):
+            text = path.read_text(encoding="utf-8")
+            self.assertNotIn(marker, text, path.name)
+            self.assertNotIn(body_only, text, path.name)
+            self.assertNotIn(releasing, text, path.name)
+        self.assertNotIn("SYSTEM_PROMPT", (REPO / "app" / "fpfa" / "claude_client.py").read_text(encoding="utf-8"))
+
+    def test_changed_role_file_is_what_the_prompt_uses(self):
+        from fpfa.everyday import assemble_system
+        from fpfa.roles_loader import read_role
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "skills").mkdir()
+            everyday = root / "roles" / "everyday"
+            everyday.mkdir(parents=True)
+            (everyday / "ROLE.md").write_text(
+                "---\nname: Everyday\ndescription: shell\n---\n\nSHELL-SENTENCE about ASSUMED trim.\n",
+                encoding="utf-8",
+            )
+            specialist = root / "roles" / "fp-sprinkler"
+            specialist.mkdir()
+            (specialist / "ROLE.md").write_text(
+                "---\nname: FP\ndescription: sprinkler specialist for wet dry and DI\n---\n\n"
+                "SPECIALIST-BODY-NOT-INLINED\n",
+                encoding="utf-8",
+            )
+            system = assemble_system(root)
+            self.assertIn("SHELL-SENTENCE about ASSUMED trim.", system)
+            self.assertIn("fp-sprinkler", system)
+            self.assertIn("sprinkler specialist for wet dry and DI", system)
+            self.assertNotIn("SPECIALIST-BODY-NOT-INLINED", system)
+            self.assertIn("SPECIALIST-BODY-NOT-INLINED", read_role(root, "fp-sprinkler"))
+            (root / "roles" / "everyday" / "ROLE.md").unlink()
+            with self.assertRaises(FileNotFoundError):
+                assemble_system(root)
+
+    def test_everyday_loop_calls_calcs_and_read_role(self):
+        from fpfa.calc_tools import ToolSession
+        from fpfa.claude_client import MODEL_ID
+        from fpfa.everyday import run_everyday
+
+        class Block:
+            def __init__(self, **kwargs):
+                self.__dict__.update(kwargs)
+
+            def model_dump(self, exclude_none=True):
+                return {key: value for key, value in self.__dict__.items() if value is not None}
+
+        args = {"segments": [{"d_in": 1.049, "length_ft": 10}]}
+        direct = ToolSession(self.root).execute("zone_trapped_volume", args)
+        script = [
+            SimpleNamespace(stop_reason="tool_use", content=[
+                Block(type="tool_use", id="toolu_role", name="read_role", input={"slug": "fp-sprinkler"}),
+            ]),
+            SimpleNamespace(stop_reason="tool_use", content=[
+                Block(type="tool_use", id="toolu_vol", name="zone_trapped_volume", input=args),
+            ]),
+            SimpleNamespace(stop_reason="end_turn", content=[
+                Block(type="text", text=f"Zone total is {direct['zone_gal']:.1f} gal from the tool."),
+            ]),
+        ]
+        seen = []
+
+        def create(**kwargs):
+            seen.append(kwargs)
+            return script[len(seen) - 1]
+
+        out = run_everyday(self.root, create, "What is the trapped volume of one 10 ft branch?")
+        self.assertEqual(seen[0]["model"], MODEL_ID)
+        self.assertNotIn("tool_choice", seen[0])
+        self.assertNotIn("temperature", seen[0])
+        self.assertNotIn("top_p", seen[0])
+        self.assertNotIn("top_k", seen[0])
+        self.assertNotIn("thinking", seen[0])
+        self.assertEqual([call["name"] for call in out["tool_calls"]], ["read_role", "zone_trapped_volume"])
+        self.assertIn("Pipe-only volume is not the exemption volume.", out["tool_calls"][0]["output"]["text"])
+        self.assertEqual(out["tool_calls"][1]["output"]["zone_gal"], direct["zone_gal"])
+        self.assertTrue(out["tool_calls"][1]["output"]["trim_assumed"])
+        self.assertEqual(out["tool_calls"][1]["output"]["trim_gal"], 5.0)
+        self.assertIn("optimistic screen", (REPO / "roles" / "fp-sprinkler" / "ROLE.md").read_text(encoding="utf-8"))
+        self.assertIn("21 13 19", (REPO / "roles" / "spec-draft" / "ROLE.md").read_text(encoding="utf-8"))
+
+    def test_tool_plan_still_governs_and_chat_repeats_it(self):
+        from unittest.mock import patch
+
+        from fpfa.sample_data import EXAMPLE_BASIS, EXAMPLE_DI
+        from fpfa.ui import chat_request_text
+        from fpfa.workflow import govern_note, run_di_zone
+
+        result = run_di_zone(self.root, EXAMPLE_DI, EXAMPLE_BASIS)
+        note = govern_note(result)
+        self.assertIn("281.3", note)
+        self.assertIn("38.1", note)
+        self.assertIn("5.0 gal trim ASSUMED", note)
+        self.assertIn("Screen limit 30.0 s — ASSUMED from time basis FM", note)
+        self.assertIn("when a narrative disagrees", note)
+        self.assertIn("not a listed water-delivery-time calculation", note)
+        request = chat_request_text(
+            [{"role": "user", "text": "Which trim family?"}, {"role": "assistant", "text": "El/El."}],
+            {"insurer": "FM"},
+            {"zone_id": "DH-1"},
+            "revise the volume",
+            result,
+        )
+        self.assertIn("Earlier turns:", request)
+        self.assertIn("Which trim family?", request)
+        self.assertIn("Governing zone total text: 281.3.", request)
+        self.assertNotIn("Governing", chat_request_text([], {}, {}, "hello"))
+        self.assertFalse(any("missing roles" in item for item in result["warnings"]))
+        seen = {}
+
+        def grab(system, user, _tools, _execute):
+            seen["system"] = system
+            seen["user"] = user
+            return {"text": "", "tool_calls": []}
+
+        run_di_zone(self.root, EXAMPLE_DI, EXAMPLE_BASIS, narrator=grab)
+        self.assertIn("roles_to_read", seen["user"])
+        self.assertIn("fp-sprinkler", seen["user"])
+        self.assertIn("spec-draft", seen["user"])
+        payload = json.loads(seen["user"].split("\n\n", 1)[1])
+        self.assertEqual(payload["roles_to_read"], ["fp-sprinkler", "fa-releasing", "spec-draft"])
+        with patch("fpfa.workflow.list_roles", return_value=[]):
+            flagged = run_di_zone(self.root, EXAMPLE_DI, EXAMPLE_BASIS)
+        self.assertTrue(any("missing roles" in item for item in flagged["warnings"]))
+        self.assertEqual(flagged["source"], "tool-plan")
+        self.assertIn("281.3", flagged["narrative"])
 
 
 class UiSmokeTests(unittest.TestCase):
@@ -912,6 +1095,7 @@ class UiSmokeTests(unittest.TestCase):
 
         save_api_key("sk-ant-local-test")
         seen = []
+        seen_meta = []
 
         class Fast:
             def __init__(self, _key):
@@ -919,6 +1103,7 @@ class UiSmokeTests(unittest.TestCase):
 
             def create(self, **kwargs):
                 seen.append(kwargs["messages"][0]["content"])
+                seen_meta.append(kwargs)
                 text = "El/El holds the prime." if len(seen) == 1 else "That follows the first answer."
                 return SimpleNamespace(
                     stop_reason="end_turn",
@@ -941,6 +1126,25 @@ class UiSmokeTests(unittest.TestCase):
             self.assertIn("El/El holds the prime.", seen[1])
             self.assertIn("explain that recommendation", seen[1])
             self.assertIn("Earlier turns:", seen[1])
+            marker = "Call list_roles and read_role before you answer as that specialist."
+            self.assertIn(marker, seen_meta[0]["system"])
+            self.assertEqual(seen_meta[0]["model"], "claude-opus-5-5")
+            self.assertNotIn("tool_choice", seen_meta[0])
+            self.assertNotIn("temperature", seen_meta[0])
+            self.assertNotIn("top_p", seen_meta[0])
+            self.assertNotIn("top_k", seen_meta[0])
+            self.assertNotIn("thinking", seen_meta[0])
+            names = [tool["name"] for tool in seen_meta[0]["tools"]]
+            for name in (
+                "read_role",
+                "read_skill",
+                "zone_trapped_volume",
+                "dry_delivery_screen",
+                "di_trip_to_water",
+                "elect_di_trim",
+                "releasing_truth_table",
+            ):
+                self.assertIn(name, names)
         finally:
             root.destroy()
 
@@ -1077,6 +1281,55 @@ class UiSmokeTests(unittest.TestCase):
             self.assertEqual(app.zone_id.get(), "KEY-3")
             self.assertEqual(load_project(app.project["id"])["di"]["zone_id"], "KEY-3")
             self.assertIn("Saved", app.status.get())
+        finally:
+            root.destroy()
+
+    def test_chat_does_not_replace_the_tool_plan(self):
+        if not os.environ.get("DISPLAY"):
+            self.skipTest("no display")
+        _isolate_data()
+        import tkinter as tk
+        from types import SimpleNamespace
+        from unittest.mock import patch
+
+        from fpfa.keystore import save_api_key
+        from fpfa.ui import App
+
+        root = tk.Tk()
+        seen = []
+        try:
+            app = App(root)
+            root.update()
+            app.chat_entry.insert(0, "/sample-di")
+            app.send_chat()
+            root.update()
+            zone_gal = app.project["last_run"]["tools"]["zone_trapped_volume"]["zone_gal"]
+            self.assertIn("281.3", app.results.get("1.0", "end"))
+            save_api_key("sk-ant-local-test")
+
+            class Fast:
+                def __init__(self, _key):
+                    pass
+
+                def create(self, **kwargs):
+                    seen.append(kwargs["messages"][0]["content"])
+                    return SimpleNamespace(
+                        stop_reason="end_turn",
+                        content=[SimpleNamespace(type="text", text="I estimate about 40 gallons and 12 seconds.")],
+                    )
+
+            with patch("fpfa.ui.AnthropicMessages", Fast):
+                app.chat_entry.insert(0, "revise the volume")
+                app.send_chat()
+                self._wait_for(app, "I estimate about 40 gallons and 12 seconds.")
+            self.assertEqual(app.project["last_run"]["tools"]["zone_trapped_volume"]["zone_gal"], zone_gal)
+            self.assertIn("281.3", app.results.get("1.0", "end"))
+            self.assertIn("5.0 gal trim ASSUMED", app.results.get("1.0", "end"))
+            self.assertIn("Governing zone total text: 281.3.", seen[0])
+            self.assertIn("38.1", seen[0])
+            self.assertIn("5.0 gal trim ASSUMED", seen[0])
+            self.assertIn("Earlier turns:", seen[0])
+            self.assertIn("tool plan", app.status.get())
         finally:
             root.destroy()
 
