@@ -1737,6 +1737,584 @@ class UiSmokeTests(unittest.TestCase):
         finally:
             root.destroy()
 
+    def test_local_zone_is_labeled_on_the_inbox(self):
+        if not os.environ.get("DISPLAY"):
+            self.skipTest("no display")
+        _isolate_data()
+        import tkinter as tk
+        from docx import Document
+
+        from fpfa.ui import App
+
+        root = tk.Tk()
+        try:
+            app = App(root)
+            root.update()
+            app.chat_entry.insert(0, "/sample-di")
+            app.send_chat()
+            run = app.project["last_run"]
+            job_id = run["job_id"]
+            reply = app.chat_log[1]["text"]
+            self.assertEqual(app.chat_log[1]["job_id"], job_id)
+            self.assertIn(job_id, reply)
+            self.assertIn("Sample data hall DI zone", reply)
+            self.assertIn("| zone |", reply)
+            self.assertIn("5.0 gal trim ASSUMED", reply)
+            self.assertIn("Screen limit 30.0 s — ASSUMED from time basis FM", reply)
+            self.assertTrue(run["narrative"].startswith("Zone "))
+            self.assertNotIn(job_id, run["narrative"])
+            self.assertEqual(run["source"], "tool-plan")
+            inbox = "\n".join(app.inbox_list.get(0, "end"))
+            self.assertIn(job_id, inbox)
+            self.assertIn("done", inbox)
+            self.assertIn("zone", inbox)
+            self.assertNotEqual(str(app.chat_entry.cget("state")), "disabled")
+            self.assertNotEqual(str(app.send_button.cget("state")), "disabled")
+            with tempfile.TemporaryDirectory() as tmp:
+                written = app.export_to(Path(tmp) / "draft.docx")
+                doc = Document(written)
+                text = "\n".join(p.text for p in doc.paragraphs)
+                self.assertIn("Section 21 13 19", text)
+                self.assertNotIn(job_id, text)
+        finally:
+            root.destroy()
+
+    def test_failed_zone_stays_labeled_on_its_job(self):
+        if not os.environ.get("DISPLAY"):
+            self.skipTest("no display")
+        _isolate_data()
+        import tkinter as tk
+
+        from fpfa.ui import App
+
+        root = tk.Tk()
+        try:
+            app = App(root)
+            root.update()
+            app.chat_entry.insert(0, "/run")
+            app.send_chat()
+            reply = app.chat_log[-1]["text"]
+            job_id = app.chat_log[-1]["job_id"]
+            self.assertIn("Add at least one pipe segment.", reply)
+            self.assertIn(job_id, reply)
+            self.assertIn("| zone |", reply)
+            self.assertIn("Untitled job", reply)
+            inbox = "\n".join(app.inbox_list.get(0, "end"))
+            self.assertIn("error", inbox)
+            self.assertIn(job_id, inbox)
+            self.assertNotEqual(str(app.chat_entry.cget("state")), "disabled")
+        finally:
+            root.destroy()
+
+    def test_job_result_cannot_land_on_a_different_project(self):
+        if not os.environ.get("DISPLAY"):
+            self.skipTest("no display")
+        _isolate_data()
+        import tkinter as tk
+
+        from fpfa.projects import load_project, new_project
+        from fpfa.ui import App
+
+        result = {
+            "source": "tool-plan",
+            "narrative": "ORIGIN-RESULT",
+            "warnings": [],
+            "flags": [],
+            "tools": {
+                "zone_trapped_volume": {"zone_gal": 281.3, "trim_gal": 5, "trim_assumed": True},
+                "di_trip_to_water": {
+                    "t_total_s": 38.1,
+                    "passes_screen": False,
+                    "limit_s": 30,
+                    "limit_basis": "FM",
+                },
+                "elect_di_trim": {"family": "El/El"},
+            },
+        }
+        root = tk.Tk()
+        try:
+            app = App(root)
+            root.update()
+            origin = new_project("Origin job")
+            other = new_project("Other job")
+            app.open_project(other["id"])
+            zone_job = app.jobs.record(
+                project_id=origin["id"],
+                project_name="Origin job",
+                kind="zone",
+                title="Zone tool plan",
+                status="done",
+            )
+            chat_job = app.jobs.record(
+                project_id=origin["id"],
+                project_name="Origin job",
+                kind="chat",
+                title="Which trim?",
+                status="done",
+            )
+            app._finish_run(other["id"], result, None, job_id=zone_job.id)
+            app._finish_chat(other["id"], "ORIGIN-CHAT", job_id=chat_job.id)
+            saved = load_project(origin["id"])
+            self.assertEqual(saved["last_run"]["narrative"], "ORIGIN-RESULT")
+            self.assertEqual(saved["last_run"]["job_id"], zone_job.id)
+            self.assertIn(zone_job.id, saved["last_run"]["job_heading"])
+            self.assertIn("Origin job", saved["last_run"]["job_heading"])
+            texts = [turn["text"] for turn in saved["chat"]]
+            self.assertTrue(any("ORIGIN-CHAT" in text and chat_job.id in text for text in texts))
+            self.assertTrue(any(turn.get("job_id") == chat_job.id for turn in saved["chat"]))
+            self.assertIsNone(load_project(other["id"]).get("last_run"))
+            self.assertEqual(load_project(other["id"]).get("chat") or [], [])
+            visible = app.chat_view.get("1.0", "end")
+            self.assertNotIn("ORIGIN-CHAT", visible)
+            self.assertNotIn("ORIGIN-RESULT", app.results.get("1.0", "end"))
+        finally:
+            root.destroy()
+
+    def test_composer_stays_usable_while_a_zone_job_runs(self):
+        if not os.environ.get("DISPLAY"):
+            self.skipTest("no display")
+        _isolate_data()
+        import threading
+        import tkinter as tk
+        from types import SimpleNamespace
+        from unittest.mock import patch
+
+        from fpfa.keystore import save_api_key
+        from fpfa.ui import App
+
+        save_api_key("sk-ant-local-test")
+        zone_started = threading.Event()
+        zone_release = threading.Event()
+        zone_calls = {"n": 0}
+
+        class Blocking:
+            def __init__(self, _key):
+                pass
+
+            def create(self, **kwargs):
+                content = kwargs["messages"][0]["content"]
+                if "CHAT-WHILE-ZONE" in content:
+                    return SimpleNamespace(
+                        stop_reason="end_turn",
+                        content=[SimpleNamespace(type="text", text="CHAT-WHILE-REPLY")],
+                    )
+                zone_calls["n"] += 1
+                if zone_calls["n"] == 1:
+                    zone_started.set()
+                    zone_release.wait(5)
+                return SimpleNamespace(
+                    stop_reason="end_turn",
+                    content=[SimpleNamespace(type="text", text="zone narrative without the governing figures")],
+                )
+
+        root = tk.Tk()
+        try:
+            app = App(root)
+            root.update()
+            app.ask_claude.set(True)
+            app.chat_entry.insert(0, "/sample-di")
+            with patch("fpfa.ui.AnthropicMessages", Blocking):
+                app.send_chat()
+                self.assertTrue(zone_started.wait(3))
+                self.assertNotIn("5.0 gal trim ASSUMED", app.chat_view.get("1.0", "end"))
+                self.assertNotEqual(str(app.chat_entry.cget("state")), "disabled")
+                self.assertNotEqual(str(app.send_button.cget("state")), "disabled")
+                app.chat_entry.insert(0, "still typing")
+                self.assertEqual(app.chat_entry.get(), "still typing")
+                app.chat_entry.delete(0, "end")
+                app.chat_entry.insert(0, "CHAT-WHILE-ZONE")
+                app.send_chat()
+                self._wait_for(app, "CHAT-WHILE-REPLY", timeout=3)
+                mid = app.chat_view.get("1.0", "end")
+                self.assertIn("CHAT-WHILE-REPLY", mid)
+                self.assertIn("| chat |", mid)
+                self.assertNotIn("5.0 gal trim ASSUMED", mid)
+                self.assertEqual(str(app.chat_entry.cget("state")), "normal")
+                zone_release.set()
+                self._wait_for(app, "5.0 gal trim ASSUMED", timeout=3)
+            thread = app.chat_view.get("1.0", "end")
+            self.assertIn("| zone |", thread)
+            self.assertIn("| chat |", thread)
+            self.assertIn("CHAT-WHILE-REPLY", thread)
+            self.assertIn("5.0 gal trim ASSUMED", thread)
+            self.assertEqual(app.project["last_run"]["source"], "tool-plan")
+            self.assertIn("281.3", f"{app.project['last_run']['tools']['zone_trapped_volume']['zone_gal']:.1f}")
+            self.assertNotIn(app.project["last_run"]["job_id"], app.project["last_run"]["narrative"])
+            inbox = "\n".join(app.inbox_list.get(0, "end"))
+            self.assertIn("zone", inbox)
+            self.assertIn("chat", inbox)
+            self.assertIn("Sample data hall DI zone", inbox)
+        finally:
+            zone_release.set()
+            root.destroy()
+
+    def test_out_of_order_replies_are_labeled_on_their_projects(self):
+        if not os.environ.get("DISPLAY"):
+            self.skipTest("no display")
+        _isolate_data()
+        import threading
+        import tkinter as tk
+        from types import SimpleNamespace
+        from unittest.mock import patch
+
+        from fpfa.keystore import save_api_key
+        from fpfa.projects import load_project
+        from fpfa.ui import App
+
+        save_api_key("sk-ant-local-test")
+        slow_release = threading.Event()
+        fast_release = threading.Event()
+        slow_started = threading.Event()
+        fast_started = threading.Event()
+
+        class Blocking:
+            def __init__(self, _key):
+                pass
+
+            def create(self, **kwargs):
+                content = kwargs["messages"][0]["content"]
+                if "FAST-QUESTION" in content:
+                    fast_started.set()
+                    if not fast_release.wait(5):
+                        text = "FAST-TIMEOUT"
+                    else:
+                        text = "FAST-REPLY"
+                elif "SLOW-QUESTION" in content:
+                    slow_started.set()
+                    if not slow_release.wait(5):
+                        text = "SLOW-TIMEOUT"
+                    else:
+                        text = "SLOW-REPLY"
+                else:
+                    text = "OTHER-REPLY"
+                return SimpleNamespace(
+                    stop_reason="end_turn",
+                    content=[SimpleNamespace(type="text", text=text)],
+                )
+
+        root = tk.Tk()
+        try:
+            app = App(root)
+            root.update()
+            with patch("fpfa.ui.AnthropicMessages", Blocking):
+                app._start_named_job("Alpha hall")
+                alpha_id = app.project["id"]
+                app.chat_entry.insert(0, "SLOW-QUESTION")
+                app.send_chat()
+                self.assertTrue(slow_started.wait(3))
+                self.assertNotEqual(str(app.chat_entry.cget("state")), "disabled")
+                app.chat_entry.insert(0, "FAST-QUESTION")
+                app.send_chat()
+                self.assertTrue(fast_started.wait(3))
+                fast_release.set()
+                self._wait_for(app, "FAST-REPLY", timeout=3)
+                early = app.chat_view.get("1.0", "end")
+                self.assertIn("FAST-REPLY", early)
+                self.assertIn("| chat |", early)
+                self.assertNotIn("SLOW-REPLY", early)
+                turns = [turn for turn in app.chat_log if turn.get("role") == "assistant"]
+                self.assertEqual(len(turns), 1)
+                self.assertIn("FAST-QUESTION", turns[0]["text"])
+                self.assertIn(turns[0]["job_id"], turns[0]["text"])
+                slow_release.set()
+                self._wait_for(app, "SLOW-REPLY", timeout=3)
+            visible = app.chat_view.get("1.0", "end")
+            self.assertIn("FAST-REPLY", visible)
+            self.assertIn("SLOW-REPLY", visible)
+            saved = load_project(alpha_id)
+            assistant = [turn for turn in saved["chat"] if turn.get("role") == "assistant"]
+            self.assertEqual(len(assistant), 2)
+            self.assertIn("FAST-REPLY", assistant[0]["text"])
+            self.assertIn("SLOW-REPLY", assistant[1]["text"])
+            self.assertNotEqual(assistant[0]["job_id"], assistant[1]["job_id"])
+            self.assertIn(assistant[0]["job_id"], assistant[0]["text"])
+            self.assertIn("Alpha hall", assistant[0]["text"])
+            self.assertIn("Alpha hall", assistant[1]["text"])
+            self.assertIsNone(saved.get("last_run"))
+        finally:
+            slow_release.set()
+            fast_release.set()
+            root.destroy()
+
+        root = tk.Tk()
+        try:
+            app = App(root)
+            root.update()
+            with patch("fpfa.ui.AnthropicMessages", Blocking):
+                slow_release.clear()
+                fast_release.clear()
+                slow_started.clear()
+                fast_started.clear()
+                app._start_named_job("Alpha hall")
+                alpha_id = app.project["id"]
+                app.chat_entry.insert(0, "SLOW-QUESTION")
+                app.send_chat()
+                self.assertTrue(slow_started.wait(3))
+                app._start_named_job("Beta hall")
+                beta_id = app.project["id"]
+                self.assertNotEqual(alpha_id, beta_id)
+                app.chat_entry.insert(0, "FAST-QUESTION")
+                app.send_chat()
+                self.assertTrue(fast_started.wait(3))
+                fast_release.set()
+                self._wait_for(app, "FAST-REPLY", timeout=3)
+                on_beta = app.chat_view.get("1.0", "end")
+                self.assertIn("FAST-REPLY", on_beta)
+                self.assertIn("Beta hall", on_beta)
+                self.assertNotIn("SLOW-REPLY", on_beta)
+                self.assertNotIn("Alpha hall", on_beta)
+                alpha_saved = load_project(alpha_id)
+                alpha_text = "\n".join(turn.get("text") or "" for turn in alpha_saved["chat"])
+                self.assertIn("SLOW-QUESTION", alpha_text)
+                self.assertNotIn("FAST-REPLY", alpha_text)
+                slow_release.set()
+                deadline_hit = False
+                import time
+                deadline = time.time() + 3
+                while time.time() < deadline:
+                    app._poll()
+                    alpha_saved = load_project(alpha_id)
+                    blob = "\n".join(turn.get("text") or "" for turn in alpha_saved.get("chat") or [])
+                    if "SLOW-REPLY" in blob:
+                        deadline_hit = True
+                        break
+                    time.sleep(0.02)
+                self.assertTrue(deadline_hit)
+            alpha_saved = load_project(alpha_id)
+            beta_saved = load_project(beta_id)
+            alpha_text = "\n".join(turn.get("text") or "" for turn in alpha_saved["chat"])
+            beta_text = "\n".join(turn.get("text") or "" for turn in beta_saved["chat"])
+            self.assertIn("SLOW-REPLY", alpha_text)
+            self.assertIn("Alpha hall", alpha_text)
+            self.assertNotIn("FAST-REPLY", alpha_text)
+            self.assertIn("FAST-REPLY", beta_text)
+            self.assertIn("Beta hall", beta_text)
+            self.assertNotIn("SLOW-REPLY", beta_text)
+            self.assertNotIn("SLOW-REPLY", app.chat_view.get("1.0", "end"))
+            self.assertNotIn("Alpha hall", app.chat_view.get("1.0", "end"))
+        finally:
+            slow_release.set()
+            fast_release.set()
+            root.destroy()
+
+    def _zone_result(self, narrative: str) -> dict:
+        return {
+            "source": "tool-plan",
+            "narrative": narrative,
+            "warnings": [],
+            "flags": [],
+            "tools": {
+                "zone_trapped_volume": {"zone_gal": 12.0, "trim_gal": 5, "trim_assumed": True},
+                "di_trip_to_water": {
+                    "t_total_s": 10.0,
+                    "passes_screen": True,
+                    "limit_s": 60,
+                    "limit_basis": "FM",
+                },
+                "elect_di_trim": {"family": "El/El"},
+            },
+        }
+
+    def _prepare_zone_form(self, app, name: str) -> str:
+        app._start_named_job(name)
+        app._insert_segment({
+            "role": "branch",
+            "nps": "1",
+            "schedule": "sch40",
+            "length_ft": 10,
+            "d_in": 1.049,
+        })
+        app.ask_claude.set(True)
+        return app.project["id"]
+
+    def _hold_overlapping_runs(self, app, on_second):
+        """Prepare two /run jobs that block inside the zone call.
+
+        Call the returned start function after the patch is active. The first
+        job returns a labeled result. on_second() supplies the second outcome
+        and may return a result or raise.
+        """
+        import threading
+        from unittest.mock import patch
+
+        entered = [threading.Event(), threading.Event()]
+        release = [threading.Event(), threading.Event()]
+        state = {"n": 0}
+        lock = threading.Lock()
+
+        def fake_zone(_pack, _di, _basis, narrator=None, mode=None):
+            with lock:
+                index = state["n"]
+                state["n"] += 1
+            if index > 1:
+                raise AssertionError("unexpected extra zone run")
+            entered[index].set()
+            if not release[index].wait(5):
+                raise TimeoutError("zone run was not released")
+            if index == 0:
+                return self._zone_result("FIRST-ZONE-RESULT")
+            return on_second()
+
+        def start():
+            app.chat_entry.insert(0, "/run")
+            app.send_chat()
+            self.assertTrue(entered[0].wait(3), "first zone run did not start")
+            self.assertNotEqual(str(app.chat_entry.cget("state")), "disabled")
+            app.chat_entry.insert(0, "/run")
+            app.send_chat()
+            self.assertTrue(entered[1].wait(3), "second zone run did not start")
+            jobs = [job for job in app.jobs.snapshot() if job.kind == "zone"]
+            self.assertEqual(len(jobs), 2)
+            self.assertEqual(app.jobs.get(jobs[1].id).status, "running")
+            return jobs
+
+        return patch("fpfa.ui.run_di_zone", fake_zone), entered, release, start
+
+    def test_overlapping_zone_runs_each_post_a_labeled_result(self):
+        """Two /run jobs on one project each add their own labeled result."""
+        if not os.environ.get("DISPLAY"):
+            self.skipTest("no display")
+        _isolate_data()
+        import tkinter as tk
+
+        from fpfa.keystore import save_api_key
+        from fpfa.projects import load_project
+        from fpfa.ui import App
+
+        save_api_key("sk-ant-local-test")
+        root = tk.Tk()
+        patcher = None
+        patch_started = False
+        release = [None, None]
+        try:
+            app = App(root)
+            root.update()
+            origin_id = self._prepare_zone_form(app, "Overlap hall")
+            patcher, _entered, release, start = self._hold_overlapping_runs(
+                app, lambda: self._zone_result("SECOND-ZONE-RESULT")
+            )
+            patcher.start()
+            patch_started = True
+            jobs = start()
+            release[0].set()
+            self._wait_for(app, "FIRST-ZONE-RESULT", timeout=3)
+            mid = app.chat_view.get("1.0", "end")
+            self.assertIn("FIRST-ZONE-RESULT", mid)
+            self.assertIn(jobs[0].id, mid)
+            self.assertNotIn("SECOND-ZONE-RESULT", mid)
+            self.assertNotIn(jobs[1].id, mid)
+            release[1].set()
+            self._wait_for(app, "SECOND-ZONE-RESULT", timeout=3)
+            saved = load_project(origin_id)
+            assistant = [turn for turn in saved["chat"] if turn.get("role") == "assistant"]
+            self.assertEqual(len(assistant), 2)
+            self.assertEqual(assistant[0]["job_id"], jobs[0].id)
+            self.assertEqual(assistant[1]["job_id"], jobs[1].id)
+            self.assertNotEqual(assistant[0]["job_id"], assistant[1]["job_id"])
+            self.assertIn("FIRST-ZONE-RESULT", assistant[0]["text"])
+            self.assertIn(jobs[0].id, assistant[0]["text"])
+            self.assertIn("Overlap hall", assistant[0]["text"])
+            self.assertIn("| zone |", assistant[0]["text"])
+            self.assertNotIn(jobs[1].id, assistant[0]["text"])
+            self.assertIn("SECOND-ZONE-RESULT", assistant[1]["text"])
+            self.assertIn(jobs[1].id, assistant[1]["text"])
+            self.assertIn("Overlap hall", assistant[1]["text"])
+            self.assertIn("| zone |", assistant[1]["text"])
+            self.assertNotIn(jobs[0].id, assistant[1]["text"])
+            visible = app.chat_view.get("1.0", "end")
+            self.assertIn("FIRST-ZONE-RESULT", visible)
+            self.assertIn("SECOND-ZONE-RESULT", visible)
+        finally:
+            for event in release:
+                if event is not None:
+                    event.set()
+            if patch_started:
+                patcher.stop()
+            root.destroy()
+
+    def test_zone_error_after_project_switch_is_saved_on_that_project(self):
+        """A second overlapping /run that fails after a switch still lands on its project."""
+        if not os.environ.get("DISPLAY"):
+            self.skipTest("no display")
+        _isolate_data()
+        import time
+        import tkinter as tk
+        from unittest.mock import patch
+
+        from fpfa.keystore import save_api_key
+        from fpfa.projects import load_project
+        from fpfa.ui import App
+
+        save_api_key("sk-ant-local-test")
+        root = tk.Tk()
+        patcher = None
+        patch_started = False
+        release = [None, None]
+        try:
+            app = App(root)
+            root.update()
+            origin_id = self._prepare_zone_form(app, "Overlap hall")
+
+            def fail_second():
+                raise RuntimeError("SECOND-ZONE-FAILED")
+
+            patcher, _entered, release, start = self._hold_overlapping_runs(app, fail_second)
+            with patch("fpfa.ui.messagebox.showerror") as shown:
+                patcher.start()
+                patch_started = True
+                jobs = start()
+                release[0].set()
+                self._wait_for(app, "FIRST-ZONE-RESULT", timeout=3)
+                self.assertNotIn("SECOND-ZONE-FAILED", app.chat_view.get("1.0", "end"))
+                app._start_named_job("Other hall")
+                other_id = app.project["id"]
+                self.assertNotEqual(other_id, origin_id)
+                self.assertNotIn("FIRST-ZONE-RESULT", app.chat_view.get("1.0", "end"))
+                release[1].set()
+                deadline = time.time() + 3
+                saved_text = ""
+                while time.time() < deadline:
+                    app._poll()
+                    saved = load_project(origin_id)
+                    saved_text = "\n".join(turn.get("text") or "" for turn in saved.get("chat") or [])
+                    if "SECOND-ZONE-FAILED" in saved_text:
+                        break
+                    time.sleep(0.02)
+                self.assertIn("SECOND-ZONE-FAILED", saved_text)
+                self.assertFalse(shown.called)
+            saved = load_project(origin_id)
+            assistant = [turn for turn in saved["chat"] if turn.get("role") == "assistant"]
+            self.assertEqual(len(assistant), 2)
+            self.assertEqual(assistant[0]["job_id"], jobs[0].id)
+            self.assertIn("FIRST-ZONE-RESULT", assistant[0]["text"])
+            self.assertIn(jobs[0].id, assistant[0]["text"])
+            self.assertEqual(assistant[1]["job_id"], jobs[1].id)
+            self.assertIn("SECOND-ZONE-FAILED", assistant[1]["text"])
+            self.assertIn("RuntimeError", assistant[1]["text"])
+            self.assertIn(jobs[1].id, assistant[1]["text"])
+            self.assertIn("Overlap hall", assistant[1]["text"])
+            self.assertIn("| zone |", assistant[1]["text"])
+            self.assertNotIn(jobs[0].id, assistant[1]["text"])
+            self.assertNotIn("Other hall", assistant[1]["text"])
+            other = load_project(other_id)
+            other_text = "\n".join(turn.get("text") or "" for turn in other.get("chat") or [])
+            self.assertNotIn("SECOND-ZONE-FAILED", other_text)
+            self.assertNotIn("FIRST-ZONE-RESULT", other_text)
+            self.assertNotIn("SECOND-ZONE-FAILED", app.chat_view.get("1.0", "end"))
+            app.open_project(origin_id)
+            reopened = app.chat_view.get("1.0", "end")
+            self.assertIn("FIRST-ZONE-RESULT", reopened)
+            self.assertIn("SECOND-ZONE-FAILED", reopened)
+            self.assertIn(jobs[1].id, reopened)
+            self.assertEqual(app.jobs.get(jobs[1].id).status, "error")
+        finally:
+            for event in release:
+                if event is not None:
+                    event.set()
+            if patch_started:
+                patcher.stop()
+            root.destroy()
+
     def _wait_for(self, app, needle: str, timeout: float = 2.0) -> None:
         import time
 
@@ -1747,6 +2325,119 @@ class UiSmokeTests(unittest.TestCase):
                 return
             time.sleep(0.02)
         self.fail(f"timed out waiting for {needle!r}")
+
+
+class JobInboxTests(unittest.TestCase):
+    def test_submit_returns_while_a_worker_is_busy(self):
+        import threading
+        import time
+
+        from fpfa.jobs import JobInbox, label_result
+
+        inbox = JobInbox(worker_count=1)
+        started = threading.Event()
+        release = threading.Event()
+        second_ran = threading.Event()
+        seen = {}
+
+        def slow(_job_id):
+            seen["thread"] = threading.current_thread().name
+            started.set()
+            release.wait(3)
+
+        def later(_job_id):
+            second_ran.set()
+
+        try:
+            first = inbox.submit(
+                project_id="p-slow",
+                project_name="Slow job",
+                kind="zone",
+                title="Zone tool plan",
+                work=slow,
+            )
+            self.assertTrue(started.wait(2))
+            began = time.perf_counter()
+            second = inbox.submit(
+                project_id="p-fast",
+                project_name="Fast job",
+                kind="chat",
+                title="a follow up",
+                work=later,
+            )
+            self.assertLess(time.perf_counter() - began, 0.4)
+            self.assertEqual(inbox.get(second.id).status, "queued")
+            self.assertEqual(inbox.get(first.id).status, "running")
+            self.assertFalse(second_ran.is_set())
+            self.assertTrue(seen["thread"].startswith("fpfa-worker-"))
+            self.assertNotEqual(seen["thread"], threading.current_thread().name)
+            release.set()
+            self.assertTrue(second_ran.wait(2))
+            deadline = time.time() + 2
+            while time.time() < deadline and inbox.get(second.id).status != "done":
+                time.sleep(0.01)
+            self.assertEqual(inbox.get(first.id).status, "done")
+            self.assertEqual(inbox.get(second.id).status, "done")
+            slow_label = label_result(inbox.get(first.id).heading(), "SLOW-BODY")
+            fast_label = label_result(inbox.get(second.id).heading(), "FAST-BODY")
+            self.assertIn(first.id, slow_label)
+            self.assertIn("Slow job", slow_label)
+            self.assertIn("| zone |", slow_label)
+            self.assertNotIn("Fast job", slow_label)
+            self.assertNotIn(second.id, slow_label)
+            self.assertIn(second.id, fast_label)
+            self.assertIn("Fast job", fast_label)
+            self.assertIn("| chat |", fast_label)
+            self.assertNotIn("Slow job", fast_label)
+            lines = [job.inbox_line() for job in inbox.snapshot()]
+            self.assertEqual(len(lines), 2)
+            self.assertIn(first.id, lines[0])
+            self.assertIn(second.id, lines[1])
+        finally:
+            release.set()
+            inbox.close()
+
+    def test_worker_error_scrubs_an_api_key(self):
+        import time
+
+        from fpfa.jobs import JobInbox
+
+        inbox = JobInbox(worker_count=1)
+
+        def boom(_job_id):
+            raise RuntimeError("network down sk-ant-secretvalue")
+
+        try:
+            job = inbox.submit(
+                project_id="p1",
+                project_name="Key job",
+                kind="chat",
+                title="ask",
+                work=boom,
+            )
+            deadline = time.time() + 2
+            while time.time() < deadline and inbox.get(job.id).status != "error":
+                time.sleep(0.01)
+            saved = inbox.get(job.id)
+            self.assertEqual(saved.status, "error")
+            self.assertNotIn("sk-ant-secretvalue", saved.error)
+            self.assertIn("[key]", saved.error)
+        finally:
+            inbox.close()
+
+    def test_closed_inbox_rejects_new_work(self):
+        from fpfa.jobs import JobInbox
+
+        inbox = JobInbox(worker_count=1)
+        inbox.close()
+        with self.assertRaises(RuntimeError):
+            inbox.submit(
+                project_id="p1",
+                project_name="Late",
+                kind="chat",
+                title="late",
+                work=lambda _job_id: None,
+            )
 
 
 if __name__ == "__main__":

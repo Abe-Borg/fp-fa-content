@@ -1,5 +1,9 @@
 """Desktop shell. The chat thread is the main pane. The zone form is optional.
 
+Long zone runs and chat turns are jobs on the inbox. Workers run them so the
+composer stays usable. A result is labeled with its job and stored on the
+project that started it.
+
 Run from the app directory: python -m fpfa
 """
 
@@ -20,6 +24,7 @@ from fpfa import sample_data
 from fpfa.calc_tools import ToolSession
 from fpfa.claude_client import MODEL_ID, AnthropicMessages, run_tool_loop, safe_error
 from fpfa.everyday import run_everyday
+from fpfa.jobs import JobInbox, label_result
 from fpfa.keystore import clear_api_key, key_status, key_storage_help, load_api_key, save_api_key
 from fpfa.modes_loader import DEFAULT_MODE, MODE_SLUGS, list_modes, normalize_mode
 from fpfa.paths import content_root, read_config, write_config
@@ -90,7 +95,10 @@ THREAD_HINT = (
     "in the content pack, and numbers come from the calc tools.\n"
     "The Mode menu points at modes/<slug>/MODE.md "
     "(brainstorm, calculator, synthesis, mixed). "
-    "Calculated, ASSUMED, and use best judgment stay three different labels."
+    "Calculated, ASSUMED, and use best judgment stay three different labels.\n"
+    "The inbox beside Projects lists zone runs and chat turns. "
+    "A long job runs on a worker, so this composer stays usable. "
+    "A result is labeled with the job it belongs to and is saved on that project."
 )
 
 
@@ -128,7 +136,10 @@ def slash_help_text() -> str:
         "A designer judgment the tools did not return is use best judgment. "
         "That label is not ASSUMED and it is not a calculated figure.\n"
         "A typed question uses the everyday path. Specialist roles, modes, and skills are files "
-        "in the content pack, and numbers come from the calc tools."
+        "in the content pack, and numbers come from the calc tools.\n"
+        "The inbox beside Projects lists zone runs and chat turns. "
+        "A long job runs on a worker. The composer stays usable. "
+        "A finished result is labeled with the job it belongs to and is saved on that project."
     )
 
 
@@ -209,9 +220,12 @@ class App:
         self.project: dict | None = None
         self.chat_log: list[dict] = []
         self._ids: list[str] = []
-        self._busy = False
-        self._announce_runs: set[str] = set()
+        # One entry per submitted zone job. Two /run commands on one project
+        # each post their own labeled result or error.
+        self._announce_jobs: set[str] = set()
+        self.jobs: JobInbox | None = None
         self._build()
+        self.jobs = JobInbox(worker_count=2, on_change=self._on_jobs_changed)
         try:
             self._pristine_basis = self.collect_basis()
             self._pristine_di = self.collect_di()
@@ -238,6 +252,9 @@ class App:
                 self.root.after_cancel(after_id)
         except tk.TclError:
             pass
+        jobs = getattr(self, "jobs", None)
+        if jobs is not None:
+            jobs.close()
 
     def _on_save_key(self, event=None):
         try:
@@ -326,6 +343,14 @@ class App:
         buttons.pack(fill="x")
         ttk.Button(buttons, text="New", command=self.new_job).pack(side="left", padx=(0, 4))
         ttk.Button(buttons, text="Delete", command=self.delete_job).pack(side="left", padx=4)
+        ttk.Label(left, text="Inbox").pack(anchor="w", pady=(10, 0))
+        self.inbox_list = tk.Listbox(left, width=26, height=7, exportselection=False)
+        self.inbox_list.pack(fill="x", pady=(4, 0))
+        ttk.Label(
+            left,
+            text="Workers run long jobs. A result stays on the job that started it.",
+            wraplength=210,
+        ).pack(anchor="w", pady=(4, 0))
 
         right = ttk.Panedwindow(body, orient="vertical")
         body.add(right, weight=1)
@@ -549,7 +574,8 @@ class App:
         self.chat_entry = ttk.Entry(row)
         self.chat_entry.pack(side="left", fill="x", expand=True)
         self.chat_entry.bind("<Return>", lambda _event: self.send_chat())
-        ttk.Button(row, text="Send", command=self.send_chat).pack(side="left", padx=6)
+        self.send_button = ttk.Button(row, text="Send", command=self.send_chat)
+        self.send_button.pack(side="left", padx=6)
         self.chat_view = tk.Text(parent, wrap="word", state="disabled", padx=8, pady=8, height=16)
         self.chat_view.tag_configure("hint", foreground="#5c6b76")
         scroll = ttk.Scrollbar(parent, command=self.chat_view.yview)
@@ -603,6 +629,73 @@ class App:
                 self.root.after(100, self._poll)
             except tk.TclError:
                 pass
+
+    def _on_jobs_changed(self) -> None:
+        """Refresh the inbox. Worker threads only enqueue the refresh."""
+        if threading.current_thread() is threading.main_thread():
+            self._refresh_inbox()
+            return
+        self.queue.put(self._refresh_inbox)
+
+    def _refresh_inbox(self) -> None:
+        jobs = getattr(self, "jobs", None)
+        listing = getattr(self, "inbox_list", None)
+        if jobs is None or listing is None:
+            return
+        try:
+            lines = [job.inbox_line() for job in jobs.snapshot()]
+            if tuple(listing.get(0, "end")) == tuple(lines):
+                return
+            listing.delete(0, "end")
+            for line in lines:
+                listing.insert("end", line)
+            if lines:
+                listing.see("end")
+        except tk.TclError:
+            return
+
+    def _keep_composer_open(self) -> None:
+        """A running job must leave the composer usable."""
+        try:
+            self.chat_entry.configure(state="normal")
+            self.send_button.configure(state="normal")
+        except tk.TclError:
+            return
+
+    def _job_record(self, job_id: str | None):
+        if not job_id or self.jobs is None:
+            return None
+        return self.jobs.get(job_id)
+
+    def _destination_id(self, origin_id: str, job_id: str | None) -> str:
+        """The job's project wins so a result cannot land on a different one."""
+        job = self._job_record(job_id)
+        if job is not None and job.project_id:
+            return job.project_id
+        return origin_id
+
+    def _with_job_label(self, job_id: str | None, body: str) -> str:
+        job = self._job_record(job_id)
+        if job is None:
+            return body
+        return label_result(job.heading(), body)
+
+    def _stamp_job(self, result: dict | None, job_id: str | None) -> dict | None:
+        if not isinstance(result, dict):
+            return result
+        job = self._job_record(job_id)
+        if job is None:
+            return result
+        stamped = dict(result)
+        stamped["job_heading"] = job.heading()
+        stamped["job_id"] = job.id
+        return stamped
+
+    def _assistant_turn(self, text: str, job_id: str | None) -> dict:
+        turn = {"role": "assistant", "text": text}
+        if job_id:
+            turn["job_id"] = job_id
+        return turn
 
     def _sync_claude_default(self) -> None:
         self.ask_claude.set(bool(load_api_key()))
@@ -876,31 +969,17 @@ class App:
     def start_sample_di(self, typed: str | None = None) -> None:
         """Load the sample job and run the existing DI zone path."""
         raw = (typed or "/sample-di").strip() or "/sample-di"
-        if self._busy:
-            self._ensure_project()
-            self._local_exchange(
-                raw,
-                "A zone run is still going. The composer stays available; this starter was not started again.",
-            )
-            return
+        self._keep_composer_open()
         self._open_sample_project()
         self._append_chat("user", raw)
-        self._announce_runs.add(self.project["id"])
-        self.run_zone()
+        self.run_zone(announce=True)
 
     def start_zone_run(self, typed: str | None = None) -> None:
         raw = (typed or "/run").strip() or "/run"
-        if self._busy:
-            self._ensure_project()
-            self._local_exchange(
-                raw,
-                "A zone run is still going. The composer stays available; this run was not started again.",
-            )
-            return
+        self._keep_composer_open()
         self._ensure_project()
         self._append_chat("user", raw)
-        self._announce_runs.add(self.project["id"])
-        self.run_zone()
+        self.run_zone(announce=True)
 
     def _slash_new(self, raw: str, name: str) -> None:
         name = name.strip()
@@ -1006,31 +1085,58 @@ class App:
         for item in self.pipes.selection():
             self.pipes.delete(item)
 
-    def run_zone(self) -> None:
-        if self._busy:
-            return
+    def run_zone(self, *, announce: bool = False) -> None:
+        self._keep_composer_open()
         if not self.project:
-            self._report_run_problem(None, "Open a project, or use /sample-di.")
+            self._report_run_problem(None, "Open a project, or use /sample-di.", announce=announce)
             return
         origin_id = self.project["id"]
+        project_name = self.project.get("name") or "Untitled job"
         try:
             self._write_form(self.project)
         except ValueError as exc:
-            self._report_run_problem(origin_id, str(exc))
+            self._report_run_problem(origin_id, str(exc), announce=announce)
             return
         di = copy.deepcopy(self.project["di"])
         basis = copy.deepcopy(self.project["basis"])
         mode = self.mode_slug.get()
         try:
-            root = content_root()
+            pack = content_root()
         except FileNotFoundError as exc:
-            self._report_run_problem(origin_id, str(exc))
+            self._report_run_problem(origin_id, str(exc), announce=announce)
             return
         use_claude = bool(self.ask_claude.get()) and bool(load_api_key())
-        narrator = None
         if use_claude:
-            key = load_api_key()
+            self._enqueue_zone(
+                origin_id, project_name, pack, di, basis, mode, load_api_key(), announce=announce
+            )
+            return
+        self._run_zone_here(origin_id, project_name, pack, di, basis, mode, announce=announce)
 
+    def _run_zone_here(self, origin_id, project_name, pack, di, basis, mode, *, announce: bool = False) -> None:
+        """Tool plan with no model call. It finishes before the composer returns."""
+        job = self.jobs.record(
+            project_id=origin_id,
+            project_name=project_name,
+            kind="zone",
+            title="Zone tool plan",
+            status="running",
+        )
+        if announce:
+            self._announce_jobs.add(job.id)
+        try:
+            result = run_di_zone(pack, di, basis, narrator=None, mode=mode)
+        except Exception as exc:
+            self.jobs.mark(job.id, "error", safe_error(exc))
+            self._report_run_problem(origin_id, safe_error(exc), job_id=job.id)
+            return
+        self.jobs.mark(job.id, "done")
+        self._finish_run(origin_id, result, None, job_id=job.id)
+
+    def _enqueue_zone(self, origin_id, project_name, pack, di, basis, mode, key, *, announce: bool = False) -> None:
+        """Queue a zone run that calls the model. The composer stays usable."""
+
+        def work(job_id: str) -> None:
             def narrator(system, user_text, tools, execute):
                 client = AnthropicMessages(key)
                 return run_tool_loop(
@@ -1050,85 +1156,114 @@ class App:
                     max_tokens=16000,
                 )
 
-        if use_claude:
-            self._busy = True
-            self.status.set("Running the tool plan, then Claude…")
             try:
-                self.root.update_idletasks()
-            except tk.TclError:
-                pass
+                result = run_di_zone(pack, di, basis, narrator=narrator, mode=mode)
+                error = None
+            except Exception as exc:
+                result = None
+                error = safe_error(exc)
+                self.jobs.mark(job_id, "error", error)
+            self.queue.put(
+                lambda oid=origin_id, res=result, err=error, jid=job_id: self._finish_run(
+                    oid, res, err, job_id=jid
+                )
+            )
 
-            def work():
-                try:
-                    result = run_di_zone(root, di, basis, narrator=narrator, mode=mode)
-                    error = None
-                except Exception as exc:
-                    result = None
-                    error = safe_error(exc)
-                self.queue.put(lambda oid=origin_id, res=result, err=error: self._finish_run(oid, res, err))
-
-            threading.Thread(target=work, daemon=True).start()
-            return
+        job = self.jobs.submit(
+            project_id=origin_id,
+            project_name=project_name,
+            kind="zone",
+            title="Zone tool plan",
+            work=work,
+        )
+        # The worker may finish before submit returns, but the result callback
+        # stays on the UI queue until this call returns to the event loop.
+        if announce:
+            self._announce_jobs.add(job.id)
+        self._keep_composer_open()
+        self.status.set(f"Asking {MODEL_ID}… {job.heading()}")
         try:
-            result = run_di_zone(root, di, basis, narrator=None, mode=mode)
-        except Exception as exc:
-            self._report_run_problem(origin_id, safe_error(exc))
-            return
-        self._finish_run(origin_id, result, None)
+            self.root.update_idletasks()
+        except tk.TclError:
+            pass
 
-    def _report_run_problem(self, origin_id: str | None, message: str) -> None:
-        self._busy = False
-        announce = bool(origin_id) and origin_id in self._announce_runs
+    def _report_run_problem(
+        self,
+        origin_id: str | None,
+        message: str,
+        job_id: str | None = None,
+        *,
+        announce: bool | None = None,
+    ) -> None:
+        self._keep_composer_open()
         if origin_id:
-            self._announce_runs.discard(origin_id)
+            origin_id = self._destination_id(origin_id, job_id)
+        taken = self._take_announce(job_id)
+        if announce is None:
+            announce = taken
+        else:
+            announce = bool(announce) or taken
+        message = self._with_job_label(job_id, message)
         still_here = self.project is not None and (origin_id is None or self.project.get("id") == origin_id)
         if announce and still_here:
-            self._append_chat("assistant", message)
+            self.chat_log.append(self._assistant_turn(message, job_id))
+            self._render_chat()
             self._save_form_or_chat(self.project)
             save_project(self.project)
         elif announce and origin_id:
-            self._append_saved_chat(origin_id, message)
+            self._append_saved_chat(origin_id, message, job_id)
         elif still_here and origin_id:
             messagebox.showerror("DI zone", message)
         self.status.set(message or "The zone did not run.")
 
-    def _append_saved_chat(self, origin_id: str, text: str) -> None:
+    def _append_saved_chat(self, origin_id: str, text: str, job_id: str | None = None) -> None:
         try:
             project = load_project(origin_id)
         except (OSError, json.JSONDecodeError):
             self.status.set("The reply could not be saved.")
             return
         chat = list(project.get("chat") or [])
-        chat.append({"role": "assistant", "text": text})
+        chat.append(self._assistant_turn(text, job_id))
         project["chat"] = chat
         save_project(project)
 
-    def _take_announce(self, origin_id: str) -> bool:
-        announce = origin_id in self._announce_runs
-        self._announce_runs.discard(origin_id)
+    def _take_announce(self, job_id: str | None) -> bool:
+        if not job_id:
+            return False
+        announce = job_id in self._announce_jobs
+        self._announce_jobs.discard(job_id)
         return announce
 
-    def _finish_run(self, origin_id: str, result: dict | None, error: str | None) -> None:
-        self._busy = False
-        announce = self._take_announce(origin_id)
+    def _finish_run(
+        self,
+        origin_id: str,
+        result: dict | None,
+        error: str | None,
+        job_id: str | None = None,
+    ) -> None:
+        self._keep_composer_open()
+        origin_id = self._destination_id(origin_id, job_id)
+        announce = self._take_announce(job_id)
         still_here = self.project is not None and self.project.get("id") == origin_id
         if error or result is None:
-            message = error or "The zone did not run."
+            message = self._with_job_label(job_id, error or "The zone did not run.")
             if announce and still_here:
-                self._append_chat("assistant", message)
+                self.chat_log.append(self._assistant_turn(message, job_id))
+                self._render_chat()
                 self._save_form_or_chat(self.project)
                 save_project(self.project)
             elif announce:
-                self._append_saved_chat(origin_id, message)
+                self._append_saved_chat(origin_id, message, job_id)
             elif still_here:
                 messagebox.showerror("DI zone", message)
             self.status.set("The zone did not run.")
             return
-        summary = chat_run_summary(result) if announce else ""
+        result = self._stamp_job(result, job_id)
+        summary = self._with_job_label(job_id, chat_run_summary(result)) if announce else ""
         if still_here:
             self.project["last_run"] = result
             if summary:
-                self.chat_log.append({"role": "assistant", "text": summary})
+                self.chat_log.append(self._assistant_turn(summary, job_id))
                 self._render_chat()
             form_error = self._save_form_or_chat(self.project)
             save_project(self.project)
@@ -1142,25 +1277,27 @@ class App:
             project["last_run"] = result
             if summary:
                 chat = list(project.get("chat") or [])
-                chat.append({"role": "assistant", "text": summary})
+                chat.append(self._assistant_turn(summary, job_id))
                 project["chat"] = chat
             save_project(project)
-            self.status.set("DI zone finished on another project. Open it to see the results.")
+            heading = (result or {}).get("job_heading") or ""
+            note = "DI zone finished on another project. Open it to see the results."
+            self.status.set(f"{heading}. {note}" if heading else note)
             return
         if form_error:
-            self.status.set(form_error)
+            self.status.set(self._with_job_label(job_id, form_error))
         elif result["source"] == "claude":
             note = f"Tool plan plus {MODEL_ID}. Tables and Section {DRAFT_SECTION} use the tool plan."
             if result.get("warnings"):
                 note = note + " " + result["warnings"][0]
-            self.status.set(note)
+            self.status.set(self._with_job_label(job_id, note))
         else:
             note = "Tool plan only."
             if self.ask_claude.get() and not load_api_key():
                 note = "Tool plan only. Save an API key in Settings to ask Claude."
             elif result.get("warnings"):
                 note = "Tool plan only. " + result["warnings"][0]
-            self.status.set(note)
+            self.status.set(self._with_job_label(job_id, note))
 
     def _show_saved_run(self, result: dict | None) -> None:
         self.results.configure(state="normal")
@@ -1185,7 +1322,12 @@ class App:
             header = f"Narrative from {result.get('model') or MODEL_ID}. Tables use the tool plan."
         else:
             header = "Narrative from the tool plan."
-        lines = [
+        lines = []
+        heading = result.get("job_heading")
+        if heading:
+            lines.append(str(heading))
+            lines.append("")
+        lines.extend([
             "Assumptions vs calculated",
             trim_assumption_text(volume),
             screen_limit_assumption_text(trip),
@@ -1200,7 +1342,7 @@ class App:
             f"trim family: {trim.get('family') or trim.get('status')}",
             "",
             "Flags",
-        ]
+        ])
         lines.extend(f"• {flag}" for flag in result.get("flags") or [])
         if result.get("warnings"):
             lines.append("")
@@ -1268,8 +1410,10 @@ class App:
 
     def _send_chat_message(self, text: str) -> None:
         """Ask Claude without blocking the window. The zone form is optional."""
+        self._keep_composer_open()
         self._ensure_project()
         origin_id = self.project["id"]
+        project_name = self.project.get("name") or "Untitled job"
         self._append_chat("user", text)
         try:
             self.root.update_idletasks()
@@ -1286,7 +1430,6 @@ class App:
             save_project(self.project)
             self.status.set(key_status())
             return
-        self.status.set(f"Asking {MODEL_ID}…")
         try:
             basis = self.collect_basis()
             di = self.collect_di()
@@ -1304,7 +1447,7 @@ class App:
         if form_note:
             request = form_note + "\n\n" + request
 
-        def work():
+        def work(job_id: str) -> None:
             try:
                 pack = content_root()
                 client = AnthropicMessages(key)
@@ -1312,20 +1455,35 @@ class App:
                 reply = out.get("text") or "(Claude returned no text.)"
             except Exception as exc:
                 reply = safe_error(exc)
-            self.queue.put(lambda oid=origin_id, answer=reply: self._finish_chat(oid, answer))
+                self.jobs.mark(job_id, "error", reply)
+            self.queue.put(
+                lambda oid=origin_id, answer=reply, jid=job_id: self._finish_chat(oid, answer, job_id=jid)
+            )
 
-        threading.Thread(target=work, daemon=True).start()
+        job = self.jobs.submit(
+            project_id=origin_id,
+            project_name=project_name,
+            kind="chat",
+            title=text,
+            work=work,
+        )
+        self._keep_composer_open()
+        self.status.set(f"Asking {MODEL_ID}… {job.heading()}")
 
-    def _finish_chat(self, origin_id: str, reply: str) -> None:
+    def _finish_chat(self, origin_id: str, reply: str, job_id: str | None = None) -> None:
+        self._keep_composer_open()
+        origin_id = self._destination_id(origin_id, job_id)
+        reply = self._with_job_label(job_id, reply)
         if self.project is not None and self.project.get("id") == origin_id:
-            self._append_chat("assistant", reply)
+            self.chat_log.append(self._assistant_turn(reply, job_id))
+            self._render_chat()
             form_error = self._save_form_or_chat(self.project)
             save_project(self.project)
             if self.project.get("last_run"):
                 note = f"Chat updated. Tables and Section {DRAFT_SECTION} stay on the tool plan."
             else:
                 note = "Chat updated."
-            self.status.set(form_error or note)
+            self.status.set(form_error or self._with_job_label(job_id, note))
             return
         try:
             project = load_project(origin_id)
@@ -1333,10 +1491,13 @@ class App:
             self.status.set("The chat reply could not be saved.")
             return
         chat = list(project.get("chat") or [])
-        chat.append({"role": "assistant", "text": reply})
+        chat.append(self._assistant_turn(reply, job_id))
         project["chat"] = chat
         save_project(project)
-        self.status.set("Chat reply saved on another project.")
+        job = self._job_record(job_id)
+        heading = job.heading() if job is not None else ""
+        note = "Chat reply saved on another project."
+        self.status.set(f"{heading}. {note}" if heading else note)
 
     def open_settings(self) -> None:
         win = tk.Toplevel(self.root)
