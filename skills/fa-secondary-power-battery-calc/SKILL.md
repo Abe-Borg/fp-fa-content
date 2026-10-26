@@ -1,0 +1,68 @@
+---
+name: fa-secondary-power-battery-calc
+description: >-
+ Use when you must size standby batteries for a fire alarm or releasing service
+ control unit, booster, or ASD power supply per NFPA 72 §10.6.7: 24 h plus
+ alarm time, edition-keyed factor (2019 20% margin; 2022/2025 1.25 aging),
+ voice 24 h plus 15 min, generator plus 4 h option. Packet optional; missing
+ loads ASSUMED. Also covers Li-ion BESS rooms: FACP serving BESS detection and
+ the gas detection panel at 24 h standby plus 2 h alarm (NFPA 855-2023 4.8.3
+ for smoke and fire detection; 9.6.5.6.7(4) for Li-ion gas detection). Not NAC drop, UPS, or sizing the ESS itself.
+---
+# FA secondary power battery calc
+
+## Intake and scope (all FA skills)
+- The input packet is optional. Any missing input gets a stated value, labeled **ASSUMED** (value used + why). ASSUMED is never shown as a code value. Keep going.
+- Scope locks are hard Stops: wet, dry, or double-interlock (DI) preaction only. No clean agent. No foam. Single- or non-interlock as basis of design: record, Stop, RFI-variance.
+
+- On FM DI jobs carry the standing flag: "[OWNER]/insurer conflict: FM DS 5-32 (Jan 2026) s2.4.1.1 ranks DI preaction last. Company decision (design practice): keep DI. Flag to owner and FM on this job."
+- Label every claim [CODE] [HB] [PARA] [PRACTICE] [OWNER] (or [OWNER]/insurer). Cite section AND edition. Mark approximations with ~. Never invent code text; gaps get "section not pinned; verify before use.
+- Pin the enforced NFPA 72 edition first. A label can change by edition (run `fa-code-edition-delta-check`).
+- Three-layer basis (code x insurer x owner); most stringent wins; report delta vs the enforced edition and NFPA 72-2025.
+- Run math in a script; show inputs. Short sentences. No em dashes or en dashes (write "to"). Verify judgment calls with the engineer of record. Copy METHOD, not synthetic numbers.
+
+- [CODE] §10.6.7.2.1: quiescent load minimum 24 h.
+- [CODE] §10.6.7.2.2: then all evacuation/aid notification appliances 5 min, unless §10.6.7.2.4 applies.
+- [CODE] §10.6.7.2.3 to .2.4: voice/alarm: 24 h quiescent, then 15 min at maximum connected load.
+- [CODE] §10.6.7.2.13: include all loads not automatically disconnected on transfer.
+- **Edition-keyed battery factor (never hardcode):**
+ - NFPA 72-2019 §10.6.7.2.1.1*: "Battery calculations shall include a minimum 20 percent safety margin above the calculated amp-hour capacity required." Use F = 1.20 [CODE 2019].
+ - NFPA 72-2022 and 2025 §10.6.7.2.14*: "a correction factor of 1.25 for aging." Use F = 1.25 [CODE 2022/2025].
+ - Edition unknown: run `fa-code-edition-delta-check`; if still unknown, ASSUME the higher factor (1.25) and flag it [PRACTICE]. Never apply both.
+- [CODE] §10.6.7.3.1(2): automatic generator plus dedicated batteries with 4 hours of capacity (same text 2019 / 2022). The text does not say whether alarm minutes ride on top. Generator credit needs a generator per 10.6.11.3.1.1 (2022 and 2025): NFPA 110 Type 10, Class 24, Level 1. NFPA 110-2022 and 2025 Table 4.1(a) have no Class 24. Default: specify NFPA 110 Class X set to 24 h fuel, Type 10, Level 1 [CODE pointer; Design practice; Verify with the engineer of record]. If the generator does not meet that, no 4 h credit: size 24 h battery only.
+- Generator fuel: where the Class X (24 h) generator is the credit, NFPA 110-2025 5.5.3.1 sets the main tank at no less than 133 percent of the 5.5.2 low-fuel quantity for classes of 24 h or less; 5.5.3.2 sets 100 percent above 24 h (`calcs/fa/lib/epss_fuel.py`). Hand the 1.33 multiplier to the generator engineer; FA does not size the tank [CODE NFPA 110-2025].
+- Battery size cap: if the 24 h battery-only case exceeds the largest listed battery for the panel or supply (100 Ah in the corpus standard list, VERIFY against the panel and charger listing), first choice is to split the load onto a second listed supply and keep 24 h battery only. Example: two 55 Ah listed supplies, each under its own listing, each sized for 24 h plus alarm time with the edition factor. Design practice is to split the load before using one battery larger than the listing. A single larger battery is allowed only where the maker lists one supply at the needed size. Rechargeable batteries must be listed or recognized per NFPA 72-2022/2025 §10.6.10.1.3 (new in 2022). Generator plus 4 h is allowed only where the generator meets the item above. Verify with the engineer of record. The 4 h case (4 h quiescent plus the alarm period) is [PARA]; confirm it with the AHJ.
+- [CODE] NFPA 72-2025 §7.2.1(7); same item in 2022 and 2019: documentation includes battery capacity and safety margin calculations where batteries are provided. Ch. 14 annual secondary-power test confirms capacity plus margin.
+- [CODE] Table 14.4.3.2 item 8, Initial X and Annually, same words in 2019, 2022, 2025 : disconnect primary, verify the trouble signal, verify battery rated capacity exceeds standby and alarm demand "including the safety margin" from manufacturer's data, run general alarm 5 min (voice 15 min). Reading "safety margin" as this skill's F is [PARA]. The 5 / 15 min are test run times, not sizing inputs. 2025 fn c: a listed charger/power supply that verifies demand may be approved as equivalent.
+- Releasing panels: NFPA 72-2025 has NO releasing-specific duration. Applying 24 h + 5 min to a releasing panel is a **[PARA]** reading of §10.6.7.2.2, never [CODE]. Longer alarm time (e.g., 10 min) is insurer, owner, or practice; label it. Verify with the engineer of record on FM jobs: FM DS 5-40 §2.3.4 (September 2007) [OWNER/insurer] gives 90 h plus 10 min for preaction release panels. Confirm the edition is current. Conservative assumption: FM jobs carry 90 h + 10 min; NFPA-only jobs 24 h + alarm per 72.
+
+## BESS add-on (Li-ion ESS rooms, NFPA 855-2023, IFC 2024)
+- [CODE] NFPA 855-2023 4.8.3: Li-ion ESS smoke and fire detection must carry 24 h standby and 2 h alarm. 4.8.3 covers smoke and fire detection, not gas . The FACP serving BESS room detection is sized 24 h + 2 h, not 24 h + 5 min. Confirm adoption of 855-2023 with the AHJ. Running the whole FACP at 2 h alarm is an UPPER BOUND; split out the ESS detection load where the panel serves more (Verify with the engineer of record).
+- [CODE] NFPA 855-2023 9.6.5.6.7(4) : Li-ion gas detection gets at least 24 h standby and 2 h alarm, or more if the HMA requires. Item (3) asks only 2 h; the Li-ion item governs [PARA]. 9.6.5.6.7 applies only on the explosion control path. On the exhaust rate path, 855-2023 9.6.5.1.5.4(3) asks 2 h standby only ( r5). Default kept, no value change: size the gas panel at 24 h + 2 h on both paths [PRACTICE; Verify with the engineer of record, conservative]. Show both results, for example 2 h basis vs 24 h + 2 h basis. IFC 2024 1207.6.1.2.4 sets no detection battery hours (it points to Section 916).
+- [CODE] IFC 2024 916.5 (Emergency and Standby Power): standby power or trouble on power loss (FA-SKILLS-verify-01). 916.4 covers power connections. 916.5 sets no hours, so the trouble-only path does not meet 855 for Li-ion.
+- [CODE] IFC 2024 1207.6.1.2.1 (Standby Power): exhaust on standby power for at least 2 h per 1203.2.5 (FA-SKILLS-verify-01). Fan power is not on the FA battery; record it as a mechanical/electrical item.
+- Gas panel calc: controller, all gas heads, gas horn/strobes on the gas panel. Gas heads draw near alarm current in standby on many products; use data sheet values.
+- Factor: apply the enforced NFPA 72 edition factor to the gas panel 24 h + 2 h calc, same as the FACP: F = 1.20 on 72-2019 (10.6.7.2.1.1, 20 percent safety margin) or F = 1.25 on 72-2022/2025 (10.6.7.2.14, aging). Never both ( 2019 and 2022). Edition unknown: use 1.25 and flag [PRACTICE]. 855-2023 4.8.3 points to NFPA 72 secondary power (upheld 2026-10-23) [CODE pointer]; also 72-2022 17.10.2.2 where it interfaces the FA system. Then add owner margin if any (ASSUMED 20% on top only if owner requires; never double count without saying so). Derate for battery temperature where the room runs warm, per manufacturer data [PRACTICE].
+- Traps: a 72-only 24 h + 5 min FACP calc that passes but fails the 855 2 h alarm; a gas panel sized for 2 h only.
+- Steps: run the FACP case at 24 h + 5 min and at 24 h + 2 h; carry the larger. Run the gas panel at 24 h + 2 h. Report each pick and margin. Open item if HMA asks for more.
+
+## Inputs (ASSUME and flag any missing)
+1. Load list: item, qty, standby A, alarm A from listed data sheets (ASD heads, solenoids, modules, NACs).
+2. Which loads ride this panel vs separate supplies (each gets its own calc).
+3. Service type: protected premises, voice/alarm, releasing.
+4. Generator credit taken or not.
+5. Panel charger max Ah, available battery sizes.
+6. Enforced NFPA 72 edition (drives F).
+7. BESS present? Enforced NFPA 855 edition, HMA duration if any, gas panel load list.
+
+## Steps
+1. Build the load table in a script. Sum Is and Ia.
+2. Durations: standby 24 h (or 4 h quiescent plus alarm period with generator credit, [PARA], AHJ to confirm); alarm 5 min, or 15 min at max load for voice. For releasing, show 5 min [PARA] and any insurer case side by side.
+3. Required Ah = (Is x standby h + Ia x alarm h) x F, with F from the edition-keyed factor above. Print the edition and F in the script output. Pick the next standard size up. Report safety margin = picked Ah minus required Ah (and as a percent).
+3a. Thin screen: margin under 20% of required Ah is THIN [PRACTICE, ASSUMED screen, QA F11 2026-10-21c]. Verify with the engineer of record. Conservative: step up one standard size. Flag, do not change elected values silently.
+4. Check against panel charger limit; if over, call for separate charger or battery cabinet.
+5. Note what dominates (often ASD heads on aux power); show sensitivity if moved to separate supplies.
+6. On FM DI jobs add: "[OWNER]/insurer conflict: FM DS 5-32 (Jan 2026) s2.4.1.1 ranks DI preaction last. Company decision (design practice): keep DI. Flag to owner and FM on this job."
+
+## Output
+Load table (ASSUMED flags), Is, Ia, labeled durations, edition and factor F with its section (2019 §10.6.7.2.1.1 at 1.20; 2022/2025 §10.6.7.2.14 at 1.25), required Ah per case, pick, safety margin [CODE §7.2.1(7) documentation item], charger check, open items, delta vs NFPA 72-2025. The load table, F and pick are the demand record for the item 8 acceptance test; hand them to the ITM plan.

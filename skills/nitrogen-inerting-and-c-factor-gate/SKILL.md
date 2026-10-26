@@ -1,32 +1,27 @@
 ---
 name: Nitrogen inerting and C-factor gate
 description: >-
-  use this when company-elected dry or double-interlock is pinned (STS dry|DI +
-  matrix nitrogen/C rows consumed when present, else ASSUMED and flagged;
-  packet optional) and you must elect
-  inert vs air, generator vs cylinders (ECS default family; two-number
-  fill/maintenance check), remote-branch purity sampling, and emit calc C=100
-  always (C=120 comparison-only); SI/NI-as-BOD → Stop RFI-variance
-  (comparison-only); foam prohibited; mist PRACTICE REFUSED; status register
-  every run — not ITM interval tables, not El/El trim catalog, not SprinkFDT,
-  not occupancy or density×area, not QOD/30 s delivery proof.
+ use this when company-elected dry or double-interlock is pinned (STS dry|DI +
+ matrix nitrogen/C rows consumed when present, else ASSUMED and flagged;
+ packet optional) and you must elect
+ inert vs air, generator vs cylinders (ECS default family; two-number
+ fill/maintenance check), remote-branch purity sampling, and emit calc C=100
+ always (C=120 comparison-only); SI/NI-as-BOD → Stop RFI-variance
+ (comparison-only); foam prohibited; mist PRACTICE REFUSED; status register
+ every run — not ITM interval tables, not El/El trim catalog, not SprinkFDT,
+ not occupancy or density×area, not QOD/30 s delivery proof.
 ---
 # Nitrogen inerting and C-factor gate
 
-
-Roster language, job names, and local source-file paths were removed when this method was copied into the content pack. Section numbers and the calculation method are unchanged. Verify judgment calls with the engineer of record.
-
-**Intake rule (the engineer of record, 2026-10-07 — overrides any older gate wording below):** The assignment packet is optional and never a gate. Start from exactly what is given. A missing packet, a missing upstream result (STS token, matrix row, occupancy fork, density, C&E, etc.), or a missing input blank is **not** a Stop: run the upstream Skill if practical, otherwise fill the gap with a stated **ASSUMED** value (the value used + why), flag it in the output and the status register, and continue. ASSUMED is not verified. "Never invent" / "refuse invent" rules on project numbers mean do not *silently* invent: label the number ASSUMED; never present an ASSUMED value as a cited code or table value; never freeze a vendor SKU. **Company scope locks stay hard Stops and are not softened by this rule:** wet / dry / double-interlock preaction only; foam prohibited; clean agent not done (hand-away); water mist `PRACTICE REFUSED`; single-interlock / non-interlock / other preaction never the elected system (SI/NI-as-BOD → Stop + `RFI-variance`, comparison-only). Cite section and edition, use `_calc/run.py` for governed math, design to the most-stringent 3-layer basis; Verify with the engineer of record.
+**Intake.** The input packet is optional. A missing input is not a stop: state the value used and why, and label it ASSUMED. Do not present an ASSUMED value as a cited code or table value, and do not freeze a vendor SKU. **Scope lock.** Wet pipe, dry pipe, and double-interlock preaction only. Foam, clean agent, water mist, and single-interlock or non-interlock preaction are out of scope. If one of those is requested as the basis of design, record it and stop. Do not substitute another system and do not size it here. Cite the section and the edition. Decide each parameter by the most stringent of the code floor, the insurer sheet, and the owner standard. Verify judgment calls with the engineer of record.
 
 Reusable DC fire-protection recipe. **This Skill is the HARDWARE + C-FACTOR GATE** that makes nitrogen real on a dry or double-interlock system that **suppression-technology-selection has already pinned** as company `dry` | `double-interlock`. It elects **inert vs air**, **generator vs cylinders** (liquid is forbidden; **ECS** is the default generator family — design-practice setting), **remote-branch purity sampling**, and **emits calc C=100 — always** (design-practice setting: use C=100, do not chase C=120; C=120 appears only as a `comparison-only` line). It then **hands the 3 yr → 10 yr trip-test INTERVAL LEVER** to **itm-design-for-testability**. It does **not** own that lever’s schedule. It does **not** elect wet/dry/DI. It does **not** prove ≤30 s / ≤60 s water delivery (fill ≠ delivery).
 
 **Core thesis:** **Calc C = 100 — always** on the company dry / DI sprinkler pipe this gate covers (**design-practice setting: use C=100; don't chase C=120**). Nitrogen is a **corrosion and reliability decision, not a hydraulic credit.** The C=120 allowance exists in other layers (FM DS 2-0 Table 2.2.1.3.3 "dry/preaction black steel + inert gas 120"; NFPA 13-2022 per Hopkins; UFC 3-600-01 §9-6/§9-7), but this Skill prints it only as a **`comparison-only`** line with the **≈29 % friction understatement** shown (FM DS 3-0 Eq 15: `(100/120)^1.85 ≈ 0.714`). The evidence backs the dial: independent 8-week testing failed 98 % system-wide under every purge method sold (best **97.3 %**; branches in the **80s–low 90s**) while purge-valve ports read 98 %+. Remote purge + branch-end sampling stay mandatory because they decide whether the pipe is actually inerted against **corrosion** — not to earn C. **Default generator family = ECS** (AdvancedIQ; design-practice setting — ECS, not Potter), specified by **duty + listed function** with OEM values `confirm at submittal`; Potter IntelliGen and UFS NITROGEN-PAC are cited examples / alternates, never a frozen hall SKU. Size any family on **two numbers** (maintenance volume ≥ Σ connected gallons; 30-min compressor / bypass fill ≥ largest single system). FM DS 2-81 rewards systems **originally installed with nitrogen** (full-flow **3 yr → 10 yr**; black-steel obstruction exemption) — a **CD decision**, not a later O&M conversion — and only when FM grants on company-elected **dry/DI**.
 
-**Design practice (lede):** three-layer basis (code floor × insurer sheet × owner standard), **most-stringent union PER PARAMETER**, applied separately to **medium**, **source**, **sample locations**, **C-factor**, and **ITM-lever eligibility**. Delta vs **NFPA 13-2025** (C-factor / dry-pipe air vs N₂ / corrosion — directional `[V]` where unpinned). Cite **section AND edition**. Show-and-verify math. Flag invented values `[SYN]` / unpinned `[V]`. Status vocabulary every run: `grounded` / `provisional` / `unresolved` / `comparison-only` / `handoff` / `RFI-variance`. Company fence: controlling BOD for this gate = **`dry` | `double-interlock`** only (wet → N/A); SI/NI → Stop + `RFI-variance` / comparison-only; **Foam prohibited**; **Mist = `PRACTICE REFUSED`**. Upstream (packet optional; gaps → `ASSUMED`): completed `dc-fp-assignment-packet` + STS `dry`|`double-interlock` + matrix nitrogen/C/inert-medium rows when dual-carrier. Caller-path-only. **NO PLACEHOLDER.** If notes conflict, **most-stringent wins and both sources stay visible**.
+**Design practice (lede):** three-layer basis (code floor × insurer sheet × owner standard), **most-stringent union PER PARAMETER**, applied separately to **medium**, **source**, **sample locations**, **C-factor**, and **ITM-lever eligibility**. Delta vs **NFPA 13-2025** (C-factor / dry-pipe air vs N₂ / corrosion — directional `[V]` where unpinned). Cite **section AND edition**. Show-and-verify math. Flag invented values `[SYN]` / unpinned `[V]`. Status vocabulary every run: `grounded` / `provisional` / `unresolved` / `comparison-only` / `handoff` / `RFI-variance`. Company fence: controlling BOD for this gate = **`dry` | `double-interlock`** only (wet → N/A); SI/NI → Stop + `RFI-variance` / comparison-only; **Foam prohibited**; **Mist = `PRACTICE REFUSED`**. Upstream (packet optional; gaps → `ASSUMED`): completed the input packet + STS `dry`|`double-interlock` + matrix nitrogen/C/inert-medium rows when dual-carrier. Caller-path-only. **NO PLACEHOLDER.** If notes conflict, **most-stringent wins and both sources stay visible**.
 
-**Honesty — worked packages now exist (method only, `[SYN]`).** Held 2026-10-05 Engineer packages: **Anne Arundel MD** DI hall two-number check (`case-2026-10-05-bg`: largest zone 549.4 gal / riser-room Σ 1,442.2 gal; ECS AG-2000 800 @ 40 psig / 2,000 total passes; UFS NGM-5 + CTA-30 1,350 / 3,000 passes as FM-certificate alternate; fill 549.4 × 40 / (7.48 × 14.7 × 30) = 6.66 SCFM; C = 100); **WDM (West Des Moines IA) dock** dry-pipe generator election (`case-2026-10-05-bd`: 244.6 gal; FM DS 2-1 §2.2.1.12 fork → N₂ for life + black steel; ECS AG-675 235 gal @ 40 psi **fails** fill by 9.6 gal — a smaller ECS unit is not automatically adequate; C = 100); **C-Aire / N2Blast** feed-air packages (`worked-ac-caire-quickfill-231`, `worked-ad-caire-mid-232`, `worked-ae-beecher-cs-233`: **tank gallons ≠ system gallons**; Quick-Fill 635 is quick-fill only, not supervisory maintenance). Two preaction CD sets emit a `05_detection-releasing` supervisory-air / corrosion-control sheet — the **home for this output**. **Do not copy any package's zone gallons, SKUs, purity %, scfm, or supervisory-floor numbers onto a new hall** — re-derive (Adapt). **Do not invent a 98 % acceptance or a 14-day closeout as achieved.**
-
-Write the gate **only** to the path the **caller** names. Do not write into KNOWLEDGE_BASE, EXERCISES, `_pruner`, `_surveyor`, `_engineer`, ARCHIVE, or the root PDF queue. Look up shop codebook notes **by title**.
+**Honesty — worked packages now exist (method only, `[SYN]`).** Held 2026-10-05 Engineer packages: **a prior layout** DI hall two-number check (``: largest zone 549.4 gal / riser-room Σ 1,442.2 gal; ECS AG-2000 800 @ 40 psig / 2,000 total passes; UFS NGM-5 + CTA-30 1,350 / 3,000 passes as FM-certificate alternate; fill 549.4 × 40 / (7.48 × 14.7 × 30) = 6.66 SCFM; C = 100); **a prior layout (West Des Moines IA) dock** dry-pipe generator election (``: 244.6 gal; FM DS 2-1 §2.2.1.12 fork → N₂ for life + black steel; ECS AG-675 235 gal @ 40 psi **fails** fill by 9.6 gal — a smaller ECS unit is not automatically adequate; C = 100); **C-Aire / N2Blast** feed-air packages (`worked-ac-caire-quickfill-231`, `worked-ad-caire-mid-232`, `worked-ae-beecher-cs-233`: **tank gallons ≠ system gallons**; Quick-Fill 635 is quick-fill only, not supervisory maintenance). Two preaction CD sets emit a `05_detection-releasing` supervisory-air / corrosion-control sheet — the **home for this output**. **Do not copy any package's zone gallons, SKUs, purity %, scfm, or supervisory-floor numbers onto a new hall** — re-derive (Adapt). **Do not invent a 98 % acceptance or a 14-day closeout as achieved.**
 
 ---
 
@@ -47,7 +42,7 @@ Comparison-only (never elected here; never the controlling N₂/C BOD):
 - Non-interlock preaction
 - Any other preaction type
 
-**This Skill does not elect wet | dry | DI.** It **consumes** the STS election and nitrogen / C / inert-medium rows from `most-stringent-basis-matrix` (plus the completed `dc-fp-assignment-packet`). Controlling company BOD for this gate = **`dry` | `double-interlock`** only.
+**This Skill does not elect wet | dry | DI.** It **consumes** the STS election and nitrogen / C / inert-medium rows from `most-stringent-basis-matrix` (plus the completed the input packet). Controlling company BOD for this gate = **`dry` | `double-interlock`** only.
 
 If the caller presents SI, NI, or another prohibited preaction type as the **basis of design** / controlling mix:
 
@@ -78,13 +73,13 @@ If the caller presents SI, NI, or another prohibited preaction type as the **bas
 |---|---|
 | Parameters A–E gate + status register | System-family election (STS) |
 | Inert vs air; generator vs cylinders (liquid Stop); ECS default family; two-number fill/maintenance check | Occupancy / HC / OH classification |
-| Remote-branch (+ dead-end) purity sampling doctrine | Density × area `_calc` (consumes emitted C) |
+| Remote-branch (+ dead-end) purity sampling doctrine | Density × area `calcs` (consumes emitted C) |
 | Emitted calc C = **100 always** (120 = comparison-only line + 29 %) | Dual-carrier BOD rebuild (consume matrix) |
 | Package checklist (compressor + generator; remote purge; branch samples) | Rewriting `preaction_trip` Boolean (C&E) |
 | ITM **eligibility** (`originally installed with nitrogen` y/n) hand-off | ITM **interval** calendar / 3→10 schedule |
 | Reciprocal handshakes (ITM / water-delivery / El-El / STS / matrix / C&E) | QOD sizing / ≤30 s / ≤60 s **delivery** proof |
 | Consume packet + STS dry\|DI + matrix N₂/C rows | El/El trim catalog / SKU schedule |
-| Thin OEM **sampling-location** pointer (not SKU BOD) | SprinkFDT / `_calc` / inventing purity % / scfm / SKU |
+| Thin OEM **sampling-location** pointer (not SKU BOD) | SprinkFDT / `calcs` / inventing purity % / scfm / SKU |
 | | Pump envelope / hydrant / node-by-node tree |
 
 ### 1.4 Status register (mandatory every run)
@@ -93,8 +88,8 @@ Emit a status token on **(a)** the Hard-scope gate, **(b)** each of Parameters A
 
 | Token | Meaning on this Skill |
 |---|---|
-| `grounded` | Controlling dry/DI + edition + claim supported by **mined** / opened `opened-file/` WHOLE evidence (or measured remote-branch + dead-end ≥98 %) |
-| `provisional` | Directionally pinned; PDF-held scout sheet or edition hole flagged `[V]` — **never silent `grounded`** |
+| `grounded` | Controlling dry/DI + edition + claim supported by **mined** / opened WHOLE evidence (or measured remote-branch + dead-end ≥98 %) |
+| `provisional` | Directionally pinned; PDF-held sheet or edition hole flagged `[V]` — **never silent `grounded`** |
 | `unresolved` | STS / matrix N₂·C row / carrier / AHJ edition / pipe material / purity-verification status not given — carried as `ASSUMED` (value + why) and flagged; not a Stop (the packet itself is optional) |
 | `comparison-only` | SI/NI, AXA SI preference, FM ranking — never controlling N₂/C BOD |
 | `handoff` | Peer owns next action (ITM 3→10 schedule; QOD×N₂ listing / 30 s proof; El/El medium compat; C&E low-air Boolean; density-area consumes C) |
@@ -110,7 +105,7 @@ Caller must supply. Do not invent a nitrogen plant, purity %, scfm, SKU, or 14-d
 
 | Input | Required | Notes |
 |---|---|---|
-| `dc-fp-assignment-packet` (optional) | no | Packet is **optional, never a gate**. Consume; do not rebuild; do not retrieve `CASE_INDEX`. Missing → proceed from the inputs given; label filled-in values `ASSUMED` (value + why). |
+| the input packet (optional) | no | Packet is **optional, never a gate**. Consume; do not rebuild; do not retrieve `CASE_INDEX`. Missing → proceed from the inputs given; label filled-in values `ASSUMED` (value + why). |
 | **Company-elected `system_type` from STS** | **yes** (inherited) | Must be `dry` \| `double-interlock` from `suppression-technology-selection`. Missing → **not a Stop**: proceed with a stated `ASSUMED` value (value + why), flagged. SI/NI as BOD → **Stop** (`RFI-variance`). Wet with no dry/DI → **N/A**. |
 | **Consumed `most-stringent-basis-matrix` nitrogen / C / inert-medium rows** | **yes** when dual-carrier (or when those rows exist) | Consume; do not rebuild. Unresolved controlling N₂ or C row → **not a Stop**: carry the more stringent candidate value as `ASSUMED` (value + why), flagged. Never silent-swap FM numbers onto an AXA job. |
 | **System type per hall / zone (controlling)** | **yes** | Already pinned: `dry` / `double-interlock`. This Skill does **not** pick SI vs DI. |
@@ -134,7 +129,7 @@ Hand-off line (2026-10-22c): largest-system volume (gal) and connected Σ gallon
 
 | Upstream Skill | Consume | Do not |
 |---|---|---|
-| `dc-fp-assignment-packet` | Packet context — **optional** (consume when present) | Rebuild the packet; retrieve `CASE_INDEX` |
+| the input packet | Packet context — **optional** (consume when present) | Rebuild the packet; retrieve `CASE_INDEX` |
 | `suppression-technology-selection` | Elected dry/DI; comparison-only / prohibited / `PRACTICE REFUSED` status | Elect a system family; silent-substitute SI→DI |
 | `most-stringent-basis-matrix` | Nitrogen / C / inert-medium rows; company dry/DI fence; provisional/`[V]` | Rebuild dual-carrier BOD; silent FM↔AXA C swap |
 | `preaction-releasing-c-and-e-soo` | Low-air Boolean context; SI line is **comparison-only** | Rewrite C&E; invent SI supervisory defaults |
@@ -154,7 +149,7 @@ If SI/NI/foam/mist is presented as BOD → **Stop** (company scope lock — stay
 | `preaction-releasing-c-and-e-soo` | Controlling `preaction_trip` / low-air Boolean; SI line **comparison-only** | Day-one N₂ / medium context; do not rewrite matrix |
 | `suppression-technology-selection` | Company wet \| dry \| DI election | Consumes dry/DI; does not re-elect |
 | `most-stringent-basis-matrix` | Dual-carrier nitrogen / C / inert rows | Consumes; never silent-swap |
-| `dc-fp-assignment-packet` | Packet intake (optional) | Consume when present |
+| the input packet | Packet intake (optional) | Consume when present |
 | `density-area-dry-increase` (and pump / hydrant / hydraulic-tree) | Consume emitted C; AXA DI +30 % area **AND** N₂ penalty stays density / matrix | Emit C; do not re-run `qd` |
 
 Emit rows as needed:
@@ -173,8 +168,8 @@ Emit rows as needed:
 
 | Standard | Role | Shop-pinned editions |
 |---|---|---|
-| **NFPA 13** | Code floor: air **or** nitrogen permitted; C=120 at 98 % is the **Hopkins 13-2022** characterization | Delta = **13-2025**. Unamended **2024 I-Codes** enforce **13-2022**. NFPA 13 nitrogen C=120 allowance [CODE NFPA 13-2025 §28.2.4.8.1(14) + Table 28.2.4.8.1 (new systems, nitrogen per §8.2.10); NFPA 13-2022 §28.2.4.8.1(13) + Table 28.2.4.8.1 (nitrogen per §8.2.6.9); pull 13-16]. The 98 % figure is not in that clause (Hopkins / §8.2.x, `[V]`). TIA effect on the clause unconfirmed (code edition shows only a general TIA notice, pull 13-16) → `[V]`. Company emit stays 100 (design-practice setting). **Do not invent a 13-2025 C-table section.** |
-| **NFPA 13 air/N₂ supply trim (2026-10-22)** | Check valve in the pneumatic supply connection, listed shutoff (renewable-disc or ball) on its supply side, approved relief valve between supply and shutoff set ≥10 psi above system pressure and within the maker's limit | [CODE NFPA 13-2025 §8.2.9.2–8.2.9.4, pulls 13-42, 13-48, 13-51; 2022 §8.2.6.4.2 check, §8.2.6.5 relief, §8.2.6.6.4 check per system]. Do not cite 8.2.6.6.4 for 2025 (does not exist). |
+| **NFPA 13** | Code floor: air **or** nitrogen permitted; C=120 at 98 % is the **Hopkins 13-2022** characterization | Delta = **13-2025**. Unamended **2024 I-Codes** enforce **13-2022**. NFPA 13 nitrogen C=120 allowance [CODE NFPA 13-2025 §28.2.4.8.1(14) + Table 28.2.4.8.1 (new systems, nitrogen per §8.2.10); NFPA 13-2022 §28.2.4.8.1(13) + Table 28.2.4.8.1 (nitrogen per §8.2.6.9);]. The 98 % figure is not in that clause (Hopkins / §8.2.x, `[V]`). TIA effect on the clause unconfirmed (code edition shows only a general TIA notice) → `[V]`. Company emit stays 100 (design-practice setting). **Do not invent a 13-2025 C-table section.** |
+| **NFPA 13 air/N₂ supply trim (2026-10-22)** | Check valve in the pneumatic supply connection, listed shutoff (renewable-disc or ball) on its supply side, approved relief valve between supply and shutoff set ≥10 psi above system pressure and within the maker's limit | [CODE NFPA 13-2025 §8.2.9.2–8.2.9.4, pulls, ; 2022 §8.2.6.4.2 check, §8.2.6.5 relief, §8.2.6.6.4 check per system]. Do not cite 8.2.6.6.4 for 2025 (does not exist). |
 | **NFPA 25-2026 C-value upkeep** | Only matters if C=120 is claimed (shop does not): corrosion-mitigation ITM; if not maintained, re-calc at the lower C | [CODE NFPA 25-2026 §4.1.5.1–4.1.5.2, pull 25-08]. Shop C=100 on dry/DI sidesteps this; keep it that way. |
 | **NFPA 25** | ITM floor under the lever this Skill **hands off**. FM’s 10-year full-flow is an **FM relaxation**; NFPA 25 floor is **3 years** [CODE NFPA 25-2017–2026, full-open trip every 3 yr: preaction §13.4.3.2.2 (partial-open in other years §13.4.3.2.3); dry §13.4.5.2.2.2 (annual trip §13.4.5.2.2), pull 25-04] | Latest **2026**; 2024 I-Codes typically **25-2023**. **Licensed NFPA 25 not in codebook.** Do not emit the interval table here. NFPA 25 N₂ items apply only where N₂ is used for an increased C value: semiannual ≥98% check [CODE 2023 preaction §13.4.3.2.14 / 2026 §13.4.3.2.15; dry 2023/2026 §13.4.5.2.10] and §14.3.1(16) N₂-loss obstruction trigger (2023+), pull 25-04; at the emitted C of 100 neither is triggered by this Skill. |
 | **FM DS 2-0** | C-table, inert-medium default, 30-minute fill, FM Approved generator, pendent-on-preaction galvanized-**or**-nitrogen | **October 2021 / Interim Rev. January 2024** |
@@ -182,22 +177,22 @@ Emit rows as needed:
 | **FM DS 3-0** | Hazen-Williams physics for the 29 % swing | Held copy **March 2010** (verify current). Eq 15 is edition-independent physics. |
 | **AXA XL** DC white paper | Controlling AXA path that **mandates** N₂ = **DI** (+30 % area **AND** nitrogen-fill). SI preferred = **`comparison-only`** under company fence — may discuss N₂ for corrosion, **cannot** be controlling BOD | **March 2026**, p.8 |
 | **DoD UFC 3-600-01** | Controlling **only** on a DoD job: **mandatory** N₂, **≥98 % throughout piping within 14 days**, C=120 permitted (here `comparison-only` — emit 100), **no stand-alone bottles**; continuous venting not permitted | Change **6, 2021**, §9-6 / §9-7. **14-day = spec obligation**, not a Hopkins-supported achievement. |
-| **FM Approval Standard 1035** | Defines "FM Approved nitrogen generator" | **Certificate-held:** FM Approvals certificates cite **FM 1035 (September 2024)** — UFS **PR470042** (NGM-5 / 10 / 20 / 30 / 60, granted 15 Sep 2025, UFS-356 Rev 1.00) and **PR470065** (NITROGEN-PAC SC-1L, granted 25 Oct 2024, UFS-612A Rev 1.00). **Standard text unheld** (Sep 2022 copy scout-opened, PDF-held only). ECS / Potter "FM 1035 Approved" = **listing claims** in OEM sheets. Verify any listing at approvalguide.com (surveillance-dependent). |
+| **FM Approval Standard 1035** | Defines "FM Approved nitrogen generator" | **Certificate-held:** FM Approvals certificates cite **FM 1035 (September 2024)** — UFS **PR470042** (NGM-5 / 10 / 20 / 30 / 60, granted 15 Sep 2025, UFS-356 Rev 1.00) and **PR470065** (NITROGEN-PAC SC-1L, granted 25 Oct 2024, UFS-612A Rev 1.00). **Standard text unheld** (Sep 2022 copy opened, PDF-held only). ECS / Potter "FM 1035 Approved" = **listing claims** in OEM sheets. Verify any listing at approvalguide.com (surveillance-dependent). |
 | **FM DS 2-1** *Corrosion in Automatic Sprinkler Systems* | Corrosion mechanism + N₂ in dry/preaction **and** wet; coupon rates; **does not grant C=120** | **Oct 2016 / IR July 2022**, 21 pp. Official ungated FMDS0201. |
 
 Look up **by title**: *The Design practice*; *Enforced-vs-latest edition resolver*; *Nitrogen inerting and internal corrosion control*; *Dry-pipe & double-interlock air supply and water delivery*; *Fire-protection hydraulics methods*; *ITM basis and design for testability*; *AXA XL insurer design basis*; *DoD UFC 3-600-01 water-based suppression design basis*; Hopkins / Sprinkler Age *Nitrogen Generators for Dry Pipe Systems* (May/June 2024); Potter *Corrosion Inhibition… Using Nitrogen Gas* (corrosion data); ECS *Managing Safety in Nitrogen Inerting Fire Sprinkler Systems* (May 2014); ECS AdvancedIQ IOM **M-1428 Rev 1.12** (AG-675/950/2000/3500) + AG-2000/3500 spec **Rev 6.00**; UFS NGM data sheet **UFS-354 Rev 1.02 (Sep 2025)** + CTA **UFS-352 Rev 1.01 (Jun 2025)**.
 
 **Design-practice settings (live in the design practice charter; not yet written into the corpus codebook):** **C = 100 always** (don't chase 120); **ECS** is the default N₂ generator family (not Potter). Owner / insurer may raise, never lower.
 
-Consume the assignment packet if present (optional). Do not rebuild it. Do not retrieve CASE_INDEX. Do not run `_calc` except `hw` at C=100 when a pipe-friction number is needed, `pipe_volume` (via `sprinkler-system-volume-takeoff`) and `air_fill_scfm` for the 30-minute fill (JSON saved beside the deliverable).
+Consume the assignment packet if present (optional). Do not rebuild it. Do not retrieve CASE_INDEX. Do not run `calcs` except `hw` at C=100 when a pipe-friction number is needed, `pipe_volume` (via `sprinkler-system-volume-takeoff`) and `air_fill_scfm` for the 30-minute fill (JSON saved beside the deliverable).
 
-**Combined op (2026-10-23b):** `compressor_n2_sizing` (`systems:[{id,v_gal,p_psig}]`, `t_min`=30). It returns the compressor on the largest single system [CODE NFPA 13-2025 §8.2.7.3] and the N2 generator on the campus connected total [Lead C4, PRACTICE, Verify with the engineer of record]. It matches the two-number rule. Report both the gauge and abs scfm.
+**Combined op (2026-10-23b):** `compressor_n2_sizing` (`systems:[{id,v_gal,p_psig}]`, `t_min`=30). It returns the compressor on the largest single system [CODE NFPA 13-2025 §8.2.7.3] and the N2 generator on the campus connected total [PRACTICE]. It matches the two-number rule. Report both the gauge and abs scfm.
 
-**Owner restore target shorter than 30 min ( R29, open item G4).** Code floor is 30 min [CODE NFPA 13-2025 §8.2.7.3]. An owner standard of e.g. 20 min is **more stringent** → size the compressor for the owner time (rerun with `t_min:20`); never relax below 30 min unless code permits. Practice case: 20 min needs 5.45 scfm, so a 5 scfm compressor that passes 30 min fails the owner target. Owner value is an owner ruling, not code; if the owner target is unconfirmed, keep 30 min and flag Verify with the engineer of record / RFI.
+**Owner restore target shorter than 30 min (open item G4).** Code floor is 30 min [CODE NFPA 13-2025 §8.2.7.3]. An owner standard of e.g. 20 min is **more stringent** → size the compressor for the owner time (rerun with `t_min:20`); never relax below 30 min unless code permits. Practice case: 20 min needs 5.45 scfm, so a 5 scfm compressor that passes 30 min fails the owner target. Owner value is an owner ruling, not code; if the owner target is unconfirmed, keep 30 min and flag Verify with the engineer of record / RFI.
 
-**30-minute fill op (2026-10-23, `_calc` inc4 R1):** step `{"op":"air_fill_scfm","v_gal":<largest single system gal>,"p_psig":<supervisory psig>,"t_min":30}` [restore rule CODE NFPA 13-2025 §8.2.7.3; 2019/2022 §8.2.6.3.2]. Outputs `scfm_gauge_basis` = V·P/(7.48·14.7·T) and `scfm_abs_basis` = V·(P+14.7)/(7.48·14.7·T). **Size on `scfm_abs_basis`** (≈37 % higher at 40 psig) — `Verify with the engineer of record` (conservative; KB/Viking basis is gauge; listed compressor/CTA fill table governs when held). Run it on the **largest single system** only; Σ gallons stays the **generator maintenance** check — do **not** follow corpus core-r4c2's "generator sized on the single largest system" wording; the two-number rule here governs. Do not run SprinkFDT.
+**30-minute fill op (2026-10-23, `calcs` ):** step `{"op":"air_fill_scfm","v_gal":<largest single system gal>,"p_psig":<supervisory psig>,"t_min":30}` [restore rule CODE NFPA 13-2025 §8.2.7.3; 2019/2022 §8.2.6.3.2]. Outputs `scfm_gauge_basis` = V·P/(7.48·14.7·T) and `scfm_abs_basis` = V·(P+14.7)/(7.48·14.7·T). **Size on `scfm_abs_basis`** (≈37 % higher at 40 psig) — `Verify with the engineer of record` (conservative; KB/Viking basis is gauge; listed compressor/CTA fill table governs when held). Run it on the **largest single system** only; Σ gallons stays the **generator maintenance** check — do **not** follow corpus core-r4c2's "generator sized on the single largest system" wording; the two-number rule here governs. Do not run SprinkFDT.
 
-**Overlay traps:** (1) NFPA 13 C=120 is pinned at 13-2025 §28.2.4.8.1(14) / 13-2022 §28.2.4.8.1(13) and Table 28.2.4.8.1 (pull 13-16); the 98 % link stays `[V]`; TIA effect unconfirmed, `[V]`. (2) Galvanized dry/preaction C=120 is a **live dispute** (FM Table 2.2.1.3.3 = 120; Potter citing NFPA 13-2013 = 100). **Both sources stay visible. Emitted C = 100 regardless** (design-practice setting). (3) **FM DS 2-1 corrosion success ≠ C=120 grant** — coupon 20×/14× and 98 % chemistry are corrosion results; they do not move the emitted C.
+**Overlay traps:** (1) NFPA 13 C=120 is pinned at 13-2025 §28.2.4.8.1(14) / 13-2022 §28.2.4.8.1(13) and Table 28.2.4.8.1 ; the 98 % link stays `[V]`; TIA effect unconfirmed, `[V]`. (2) Galvanized dry/preaction C=120 is a **live dispute** (FM Table 2.2.1.3.3 = 120; Potter citing NFPA 13-2013 = 100). **Both sources stay visible. Emitted C = 100 regardless** (design-practice setting). (3) **FM DS 2-1 corrosion success ≠ C=120 grant** — coupon 20×/14× and 98 % chemistry are corrosion results; they do not move the emitted C.
 
 ### 3.2 Confirm prerequisites — consume, don’t redo
 
@@ -248,7 +243,7 @@ The riser room is an occupied indoor space. **OSHA: below 19.5 % O₂ is oxygen-
 
 **Scale check:** **1 gal LN₂ → 93 ft³ of gas**; a **60-gal dewar → >5,500 ft³**.
 
-**UFC overlay:** **no stand-alone N₂ bottles**. Specify the generator **by duty + listed function** (FM 1035 where claimed / certified; membrane; integral or separate compressor with bypass for the NFPA 13 30-minute fill [CODE NFPA 13-2025 §8.2.7.3; 2019/2022 §8.2.6.3.2; 2007 §7.2.6.2.2; design-practice-notes-link-13-03-air-n2-supply-2007-2025 (ABE-SRC-04)]; maintenance capacity ≥ Σ connected gallons; supervisory alarms to FACP/BMS), never by a hall-default model. OEM capacities are **`confirm at submittal`**.
+**UFC overlay:** **no stand-alone N₂ bottles**. Specify the generator **by duty + listed function** (FM 1035 where claimed / certified; membrane; integral or separate compressor with bypass for the NFPA 13 30-minute fill [CODE NFPA 13-2025 §8.2.7.3; 2019/2022 §8.2.6.3.2; 2007 §7.2.6.2.2; design-practice-notes-link--air-n2-supply-2007-2025 ]; maintenance capacity ≥ Σ connected gallons; supervisory alarms to FACP/BMS), never by a hall-default model. OEM capacities are **`confirm at submittal`**.
 
 **Generator family election (design-practice setting — ECS, not Potter):**
 
@@ -257,10 +252,10 @@ The riser room is an occupied indoor space. **OSHA: below 19.5 % O₂ is oxygen-
 | **ECS AdvancedIQ** (wall-mount AG-675 / 950 / 2000 / 3500) | **Default family** | IOM **M-1428 Rev 1.12** pp. 8–9: largest single zone **235 / 235 / 800 / 800 gal @ 40 psig** (470 / 470 / 1,600 @ 20 psig); accumulative **675 / 950 / 2,000 / 3,500 gal**; "largest system capacities … based on FM Global testing"; "FM Approved: Standard 1035" = listing claim; AMD one per system (AG-675/950 single-system may omit). Spec sheet **Rev 6.00**: integral compressor + bypass meets the 30-min fill; inert "within 14 days" = **listing timeline, not measured**. Above the AG listing single-zone fill → separate compressor / larger ECS configuration `[V]` with ECS. |
 | **UFS NITROGEN-PAC M-Series NGM-5…60 + CTA** | **Alternate — FM-certificate grade** | Certificate **PR470042** (FM 1035 Sep 2024). UFS-354 Table 1 **maximum sprinkler pipe volume:** NGM-5 **3,000** · NGM-10 **5,000** · NGM-20 **10,000** · NGM-30 **20,000** · NGM-60 **31,100 gal** (basis pressure / leak / riser count not printed). 30-min fill rides the **CTA** via the NGM membrane bypass — UFS-352 Table 1 bypass: CTA-30 **2,700 @ 20 / 1,350 @ 40 psi**; CTA-50 4,000 / 2,000; CTA-75 7,700(?) / 3,350 (20-psi value breaks the 2:1 pattern — confirm with UFS); CTA-100 10,700 / 5,350. Current-generation manual 30-NPMICM-0G2 unheld — do not mix with 2019 NGM-S/M/L codes. |
 | **UFS NITROGEN-PAC SC-1L** | Alternate — certificate only | Certificate **PR470065** (FM 1035 Sep 2024). **No held capacity gate** (SC Series ICM Rev 4.00 Table 3 lists SC-1S/1M/2M/2L only) — do not borrow SC-1S/1M numbers; `[V]`. |
-| **Potter IntelliGen** INS-500/1000 (#5403645 Rev J 02/25) / INS-1500/2000 (#5403646) | **Cited example only** | FM 1035 = IOM claim; bypass / total gallons are vendor figures for those SKUs — not campus defaults. Stale INS-100/250 #5403644-P **Absent in `opened-file/`**. |
+| **Potter IntelliGen** INS-500/1000 (#5403645 Rev J 02/25) / INS-1500/2000 (#5403646) | **Cited example only** | FM 1035 = IOM claim; bypass / total gallons are vendor figures for those SKUs — not campus defaults. Stale INS-100/250 #5403644-P **Absent in **. |
 | South-Tek N2-BLAST / GAP NGP / Tyco NG-2 | Cited examples | Function + listing pointers only (Tyco NG-2 = ECS family). |
 
-**Two-number pairing rule (any family):** (1) generator **maintenance / max-pipe-volume** capacity ≥ **Σ gallons** of all dry/DI systems it serves; **and** (2) compressor / CTA / bypass **30-minute fill** ≥ the **largest single system** at its fill pressure (30 min body rule [CODE NFPA 13-2025 §8.2.7.3; 2019/2022 §8.2.6.3.2, ABE-SRC-04]; 'single largest system' is annex text, A.8.2.6.3.2 in 2019/2022 and A.8.2.7.3 in 2025 [annex, pull 13-38]). The two tables are independent (e.g. NGM-10 = 5,000 gal maintenance, but with CTA-30 it fills only a **1,350 gal** single system at 40 psi). Fill CFM pin (labeled derivation): `V × P / (7.48 × 14.7 × 30)`. **Do not size a compressor from "CFM @ max pressure" with the Viking F_011607 factor (gal × 0.01213 free-air CFM for 40 psi in 30 min)** — on the UFS CTA it **under-credits the unit 1.40–1.89×**; use the printed bypass gallons. **Tank gallons ≠ system gallons**; a quick-fill compressor is not the supervisory maintenance device (C-Aire packages). This is not a `_calc` kernel op — print the arithmetic as a pin.
+**Two-number pairing rule (any family):** (1) generator **maintenance / max-pipe-volume** capacity ≥ **Σ gallons** of all dry/DI systems it serves; **and** (2) compressor / CTA / bypass **30-minute fill** ≥ the **largest single system** at its fill pressure (30 min body rule [CODE NFPA 13-2025 §8.2.7.3; 2019/2022 §8.2.6.3.2]; 'single largest system' is annex text, A.8.2.6.3.2 in 2019/2022 and A.8.2.7.3 in 2025 [annex]). The two tables are independent (e.g. NGM-10 = 5,000 gal maintenance, but with CTA-30 it fills only a **1,350 gal** single system at 40 psi). Fill CFM pin (labeled derivation): `V × P / (7.48 × 14.7 × 30)`. **Do not size a compressor from "CFM @ max pressure" with the Viking F_011607 factor (gal × 0.01213 free-air CFM for 40 psi in 30 min)** — on the UFS CTA it **under-credits the unit 1.40–1.89×**; use the printed bypass gallons. **Tank gallons ≠ system gallons**; a quick-fill compressor is not the supervisory maintenance device (C-Aire packages). This is not a `calcs` kernel op — print the arithmetic as a pin.
 
 Do **not** copy Hopkins test-rig scfm / gallon figures onto a campus.
 
@@ -285,7 +280,7 @@ Mark each `DRAW` / `SPEC` / `C&E` / `N/A` / `[V]`.
 
 **STOP: never accept a purity reading taken at the purge valve, at the generator, at an AutoPurge/Quick-Check, at a riser vent, or at a cabinet vent as evidence the system is inerted (≥98 % throughout).** It never changes the emitted C=100 either way.
 
-Independent 8-week testing (Hopkins / Summit / TERPconsulting, Sprinkler Age May/June 2024) — article **WHOLE-mined Exceptional** in `opened-file/general-air-products-sprinkler-age-n2-migration-2024.md`; **raw per-port workbook Absent**. Supply gas **deliberately set to 99.2–99.5 %**. **This is not a bad-generator artefact.**
+Independent 8-week testing (Hopkins / Summit / TERPconsulting, Sprinkler Age May/June 2024) — article **published** in ; **raw per-port workbook Absent**. Supply gas **deliberately set to 99.2–99.5 %**. **This is not a bad-generator artefact.**
 
 | Purge method | Purge valve | **2 weeks** (system avg) | **8 weeks** (system avg) | vs 98 % gate |
 |---|---|---|---|---|
@@ -301,7 +296,7 @@ Conflict-of-interest travels with the finding (testing hosted at GAP R&D). Inves
 
 #### Thin OEM sampling-location pointer (not a SKU BOD catalog)
 
-Provenance: **mined** `opened-file/` unless marked PDF-held. **Still refuse invent scfm/SKU as hall defaults.** **C=100 always.**
+Provenance: **mined** unless marked PDF-held. **Still refuse invent scfm/SKU as hall defaults.** **C=100 always.**
 
 | Device / geometry (mined) | What it samples | Inerting-evidence class (C stays 100) |
 |---|---|---|
@@ -335,7 +330,7 @@ p_f(C=120) / p_f(C=100) = (100/120)^1.85 ≈ 0.714
 friction understated by a C=120 calc ≈ 0.286 ≈ 29 %
 ```
 
-Where a pipe-segment friction number is needed, run it through `_calc/run.py` `hw` at **C=100** (optionally a second step at C=120 labeled `comparison-only`) with the JSON saved beside the deliverable.
+Where a pipe-segment friction number is needed, run it through `calcs/fp/run.py` `hw` at **C=100** (optionally a second step at C=120 labeled `comparison-only`) with the JSON saved beside the deliverable.
 
 This Skill **emits C=100** for density-area / pump-envelope / hydrant-supply-curve / the hydraulic tree to **consume**. Do not silently mix **sprinkler-pipe C** with **underground C**.
 
@@ -343,7 +338,7 @@ VPCI / chemical inhibitor is **not** a drop-in equivalent to the inert-medium ro
 
 #### Appendix D-1 — C=120 comparison reference (`comparison-only`; never the design path)
 
-**FM DS 2-0 Table 2.2.1.3.3 (p.13):** wet black steel **120**; dry/preaction black steel **100**; dry/preaction black steel **+ inert gas 120**; internally galvanized dry/preaction **120**; polymer-enhanced **140**. UFC 3-600-01 Change 6 §9-6/§9-7: C=120 with ≥98 % throughout in 14 days. NFPA 13-2022 (Hopkins characterization) C=120 at 98 % — Table 28.2.4.8.1 now held: 2025 item (14) citing §8.2.10, 2022 item (13) citing §8.2.6.9, new systems only (pull 13-16); 98 % link and TIA effect `[V]`. Hopkins 8-week data (§3.7): no purge method reached 98 % system-wide. Record these so reviewers see what was declined and why.
+**FM DS 2-0 Table 2.2.1.3.3 (p.13):** wet black steel **120**; dry/preaction black steel **100**; dry/preaction black steel **+ inert gas 120**; internally galvanized dry/preaction **120**; polymer-enhanced **140**. UFC 3-600-01 Change 6 §9-6/§9-7: C=120 with ≥98 % throughout in 14 days. NFPA 13-2022 (Hopkins characterization) C=120 at 98 % — Table 28.2.4.8.1 now held: 2025 item (14) citing §8.2.10, 2022 item (13) citing §8.2.6.9, new systems only ; 98 % link and TIA effect `[V]`. Hopkins 8-week data (§3.7): no purge method reached 98 % system-wide. Record these so reviewers see what was declined and why.
 
 ### 3.9 Parameter E — ITM-lever eligibility, then hand off
 
@@ -369,17 +364,17 @@ Match **itm-design-for-testability** nitrogen language. **Do not emit the interv
 
 A **nitrogen-inerting + C-factor gate**. Write **only** to the caller-named path.
 
-Minimum: Hard-scope gate + status register (gate / A–E / emitted C / ITM eligibility); edition-pin block (name remaining holes: 13 C-table, FM 1035 standard text (Sep 2024 edition certificate-cited, text unheld), NFPA 25, Hopkins raw per-port workbook); inputs echoed including **packet + STS dry|DI + matrix N₂/C rows**; statement **C=100 always** (design-practice setting) with the C=120 `comparison-only` line + 29 %; generator family (ECS default; alternates) + two-number check; Parameters A–E with status; package checklist (`DRAW`/`SPEC`/`C&E`/`N/A`/`[V]`); 8-week sampling table; thin OEM sampling-location pointer; emitted C=100 + 29 % comparison line; ITM-lever eligibility hand-off; reciprocal C&E / water-delivery / El-El / WY hand-off rows; Δ vs 13-2025 and vs NFPA 25; `[SYN]`/`[V]` register. **NO PLACEHOLDER.**
+Minimum: Hard-scope gate + status register (gate / A–E / emitted C / ITM eligibility); edition-pin block (name remaining holes: 13 C-table, FM 1035 standard text (Sep 2024 edition certificate-cited, text unheld), NFPA 25, Hopkins raw per-port workbook); inputs echoed including **packet + STS dry|DI + matrix N₂/C rows**; statement **C=100 always** (design-practice setting) with the C=120 `comparison-only` line + 29 %; generator family (ECS default; alternates) + two-number check; Parameters A–E with status; package checklist (`DRAW`/`SPEC`/`C&E`/`N/A`/`[V]`); 8-week sampling table; thin OEM sampling-location pointer; emitted C=100 + 29 % comparison line; ITM-lever eligibility hand-off; reciprocal C&E / water-delivery / El/El hand-off rows; Δ vs 13-2025 and vs NFPA 25; `[SYN]`/`[V]` register. **NO PLACEHOLDER.**
 
-Do **not** emit occupancy schedule, density×area `_calc`, pump nameplate, node-by-node tree, SprinkFDT, ITM task calendar, El/El trim schedule, QOD/30 s delivery proof, a fake 98 % closeout, or CASE_INDEX retrieval.
+Do **not** emit occupancy schedule, density×area `calcs`, pump nameplate, node-by-node tree, SprinkFDT, ITM task calendar, El/El trim schedule, QOD/30 s delivery proof, a fake 98 % closeout, or CASE_INDEX retrieval.
 
 ---
 
 ## 5. Stop
 
-**2026-10-07 intake rule:** any item below that is a missing packet, a missing upstream result, or a missing input blank is **not** a Stop — proceed with a stated `ASSUMED` value (value + why), flagged in the output and status register. Only company scope-lock items (SI/NI-as-BOD → `RFI-variance`, foam, water mist `PRACTICE REFUSED`, clean agent as company BOD) and wrong-Skill / out-of-scope routing remain hard Stops.
+Missing inputs stay ASSUMED and flagged. The scope lock above still stops.
 
-1. Assignment packet missing → not a Stop (packet optional); proceed and flag `ASSUMED`. 2. STS election missing / `unresolved`, or system type missing / still **wet** with no dry/DI (N/A vs Stop as applicable). 3. SI/NI (or other prohibited preaction) presented as **BOD** → `RFI-variance`. 4. Foam BOD. 5. Mist design request (`PRACTICE REFUSED` / `RFI-variance`). 6. Dual-carrier controlling nitrogen / C / inert-medium matrix rows missing when required → `unresolved`. 7. Pipe material unpinned. 8. Unpinned carrier. 9. Unpinned AHJ NFPA 13 edition. 10. Caller asks to emit **C=120 as the design C** (desk assumption or "earned" by purity data) → refuse; emit **C=100** (design-practice setting) and print 120 as `comparison-only` with 29 %. 11. Caller asks to invent purity % / generator scfm / hall-default SKU / 14-day closeout, or to freeze a vendor SKU (any family, incl. ECS) as the hall default. 12. Caller asks for ITM interval tables. 13. Caller asks for an El/El / valve-room trim catalog. 14. SprinkFDT, occupancy, density×area, or pump envelope. 15. **Liquid nitrogen**. 16. Air elected on an FM hall with >20 sprinklers and no regenerative dryer. 17. Air elected on a UFC job or an AXA DI job without withdrawing that layer. 18. Purge-valve-only / generator-only / AutoPurge-only / riser-vent-only purity offered as 98 % inerting verification. 19. NDA owner treated as numeric. 20. Write into KNOWLEDGE_BASE / EXERCISES / `_pruner` / `_surveyor` / `_engineer` / ARCHIVE / root PDF queue.
+1. Assignment packet missing → not a Stop (packet optional); proceed and flag `ASSUMED`. 2. STS election missing / `unresolved`, or system type missing / still **wet** with no dry/DI (N/A vs Stop as applicable). 3. SI/NI (or other prohibited preaction) presented as **BOD** → `RFI-variance`. 4. Foam BOD. 5. Mist design request (`PRACTICE REFUSED` / `RFI-variance`). 6. Dual-carrier controlling nitrogen / C / inert-medium matrix rows missing when required → `unresolved`. 7. Pipe material unpinned. 8. Unpinned carrier. 9. Unpinned AHJ NFPA 13 edition. 10. Caller asks to emit **C=120 as the design C** (desk assumption or "earned" by purity data) → refuse; emit **C=100** (design-practice setting) and print 120 as `comparison-only_pruner` / / / ARCHIVE / root PDF queue.
 
 Nitrogen = `n` on a dry/DI hall is **not** a Stop — it is a lever **not taken** and a C-credit **not taken**. Record both.
 
@@ -389,13 +384,13 @@ Nitrogen = `n` on a dry/DI hall is **not** a Stop — it is a lever **not taken*
 
 **FM DS 2-1 Oct-2016 / IR Jul-2022 (mined):** §3.1 oxygen cathodic driver; §2.2.1.12.1 N₂ + FM Approved generator, black steel if N₂ for life; §2.2.1.4 / §2.2.1.13.B no internally galvanized wet; IR 2022 wet-pipe N₂ + polymer-enhanced; §3.2 **20×** dry CS air vs N₂; §3.3 **≤14×** wet; <98 % (e.g. 95 %) tracks toward air; **does not grant C=120**.
 
-**FM 1035 (September 2024) — certificate-held, standard text unheld:** UFS **PR470042** NGM-5 / 10 / 20 / 30 / 60 (granted 15 Sep 2025; UFS-356 Rev 1.00 Sep 2025); UFS **PR470065** NITROGEN-PAC SC-1L (granted 25 Oct 2024; UFS-612A Rev 1.00 Mar 2025). Sep 2022 standard copy scout-opened (PDF-held): §1.2 scope; §3.5 / §4.2 bypass; §4.3 generation capacity — `[V]` vs Sep 2024.
+**FM 1035 (September 2024) — certificate-held, standard text unheld:** UFS **PR470042** NGM-5 / 10 / 20 / 30 / 60 (granted 15 Sep 2025; UFS-356 Rev 1.00 Sep 2025); UFS **PR470065** NITROGEN-PAC SC-1L (granted 25 Oct 2024; UFS-612A Rev 1.00 Mar 2025). Sep 2022 standard copy opened (PDF-held): §1.2 scope; §3.5 / §4.2 bypass; §4.3 generation capacity — `[V]` vs Sep 2024.
 
-**UFS NGM data sheet UFS-354 Rev 1.02 (Sep 2025):** Table 1 max sprinkler pipe volume 3,000 / 5,000 / 10,000 / 20,000 / 31,100 gal (NGM-5…60). **UFS CTA UFS-352 Rev 1.01 (Jun 2025):** Table 1 bypass 30-min fill 2,700/1,350 · 4,000/2,000 · 7,700(?)/3,350 · 10,700/5,350 gal @ 20/40 psi; Viking 0.01213 cross-check under-credits 1.40–1.89×. Pairing rule = KB synthesis (Run-659).
+**UFS NGM data sheet UFS-354 Rev 1.02 (Sep 2025):** Table 1 max sprinkler pipe volume 3,000 / 5,000 / 10,000 / 20,000 / 31,100 gal (NGM-5…60). **UFS CTA UFS-352 Rev 1.01 (Jun 2025):** Table 1 bypass 30-min fill 2,700/1,350 · 4,000/2,000 · 7,700(?)/3,350 · 10,700/5,350 gal @ 20/40 psi; Viking 0.01213 cross-check under-credits 1.40–1.89×. Pairing rule = KB synthesis .
 
 **ECS AdvancedIQ IOM M-1428 Rev 1.12 (©2025) pp. 8–9 + AG-2000/3500 spec Rev 6.00 (mined):** zone / accumulative gallons per SKU; FM 1035 listing claim; integral compressor + bypass for 30-min fill; 14-day = listing timeline; riser vents (PAV-D/PSV-D) collide with remote-purge doctrine.
 
-**Worked packages (`[SYN]` method):** `case-2026-10-05-bg` (Anne Arundel MD two-number check); `case-2026-10-05-bd` (WDM IA dock generator election); `worked-ac-caire-quickfill-231` / `worked-ad-caire-mid-232` / `worked-ae-beecher-cs-233` (C-Aire / N2Blast feed air). All C = 100.
+**Worked packages (`[SYN]` method):** `` (a prior layout two-number check); `` (a prior layout IA dock generator election); `worked-ac-caire-quickfill-231` / `worked-ad-caire-mid-232` / `worked-ae-beecher-cs-233` (C-Aire / N2Blast feed air). All C = 100.
 
 **FM DS 2-0 Oct-2021 / Jan-2024 (mined):** Table 2.2.1.3.3 p.13 C-rows; §2.2.1.10.2 inert default; §2.2.1.10.3 air only if dryer or ≤20 heads; §2.2.1.10.5 FM Approved generator + 30-minute fill; §2.2.4.3.2 pendent galvanized-or-N₂; App. A pp.158, 165 regenerative dryer / reliable supply.
 
@@ -415,7 +410,7 @@ Nitrogen = `n` on a dry/DI hall is **not** a Stop — it is a lever **not taken*
 
 **OEM sampling (mined):** Potter INS-PV #5401532; IntelliGen #5403645 / #5403646; Tyco TAV-D TFP1262 / TSV-D TFP1263; South-Tek Quick-Check 10/13/2020; ECS AdvancedIQ / Tyco TFP1277; FireFlex TOTALPAC PSV-D; UFS / GAP function+listing pointers.
 
-**Absent / still `[V]` / PDF-held:** NFPA 13-2025 C-value table and TIA status; NFPA 25-2026; **FM 1035 standard text** (Sep 2024 edition named on certificates; Sep 2022 scout-opened, PDF-held); UFS current-generation manual 30-NPMICM-0G2; SC-1L capacity gate; NGM basis pressure / leak rate behind the volume ceiling; Hopkins **raw** per-port workbook (article mined); a Tier-A owner nitrogen standard; Potter INS-100/250 #5403644-P (Absent in `opened-file/`).
+**Absent / still `[V]` / PDF-held:** NFPA 13-2025 C-value table and TIA status; NFPA 25-2026; **FM 1035 standard text** (Sep 2024 edition named on certificates; Sep 2022 opened, PDF-held); UFS current-generation manual 30-NPMICM-0G2; SC-1L capacity gate; NGM basis pressure / leak rate behind the volume ceiling; Hopkins **raw** per-port workbook (article mined); a Tier-A owner nitrogen standard; Potter INS-100/250 #5403644-P (Absent in ).
 
 ---
 
@@ -425,8 +420,8 @@ Nitrogen = `n` on a dry/DI hall is **not** a Stop — it is a lever **not taken*
 2. Per-parameter, not per-layer. Never MAX whole sheets.
 3. **C = 100 always** (design-practice setting — don't chase 120); C=120 is a `comparison-only` line with the 29 % shown. **ECS** is the default generator family; specify duty + listed function, OEM values confirm at submittal. Originally-installed nitrogen is a CD specification. The 10-year lever does not exist where NFPA 25 is enforced directly, and does not exist on SI-as-BOD.
 4. Current editions; enforced ≠ latest. Do not invent 13-2025 C-table section numbers.
-5. Show-and-verify: `(120/100)^1.85 ≈ 1.401` → **≈29 %**; `10/3 ≈ 3.3×` ITM trips (hand-off arithmetic); two-number check and fill CFM printed as pins. Pipe friction, if needed, via `_calc/run.py hw` at C=100.
-6. Honesty. Worked packages (Anne Arundel, WDM dock, C-Aire/N2Blast) are **method** — Adapt, don't copy. Do not invent purity % or generator scfm or SKU. Galvanized dispute: **C=100 and both sources stay visible.** DS 2-1 20×/14× ≠ C=120 grant. UFC 14-day = obligation ≠ Hopkins achievement.
+5. Show-and-verify: `(120/100)^1.85 ≈ 1.401` → **≈29 %**; `10/3 ≈ 3.3×` ITM trips (hand-off arithmetic); two-number check and fill CFM printed as pins. Pipe friction, if needed, via `calcs/fp/run.py hw` at C=100.
+6. Honesty. Worked packages (a prior layout, a prior layout dock, C-Aire/N2Blast) are **method** — Adapt, don't copy. Do not invent purity % or generator scfm or SKU. Galvanized dispute: **C=100 and both sources stay visible.** DS 2-1 20×/14× ≠ C=120 grant. UFC 14-day = obligation ≠ Hopkins achievement.
 7. Status vocabulary every run. Company fence dry|DI. Foam prohibited. Mist `PRACTICE REFUSED`. Packet optional; STS + matrix consumed or `ASSUMED`. **NO PLACEHOLDER.** Caller-path-only.
 
 ---
@@ -438,7 +433,7 @@ Nitrogen = `n` on a dry/DI hall is **not** a Stop — it is a lever **not taken*
 | Wet / dry / double-interlock election | suppression-technology-selection |
 | Nitrogen as **3 yr → 10 yr** interval lever | **itm-design-for-testability** |
 | Low-air / LOW AIR ALARM / SI vs DI trip Boolean | **preaction-releasing-c-and-e-soo** (SI line comparison-only) |
-| Density × area `_calc` | density-area-dry-increase (consumes C; AXA DI+N₂ area penalty) |
+| Density × area `calcs` | density-area-dry-increase (consumes C; AXA DI+N₂ area penalty) |
 | Pump envelope / hydrant curve | pump-envelope / hydrant-supply-curve (underground C is **not** sprinkler C) |
 | Node-by-node tree | hydraulic-tree Skill (consumes the C this Skill emits) |
 | 30 s / 60 s water-delivery / QOD listing | **dry-preaction-water-delivery-screen**. Compressor 30-minute **fill** stays in this package and is **not** that clock. Fill ≠ delivery. |
@@ -449,6 +444,6 @@ Nitrogen = `n` on a dry/DI hall is **not** a Stop — it is a lever **not taken*
 
 ---
 
-## 9. Runner checklist
+## Check before you finish
 
 1. Hard-scope gate: dry|DI only; wet → N/A; SI/NI-as-BOD → Stop `RFI-variance`; foam/mist Stop. Emit status on gate. 2. Check packet (optional) + STS `dry`|`double-interlock` + matrix nitrogen/C/inert rows; missing → `ASSUMED` (flagged), not a Stop. 3. Confirm other inputs; Stop tests. 4. Pin editions; name the holes (13 C-table, 1035 WHOLE/2024, NFPA 25, Hopkins raw per-port). 5. Union five parameters separately; status on each. 6. Elect inert vs air (AXA SI = comparison-only; AXA DI mandates N₂). 7. Elect generator vs cylinders. Liquid = Stop. Specify by duty + listed function (FM 1035 where claimed / certified); **ECS = default family**, UFS NGM+CTA = FM-certificate alternate, Potter IntelliGen = cited example; OEM values confirm at submittal. Two-number check (Σ gal vs maintenance; largest single vs 30-min fill); no Viking 0.01213 sizing from CFM @ max pressure. Draw compressor + generator. 8. Remote purge. Branch-end (+ dead-end) sample ports. Reject purge-valve / generator / AutoPurge / riser-vent / cabinet-SP readings as inerting evidence. Print the 8-week table + thin OEM sampling pointer. 9. Emit **C=100 always** (design-practice setting). C=120 = `comparison-only` line with ≈29 % shown. DS 2-1 does not grant 120. 10. ITM-lever eligibility; hand off to itm-design-for-testability (dry/DI + FM only). 11. Reciprocal hand-offs: water-delivery (fill ≠ delivery) / El-El / C&E / STS / matrix / density consumers. 12. Δ vs 13-2025 and vs NFPA 25. 13. Honesty: worked packages are method (Adapt, don't copy); no PLACEHOLDER; no invent purity/scfm/SKU/14-day. 14. Write **only** to the caller-named path.

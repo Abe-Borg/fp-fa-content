@@ -1,34 +1,29 @@
 ---
 name: Density area dry increase
 description: >-
-  use this when elected wet/dry/double-interlock, HC/OH (or a pinned carrier
-  density), and completed most-stringent-basis-matrix + occupancy-hazard-fork
-  results (plus fire-area-compartmentation-schedule on multi-hall jobs) ideally
-  exist — if absent, assume and flag ASSUMED (never a stop) — and you must
-  produce density×area demand (q_spr + hose + duration
-  gallons), including the FM dry-area 2,500→3,500 (≈+40%) vs NFPA 13-2025
-  +30% fork (NFPA 13-2025 §19.2.3.2.6) — not for occupancy classification, system-family
-  election, SI/NI election, hydrant curve, pump envelope, or node-by-node
-  hydraulics.
+ use this when elected wet/dry/double-interlock, HC/OH (or a pinned carrier
+ density), and completed most-stringent-basis-matrix + occupancy-hazard-fork
+ results (plus fire-area-compartmentation-schedule on multi-hall jobs) ideally
+ exist — if absent, assume and flag ASSUMED (never a stop) — and you must
+ produce density×area demand (q_spr + hose + duration
+ gallons), including the FM dry-area 2,500→3,500 (≈+40%) vs NFPA 13-2025
+ +30% fork (NFPA 13-2025 §19.2.3.2.6) — not for occupancy classification, system-family
+ election, SI/NI election, hydrant curve, pump envelope, or node-by-node
+ hydraulics.
 ---
 # Density area dry increase
 
-
-Roster language, job names, and local source-file paths were removed when this method was copied into the content pack. Section numbers and the calculation method are unchanged. Verify judgment calls with the engineer of record.
-
-**Intake rule (the engineer of record, 2026-10-07 — overrides any older gate wording below):** The assignment packet is optional and never a gate. Start from exactly what is given. A missing packet, a missing upstream result (STS token, matrix row, occupancy fork, density, C&E, etc.), or a missing input blank is **not** a Stop: run the upstream Skill if practical, otherwise fill the gap with a stated **ASSUMED** value (the value used + why), flag it in the output and the status register, and continue. ASSUMED is not verified. "Never invent" / "refuse invent" rules on project numbers mean do not *silently* invent: label the number ASSUMED; never present an ASSUMED value as a cited code or table value; never freeze a vendor SKU. **Company scope locks stay hard Stops and are not softened by this rule:** wet / dry / double-interlock preaction only; foam prohibited; clean agent not done (hand-away); water mist `PRACTICE REFUSED`; single-interlock / non-interlock / other preaction never the elected system (SI/NI-as-BOD → Stop + `RFI-variance`, comparison-only). Cite section and edition, use `_calc/run.py` for governed math, design to the most-stringent 3-layer basis; Verify with the engineer of record.
+**Intake.** The input packet is optional. A missing input is not a stop: state the value used and why, and label it ASSUMED. Do not present an ASSUMED value as a cited code or table value, and do not freeze a vendor SKU. **Scope lock.** Wet pipe, dry pipe, and double-interlock preaction only. Foam, clean agent, water mist, and single-interlock or non-interlock preaction are out of scope. If one of those is requested as the basis of design, record it and stop. Do not substitute another system and do not size it here. Cite the section and the edition. Decide each parameter by the most stringent of the code floor, the insurer sheet, and the owner standard. Verify judgment calls with the engineer of record.
 
 Reusable US data-center fire-protection recipe.
 
-**This Skill owns** the **density×area demand calculation**: pin density and design area under a three-layer most-stringent union (separately), apply the FM dry/DI absolute-area fork (2,500 → 3,500 ≈ +40%) versus the NFPA 13 +30% delta [CODE NFPA 13 2025 §19.2.3.2.6 / 2022 §19.2.3.2.5 / 2019 §19.3.3.2.5, pull 13-03], add hose and duration, and produce `q_spr` / `qd` / gallons through the shop `_calc` kernel.
+**This Skill owns** the **density×area demand calculation**: pin density and design area under a three-layer most-stringent union (separately), apply the FM dry/DI absolute-area fork (2,500 → 3,500 ≈ +40%) versus the NFPA 13 +30% delta [CODE NFPA 13 2025 §19.2.3.2.6 / 2022 §19.2.3.2.5 / 2019 §19.3.3.2.5], add hose and duration, and produce `q_spr` / `qd` / gallons through the shop `calcs` kernel.
 
 It does **not** own occupancy classification, system-family election, fire-area rating design, hydrant supply curves, pump envelopes, or node-by-node hydraulic trees.
 
 **Core thesis:** on an FM HC-2 white-space hall the controlling density-method demand is usually **0.2 gpm/ft²** over **2,500 ft² wet** or **3,500 ft² dry/DI**, plus **250 gpm** hose and **60 min** duration — **750 gpm / 45,000 gal** wet, **950 gpm / 57,000 gal** dry/DI. FM fixes absolute areas; NFPA 13 applies a relative dry/DI +30% on a different base. Always print the delta. Never stack FM 3,500 with NFPA +30%.
 
 **Design practice:** three-layer basis (code floor × insurer × owner) → **most-stringent union PER PARAMETER** (density separate from area). Report **Δ vs NFPA 13-2025**. Cite **section AND edition**. Show-and-verify math. Mark invented values `[SYN]` / unpinned `[V]`. Status vocabulary: `grounded` / `provisional` / `unresolved` / `comparison-only` / `handoff` / `RFI-variance`. Consume upstream Skills; do not rebuild them. Generic — do not copy a prototype hall onto another job.
-
-Write output **only** to the path the **caller** names. Do not write into `KNOWLEDGE_BASE`, `EXERCISES`, `_pruner`, `_surveyor`, `_engineer`, or `ARCHIVE`. Look up shop codebook notes **by title**.
 
 ---
 
@@ -86,8 +81,8 @@ SI/NI may appear in a **comparison / delta** column only (e.g., “if SI were al
 |---|---|
 | Density pin + design-area pin under 3-layer union | Occupancy / HC / OH classification |
 | FM absolute wet 2,500 / dry-DI 3,500 fork | System-family election |
-| NFPA 13-2025 dry/DI +30% **delta** column [CODE NFPA 13 2025 §19.2.3.2.6 / 2022 §19.2.3.2.5 / 2019 §19.3.3.2.5, pull 13-03] | Fire-area / FRR schedule |
-| Hose + duration → `qd` + gallons via `_calc` | Hydrant supply curve |
+| NFPA 13-2025 dry/DI +30% **delta** column [CODE NFPA 13 2025 §19.2.3.2.6 / 2022 §19.2.3.2.5 / 2019 §19.3.3.2.5] | Fire-area / FRR schedule |
+| Hose + duration → `qd` + gallons via `calcs` | Hydrant supply curve |
 | Owner DI → area 3,500 consequence | Pump rated flow/pressure / churn / 150% |
 | Show-and-verify + `[SYN]`/`[V]`/status register | Node-by-node tree, K√P, pipe schedule |
 | Consume demand-area HINT from occupancy-hazard-fork | Storage / ESS / commodity density design |
@@ -109,14 +104,14 @@ Caller must supply. Do **not** invent HC/OH, density, system family, carrier, or
 | **`ceiling_height_ft`** | **yes** | FM DS 5-32 **30 ft (9 m) cap**. ≤30 ft → table values. **>30 ft on FM without cited off-table path → Stop.** |
 | **Demand-area HINT** | **yes** (from occupancy-hazard-fork) | Starting `base_area_ft2`. Do not invent past the hint without a cited sheet. |
 | **`hose_gpm` / `duration_min`** | **yes** | Prefer matrix-pinned or FM sheet values. FM HC-1/HC-2 default **250 gpm / 60 min**. |
-| (NFPA 13-2025 delta for hose/duration) | — | [CODE NFPA 13-2025 Table 19.2.3.1.2: OH 250 gpm / 60 or 90 min; EH 500 / 90 or 120; lower value only per §19.2.3.1.3 (supervised + monitored at a constantly attended location), pull 13-52]. Print vs FM 250/60. |
+| (NFPA 13-2025 delta for hose/duration) | — | [CODE NFPA 13-2025 Table 19.2.3.1.2: OH 250 gpm / 60 or 90 min; EH 500 / 90 or 120; lower value only per §19.2.3.1.3 (supervised + monitored at a constantly attended location)]. Print vs FM 250/60. |
 | **Controlling carrier** | **yes** (usually inherited) | `FM` \| `AXA XL` \| other named. Unpinned → **not a Stop**: proceed with a stated `ASSUMED` value (value + why), flagged. Dual-carrier without matrix union → **not a Stop**: take the more stringent carrier value per parameter (flag `ASSUMED`) or hand back to `most-stringent-basis-matrix`. |
 | **Owner interlock / area mandate** | **yes** (may be `none`) | Owner may force DI → dry area 3,500. NDA → posture-only. |
 | **AHJ-enforced NFPA 13 edition** | **yes** to cite | Delta baseline = **NFPA 13-2025**. Enforced ≠ latest. Prefer matrix pins. |
 | **Caller output path** | **yes** for file output | Typically `<name>.calc.json` + short markdown verification. If unnamed, return results in the response and stop. |
 | Optional K, spacing, coverage/head | no | Not needed for density×area demand. If invented → **`[SYN]`**. |
 
-**Do not invent** an FM density, an AXA density method, an NFPA 13 section number for general dry/DI +30% other than [CODE NFPA 13 2025 §19.2.3.2.6 / 2022 §19.2.3.2.5 / 2019 §19.3.3.2.5, pull 13-03], a stacked `3500 × 1.30`, or a storage/ESS demand disguised as HC-2. *(2026-10-07: this means do not **silently** invent. When a needed project value is not given, use a stated `ASSUMED` value (value + why), flagged — never presented as a cited, listed, or field-verified value; never a frozen vendor SKU.)*
+**Do not invent** an FM density, an AXA density method, an NFPA 13 section number for general dry/DI +30% other than [CODE NFPA 13 2025 §19.2.3.2.6 / 2022 §19.2.3.2.5 / 2019 §19.3.3.2.5], a stacked `3500 × 1.30`, or a storage/ESS demand disguised as HC-2. *(2026-10-07: this means do not **silently** invent. When a needed project value is not given, use a stated `ASSUMED` value (value + why), flagged — never presented as a cited, listed, or field-verified value; never a frozen vendor SKU.)*
 
 ### 2.1 Upstream consumption (do not rebuild; consume when present, else `ASSUMED`)
 
@@ -146,7 +141,7 @@ Hints are **area only**. Do not add hose, duration, density, flow, tank volume, 
 
 ### 2.3 Look up by title
 
-*The Design practice*; *Enforced-vs-latest edition resolver and reference pins*; *FM DS 5-32 insurer design basis*; *FM hazard category for data-center spaces*; *Data-center sprinkler and preaction design*; *AXA XL insurer design basis*; *FM occupancy vs installation sheet precedence DS 5-32 and DS 2-0*; *Dry-pipe and double-interlock air supply and water delivery*; *The hyperscaler owner-standard layer*; shop `_calc` README / `density_area` formula.
+*The Design practice*; *Enforced-vs-latest edition resolver and reference pins*; *FM DS 5-32 insurer design basis*; *FM hazard category for data-center spaces*; *Data-center sprinkler and preaction design*; *AXA XL insurer design basis*; *FM occupancy vs installation sheet precedence DS 5-32 and DS 2-0*; *Dry-pipe and double-interlock air supply and water delivery*; *The hyperscaler owner-standard layer*; shop `calcs` README / `density_area` formula.
 
 ---
 
@@ -154,7 +149,7 @@ Hints are **area only**. Do not add hose, duration, density, flow, tank volume, 
 
 | Layer | What to pin | Shop-pinned editions |
 |---|---|---|
-| Code floor | NFPA 13 density/area; dry/DI +30% delta | **NFPA 13-2025** for the delta baseline. AHJ-enforced edition often a cycle behind — surface both. **General dry/DI +30%:** [CODE NFPA 13 2025 §19.2.3.2.6 / 2022 §19.2.3.2.5 / 2019 §19.3.3.2.5, pull 13-03]. |
+| Code floor | NFPA 13 density/area; dry/DI +30% delta | **NFPA 13-2025** for the delta baseline. AHJ-enforced edition often a cycle behind — surface both. **General dry/DI +30%:** [CODE NFPA 13 2025 §19.2.3.2.6 / 2022 §19.2.3.2.5 / 2019 §19.3.3.2.5]. |
 | Insurer | Controlling sheet | **FM DS 5-32, January 2026** (DC occupancy). Demand backbone **FM DS 3-26, April 2025** (Table 2.3.1.10, §2.3.1.7, §2.3.1.11–13). Install sheet **FM DS 2-0, October 2021 / Interim Rev. January 2024** (do not silently restack its airflow +30%). **AXA XL** DC white paper **March 2026** (OH-1; DI +30% area + nitrogen; **no density/area tables**). |
 | Owner | Interlock posture / any numeric raise | Project-issued standard. Public posture ≠ basis of design. |
 
@@ -181,7 +176,7 @@ Do **not** invent a density.
 
 | Source | Density | Cite | Status |
 |---|---|---|---|
-| Code floor | OH-1 **0.15 / 1,500**, OH-2 **0.20 / 1,500** [CODE NFPA 13-2025 Table 19.2.3.1.1; 2022 Table 19.2.3.1.1 (new systems; Figure 19.2.3.1.1 curves for existing), pull 13-08]. | Hydraulic-calculation-method note | held (pull 13-08) |
+| Code floor | OH-1 **0.15 / 1,500**, OH-2 **0.20 / 1,500** [CODE NFPA 13-2025 Table 19.2.3.1.1; 2022 Table 19.2.3.1.1 (new systems; Figure 19.2.3.1.1 curves for existing)]. | Hydraulic-calculation-method note | held |
 | FM HC-2 white space, ≤30 ft | **0.2 gpm/ft² (8 mm/min)** | FM DS 5-32 **§2.4.3.3.1.1.A (Jan-2026)**; identical root FM DS 3-26 **Table 2.3.1.10 (April 2025)** | `grounded` |
 | FM HC-1 (NOC/telecom), ≤30 ft | **0.1 gpm/ft²** over 1,500 ft² wet & dry | FM DS 3-26 **Table 2.3.1.10 (April 2025)** — only if occupancy-hazard-fork classified HC-1 | `grounded` when so classified |
 | AXA XL | **No density.** Occupancy = **Ordinary Hazard Group 1** per NFPA 13 | AXA XL white paper **p.8 (Mar-2026)** | incomplete basis |
@@ -201,11 +196,11 @@ This section applies only when `ess-isolation-venting-and-duration` hands over a
 
 - **Density and area (≤ 50 kWh groups):** 0.30 gpm/ft² over the room area or 2,500 ft², whichever is smaller [CODE IFC 2024 §1207.5.5 item 1, pull IBC-IFC-24-bess]. Union with FM DS 5-33 §2.4.1 (0.30 over the ROOM) and take the most stringent.
 - **Groups over 50 kWh:** no density without a UL 9540A installation-level test basis [CODE IFC 2024 §1207.5.5 item 2]. Report the density as `unresolved` and do not run the calc.
-- **Dry / DI:** apply the +30 % increase to the §1207.5.5 area [CODE NFPA 13 2025 §19.2.3.2.6, pull 13-03]. Verify the math: 2,500 × 1.30 = 3,250 ft², and 0.30 × 3,250 = 975 gpm (wet is 0.30 × 2,500 = 750 gpm).
-  - When 3,250 ft² is larger than the room, carry the full 3,250 ft². This is the conservative case. NFPA 13-2025 has no text on a design area larger than the room (only §19.2.3.1.4 / §19.2.3.3.4 for rooms smaller than the area); multiple adjustments compound from the Table 19.2.3.1.1 area (§19.2.3.2.8.1) [pull 13-58]. **Verify with the engineer of record** before capping the area at the room size.
-- NFPA 855-2023 §4.9.2.1 matches IFC 0.30 / room-or-2,500; §4.9.2.2 >50 kWh from §9.1.5 testing; A.4.9.2.2 points to UL 9540A installation-level Method 1 [pull 855-10] — no longer `[V]`.
-  - Do not stack the FM 3,500 ft² area with the +30 %.
-- **Hose and duration:** NFPA 13-2025 Table 19.2.3.1.2 extra-hazard row gives 500 gpm hose and 90 or 120 min (90 only with supervised, monitored waterflow/supervisory per §19.2.3.1.3) [CODE NFPA 13-2025 Table 19.2.3.1.2, pull 13-52]. Applying the EH row to an ESS room is still **Verify with the engineer of record**. Neither is cited for ESS: IFC §1207.5.5 gives density only, and the 500 gpm is the NFPA 13 extra-hazard hose value carried over. Union with FM DS 5-33 §2.4.1 (250 gpm hose) and take the most stringent.
+- **Dry / DI:** apply the +30 % increase to the §1207.5.5 area [CODE NFPA 13 2025 §19.2.3.2.6]. Verify the math: 2,500 × 1.30 = 3,250 ft², and 0.30 × 3,250 = 975 gpm (wet is 0.30 × 2,500 = 750 gpm).
+ - When 3,250 ft² is larger than the room, carry the full 3,250 ft². This is the conservative case. NFPA 13-2025 has no text on a design area larger than the room (only §19.2.3.1.4 / §19.2.3.3.4 for rooms smaller than the area); multiple adjustments compound from the Table 19.2.3.1.1 area (§19.2.3.2.8.1) . **Verify with the engineer of record** before capping the area at the room size.
+- NFPA 855-2023 §4.9.2.1 matches IFC 0.30 / room-or-2,500; §4.9.2.2 >50 kWh from §9.1.5 testing; A.4.9.2.2 points to UL 9540A installation-level Method 1 — no longer `[V]`.
+ - Do not stack the FM 3,500 ft² area with the +30 %.
+- **Hose and duration:** NFPA 13-2025 Table 19.2.3.1.2 extra-hazard row gives 500 gpm hose and 90 or 120 min (90 only with supervised, monitored waterflow/supervisory per §19.2.3.1.3) [CODE NFPA 13-2025 Table 19.2.3.1.2]. Applying the EH row to an ESS room is still **Verify with the engineer of record**. Neither is cited for ESS: IFC §1207.5.5 gives density only, and the 500 gpm is the NFPA 13 extra-hazard hose value carried over. Union with FM DS 5-33 §2.4.1 (250 gpm hose) and take the most stringent.
 - **Exhaust-duct sprinklers:** when they are fed from this system, add their flow to the demand (see `ess-exhaust-duct-shaft-and-duct-sprinklers`).
 
 ## 6. Resolve design AREA — controlling company path
@@ -254,9 +249,9 @@ AXA XL **(Mar-2026, p.8):** prefers single-interlock (comparison-only for compan
 
 ### 6.5 NFPA 13-2025 +30% (delta column only)
 
-NFPA 13 applies a **+30% design-area increase to dry-pipe and double-interlock-preaction** systems. [CODE NFPA 13 2025 §19.2.3.2.6 / 2022 §19.2.3.2.5 / 2019 §19.3.3.2.5, pull 13-03].
+NFPA 13 applies a **+30% design-area increase to dry-pipe and double-interlock-preaction** systems. [CODE NFPA 13 2025 §19.2.3.2.6 / 2022 §19.2.3.2.5 / 2019 §19.3.3.2.5].
 
-**Cite the dry/DI +30% rule by edition:** 2025 §19.2.3.2.6 · 2022 §19.2.3.2.5 · 2019 §19.3.3.2.5 (pull 13-03). Always give the edition with §19.2.3.2.5, because the number means a different rule in 2025 (ceilings over 30 ft).
+**Cite the dry/DI +30% rule by edition:** 2025 §19.2.3.2.6 · 2022 §19.2.3.2.5 · 2019 §19.3.3.2.5 . Always give the edition with §19.2.3.2.5, because the number means a different rule in 2025 (ceilings over 30 ft).
 
 Wet does **not** take the general dry/DI +30%. SI would not either — but SI is not a company election.
 
@@ -267,7 +262,7 @@ Do **not** feed NFPA +30% into the controlling FM run. Run it as a **delta step*
 ## 7. High-ceiling fork
 
 - **FM DS 5-32 §2.4.3.3.1.1.C and §2.2.5.2 (Jan-2026):** max ceiling **30 ft (9 m)**. Table / DS 5-32 numbers are **HC-2 @ ≤30 ft**. **Ceiling > 30 ft on FM without a cited off-table occupancy path → Stop.** Do not invent a high-ceiling density. Status: `unresolved` / `handoff`.
-- **NFPA 13 high-ceiling mechanisms:** consume from `most-stringent-basis-matrix`. OH1 “+30% area for ceilings > 30 ft” [CODE 2025 §19.2.3.2.5.2(A), pull 13-03]. Cite by edition: the ceilings-over-30 ft rule is 2025 §19.2.3.2.5 [CODE 2025, pull 13-03]; in 2022 that same number is the dry/DI +30% rule.
+- **NFPA 13 high-ceiling mechanisms:** consume from `most-stringent-basis-matrix`. OH1 “+30% area for ceilings > 30 ft” [CODE 2025 §19.2.3.2.5.2(A)]. Cite by edition: the ceilings-over-30 ft rule is 2025 §19.2.3.2.5 [CODE 2025]; in 2022 that same number is the dry/DI +30% rule.
 - **Do not conflate** high-ceiling +30% with **FM DS 2-0 §2.5.2.1.8.1** (Oct-2021 / Jan-2024) airflow option 2 (ceiling-plane > **5 ft/s (1.5 m/s)** and hazard **> HC-1** → one option is +30% design area, stacking with dry area **`[V]`**). That is an install-sheet gate, not this Skill. Raise it; do not silently price it into `area_increase`.
 
 ---
@@ -279,9 +274,9 @@ Build two 3-layer rows, then take the union:
 | | Code floor | Insurer | Owner | Controlling |
 |---|---|---|---|---|
 | **Density** | OH `[V]` | FM **0.2** (HC-2) or AXA XL *none* | may raise | max pinned |
-| **Area** | wet OH `[V]` · dry/DI **×1.30** [CODE NFPA 13 2025 §19.2.3.2.6 / 2022 §19.2.3.2.5 / 2019 §19.3.3.2.5, pull 13-03] | FM **2,500 wet / 3,500 dry (≈+40%)** · AXA XL DI **+30% + N₂** | may **force DI → 3,500** | most stringent *applicable* area after elected-system fork |
+| **Area** | wet OH `[V]` · dry/DI **×1.30** [CODE NFPA 13 2025 §19.2.3.2.6 / 2022 §19.2.3.2.5 / 2019 §19.3.3.2.5] | FM **2,500 wet / 3,500 dry (≈+40%)** · AXA XL DI **+30% + N₂** | may **force DI → 3,500** | most stringent *applicable* area after elected-system fork |
 
-**Key delta to always print:** FM absolute **2,500 → 3,500 ≈ +40%** vs NFPA 13-2025 **+30%** [CODE NFPA 13 2025 §19.2.3.2.6 / 2022 §19.2.3.2.5 / 2019 §19.3.3.2.5, pull 13-03]. On a 2,500 wet base, NFPA +30% → **3,250 ft²**; FM dry is **250 ft² larger**. Wet jobs **avoid both** bumps. DI/dry jobs take FM 3,500 when FM controls.
+**Key delta to always print:** FM absolute **2,500 → 3,500 ≈ +40%** vs NFPA 13-2025 **+30%** [CODE NFPA 13 2025 §19.2.3.2.6 / 2022 §19.2.3.2.5 / 2019 §19.3.3.2.5]. On a 2,500 wet base, NFPA +30% → **3,250 ft²**; FM dry is **250 ft² larger**. Wet jobs **avoid both** bumps. DI/dry jobs take FM 3,500 when FM controls.
 
 Canonical shop minima (FM HC-2, hose 250, 60 min), density-method, **not** balanced hydraulics:
 
@@ -289,7 +284,7 @@ Canonical shop minima (FM HC-2, hose 250, 60 min), density-method, **not** balan
 |---|---|---|---|---|---|
 | Wet | 2,500 | 500 gpm | **750 gpm** | **45,000 gal** | `grounded` FM path |
 | Double-interlock / dry | 3,500 | 700 gpm | **950 gpm** | **57,000 gal** | `grounded` FM path |
-| NFPA +30% on 2,500 (delta only; 2025 §19.2.3.2.6, pull 13-03) | 3,250 | 650 gpm | 900 gpm | 54,000 gal | `comparison-only` |
+| NFPA +30% on 2,500 (delta only; 2025 §19.2.3.2.6) | 3,250 | 650 gpm | 900 gpm | 54,000 gal | `comparison-only` |
 | SI wet 2,500 (if proposed) | 2,500 | 500 | 750 | 45,000 | **`comparison-only`** — not BOD |
 
 Owner-mandated DI vs wet: **+200 gpm / +12,000 gal** from area alone (+26.7% on the 750 gpm wet total).
@@ -298,7 +293,7 @@ These are **MINIMA**. Inner-head over-discharge (typically ~1.1–1.3×) is a no
 
 ---
 
-## 9. Run `_calc/run.py` — kernel is source of truth
+## 9. Run `calcs/fp/run.py` — kernel is source of truth
 
 Stdlib kernel. Agents **set inputs and interpret**. Paste **stdout**. QA re-runs the **same JSON**. Exit **2** on bad inputs. Transcript ends with `TRANSCRIPT_OK`. Rounding: **4 decimal places** unless the value is an integer.
 
@@ -314,35 +309,35 @@ gallons = qd * duration_min # hose already inside qd
 **Preferred: JSON batch** (write JSON at the **caller-named** path, next to the deliverable):
 
 ```
-python3 _calc/run.py path/to/name.calc.json
+python3 calcs/fp/run.py path/to/name.calc.json
 ```
 
 JSON shape (ops `density_area` / `density-area`):
 
 ```json
 {
-  "job": "<caller job id>",
-  "notes": "density-area demand; controlling vs NFPA +30% delta; elected wet|dry|DI only",
-  "steps": [
-    {
-      "id": "qd_controlling",
-      "op": "density_area",
-      "density": 0.20,
-      "area": 2500,
-      "area_increase": 0,
-      "hose": 250,
-      "duration_min": 60
-    },
-    {
-      "id": "qd_nfpa_delta",
-      "op": "density_area",
-      "density": 0.20,
-      "area": 2500,
-      "area_increase": 0.30,
-      "hose": 250,
-      "duration_min": 60
-    }
-  ]
+ "job": "<caller job id>",
+ "notes": "density-area demand; controlling vs NFPA +30% delta; elected wet|dry|DI only",
+ "steps": [
+ {
+ "id": "qd_controlling",
+ "op": "density_area",
+ "density": 0.20,
+ "area": 2500,
+ "area_increase": 0,
+ "hose": 250,
+ "duration_min": 60
+ },
+ {
+ "id": "qd_nfpa_delta",
+ "op": "density_area",
+ "density": 0.20,
+ "area": 2500,
+ "area_increase": 0.30,
+ "hose": 250,
+ "duration_min": 60
+ }
+ ]
 }
 ```
 
@@ -357,9 +352,9 @@ Equivalent relative check (optional third step; must **not** replace the absolut
 **Ad-hoc** (one op, no JSON; still paste stdout; prefer JSON for QA):
 
 ```
-python3 _calc/run.py density-area --density 0.20 --area 2500 --area-increase 0 --hose 250 --duration 60
-python3 _calc/run.py density-area --density 0.20 --area 3500 --area-increase 0 --hose 250 --duration 60
-python3 _calc/run.py density-area --density 0.20 --area 2500 --area-increase 0.30 --hose 250 --duration 60
+python3 calcs/fp/run.py density-area --density 0.20 --area 2500 --area-increase 0 --hose 250 --duration 60
+python3 calcs/fp/run.py density-area --density 0.20 --area 3500 --area-increase 0 --hose 250 --duration 60
+python3 calcs/fp/run.py density-area --density 0.20 --area 2500 --area-increase 0.30 --hose 250 --duration 60
 ```
 
 CLI flags: `--density` `--area` `--area-increase` (default 0) `--hose` (default 0) `--duration` (optional; enables gallons).
@@ -387,26 +382,26 @@ steps: 1
 
 --- step density_area op=density_area formula=density/area demand ---
 inputs
-  density_gpm_ft2: 0.2000 gpm/ft2
-  base_area_ft2: 2500 ft2
-  area_increase: 0
-  hose_gpm: 250 gpm
-  duration_min: 60 min
+ density_gpm_ft2: 0.2000 gpm/ft2
+ base_area_ft2: 2500 ft2
+ area_increase: 0
+ hose_gpm: 250 gpm
+ duration_min: 60 min
 outputs
-  design_area_ft2: 2500 ft2
-  q_spr_gpm: 500 gpm
-  hose_gpm: 250 gpm
-  qd_gpm: 750 gpm
-  duration_min: 60 min
-  gallons: 45000 gal
-  gallons_note: hose already inside qd
+ design_area_ft2: 2500 ft2
+ q_spr_gpm: 500 gpm
+ hose_gpm: 250 gpm
+ qd_gpm: 750 gpm
+ duration_min: 60 min
+ gallons: 45000 gal
+ gallons_note: hose already inside qd
 
 TRANSCRIPT_OK
 ```
 
 DI / dry (`area 3500`, `area_increase 0`): `design_area_ft2: 3500` · `q_spr_gpm: 700` · `qd_gpm: 950` · `gallons: 57000`.
 
-NFPA +30% delta (`area 2500`, `area_increase 0.30`) [2025 §19.2.3.2.6, pull 13-03]: `design_area_ft2: 3250` · `q_spr_gpm: 650` · `qd_gpm: 900` · `gallons: 54000`.
+NFPA +30% delta (`area 2500`, `area_increase 0.30`) [2025 §19.2.3.2.6]: `design_area_ft2: 3250` · `q_spr_gpm: 650` · `qd_gpm: 900` · `gallons: 54000`.
 
 If stdout disagrees with a hand product, **the kernel wins**. Re-check inputs (especially stacked `area_increase` on an already-dry `base_area`).
 
@@ -460,7 +455,7 @@ K and spacing are **out of scope** for demand. If the caller asked for them anyw
 
 ## 12. Output
 
-Write **only** to the path the **caller** names (typically a `.calc.json` transcript plus a short markdown verification beside it). Do **not** write into `KNOWLEDGE_BASE`, `EXERCISES`, `_pruner`, `_surveyor`, `_engineer`, `ARCHIVE`, or any shop codebook tree.
+Write **only** to the path the **caller** names (typically a `.calc.json` transcript plus a short markdown verification beside it). Do **not** write into,,, or any shop codebook tree.
 
 **`.calc.json`** — the JSON actually run (QA re-runs this file). Keep a `.calc.stdout.txt` (or paste stdout into the markdown). Transcript must end with `TRANSCRIPT_OK`.
 
@@ -474,7 +469,7 @@ Write **only** to the path the **caller** names (typically a `.calc.json` transc
 6. Controlling area fork: wet = 2,500 / `area_increase=0`; dry or DI = 3,500 / `area_increase=0`.
 7. Kernel command + **full stdout**.
 8. Show-and-verify `q = density × area`, `Q = q + hose`, `V = Q × duration`.
-9. Directional delta vs NFPA 13-2025: FM **≈+40%** vs NFPA **+30%** cited by edition (2025 §19.2.3.2.6 / 2022 §19.2.3.2.5 / 2019 §19.3.3.2.5, pull 13-03).
+9. Directional delta vs NFPA 13-2025: FM **≈+40%** vs NFPA **+30%** cited by edition (2025 §19.2.3.2.6 / 2022 §19.2.3.2.5 / 2019 §19.3.3.2.5).
 10. Statement that `qd` is a **density-method minimum**, not balanced demand.
 11. Status / `[SYN]` / `[V]` / `RFI-variance` / `handoff` register.
 12. Explicit hand-off: **`hydrant-supply-curve`** → **`pump-envelope`** (and matrix if dual-carrier still open; hydraulic tree when node-by-node work begins).
@@ -483,7 +478,7 @@ Write **only** to the path the **caller** names (typically a `.calc.json` transc
 
 ## 13. Stop conditions
 
-**2026-10-07 intake rule:** any item below that is a missing packet, a missing upstream result, or a missing input blank is **not** a Stop — proceed with a stated `ASSUMED` value (value + why), flagged in the output and status register. Only company scope-lock items (SI/NI-as-BOD → `RFI-variance`, foam, water mist `PRACTICE REFUSED`, clean agent as company BOD) and wrong-Skill / out-of-scope routing remain hard Stops.
+Missing inputs stay ASSUMED and flagged. The scope lock above still stops.
 
 Return the blocker (hard Stop only for scope-lock / wrong-Skill items). For a missing input, use a stated `ASSUMED` value (flagged) — stated, not a silent guess.
 
@@ -502,7 +497,7 @@ Return the blocker (hard Stop only for scope-lock / wrong-Skill items). For a mi
 13. AXA-XL-only job with **density still unpinned** (white paper has no density/area tables).
 14. Liquid-cooled hall whose coolant classification would displace this basis (open ignitable-liquid immersion → other occupancy sheet, not HC-2 0.2/2,500). Occupancy-hazard-fork should have gated this; if it didn’t, **Stop**.
 15. Attempt to stack `area=3500` with `area_increase=0.30` on the controlling run.
-16. Caller asks to write into `KNOWLEDGE_BASE` / `EXERCISES` / agent worktrees / `ARCHIVE`.
+16. Caller asks to write into / / agent worktrees / .
 
 ---
 
@@ -517,8 +512,8 @@ Return the blocker (hard Stop only for scope-lock / wrong-Skill items). For a mi
 | Dual-carrier reconciliation | `most-stringent-basis-matrix` (not a separate dual-carrier Skill) |
 | Hydrant / municipal supply curve vs `qd` | **`hydrant-supply-curve`** (next after this Skill) |
 | Pump rated flow/pressure, churn, 150% envelope | **`pump-envelope`** (after hydrant verdict says pump needed, or as sequenced by parent) |
-| Node-by-node hydraulic tree, BOR psi, pipe schedule, K√P | hydraulic-calc Skill (`_calc` `hw` is a *single segment*, not a tree) |
-| Water-delivery-time / SprinkFDT | not in `_calc`; vendor-listed |
+| Node-by-node hydraulic tree, BOR psi, pipe schedule, K√P | hydraulic-calc Skill (`calcs` `hw` is a *single segment*, not a tree) |
+| Water-delivery-time / SprinkFDT | not in `calcs`; vendor-listed |
 | VEWFD, releasing SOO, Li-ion barriers, ESS sprinkler | other recipes |
 | Foam / mist / clean-agent / hybrid / ORS design | prohibited / refused / specialist Skills |
 
@@ -529,7 +524,7 @@ Return the blocker (hard Stop only for scope-lock / wrong-Skill items). For a mi
 ## 15. Design practice
 
 1. **Three-layer, most stringent, on DENSITY and AREA separately.** Code is the floor (IFC/IBC → adopted NFPA 13 edition). Insurer sheet usually sets the real basis (FM DS 5-32 Jan-2026 on FM jobs). Owner standard can raise AREA by forcing double-interlock (dry 3,500) even when FM ranks DI last. Cite the sheet. Do not assert interlock from habit. Company elections remain wet / dry / DI only.
-2. **Delta vs NFPA 13-2025 every time.** FM **fixes** absolute wet/dry areas (**2,500 → 3,500, ≈+40%**) and **0.2 gpm/ft²**, plus QR, 30 ft cap, ≤30 s preaction delivery, mandatory VEWFD. NFPA 13 sets occupancy (commonly OH-1/OH-2 `[V]`) and a **+30% dry/DI area increase** [CODE NFPA 13 2025 §19.2.3.2.6 / 2022 §19.2.3.2.5 / 2019 §19.3.3.2.5, pull 13-03]. Net: FM is more prescriptive and generally more stringent on a white-space hall. If the numeric floor isn’t pinned, say **directional `[V]`**. Do not invent a 13-2025 section number. Do not misuse §19.2.3.2.5 as the general dry/DI +30%.
+2. **Delta vs NFPA 13-2025 every time.** FM **fixes** absolute wet/dry areas (**2,500 → 3,500, ≈+40%**) and **0.2 gpm/ft²**, plus QR, 30 ft cap, ≤30 s preaction delivery, mandatory VEWFD. NFPA 13 sets occupancy (commonly OH-1/OH-2 `[V]`) and a **+30% dry/DI area increase** [CODE NFPA 13 2025 §19.2.3.2.6 / 2022 §19.2.3.2.5 / 2019 §19.3.3.2.5]. Net: FM is more prescriptive and generally more stringent on a white-space hall. If the numeric floor isn’t pinned, say **directional `[V]`**. Do not invent a 13-2025 section number. Do not misuse §19.2.3.2.5 as the general dry/DI +30%.
 3. **Show-and-verify.** Kernel stdout + independent `density × area` / `+ hose` / `× duration`. Hose is added at the demand point, already inside `qd` / gallons.
 4. **Current editions; enforced ≠ latest.** Default NFPA 13-**2025** for the delta baseline; report the AHJ-referenced edition when it differs.
 5. **Honesty on minima.** Density×area is the **lower bound**. Balanced demand is higher. Do not size the campus pump from 500 gpm when the tree will run ~1.2×.
@@ -576,37 +571,36 @@ Shop codebook **by title** (not a required filesystem path). Prefer these sectio
 
 | Claim | Why `[V]` |
 |---|---|
-| NFPA 13 **general** dry-pipe / double-interlock **+30% area** section number | Held: [CODE NFPA 13 2025 §19.2.3.2.6 / 2022 §19.2.3.2.5 / 2019 §19.3.3.2.5, pull 13-03] |
-| Citing **§19.2.3.2.5** without an edition | **Forbidden** — it is the dry/DI +30% rule in 2022 but the ceilings-over-30 ft rule in 2025 (pull 13-03) |
-| OH-1 / OH-2 numeric density/area as quoted 13-2025 code | Held: [CODE NFPA 13-2025/2022 Table 19.2.3.1.1, pull 13-08] |
+| NFPA 13 **general** dry-pipe / double-interlock **+30% area** section number | Held: [CODE NFPA 13 2025 §19.2.3.2.6 / 2022 §19.2.3.2.5 / 2019 §19.3.3.2.5] |
+| Citing **§19.2.3.2.5** without an edition | **Forbidden** — it is the dry/DI +30% rule in 2022 but the ceilings-over-30 ft rule in 2025 |
+| OH-1 / OH-2 numeric density/area as quoted 13-2025 code | Held: [CODE NFPA 13-2025/2022 Table 19.2.3.1.1] |
 | High-ceiling +30% as a universal code-floor lever | Unpinned / matrix-linked; do not invent |
-| 130 ft²/head OH cap [CODE NFPA 13-2019/2025 Table 10.2.4.2.1(b) Ordinary Hazard, all construction rows: 130 ft² max protection area, standard pendent/upright spray; pull 13-31]; NFPA 13-2025 min pressure if used | Not pinned for this Skill’s demand output |
+| 130 ft²/head OH cap [CODE NFPA 13-2019/2025 Table 10.2.4.2.1(b) Ordinary Hazard, all construction rows: 130 ft² max protection area, standard pendent/upright spray;]; NFPA 13-2025 min pressure if used | Not pinned for this Skill’s demand output |
 | DS 2-0 airflow +30% stacking with dry area | Install-sheet gate; stacking unverified → `[V]`; raise, don’t silently price |
 | AXA XL “NFPA 13” with no edition | White paper silent on edition |
 | Potter/Viking preaction § numbers from older editions | Reconcile to 2025; do not treat 2019/2007 § as 2025 |
 
 ### 16.5 Kernel
 
-`_calc` README / `run.py` / `formulas.density_area`: `design_area = base_area_ft2 * (1 + area_increase)`; `q_spr = density * design_area`; `qd = q_spr + hose`; optional `gallons = qd * duration_min`.
+`calcs` README / `run.py` / `formulas.density_area`: `design_area = base_area_ft2 * (1 + area_increase)`; `q_spr = density * design_area`; `qd = q_spr + hose`; optional `gallons = qd * duration_min`.
 
 ---
 
-## 17. Runner checklist
+## Check before you finish
 
-- [ ] `most-stringent-basis-matrix` consumed (editions, carrier union, density/area/hose/duration, deltas). Not rebuilt.
-- [ ] `suppression-technology-selection` consumed; elected system is **wet | dry | double-interlock** only.
-- [ ] `occupancy-hazard-fork` consumed (HC/OH + demand-area HINT + ceiling). Classification not redone. Off-table not sized as HC-2 default.
-- [ ] `fire-area-compartmentation-schedule` consumed when multi-hall / required; else marked `n/a`.
-- [ ] Company fence enforced: SI/NI = `comparison-only`; SI/NI-as-BOD → stopped / `RFI-variance`. Foam prohibited; mist `PRACTICE REFUSED`.
-- [ ] Editions pinned: NFPA 13-2025 (delta) + AHJ edition; FM DS 5-32 Jan-2026 and/or AXA XL Mar-2026; DS 3-26 April 2025 if HC-rooted; owner posture.
-- [ ] Density taken from a cited sheet or matrix row (FM 0.2 HC-2, FM 0.1 HC-1, or fork-resolved). Not invented. AXA-XL-only without density → stopped.
-- [ ] Controlling area: **wet → 2,500 / `area_increase=0`**; **dry or DI → 3,500 / `area_increase=0`**. No `3500×0.30` stack.
-- [ ] Owner DI mandate applied to **AREA** (3,500) when DI is elected.
-- [ ] Dual-carrier not blended; unresolved dual-carrier → handed back to matrix.
-- [ ] Ceiling ≤30 ft on FM, or stopped / handed off.
-- [ ] JSON written at **caller path**; `python3 _calc/run.py <that.json>` run; stdout pasted; `TRANSCRIPT_OK`; exit 0.
-- [ ] Independent verify: q = density × area, Q = q + hose, V = Q × duration. Hose labeled inside `qd`.
-- [ ] Delta printed: FM 2,500→3,500 **≈+40%** vs NFPA **+30%** cited by edition (2025 §19.2.3.2.6 / 2022 §19.2.3.2.5 / 2019 §19.3.3.2.5). Wet: both bumps **avoided**.
-- [ ] Result labeled **density-method minimum**; handoff **`hydrant-supply-curve` then `pump-envelope`**.
-- [ ] Status register complete: grounded / provisional / unresolved / comparison-only / handoff / RFI-variance + `[SYN]` / `[V]`.
-- [ ] No codebook / EXERCISES / agent-worktree writes. No pipe/K/hydraulics invented as demand.
+- `most-stringent-basis-matrix` consumed (editions, carrier union, density/area/hose/duration, deltas). Not rebuilt.
+- `suppression-technology-selection` consumed; elected system is **wet | dry | double-interlock** only.
+- `occupancy-hazard-fork` consumed (HC/OH + demand-area HINT + ceiling). Classification not redone. Off-table not sized as HC-2 default.
+- `fire-area-compartmentation-schedule` consumed when multi-hall / required; else marked `n/a`.
+- Company fence enforced: SI/NI = `comparison-only`; SI/NI-as-BOD → stopped / `RFI-variance`. Foam prohibited; mist `PRACTICE REFUSED`.
+- Editions pinned: NFPA 13-2025 (delta) + AHJ edition; FM DS 5-32 Jan-2026 and/or AXA XL Mar-2026; DS 3-26 April 2025 if HC-rooted; owner posture.
+- Density taken from a cited sheet or matrix row (FM 0.2 HC-2, FM 0.1 HC-1, or fork-resolved). Not invented. AXA-XL-only without density → stopped.
+- Controlling area: **wet → 2,500 / `area_increase=0`**; **dry or DI → 3,500 / `area_increase=0`**. No `3500×0.30` stack.
+- Owner DI mandate applied to **AREA** (3,500) when DI is elected.
+- Dual-carrier not blended; unresolved dual-carrier → handed back to matrix.
+- Ceiling ≤30 ft on FM, or stopped / handed off.
+- JSON written at **caller path**; `python3 calcs/fp/run.py <that.json>` run; stdout pasted; `TRANSCRIPT_OK`; exit 0.
+- Independent verify: q = density × area, Q = q + hose, V = Q × duration. Hose labeled inside `qd`.
+- Delta printed: FM 2,500→3,500 **≈+40%** vs NFPA **+30%** cited by edition (2025 §19.2.3.2.6 / 2022 §19.2.3.2.5 / 2019 §19.3.3.2.5). Wet: both bumps **avoided**.
+- Result labeled **density-method minimum**; handoff **`hydrant-supply-curve` then `pump-envelope`**.
+- Status register complete: grounded / provisional / unresolved / comparison-only / handoff / RFI-variance + `[SYN]` / `[V]`.
