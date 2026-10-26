@@ -583,6 +583,78 @@ class KeyAndSkillTests(unittest.TestCase):
                 text = path.read_text(encoding="utf-8")
                 self.assertNotIn(banned, text, path.name)
 
+    def test_spec_builders_keep_double_interlock_on_21_13_19(self):
+        import importlib.util
+
+        from fpfa.skills_loader import spec_notes
+
+        folder = REPO / "specs"
+        files = sorted(
+            path for path in folder.glob("*.md") if path.name.lower() != "readme.md"
+        )
+        names = [path.name for path in files]
+        self.assertEqual(
+            names,
+            [
+                "21-05-00-common-work.md",
+                "21-11-00-fire-service-mains.md",
+                "21-12-00-standpipes.md",
+                "21-13-13-wet-pipe.md",
+                "21-13-16-dry-pipe.md",
+                "21-13-19-double-interlock-preaction.md",
+                "21-30-00-fire-pumps.md",
+                "28-31-00-fire-detection-and-alarm.md",
+            ],
+        )
+        notes = spec_notes(REPO)
+        self.assertEqual([note["name"] for note in notes], names)
+        for note in notes:
+            self.assertLessEqual(len(note["text"]), 4000)
+            self.assertEqual(
+                len(note["text"]),
+                len((folder / note["name"]).read_text(encoding="utf-8")),
+            )
+
+        di = (folder / "21-13-19-double-interlock-preaction.md").read_text(encoding="utf-8")
+        dry = (folder / "21-13-16-dry-pipe.md").read_text(encoding="utf-8")
+        self.assertIn("CSI 21 13 19", di)
+        self.assertIn("Do not write double-interlock requirements into Section 21 13 16.", di)
+        self.assertIn("CSI 21 13 16", dry)
+        self.assertIn("Section 21 13 19", dry)
+        self.assertNotIn("Single- or double-interlock", di)
+
+        mislabel = re.compile(
+            r"(?i)(double-interlock|preaction).{0,80}21 13 16"
+            r"|21 13 16.{0,80}(double-interlock|preaction)"
+        )
+        fence = re.compile(r"(?i)\b(not|dry pipe|dry-pipe)\b")
+        for path in folder.glob("*.md"):
+            for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+                if mislabel.search(line):
+                    self.assertRegex(line, fence, f"{path.name}:{number}")
+
+        roster = re.compile(
+            r"\bAbe\b|DC FP Lead|stay dark|Hyperion|Abraham|\bNovva\b|NEEDS PE REVIEW|/workspace/"
+            r"|Canada|Canadian|\bCSA\b|NFPA 2001"
+        )
+        authored = re.compile(r"(?i)provide (a |an )?(foam|clean agent|water mist|deluge)")
+        scan_path = REPO / "calcs" / "fp" / "place_name_scan.py"
+        spec = importlib.util.spec_from_file_location("place_name_scan", scan_path)
+        scanner = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(scanner)
+        places = scanner.banned_pattern()
+        hits = []
+        for path in folder.glob("*.md"):
+            text = path.read_text(encoding="utf-8")
+            if roster.search(text) or places.search(text) or authored.search(text):
+                hits.append(path.name)
+            self.assertNotIn("_sources", text)
+            lowered = path.name.lower()
+            self.assertNotIn("foam", lowered)
+            self.assertNotIn("clean", lowered)
+            self.assertNotIn("canada", lowered)
+        self.assertEqual(hits, [])
+
 
 class EverydayPathTests(unittest.TestCase):
     def setUp(self):

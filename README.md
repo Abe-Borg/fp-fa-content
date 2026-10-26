@@ -71,7 +71,7 @@ py -m unittest discover -s tests
 | `modes/<slug>/MODE.md` | Everyday-path modes: brainstorm, calculator, synthesis, mixed |
 | `calcs/fp` | Fire-protection formulas, shop pipe IDs, DI zone screens |
 | `calcs/fa` | Fire-alarm calculation libraries |
-| `specs/` | Optional master-spec markdown (README is not treated as a spec) |
+| `specs/` | Draft CSI sections, one file each. README is not a spec. Double-interlock draft language is 21 13 19 |
 | `corpus/` | Paraphrased reference notes (edition pins and decision logs). The app does not search this folder yet |
 
 ## Not in this prototype
