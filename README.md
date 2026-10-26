@@ -23,7 +23,7 @@ py -m pip install pywin32
 py -m fpfa
 ```
 
-`pywin32` lets the `keyring` package store the API key in Windows Credential Manager. If Credential Manager is unavailable, the app stores the key in a user-only file under `%APPDATA%\fpfa-assistant` and says so in Settings. The key is not written into the project file, the chat log, or the exported document.
+`pywin32` lets the `keyring` package store the API key in Windows Credential Manager. If Credential Manager is unavailable, the app stores the key in a user-only file under `%APPDATA%\fpfa-assistant`. Settings and the status line say which store holds the key. The key is not written into the project file, the chat log, or the exported document.
 
 On Linux or macOS the same commands work with `python3` in place of `py`. The key is stored in a user-only file under `~/.local/share/fpfa-assistant` (or `$XDG_DATA_HOME`), mode `0600` where the filesystem allows it. Set `FPFA_USE_KEYRING=1` before starting the app to use the system keyring instead. A missing keyring on those desktops can open a blocking password dialog, so the file is the default there.
 
@@ -34,7 +34,7 @@ Projects are JSON files in that data directory. Override it with `FPFA_DATA_DIR`
 1. Settings. Paste an Anthropic API key. Check key calls the models endpoint for `claude-opus-5-5` and does not generate text.
 2. Projects. Create a job, or load the sample data-hall zone. Record the AHJ, NFPA 13 and NFPA 72 editions, the insurer, and hazard notes.
 3. DI zone. Enter pipe segments (nominal size, schedule, length, role). Blank schedule uses the shop default and is flagged. Run the zone.
-4. Results. Trapped volume, pipe-only and zone-total delivery screens, trim family, releasing truth table, nitrogen C-factor, density and hose. Export a draft Section 21 13 16 `.docx`.
+4. Results. Trapped volume, pipe-only and zone-total delivery screens, trim family, releasing truth table, nitrogen C-factor, density and hose. Blank trim (5 gal) and the screen-limit seconds are labeled ASSUMED. Pipe gallons and trip time are calculated. Export a draft Section 21 13 19 `.docx` (double-interlock preaction).
 5. Chat. With a key saved, the same tools and skills are available. Without a key, the zone tool plan still runs.
 
 The sample zone is generic. It is not a constructed building.

@@ -18,11 +18,18 @@ from tkinter import filedialog, messagebox, simpledialog, ttk
 from fpfa import sample_data
 from fpfa.calc_tools import SCHEMAS, ToolSession
 from fpfa.claude_client import MODEL_ID, AnthropicMessages, run_tool_loop, safe_error
-from fpfa.keystore import clear_api_key, key_status, load_api_key, save_api_key
+from fpfa.keystore import clear_api_key, key_status, key_storage_help, load_api_key, save_api_key
 from fpfa.paths import content_root, read_config, write_config
 from fpfa.projects import delete_project, list_projects, load_project, new_project, save_project
-from fpfa.spec_docx import write_docx
-from fpfa.workflow import format_transcript, run_di_zone, system_prompt
+from fpfa.spec_docx import DRAFT_SECTION, write_docx
+from fpfa.workflow import (
+    form_assumption_lines,
+    format_transcript,
+    run_di_zone,
+    screen_limit_assumption_text,
+    system_prompt,
+    trim_assumption_text,
+)
 
 
 def format_chat_request(prior_turns: list[dict], basis: dict, di: dict, latest: str) -> str:
@@ -133,11 +140,11 @@ class App:
         self.ask_claude = tk.BooleanVar(value=False)
         ttk.Checkbutton(
             bar,
-            text="Ask Claude after the tool plan",
+            text="Ask Claude after the tool plan (your key; numbers stay from the calcs)",
             variable=self.ask_claude,
         ).pack(side="left")
         ttk.Button(bar, text="Run DI zone", command=self.run_zone).pack(side="left", padx=8)
-        ttk.Button(bar, text="Export .docx", command=self.export_docx).pack(side="left")
+        ttk.Button(bar, text=f"Export {DRAFT_SECTION}", command=self.export_docx).pack(side="left")
         ttk.Button(bar, text="Save project", command=self.save_current).pack(side="left", padx=8)
         self.status = tk.StringVar(value=key_status())
         ttk.Label(bar, textvariable=self.status).pack(side="left", padx=12)
@@ -148,6 +155,22 @@ class App:
         entry = ttk.Entry(parent, textvariable=variable, width=width)
         entry.grid(row=row, column=column + 1, sticky="ew", padx=4, pady=3)
         return entry
+
+    def _refresh_assumptions(self) -> None:
+        trim = self.trim_gal.get()
+        basis = self.delivery_basis.get() or "FM"
+        try:
+            lines = form_assumption_lines(trim, basis, content_root())
+        except Exception as exc:
+            if str(trim).strip():
+                trim_line = f"Trim: {str(trim).strip()} gal entered on the form. Not assumed."
+            else:
+                trim_line = "Trim: ASSUMED 5 gal when Trim gal is blank (no valve data sheet). Not calculated."
+            lines = [
+                trim_line,
+                "Screen limit: ASSUMED from the time basis lookup, not calculated. " + safe_error(exc),
+            ]
+        self.assumption_text.set("\n".join(lines))
 
     def _combo(self, parent, text, variable, values, row, column, width=18):
         ttk.Label(parent, text=text).grid(row=row, column=column, sticky="w", padx=4, pady=3)
@@ -226,6 +249,16 @@ class App:
         self._combo(form, "Lengths", self.length_label, [label for label, _ in LENGTHS], 5, 0, width=18)
         self._labeled(form, "Fittings %", self.fittings, width=10, row=5, column=2)
         self._labeled(form, "Trim gal", self.trim_gal, width=8, row=5, column=4)
+        self.assumption_text = tk.StringVar()
+        ttk.Label(
+            form,
+            textvariable=self.assumption_text,
+            wraplength=860,
+            justify="left",
+        ).grid(row=8, column=0, columnspan=6, sticky="w", padx=4, pady=(4, 0))
+        self.trim_gal.trace_add("write", lambda *_args: self._refresh_assumptions())
+        self.delivery_basis.trace_add("write", lambda *_args: self._refresh_assumptions())
+        self._refresh_assumptions()
         self._labeled(form, "Supervisory psig", self.supervisory_psig, width=10, row=6, column=0)
         self._labeled(form, "Fill minutes", self.fill_minutes, width=10, row=6, column=2)
         checks = ttk.Frame(form)
@@ -274,7 +307,9 @@ class App:
             pipes,
             text=(
                 "Blank schedule uses the shop default (branch and under 2 in = sch 40, mains and cross 2 in and up = sch 10). "
-                "The ID comes from the calc pack. Blank fittings follow the length basis. Blank trim is 5 gal, assumed."
+                "The ID comes from the calc pack. Blank fittings follow the length basis. "
+                "Blank trim is ASSUMED 5 gal (no valve data sheet), not calculated. "
+                "The screen-limit seconds are ASSUMED from the time basis lookup, not calculated."
             ),
             wraplength=720,
         ).pack(anchor="w")
@@ -284,7 +319,12 @@ class App:
         self.tabs.add(tab, text="Results")
         ttk.Label(
             tab,
-            text="Figures in this view come from the tool plan on the form. A delivery time here is an optimistic screen, not a listed water-delivery-time calculation.",
+            text=(
+                "Figures in this view come from the tool plan on the form. "
+                "Pipe gallons and t_total are calculated. "
+                "Blank trim and the screen-limit seconds are marked ASSUMED. "
+                "A delivery time here is an optimistic screen, not a listed water-delivery-time calculation."
+            ),
             wraplength=900,
         ).pack(anchor="w", pady=(0, 6))
         self.results = tk.Text(tab, wrap="word")
@@ -621,6 +661,8 @@ class App:
                         "elect_di_trim",
                         "releasing_truth_table",
                     ],
+                    max_rounds=16,
+                    max_tokens=16000,
                 )
 
         if use_claude:
@@ -673,7 +715,10 @@ class App:
         if form_error:
             self.status.set(form_error)
         elif result["source"] == "claude":
-            self.status.set(f"Tool plan plus {MODEL_ID}. Tables use the tool plan.")
+            note = f"Tool plan plus {MODEL_ID}. Tables and Section {DRAFT_SECTION} use the tool plan."
+            if result.get("warnings"):
+                note = note + " " + result["warnings"][0]
+            self.status.set(note)
         else:
             note = "Tool plan only."
             if self.ask_claude.get() and not load_api_key():
@@ -696,13 +741,23 @@ class App:
         volume = tools["zone_trapped_volume"]
         trip = tools["di_trip_to_water"]
         trim = tools["elect_di_trim"]
+        source = result.get("source") or "tool-plan"
+        if source == "claude":
+            header = f"Narrative from {result.get('model') or MODEL_ID}. Tables use the tool plan."
+        else:
+            header = "Narrative from the tool plan."
         lines = [
+            "Assumptions vs calculated",
+            trim_assumption_text(volume),
+            screen_limit_assumption_text(trip),
+            "",
+            header,
             result.get("narrative") or "",
             "",
             "— Tool plan —",
             f"Zone {volume['zone_gal']:.1f} gal    t_total {trip['t_total_s']:.1f} s    "
             f"passes screen: {'yes' if trip['passes_screen'] else 'no'}    "
-            f"trim: {trim.get('family') or trim.get('status')}",
+            f"trim family: {trim.get('family') or trim.get('status')}",
             "",
             "Flags",
         ]
@@ -730,7 +785,7 @@ class App:
             return
         path = filedialog.asksaveasfilename(
             parent=self.root,
-            title="Export draft section",
+            title=f"Export draft Section {DRAFT_SECTION}",
             defaultextension=".docx",
             filetypes=[("Word document", "*.docx")],
             initialfile=f"{self.project.get('name', 'di-zone')}.docx",
@@ -795,6 +850,7 @@ class App:
                     tools=SCHEMAS,
                     execute=session.execute,
                     required=[],
+                    max_tokens=16000,
                 )
                 reply = out.get("text") or "(Claude returned no text.)"
             except Exception as exc:
@@ -825,7 +881,7 @@ class App:
         win = tk.Toplevel(self.root)
         win.title("Settings")
         win.transient(self.root)
-        win.geometry("640x360")
+        win.geometry("680x460")
         frame = ttk.Frame(win, padding=12)
         frame.pack(fill="both", expand=True)
         ttk.Label(frame, text=f"Model  {MODEL_ID}").pack(anchor="w")
@@ -834,6 +890,7 @@ class App:
             text="Paste your own Anthropic API key. It stays on this machine and is not written into the project.",
             wraplength=580,
         ).pack(anchor="w", pady=(8, 4))
+        ttk.Label(frame, text=key_storage_help(), wraplength=580).pack(anchor="w", pady=(0, 4))
         key_var = tk.StringVar()
         ttk.Entry(frame, textvariable=key_var, show="•", width=60).pack(anchor="w", fill="x")
         status = tk.StringVar(value=key_status())

@@ -151,10 +151,28 @@ def clear_api_key() -> None:
     _delete_file()
 
 
+def key_storage_help() -> str:
+    """Shown in Settings so a designer can see where Save key will put the key."""
+    return (
+        "On Windows the key is stored in Credential Manager when keyring and pywin32 are available. "
+        "If Credential Manager cannot store it, the key is stored in a user-only file under "
+        "%APPDATA%\\fpfa-assistant. On other computers that user-only file is the default unless "
+        "FPFA_USE_KEYRING=1. The key is not written into the project, the chat, or the exported section."
+    )
+
+
 def key_status() -> str:
-    if load_api_key():
-        backend = key_backend() or "file"
-        if backend == "keyring":
-            return "Key stored in the OS keyring (Credential Manager on Windows)."
-        return "Key stored in a user-only file because the OS keyring was not available."
-    return "No API key saved."
+    """One line for the status bar and Settings. Names the store that holds the key."""
+    if not load_api_key():
+        return "No API key saved."
+    backend = key_backend() or "file"
+    if backend == "keyring" and sys.platform == "win32":
+        return "API key stored in Windows Credential Manager (this PC only)."
+    if backend == "keyring":
+        return "API key stored in the system keyring (this computer only)."
+    if sys.platform == "win32":
+        return (
+            "API key stored in a user-only file. Credential Manager did not take it. "
+            "Install pywin32 if it is missing, then save the key again."
+        )
+    return "API key stored in a user-only file on this computer (not in the project)."

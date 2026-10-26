@@ -60,8 +60,38 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn(self.fmt1(volume), result["narrative"])
         self.assertIn(self.fmt1(trip["t_total_s"]), result["narrative"])
         self.assertIn("not a listed water-delivery-time calculation", result["narrative"])
+        self.assertIn("5.0 gal trim ASSUMED", result["narrative"])
+        self.assertIn("Screen limit 30.0 s — ASSUMED from time basis FM", result["narrative"])
+        self.assertTrue(any("ASSUMED from time basis FM" in flag for flag in result["flags"]))
         self.assertTrue(result["narrative_checks"]["quotes_volume"])
         self.assertTrue(result["narrative_checks"]["quotes_time"])
+
+    def test_claude_request_carries_the_tool_plan_figures(self):
+        from fpfa.workflow import form_assumption_lines
+
+        seen = {}
+
+        def grab(system, user, _tools, _execute):
+            seen["system"] = system
+            seen["user"] = user
+            return {"text": "", "tool_calls": [], "stop_reason": "max_tokens"}
+
+        result = self.run(self.root, self.di, self.basis, narrator=grab)
+        volume = self.fmt1(result["tools"]["zone_trapped_volume"]["zone_gal"])
+        total = self.fmt1(result["tools"]["di_trip_to_water"]["t_total_s"])
+        self.assertIn(volume, seen["user"])
+        self.assertIn(total, seen["user"])
+        self.assertIn("5.0 gal trim ASSUMED", seen["user"])
+        self.assertIn("tool_plan_inputs", seen["user"])
+        self.assertIn("ASSUMED", seen["system"])
+        self.assertTrue(any("output limit" in item for item in result["warnings"]))
+        blank = "\n".join(form_assumption_lines("", "FM", self.root))
+        self.assertIn("Trim: ASSUMED 5 gal", blank)
+        self.assertIn("30.0 s ASSUMED from time basis FM", blank)
+        entered = "\n".join(form_assumption_lines("10", "NFPA-OH", self.root))
+        self.assertIn("10 gal entered on the form. Not assumed.", entered)
+        self.assertIn("50.0 s ASSUMED from time basis NFPA-OH", entered)
+        self.assertNotIn("Trim: ASSUMED", entered)
 
     def test_model_text_is_kept_only_when_it_quotes_the_tool_plan(self):
         first = self.run(self.root, self.di, self.basis)
@@ -108,7 +138,12 @@ class WorkflowTests(unittest.TestCase):
             for table in doc.tables:
                 for row in table.rows:
                     text += "\n" + " | ".join(cell.text for cell in row.cells)
-        self.assertIn("Section 21 13 16", text)
+        self.assertIn("Section 21 13 19", text)
+        self.assertEqual(doc.core_properties.title, "Section 21 13 19 — Double-interlock preaction (draft)")
+        self.assertNotIn("21 13 " + "16", text)
+        self.assertIn("5.0 gal trim ASSUMED", text)
+        self.assertIn("30.0 ASSUMED", text)
+        self.assertIn("Screen limit 30.0 s — ASSUMED from time basis FM", text)
         self.assertIn("not a listed water-delivery-time calculation", text)
         self.assertIn(volume, text)
         self.assertIn(total, text)
@@ -175,6 +210,9 @@ class WorkflowTests(unittest.TestCase):
         self.assertFalse(screen["nfpa_delivery_time_exempt"])
         self.assertEqual(screen["nfpa_size_cap_gal"], 500)
         self.assertIn("cap: no", result["narrative"])
+        self.assertIn("not assumed", result["narrative"])
+        self.assertNotIn("trim ASSUMED", result["narrative"])
+        self.assertIn("ASSUMED from time basis", result["narrative"])
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "section.docx"
             write_docx(path, {"name": "Exemption check", "basis": self.basis}, result)
@@ -184,6 +222,11 @@ class WorkflowTests(unittest.TestCase):
         zone_row = next(row for row in rows if row[0] == "Zone total")
         self.assertEqual(pipe_row[-1], "—")
         self.assertEqual(zone_row[-1], "No")
+        self.assertIn("ASSUMED", pipe_row[3])
+        self.assertIn("ASSUMED", zone_row[3])
+        body = "\n".join(paragraph.text for paragraph in doc.paragraphs)
+        self.assertIn("not assumed", body)
+        self.assertNotIn("trim ASSUMED", body)
 
 
 class ChatRequestTests(unittest.TestCase):
@@ -277,11 +320,75 @@ class ClaudeLoopTests(unittest.TestCase):
             client.create(max_tokens=8, messages=[], tool_choice={"type": "any"})
         with self.assertRaises(ValueError):
             client.create(max_tokens=8, messages=[], thinking={"type": "disabled"})
-        client.create(max_tokens=8, messages=[], temperature=0, top_p=1, top_k=5)
+        client.create(max_tokens=8, messages=[], temperature=0, top_p=1, top_k=5, tool_choice={"type": "auto"})
         self.assertNotIn("temperature", client._client.messages.kwargs)
         self.assertNotIn("top_p", client._client.messages.kwargs)
         self.assertNotIn("top_k", client._client.messages.kwargs)
         self.assertNotIn("tool_choice", client._client.messages.kwargs)
+        self.assertNotIn("thinking", client._client.messages.kwargs)
+
+    def test_wrapper_retries_a_transient_overload(self):
+        from unittest.mock import patch
+
+        from fpfa.claude_client import AnthropicMessages
+
+        client = AnthropicMessages("sk-ant-test-not-sent")
+
+        class Overloaded(Exception):
+            status_code = 529
+
+        class Messages:
+            def __init__(self):
+                self.calls = 0
+                self.kwargs = None
+
+            def create(self, **kwargs):
+                self.calls += 1
+                self.kwargs = kwargs
+                if self.calls == 1:
+                    raise Overloaded("overloaded")
+                return SimpleNamespace(content=[])
+
+        class Inner:
+            def __init__(self):
+                self.messages = Messages()
+
+        client._client = Inner()
+        with patch("fpfa.claude_client.time.sleep"):
+            client.create(max_tokens=8, messages=[])
+        self.assertEqual(client._client.messages.calls, 2)
+
+    def test_truncated_tool_call_is_not_executed(self):
+        from fpfa.claude_client import run_tool_loop
+
+        class Block:
+            def __init__(self, **kwargs):
+                self.__dict__.update(kwargs)
+
+            def model_dump(self, exclude_none=True):
+                return {key: value for key, value in self.__dict__.items() if value is not None}
+
+        def create(**_kwargs):
+            return SimpleNamespace(
+                stop_reason="max_tokens",
+                content=[Block(type="tool_use", id="toolu_cut", name="zone_trapped_volume", input={})],
+            )
+
+        def execute(_name, _arguments):
+            raise AssertionError("a truncated tool call must not run")
+
+        out = run_tool_loop(
+            create,
+            system="sys",
+            user_text="go",
+            tools=[],
+            execute=execute,
+            required=["zone_trapped_volume"],
+            max_rounds=4,
+        )
+        self.assertEqual(out["tool_calls"], [])
+        self.assertEqual(out["stop_reason"], "max_tokens")
+        self.assertEqual(out["nudges"], 0)
 
 
 class KeyAndSkillTests(unittest.TestCase):
@@ -303,8 +410,56 @@ class KeyAndSkillTests(unittest.TestCase):
         project = new_project("Key isolation")
         blob = (data / "projects" / f"{project['id']}.json").read_text(encoding="utf-8")
         self.assertNotIn("sk-ant-local-test", blob)
+        self.assertIn("user-only file", keystore.key_status())
         keystore.clear_api_key()
         self.assertEqual(keystore.load_api_key(), "")
+        self.assertIn("Credential Manager", keystore.key_storage_help())
+        self.assertIn("pywin32", keystore.key_storage_help())
+        self.assertIn("FPFA_USE_KEYRING=1", keystore.key_storage_help())
+
+    def test_windows_status_names_credential_manager_or_the_file(self):
+        from unittest.mock import patch
+
+        _isolate_data()
+        import fpfa.keystore as keystore
+
+        calls = []
+
+        def fake(action, secret=None, timeout=2.0):
+            calls.append(action)
+            if action == "set":
+                fake.saved = secret
+                return "ok"
+            if action == "get":
+                return getattr(fake, "saved", "")
+            return "ok"
+
+        keystore._keyring_call = fake
+        os.environ["FPFA_USE_KEYRING"] = "0"
+        try:
+            with patch.object(keystore.sys, "platform", "win32"):
+                self.assertEqual(keystore.save_api_key("sk-ant-local-test"), "file")
+                text = keystore.key_status()
+            self.assertNotIn("set", calls)
+            self.assertIn("user-only file", text)
+            self.assertIn("Credential Manager", text)
+            self.assertIn("pywin32", text)
+        finally:
+            os.environ.pop("FPFA_USE_KEYRING", None)
+            keystore.clear_api_key()
+
+        os.environ["FPFA_USE_KEYRING"] = "1"
+        try:
+            self.assertEqual(keystore.save_api_key("sk-ant-local-test"), "keyring")
+            with patch.object(keystore.sys, "platform", "win32"):
+                windows = keystore.key_status()
+            with patch.object(keystore.sys, "platform", "linux"):
+                other = keystore.key_status()
+            self.assertIn("Windows Credential Manager", windows)
+            self.assertIn("system keyring", other)
+        finally:
+            os.environ.pop("FPFA_USE_KEYRING", None)
+            keystore.clear_api_key()
 
     def test_skills_come_from_the_pack(self):
         from fpfa.paths import content_root
@@ -333,6 +488,17 @@ class KeyAndSkillTests(unittest.TestCase):
                     hits.append(str(path.relative_to(REPO)))
         self.assertEqual(hits, [])
 
+    def test_di_draft_does_not_use_the_dry_pipe_section_number(self):
+        banned = "21 13 " + "16"
+        readme = (REPO / "README.md").read_text(encoding="utf-8")
+        self.assertNotIn(banned, readme)
+        self.assertIn("21 13 19", readme)
+        for path in (REPO / "app" / "fpfa").rglob("*.py"):
+            text = path.read_text(encoding="utf-8")
+            self.assertNotIn(banned, text, path.name)
+            if path.name == "spec_docx.py":
+                self.assertIn("21 13 19", text)
+
 
 class UiSmokeTests(unittest.TestCase):
     def test_demo_run_and_export(self):
@@ -351,7 +517,11 @@ class UiSmokeTests(unittest.TestCase):
             self.assertEqual(len(app.pipes.get_children()), 4)
             narrative = app.results.get("1.0", "end")
             self.assertIn("Zone total is", narrative)
+            self.assertIn("5.0 gal trim ASSUMED", narrative)
+            self.assertIn("Screen limit 30.0 s — ASSUMED from time basis FM", narrative)
             self.assertIn("not a listed water-delivery-time calculation", narrative)
+            self.assertIn("Trim: ASSUMED 5 gal", app.assumption_text.get())
+            self.assertIn("30.0 s ASSUMED", app.assumption_text.get())
             self.assertIsNotNone(app.project["last_run"])
             with tempfile.TemporaryDirectory() as tmp:
                 written = app.export_to(Path(tmp) / "draft.docx")

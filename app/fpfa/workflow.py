@@ -224,6 +224,62 @@ def govern_nfpa_exemption(screen: dict, zone_gal: float) -> dict:
     return governed
 
 
+def trim_assumption_text(volume: dict) -> str:
+    """Say whether trim gallons were typed or filled with the 5 gal assumption."""
+    if "trim_gal" not in volume:
+        return "Trim was not on this result."
+    gallons = fmt1(volume["trim_gal"])
+    if volume.get("trim_assumed"):
+        return (
+            f"{gallons} gal trim ASSUMED (blank trim; 5 gal, no valve data sheet; not calculated)"
+        )
+    return f"{gallons} gal trim (entered on the form, not assumed)"
+
+
+def screen_limit_assumption_text(trip: dict) -> str:
+    """The limit seconds are a basis lookup. t_total is the calculated trip time."""
+    if "limit_s" not in trip or "t_total_s" not in trip:
+        return "Screen limit was not on this result."
+    limit = fmt1(trip["limit_s"])
+    total = fmt1(trip["t_total_s"])
+    basis = trip.get("limit_basis") or ""
+    calculated = f"t_total {total} s is calculated."
+    if basis == "explicit":
+        return (
+            f"Screen limit {limit} s is an explicit value, not a calculated delivery time. {calculated}"
+        )
+    return (
+        f"Screen limit {limit} s — ASSUMED from time basis {basis}. "
+        f"The limit is a lookup, not calculated. {calculated}"
+    )
+
+
+def lookup_screen_limit(content_root: Path, basis: str) -> dict[str, Any]:
+    """Read the screen-limit table from the calc pack. Do not copy the seconds here."""
+    session = ToolSession(content_root)
+    table = session.formulas.DI_LIMITS_S
+    key = str(basis or "FM").strip().upper()
+    if key == "NFPA":
+        key = "NFPA-OH"
+    if key not in table:
+        raise ValueError(f"Time basis {basis!r} has no screen limit in the calc pack.")
+    return {"limit_s": float(table[key]), "limit_basis": key}
+
+
+def form_assumption_lines(trim_text: str, basis: str, content_root: Path) -> list[str]:
+    """Live form copy: blank trim and the basis lookup are ASSUMED, not calculated."""
+    if _blank(trim_text):
+        trim_line = "Trim: ASSUMED 5 gal when Trim gal is blank (no valve data sheet). Not calculated."
+    else:
+        trim_line = f"Trim: {str(trim_text).strip()} gal entered on the form. Not assumed."
+    limit = lookup_screen_limit(content_root, basis)
+    limit_line = (
+        f"Screen limit: {fmt1(limit['limit_s'])} s ASSUMED from time basis {limit['limit_basis']}. "
+        "This limit is a lookup, not calculated. Trip time is calculated when the zone runs."
+    )
+    return [trim_line, limit_line]
+
+
 def template_narrative(di: dict, tools: dict[str, Any]) -> str:
     volume = tools["zone_trapped_volume"]
     screen = tools["dry_delivery_screen"]
@@ -246,15 +302,15 @@ def template_narrative(di: dict, tools: dict[str, Any]) -> str:
         (
             f"Trapped volume is {fmt1(volume['pipe_gal'])} gal of pipe, "
             f"{fmt1(volume['fittings_gal'])} gal fittings allowance "
-            f"({volume['fittings_percent']:g}%), and {fmt1(volume['trim_gal'])} gal trim. "
+            f"({volume['fittings_percent']:g}%), and {trim_assumption_text(volume)}. "
             f"Zone total is {fmt1(volume['zone_gal'])} gal."
         ),
         (
             f"NFPA size exemption on the zone total of {fmt1(volume['zone_gal'])} gal "
             f"against the {screen['nfpa_size_cap_gal']:.0f} gal cap: {exempt}. "
             "A quick-opening device does not raise the double-interlock cap. "
-            f"The {trip['limit_basis']} {fmt1(trip['limit_s'])} s screen on the zone total {screen_word}: "
-            f"t_total {fmt1(trip['t_total_s'])} s. "
+            f"{screen_limit_assumption_text(trip)} "
+            f"The zone-total screen {screen_word}. "
             "This screen is not a listed water-delivery-time calculation."
         ),
         (
@@ -299,6 +355,8 @@ def _flags(di: dict, tools: dict[str, Any], extra: list[str]) -> list[str]:
     flags.extend(tools["elect_di_trim"].get("flags") or [])
     screen = tools["dry_delivery_screen"]
     trip = tools["di_trip_to_water"]
+    if trip.get("limit_basis") != "explicit" and "limit_s" in trip:
+        flags.append(screen_limit_assumption_text(trip))
     if screen["nfpa_delivery_time_exempt"] and not trip["passes_screen"]:
         flags.append(
             "Zone total is inside the NFPA size cap and the zone-total time screen still misses. "
@@ -320,16 +378,39 @@ def _flags(di: dict, tools: dict[str, Any], extra: list[str]) -> list[str]:
     return flags
 
 
-def _user_message(content_root: Path, di: dict, basis: dict) -> str:
+def _user_message(content_root: Path, di: dict, basis: dict, tools: dict[str, Any]) -> str:
+    """Ask Claude to quote the tool plan. The plan already ran; its figures govern."""
     known = {item["slug"] for item in list_skills(content_root)}
     present = [slug for slug in DI_SKILL_SLUGS if slug in known]
+    volume = tools["zone_trapped_volume"]
+    trip = tools["di_trip_to_water"]
+    plan_inputs = {call["name"]: call["input"] for call in _plan_transcript(tools, di, basis)}
+    governing = {
+        "zone_gal_text": fmt1(volume["zone_gal"]),
+        "t_total_s_text": fmt1(trip["t_total_s"]),
+        "trim": trim_assumption_text(volume),
+        "screen_limit": screen_limit_assumption_text(trip),
+    }
     return (
-        "Run the double-interlock preaction zone. Read each listed skill with read_skill, "
-        "then call zone_trapped_volume, dry_delivery_screen, di_trip_to_water, elect_di_trim, "
-        "and releasing_truth_table on these inputs. Also call density_area, hose_duration, and "
-        "nitrogen_gate. Quote the tool zone_gal and t_total_s in the draft. "
-        "Do not invent gallons or seconds.\n\n"
-        + json.dumps({"skills_to_read": present, "basis": basis, "inputs": di}, indent=2, default=str)
+        "The tool plan on this form already ran in the app. Those figures govern the tables and the export.\n"
+        f"The draft must contain the exact text {governing['zone_gal_text']} and {governing['t_total_s_text']}.\n"
+        "Pipe gallons and t_total are calculated. "
+        "If the notes below say ASSUMED for trim or the screen limit, write ASSUMED next to that figure. "
+        "Do not describe an ASSUMED value as calculated.\n"
+        "Read a listed skill with read_skill when you apply that method. "
+        "You can call several tools in one reply. "
+        "If you call a calc tool, use tool_plan_inputs. Do not invent gallons, seconds, gpm, or scfm.\n\n"
+        + json.dumps(
+            {
+                "skills_to_read": present,
+                "basis": basis,
+                "inputs": di,
+                "tool_plan_inputs": plan_inputs,
+                "governing": governing,
+            },
+            indent=2,
+            default=str,
+        )
     )
 
 
@@ -360,10 +441,14 @@ def run_di_zone(
         try:
             drafted = narrator(
                 system_prompt(content_root),
-                _user_message(content_root, di, basis),
+                _user_message(content_root, di, basis, tools),
                 SCHEMAS,
                 session.execute,
             )
+            if drafted.get("stop_reason") == "max_tokens":
+                warnings.append(
+                    "Claude stopped because the reply hit the output limit. Tables stay on the tool plan."
+                )
             for call in drafted.get("tool_calls") or []:
                 transcript.append({
                     "name": call.get("name"),
