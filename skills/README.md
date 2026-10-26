@@ -54,7 +54,7 @@ Tier B methods in this folder (v1, after Tier A). Tier C is not in this pack:
 - `fire-area-compartmentation-schedule`
 - `combustion-air-and-hall-free-area`
 
-Specialist role prompts live next to this folder in `roles/<slug>/ROLE.md`. The everyday path points at those files the same way it points at `SKILL.md`. Do not paste a role into the application.
+Specialist role prompts live next to this folder in `roles/<slug>/ROLE.md`. Mode behavior lives in `modes/<slug>/MODE.md`. The everyday path points at those files the same way it points at `SKILL.md`. Do not paste a role or a mode into the application.
 
 The double-interlock zone screen asks for these slugs when they are present:
 

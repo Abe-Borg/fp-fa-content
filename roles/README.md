@@ -13,4 +13,4 @@ Roles in this pack:
 - `fa-releasing` — detection and releasing that trip those systems
 - `spec-draft` — narrative after a tool-plan run, including section 21 13 19
 
-A later step can add mode behavior (brainstorm, calculator, synthesis). These files do not switch modes. Keep section numbers that the app already uses. Do not add job names, client names, personal names, raw standards text, or a vendor catalog.
+Mode behavior lives next to this folder in `modes/<slug>/MODE.md` (brainstorm, calculator, synthesis, mixed). These role files do not switch modes. Keep section numbers that the app already uses. Do not add job names, client names, personal names, raw standards text, or a vendor catalog.

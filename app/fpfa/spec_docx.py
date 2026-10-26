@@ -10,7 +10,7 @@ from pathlib import Path
 
 from docx import Document
 
-from fpfa.workflow import fmt1, screen_limit_assumption_text, trim_assumption_text
+from fpfa.workflow import fmt1, judgment_label_line, screen_limit_assumption_text, trim_assumption_text
 
 DRAFT_SECTION = "21 13 19"
 DRAFT_HEADING = "Section 21 13 19 — Double-interlock preaction (draft)"
@@ -62,8 +62,10 @@ def write_docx(path: Path | str, project: dict, result: dict) -> Path:
         f"Draft Section {DRAFT_SECTION} for review. Verify with the engineer of record. "
         "The delivery times in this section are an optimistic screen from the trapped volume "
         "and an assumed fill flow. They are not a listed water-delivery-time calculation. "
-        "Figures marked ASSUMED were not calculated from the zone."
+        "Figures marked ASSUMED were not calculated from the zone. "
+        "Pipe gallons and t_total are calculated."
     )
+    doc.add_paragraph(judgment_label_line())
     doc.add_paragraph(
         f"Project: {project.get('name') or 'Untitled job'}. "
         f"Zone: {di.get('zone_id') or '—'}. "
@@ -79,7 +81,10 @@ def write_docx(path: Path | str, project: dict, result: dict) -> Path:
         f"Insurer: {basis.get('insurer') or '—'}."
     )
     if basis.get("hazard_notes"):
-        doc.add_paragraph(str(basis["hazard_notes"]))
+        doc.add_paragraph(
+            "Hazard notes (use best judgment; the tools did not return this text): "
+            + str(basis["hazard_notes"])
+        )
 
     doc.add_heading("Trapped volume", level=2)
     doc.add_paragraph(volume["formula"])
@@ -96,7 +101,7 @@ def write_docx(path: Path | str, project: dict, result: dict) -> Path:
         ] for row in volume["segments"]],
     )
     doc.add_paragraph(
-        f"Pipe {fmt1(volume['pipe_gal'])} gal. "
+        f"Pipe {fmt1(volume['pipe_gal'])} gal (calculated). "
         f"Fittings {fmt1(volume['fittings_gal'])} gal at {volume['fittings_percent']:g}%. "
         f"{trim_assumption_text(volume)}. "
         f"Zone total {fmt1(volume['zone_gal'])} gal."
