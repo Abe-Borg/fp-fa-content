@@ -2025,6 +2025,224 @@ class UiSmokeTests(unittest.TestCase):
             fast_release.set()
             root.destroy()
 
+    def _zone_result(self, narrative: str) -> dict:
+        return {
+            "source": "tool-plan",
+            "narrative": narrative,
+            "warnings": [],
+            "flags": [],
+            "tools": {
+                "zone_trapped_volume": {"zone_gal": 12.0, "trim_gal": 5, "trim_assumed": True},
+                "di_trip_to_water": {
+                    "t_total_s": 10.0,
+                    "passes_screen": True,
+                    "limit_s": 60,
+                    "limit_basis": "FM",
+                },
+                "elect_di_trim": {"family": "El/El"},
+            },
+        }
+
+    def _prepare_zone_form(self, app, name: str) -> str:
+        app._start_named_job(name)
+        app._insert_segment({
+            "role": "branch",
+            "nps": "1",
+            "schedule": "sch40",
+            "length_ft": 10,
+            "d_in": 1.049,
+        })
+        app.ask_claude.set(True)
+        return app.project["id"]
+
+    def _hold_overlapping_runs(self, app, on_second):
+        """Prepare two /run jobs that block inside the zone call.
+
+        Call the returned start function after the patch is active. The first
+        job returns a labeled result. on_second() supplies the second outcome
+        and may return a result or raise.
+        """
+        import threading
+        from unittest.mock import patch
+
+        entered = [threading.Event(), threading.Event()]
+        release = [threading.Event(), threading.Event()]
+        state = {"n": 0}
+        lock = threading.Lock()
+
+        def fake_zone(_pack, _di, _basis, narrator=None, mode=None):
+            with lock:
+                index = state["n"]
+                state["n"] += 1
+            if index > 1:
+                raise AssertionError("unexpected extra zone run")
+            entered[index].set()
+            if not release[index].wait(5):
+                raise TimeoutError("zone run was not released")
+            if index == 0:
+                return self._zone_result("FIRST-ZONE-RESULT")
+            return on_second()
+
+        def start():
+            app.chat_entry.insert(0, "/run")
+            app.send_chat()
+            self.assertTrue(entered[0].wait(3), "first zone run did not start")
+            self.assertNotEqual(str(app.chat_entry.cget("state")), "disabled")
+            app.chat_entry.insert(0, "/run")
+            app.send_chat()
+            self.assertTrue(entered[1].wait(3), "second zone run did not start")
+            jobs = [job for job in app.jobs.snapshot() if job.kind == "zone"]
+            self.assertEqual(len(jobs), 2)
+            self.assertEqual(app.jobs.get(jobs[1].id).status, "running")
+            return jobs
+
+        return patch("fpfa.ui.run_di_zone", fake_zone), entered, release, start
+
+    def test_overlapping_zone_runs_each_post_a_labeled_result(self):
+        """Two /run jobs on one project each add their own labeled result."""
+        if not os.environ.get("DISPLAY"):
+            self.skipTest("no display")
+        _isolate_data()
+        import tkinter as tk
+
+        from fpfa.keystore import save_api_key
+        from fpfa.projects import load_project
+        from fpfa.ui import App
+
+        save_api_key("sk-ant-local-test")
+        root = tk.Tk()
+        patcher = None
+        patch_started = False
+        release = [None, None]
+        try:
+            app = App(root)
+            root.update()
+            origin_id = self._prepare_zone_form(app, "Overlap hall")
+            patcher, _entered, release, start = self._hold_overlapping_runs(
+                app, lambda: self._zone_result("SECOND-ZONE-RESULT")
+            )
+            patcher.start()
+            patch_started = True
+            jobs = start()
+            release[0].set()
+            self._wait_for(app, "FIRST-ZONE-RESULT", timeout=3)
+            mid = app.chat_view.get("1.0", "end")
+            self.assertIn("FIRST-ZONE-RESULT", mid)
+            self.assertIn(jobs[0].id, mid)
+            self.assertNotIn("SECOND-ZONE-RESULT", mid)
+            self.assertNotIn(jobs[1].id, mid)
+            release[1].set()
+            self._wait_for(app, "SECOND-ZONE-RESULT", timeout=3)
+            saved = load_project(origin_id)
+            assistant = [turn for turn in saved["chat"] if turn.get("role") == "assistant"]
+            self.assertEqual(len(assistant), 2)
+            self.assertEqual(assistant[0]["job_id"], jobs[0].id)
+            self.assertEqual(assistant[1]["job_id"], jobs[1].id)
+            self.assertNotEqual(assistant[0]["job_id"], assistant[1]["job_id"])
+            self.assertIn("FIRST-ZONE-RESULT", assistant[0]["text"])
+            self.assertIn(jobs[0].id, assistant[0]["text"])
+            self.assertIn("Overlap hall", assistant[0]["text"])
+            self.assertIn("| zone |", assistant[0]["text"])
+            self.assertNotIn(jobs[1].id, assistant[0]["text"])
+            self.assertIn("SECOND-ZONE-RESULT", assistant[1]["text"])
+            self.assertIn(jobs[1].id, assistant[1]["text"])
+            self.assertIn("Overlap hall", assistant[1]["text"])
+            self.assertIn("| zone |", assistant[1]["text"])
+            self.assertNotIn(jobs[0].id, assistant[1]["text"])
+            visible = app.chat_view.get("1.0", "end")
+            self.assertIn("FIRST-ZONE-RESULT", visible)
+            self.assertIn("SECOND-ZONE-RESULT", visible)
+        finally:
+            for event in release:
+                if event is not None:
+                    event.set()
+            if patch_started:
+                patcher.stop()
+            root.destroy()
+
+    def test_zone_error_after_project_switch_is_saved_on_that_project(self):
+        """A second overlapping /run that fails after a switch still lands on its project."""
+        if not os.environ.get("DISPLAY"):
+            self.skipTest("no display")
+        _isolate_data()
+        import time
+        import tkinter as tk
+        from unittest.mock import patch
+
+        from fpfa.keystore import save_api_key
+        from fpfa.projects import load_project
+        from fpfa.ui import App
+
+        save_api_key("sk-ant-local-test")
+        root = tk.Tk()
+        patcher = None
+        patch_started = False
+        release = [None, None]
+        try:
+            app = App(root)
+            root.update()
+            origin_id = self._prepare_zone_form(app, "Overlap hall")
+
+            def fail_second():
+                raise RuntimeError("SECOND-ZONE-FAILED")
+
+            patcher, _entered, release, start = self._hold_overlapping_runs(app, fail_second)
+            with patch("fpfa.ui.messagebox.showerror") as shown:
+                patcher.start()
+                patch_started = True
+                jobs = start()
+                release[0].set()
+                self._wait_for(app, "FIRST-ZONE-RESULT", timeout=3)
+                self.assertNotIn("SECOND-ZONE-FAILED", app.chat_view.get("1.0", "end"))
+                app._start_named_job("Other hall")
+                other_id = app.project["id"]
+                self.assertNotEqual(other_id, origin_id)
+                self.assertNotIn("FIRST-ZONE-RESULT", app.chat_view.get("1.0", "end"))
+                release[1].set()
+                deadline = time.time() + 3
+                saved_text = ""
+                while time.time() < deadline:
+                    app._poll()
+                    saved = load_project(origin_id)
+                    saved_text = "\n".join(turn.get("text") or "" for turn in saved.get("chat") or [])
+                    if "SECOND-ZONE-FAILED" in saved_text:
+                        break
+                    time.sleep(0.02)
+                self.assertIn("SECOND-ZONE-FAILED", saved_text)
+                self.assertFalse(shown.called)
+            saved = load_project(origin_id)
+            assistant = [turn for turn in saved["chat"] if turn.get("role") == "assistant"]
+            self.assertEqual(len(assistant), 2)
+            self.assertEqual(assistant[0]["job_id"], jobs[0].id)
+            self.assertIn("FIRST-ZONE-RESULT", assistant[0]["text"])
+            self.assertIn(jobs[0].id, assistant[0]["text"])
+            self.assertEqual(assistant[1]["job_id"], jobs[1].id)
+            self.assertIn("SECOND-ZONE-FAILED", assistant[1]["text"])
+            self.assertIn("RuntimeError", assistant[1]["text"])
+            self.assertIn(jobs[1].id, assistant[1]["text"])
+            self.assertIn("Overlap hall", assistant[1]["text"])
+            self.assertIn("| zone |", assistant[1]["text"])
+            self.assertNotIn(jobs[0].id, assistant[1]["text"])
+            self.assertNotIn("Other hall", assistant[1]["text"])
+            other = load_project(other_id)
+            other_text = "\n".join(turn.get("text") or "" for turn in other.get("chat") or [])
+            self.assertNotIn("SECOND-ZONE-FAILED", other_text)
+            self.assertNotIn("FIRST-ZONE-RESULT", other_text)
+            self.assertNotIn("SECOND-ZONE-FAILED", app.chat_view.get("1.0", "end"))
+            app.open_project(origin_id)
+            reopened = app.chat_view.get("1.0", "end")
+            self.assertIn("FIRST-ZONE-RESULT", reopened)
+            self.assertIn("SECOND-ZONE-FAILED", reopened)
+            self.assertIn(jobs[1].id, reopened)
+            self.assertEqual(app.jobs.get(jobs[1].id).status, "error")
+        finally:
+            for event in release:
+                if event is not None:
+                    event.set()
+            if patch_started:
+                patcher.stop()
+            root.destroy()
+
     def _wait_for(self, app, needle: str, timeout: float = 2.0) -> None:
         import time
 

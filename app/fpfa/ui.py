@@ -220,7 +220,9 @@ class App:
         self.project: dict | None = None
         self.chat_log: list[dict] = []
         self._ids: list[str] = []
-        self._announce_runs: set[str] = set()
+        # One entry per submitted zone job. Two /run commands on one project
+        # each post their own labeled result or error.
+        self._announce_jobs: set[str] = set()
         self.jobs: JobInbox | None = None
         self._build()
         self.jobs = JobInbox(worker_count=2, on_change=self._on_jobs_changed)
@@ -970,16 +972,14 @@ class App:
         self._keep_composer_open()
         self._open_sample_project()
         self._append_chat("user", raw)
-        self._announce_runs.add(self.project["id"])
-        self.run_zone()
+        self.run_zone(announce=True)
 
     def start_zone_run(self, typed: str | None = None) -> None:
         raw = (typed or "/run").strip() or "/run"
         self._keep_composer_open()
         self._ensure_project()
         self._append_chat("user", raw)
-        self._announce_runs.add(self.project["id"])
-        self.run_zone()
+        self.run_zone(announce=True)
 
     def _slash_new(self, raw: str, name: str) -> None:
         name = name.strip()
@@ -1085,17 +1085,17 @@ class App:
         for item in self.pipes.selection():
             self.pipes.delete(item)
 
-    def run_zone(self) -> None:
+    def run_zone(self, *, announce: bool = False) -> None:
         self._keep_composer_open()
         if not self.project:
-            self._report_run_problem(None, "Open a project, or use /sample-di.")
+            self._report_run_problem(None, "Open a project, or use /sample-di.", announce=announce)
             return
         origin_id = self.project["id"]
         project_name = self.project.get("name") or "Untitled job"
         try:
             self._write_form(self.project)
         except ValueError as exc:
-            self._report_run_problem(origin_id, str(exc))
+            self._report_run_problem(origin_id, str(exc), announce=announce)
             return
         di = copy.deepcopy(self.project["di"])
         basis = copy.deepcopy(self.project["basis"])
@@ -1103,15 +1103,17 @@ class App:
         try:
             pack = content_root()
         except FileNotFoundError as exc:
-            self._report_run_problem(origin_id, str(exc))
+            self._report_run_problem(origin_id, str(exc), announce=announce)
             return
         use_claude = bool(self.ask_claude.get()) and bool(load_api_key())
         if use_claude:
-            self._enqueue_zone(origin_id, project_name, pack, di, basis, mode, load_api_key())
+            self._enqueue_zone(
+                origin_id, project_name, pack, di, basis, mode, load_api_key(), announce=announce
+            )
             return
-        self._run_zone_here(origin_id, project_name, pack, di, basis, mode)
+        self._run_zone_here(origin_id, project_name, pack, di, basis, mode, announce=announce)
 
-    def _run_zone_here(self, origin_id, project_name, pack, di, basis, mode) -> None:
+    def _run_zone_here(self, origin_id, project_name, pack, di, basis, mode, *, announce: bool = False) -> None:
         """Tool plan with no model call. It finishes before the composer returns."""
         job = self.jobs.record(
             project_id=origin_id,
@@ -1120,6 +1122,8 @@ class App:
             title="Zone tool plan",
             status="running",
         )
+        if announce:
+            self._announce_jobs.add(job.id)
         try:
             result = run_di_zone(pack, di, basis, narrator=None, mode=mode)
         except Exception as exc:
@@ -1129,7 +1133,7 @@ class App:
         self.jobs.mark(job.id, "done")
         self._finish_run(origin_id, result, None, job_id=job.id)
 
-    def _enqueue_zone(self, origin_id, project_name, pack, di, basis, mode, key) -> None:
+    def _enqueue_zone(self, origin_id, project_name, pack, di, basis, mode, key, *, announce: bool = False) -> None:
         """Queue a zone run that calls the model. The composer stays usable."""
 
         def work(job_id: str) -> None:
@@ -1172,6 +1176,10 @@ class App:
             title="Zone tool plan",
             work=work,
         )
+        # The worker may finish before submit returns, but the result callback
+        # stays on the UI queue until this call returns to the event loop.
+        if announce:
+            self._announce_jobs.add(job.id)
         self._keep_composer_open()
         self.status.set(f"Asking {MODEL_ID}… {job.heading()}")
         try:
@@ -1179,17 +1187,22 @@ class App:
         except tk.TclError:
             pass
 
-    def _report_run_problem(self, origin_id: str | None, message: str, job_id: str | None = None) -> None:
+    def _report_run_problem(
+        self,
+        origin_id: str | None,
+        message: str,
+        job_id: str | None = None,
+        *,
+        announce: bool | None = None,
+    ) -> None:
         self._keep_composer_open()
-        announced_id = origin_id
         if origin_id:
             origin_id = self._destination_id(origin_id, job_id)
-        announce = bool(announced_id) and announced_id in self._announce_runs
-        if announced_id:
-            self._announce_runs.discard(announced_id)
-        if origin_id and origin_id != announced_id:
-            announce = announce or origin_id in self._announce_runs
-            self._announce_runs.discard(origin_id)
+        taken = self._take_announce(job_id)
+        if announce is None:
+            announce = taken
+        else:
+            announce = bool(announce) or taken
         message = self._with_job_label(job_id, message)
         still_here = self.project is not None and (origin_id is None or self.project.get("id") == origin_id)
         if announce and still_here:
@@ -1214,9 +1227,11 @@ class App:
         project["chat"] = chat
         save_project(project)
 
-    def _take_announce(self, origin_id: str) -> bool:
-        announce = origin_id in self._announce_runs
-        self._announce_runs.discard(origin_id)
+    def _take_announce(self, job_id: str | None) -> bool:
+        if not job_id:
+            return False
+        announce = job_id in self._announce_jobs
+        self._announce_jobs.discard(job_id)
         return announce
 
     def _finish_run(
@@ -1227,11 +1242,8 @@ class App:
         job_id: str | None = None,
     ) -> None:
         self._keep_composer_open()
-        announced_id = origin_id
         origin_id = self._destination_id(origin_id, job_id)
-        announce = self._take_announce(announced_id)
-        if origin_id != announced_id:
-            announce = announce or self._take_announce(origin_id)
+        announce = self._take_announce(job_id)
         still_here = self.project is not None and self.project.get("id") == origin_id
         if error or result is None:
             message = self._with_job_label(job_id, error or "The zone did not run.")
