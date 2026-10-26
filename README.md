@@ -71,7 +71,7 @@ py -m unittest discover -s tests
 | `calcs/fp` | Fire-protection formulas, shop pipe IDs, DI zone screens |
 | `calcs/fa` | Fire-alarm calculation libraries |
 | `specs/` | Optional master-spec markdown (README is not treated as a spec) |
-| `corpus/` | Reserved for later reference notes |
+| `corpus/` | Paraphrased reference notes (edition pins and decision logs). The app does not search this folder yet |
 
 ## Not in this prototype
 
