@@ -38,7 +38,7 @@ The chat thread is the main pane. You can type a question without filling in the
 - `/new Job name` opens a job. `/help` lists the composer commands.
 - **Settings** and **Export 21 13 19** stay as buttons. Export still needs a finished zone run. The draft section is 21 13 19.
 - A normal message, with a key saved, goes to Claude and includes the earlier turns in that project. The window does not wait on the call. The reply is written into the thread when it arrives. Ask Claude after the tool plan is the checkbox on `/sample-di` and `/run`. Numbers in the tables and the export stay on the tool plan either way.
-- Projects are listed beside the thread. New and Delete manage those files. The sample zone is generic. It is not a constructed building.
+- Projects are listed beside the thread. New and Delete manage those files. Ctrl+S saves the open job, and closing the window saves it too. A first `/run`, `/help`, or chat message keeps whatever is already on the optional form. The sample zone is generic. It is not a constructed building.
 
 Blank trim (5 gal) and the screen-limit seconds are labeled ASSUMED on the optional form, in the thread after a run, in the results panel, and in the export. Pipe gallons and trip time are calculated. A delivery time from these tools is an optimistic screen. It is not a listed water-delivery-time calculation.
 

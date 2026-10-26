@@ -60,6 +60,7 @@ THREAD_HINT = (
     "Sample DI (the chip below, or /sample-di) loads the sample data-hall double-interlock "
     "zone and runs the tool plan on this machine. That run does not need an API key.\n"
     "/run uses the optional zone form. /new Job name opens a job. /help lists commands.\n"
+    "Ctrl+S saves the open job. Closing the window saves it too.\n"
     "Settings holds your Anthropic key. Export writes draft Section 21 13 19 after a run.\n"
     "Blank trim and the screen-limit seconds stay labeled ASSUMED. "
     "Pipe gallons and trip time come from the calc tools."
@@ -90,6 +91,7 @@ def slash_help_text() -> str:
         "/run — run the DI zone from the optional form\n"
         "/new Job name — open a job\n"
         "/help — show these commands\n"
+        "Ctrl+S saves the open job. Closing the window saves it too.\n"
         "Settings holds your Anthropic key. Export writes draft Section "
         f"{DRAFT_SECTION} after a run.\n"
         "Blank trim and the screen-limit seconds stay labeled ASSUMED. "
@@ -156,18 +158,74 @@ class App:
         self._busy = False
         self._announce_runs: set[str] = set()
         self._build()
+        try:
+            self._pristine_basis = self.collect_basis()
+            self._pristine_di = self.collect_di()
+        except ValueError:
+            self._pristine_basis = None
+            self._pristine_di = None
         self.refresh_projects()
         self.root.bind("<Destroy>", self._cancel_afters, add="+")
+        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
+        for sequence in ("<Control-s>", "<Control-S>", "<Command-s>", "<Command-S>"):
+            self.root.bind_all(sequence, self._on_save_key)
         self.root.after(100, self._poll)
 
     def _cancel_afters(self, event=None) -> None:
         if event is not None and event.widget is not self.root:
             return
+        for sequence in ("<Control-s>", "<Control-S>", "<Command-s>", "<Command-S>"):
+            try:
+                self.root.unbind_all(sequence)
+            except tk.TclError:
+                pass
         try:
             for after_id in list(self.root.tk.call("after", "info")):
                 self.root.after_cancel(after_id)
         except tk.TclError:
             pass
+
+    def _on_save_key(self, event=None):
+        try:
+            if event is not None and event.widget.winfo_toplevel() is not self.root:
+                return
+        except tk.TclError:
+            return
+        self.save_current()
+        return "break"
+
+    def _form_is_dirty(self) -> bool:
+        if self.chat_log:
+            return True
+        if self._pristine_basis is None or self._pristine_di is None:
+            return True
+        try:
+            return (
+                self.collect_basis() != self._pristine_basis
+                or self.collect_di() != self._pristine_di
+            )
+        except ValueError:
+            return True
+
+    def _persist_open_work(self) -> None:
+        """Save an open job, or a form the designer typed before any job existed."""
+        if self.project is None:
+            if not self._form_is_dirty():
+                return
+            self._ensure_project()
+        if self.project is None:
+            return
+        self._capture_form(self.project)
+        save_project(self.project)
+
+    def _on_close(self) -> None:
+        try:
+            self._persist_open_work()
+        finally:
+            try:
+                self.root.destroy()
+            except tk.TclError:
+                pass
 
     def _build(self) -> None:
         default = tkfont.nametofont("TkDefaultFont")
@@ -503,8 +561,10 @@ class App:
         project_id = self._selected_id()
         if not project_id:
             return
-        if self.project and self.project.get("id") != project_id:
-            self._write_form(self.project)
+        if self.project and self.project.get("id") == project_id:
+            return
+        if self.project:
+            self._capture_form(self.project)
             save_project(self.project)
         self.open_project(project_id)
 
@@ -647,8 +707,8 @@ class App:
         project["di"] = self.collect_di()
         project["chat"] = self.chat_log
 
-    def _save_form_or_chat(self, project: dict) -> str | None:
-        """Write the form onto the project. A bad number does not drop the chat or the run."""
+    def _capture_form(self, project: dict) -> str | None:
+        """Copy the widgets onto project. A bad number does not drop the chat."""
         try:
             self._write_form(project)
         except ValueError as exc:
@@ -656,45 +716,60 @@ class App:
             return str(exc)
         return None
 
+    def _save_form_or_chat(self, project: dict) -> str | None:
+        """Write the form onto the project. A bad number does not drop the chat or the run."""
+        return self._capture_form(project)
+
     def save_current(self) -> None:
+        self._ensure_project()
         if not self.project:
-            messagebox.showinfo("Save", "Create or open a project first.")
             return
-        try:
-            self._write_form(self.project)
-        except ValueError as exc:
-            messagebox.showerror("Save", str(exc))
-            return
+        error = self._capture_form(self.project)
         save_project(self.project)
         self.refresh_projects(self.project["id"])
+        if error:
+            messagebox.showerror("Save", error)
+            self.status.set(error)
+            return
         self.status.set(f"Saved {self.project['name']}.")
+
+    def _start_named_job(self, name: str) -> None:
+        """Open a new job. A form with no project yet stays. An open project is saved and left behind."""
+        if self.project:
+            self._capture_form(self.project)
+            save_project(self.project)
+            project = new_project(name)
+            self.refresh_projects(project["id"])
+            self.open_project(project["id"])
+            return
+        project = new_project(name)
+        self._capture_form(project)
+        save_project(project)
+        self.project = project
+        self.refresh_projects(project["id"])
+        self.status.set(f"Opened {project.get('name')}. {key_status()}")
 
     def new_job(self) -> None:
         name = simpledialog.askstring("New job", "Job name", parent=self.root)
         if not name:
             return
-        if self.project:
-            self._write_form(self.project)
-            save_project(self.project)
-        project = new_project(name)
-        self.refresh_projects(project["id"])
-        self.open_project(project["id"])
+        self._start_named_job(name)
 
     def _ensure_project(self) -> None:
+        """Create the first job without painting an empty form over what is already typed."""
         if self.project:
             return
         project = new_project("Untitled job")
+        self._capture_form(project)
+        save_project(project)
+        self.project = project
         self.refresh_projects(project["id"])
-        self.open_project(project["id"])
+        self.status.set(f"Opened {project.get('name')}. {key_status()}")
 
     def _open_sample_project(self) -> None:
         if self.project:
-            try:
-                self._write_form(self.project)
-                save_project(self.project)
-            except ValueError:
-                self.project["chat"] = self.chat_log
-                save_project(self.project)
+            self._capture_form(self.project)
+            save_project(self.project)
         project = new_project("Sample data hall DI zone", copy.deepcopy(sample_data.EXAMPLE_BASIS))
         project["di"] = copy.deepcopy(sample_data.EXAMPLE_DI)
         save_project(project)
@@ -739,24 +814,15 @@ class App:
         if not name:
             self._local_exchange(raw, "Usage: /new Job name")
             return
-        if self.project:
-            try:
-                self._write_form(self.project)
-                save_project(self.project)
-            except ValueError:
-                self.project["chat"] = self.chat_log
-                save_project(self.project)
-        project = new_project(name)
-        self.refresh_projects(project["id"])
-        self.open_project(project["id"])
+        self._start_named_job(name)
         self._append_chat("user", raw)
         self._append_chat(
             "assistant",
-            f"Opened {project['name']}. The zone form is optional. /sample-di loads the sample zone and runs it.",
+            f"Opened {self.project['name']}. The zone form is optional. /sample-di loads the sample zone and runs it.",
         )
-        self._save_form_or_chat(self.project)
+        self._capture_form(self.project)
         save_project(self.project)
-        self.status.set(f"Opened {project['name']}.")
+        self.status.set(f"Opened {self.project['name']}.")
 
     def _local_exchange(self, user_text: str, reply: str) -> None:
         self._ensure_project()

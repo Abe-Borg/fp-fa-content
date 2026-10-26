@@ -294,6 +294,7 @@ class ChatRequestTests(unittest.TestCase):
         self.assertIn("/sample-di", help_text)
         self.assertIn(DRAFT_SECTION, help_text)
         self.assertIn("ASSUMED", help_text)
+        self.assertIn("Ctrl+S", help_text)
         self.assertIn("not a command", unknown_slash_text("inbox"))
         summary = chat_run_summary({
             "narrative": "Zone total is 281.3 gal.",
@@ -940,6 +941,142 @@ class UiSmokeTests(unittest.TestCase):
             self.assertIn("El/El holds the prime.", seen[1])
             self.assertIn("explain that recommendation", seen[1])
             self.assertIn("Earlier turns:", seen[1])
+        finally:
+            root.destroy()
+
+    def test_implicit_project_keeps_the_optional_form(self):
+        if not os.environ.get("DISPLAY"):
+            self.skipTest("no display")
+        _isolate_data()
+        import tkinter as tk
+
+        from fpfa.projects import load_project
+        from fpfa.ui import App
+
+        root = tk.Tk()
+        try:
+            app = App(root)
+            root.update()
+            app.zone_id.set("KEEP-1")
+            app.ahj.set("Kept AHJ")
+            app._insert_segment({
+                "role": "branch",
+                "nps": "1",
+                "schedule": "sch40",
+                "length_ft": 10,
+                "d_in": 1.049,
+            })
+            app.chat_entry.insert(0, "/run")
+            app.send_chat()
+            chat = app.chat_view.get("1.0", "end")
+            self.assertEqual(app.zone_id.get(), "KEEP-1")
+            self.assertEqual(app.ahj.get(), "Kept AHJ")
+            self.assertEqual(len(app.pipes.get_children()), 1)
+            self.assertNotIn("Add at least one pipe segment.", chat)
+            self.assertEqual(app.project["di"]["zone_id"], "KEEP-1")
+            self.assertEqual(app.project["basis"]["ahj"], "Kept AHJ")
+            self.assertEqual(len(app.project["di"]["segments"]), 1)
+            self.assertIsNotNone(app.project.get("last_run"))
+            self.assertIn("Trim: ASSUMED 5 gal", app.assumption_text.get())
+            saved = load_project(app.project["id"])
+            self.assertEqual(saved["di"]["zone_id"], "KEEP-1")
+            self.assertEqual(saved["basis"]["ahj"], "Kept AHJ")
+        finally:
+            root.destroy()
+
+        root = tk.Tk()
+        try:
+            app = App(root)
+            root.update()
+            app.zone_id.set("HELP-9")
+            app.chat_entry.insert(0, "/help")
+            app.send_chat()
+            self.assertEqual(app.zone_id.get(), "HELP-9")
+            self.assertEqual(app.project["di"]["zone_id"], "HELP-9")
+            self.assertIn("/sample-di", app.chat_view.get("1.0", "end"))
+        finally:
+            root.destroy()
+
+        root = tk.Tk()
+        try:
+            app = App(root)
+            root.update()
+            app.zone_id.set("CHAT-1")
+            app.chat_entry.insert(0, "hello there")
+            app.send_chat()
+            self.assertEqual(app.zone_id.get(), "CHAT-1")
+            self.assertEqual(load_project(app.project["id"])["di"]["zone_id"], "CHAT-1")
+            self.assertIn("hello there", app.chat_view.get("1.0", "end"))
+        finally:
+            root.destroy()
+
+        root = tk.Tk()
+        try:
+            app = App(root)
+            root.update()
+            app.zone_id.set("NAMED-1")
+            app._slash_new("/new Hall zone", "Hall zone")
+            self.assertEqual(app.project["name"], "Hall zone")
+            self.assertEqual(app.zone_id.get(), "NAMED-1")
+            self.assertEqual(app.project["di"]["zone_id"], "NAMED-1")
+        finally:
+            root.destroy()
+
+    def test_close_and_ctrl_s_save_form_edits(self):
+        if not os.environ.get("DISPLAY"):
+            self.skipTest("no display")
+        _isolate_data()
+        import tkinter as tk
+
+        from fpfa.projects import list_projects, load_project, new_project
+        from fpfa.ui import App
+
+        root = tk.Tk()
+        try:
+            app = App(root)
+            root.update()
+            app._on_close()
+            self.assertEqual(list_projects(), [])
+        finally:
+            try:
+                root.destroy()
+            except tk.TclError:
+                pass
+
+        root = tk.Tk()
+        try:
+            app = App(root)
+            root.update()
+            origin = new_project("Close job")
+            app.open_project(origin["id"])
+            app.refresh_projects(origin["id"])
+            app.zone_id.set("CLOSED-2")
+            app.ahj.set("Close AHJ")
+            app.project_list.event_generate("<<ListboxSelect>>")
+            root.update()
+            self.assertEqual(app.zone_id.get(), "CLOSED-2")
+            app._on_close()
+            saved = load_project(origin["id"])
+            self.assertEqual(saved["di"]["zone_id"], "CLOSED-2")
+            self.assertEqual(saved["basis"]["ahj"], "Close AHJ")
+        finally:
+            try:
+                root.destroy()
+            except tk.TclError:
+                pass
+
+        root = tk.Tk()
+        try:
+            app = App(root)
+            root.update()
+            app.zone_id.set("KEY-3")
+            app.chat_entry.focus_set()
+            app.chat_entry.event_generate("<Control-s>")
+            root.update()
+            self.assertIsNotNone(app.project)
+            self.assertEqual(app.zone_id.get(), "KEY-3")
+            self.assertEqual(load_project(app.project["id"])["di"]["zone_id"], "KEY-3")
+            self.assertIn("Saved", app.status.get())
         finally:
             root.destroy()
 
