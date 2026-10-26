@@ -277,6 +277,38 @@ class WorkflowTests(unittest.TestCase):
 
 
 class ChatRequestTests(unittest.TestCase):
+    def test_slash_commands_and_sample_di_aliases(self):
+        from fpfa.spec_docx import DRAFT_SECTION
+        from fpfa.ui import chat_run_summary, parse_slash_command, slash_help_text, unknown_slash_text
+
+        self.assertEqual(parse_slash_command("/sample-di"), ("sample-di", ""))
+        self.assertEqual(parse_slash_command("  /SAMPLE_DI  "), ("sample-di", ""))
+        self.assertEqual(parse_slash_command("/sampledi"), ("sample-di", ""))
+        self.assertEqual(parse_slash_command("/run now"), ("run", "now"))
+        self.assertEqual(parse_slash_command("/new Hall zone"), ("new", "Hall zone"))
+        self.assertEqual(parse_slash_command("/help"), ("help", ""))
+        self.assertIsNone(parse_slash_command("explain the trim"))
+        self.assertIsNone(parse_slash_command(""))
+        self.assertIsNone(parse_slash_command("/"))
+        help_text = slash_help_text()
+        self.assertIn("/sample-di", help_text)
+        self.assertIn(DRAFT_SECTION, help_text)
+        self.assertIn("ASSUMED", help_text)
+        self.assertIn("not a command", unknown_slash_text("inbox"))
+        summary = chat_run_summary({
+            "narrative": "Zone total is 281.3 gal.",
+            "tools": {
+                "zone_trapped_volume": {"trim_gal": 5, "trim_assumed": True},
+                "di_trip_to_water": {"limit_s": 30, "t_total_s": 38.1, "limit_basis": "FM"},
+            },
+        })
+        self.assertIn("Zone total is 281.3 gal.", summary)
+        self.assertIn("5.0 gal trim ASSUMED", summary)
+        self.assertIn("Screen limit 30.0 s — ASSUMED from time basis FM", summary)
+        self.assertIn("t_total 38.1 s is calculated.", summary)
+        self.assertIn(DRAFT_SECTION, summary)
+        self.assertNotIn("21 13 " + "16", summary)
+
     def test_follow_up_includes_prior_turns(self):
         from fpfa.ui import format_chat_request
 
@@ -681,6 +713,246 @@ class UiSmokeTests(unittest.TestCase):
             self.assertIn("KEPT", app.results.get("1.0", "end"))
         finally:
             root.destroy()
+
+    def _button_labels(self, root) -> list[str]:
+        labels = []
+
+        def walk(widget):
+            for child in widget.winfo_children():
+                if child.winfo_class() in ("TButton", "Button"):
+                    labels.append(str(child.cget("text")))
+                walk(child)
+
+        walk(root)
+        return labels
+
+    def test_chat_is_the_primary_pane(self):
+        if not os.environ.get("DISPLAY"):
+            self.skipTest("no display")
+        _isolate_data()
+        import tkinter as tk
+
+        from fpfa.spec_docx import DRAFT_SECTION
+        from fpfa.ui import THREAD_HINT, App
+
+        root = tk.Tk()
+        try:
+            app = App(root)
+            root.update_idletasks()
+            root.update()
+            app._prefer_chat()
+            root.update_idletasks()
+            root.update()
+            self.assertGreater(app.chat_view.winfo_height(), app.tabs.winfo_height())
+            self.assertIn("/sample-di", app.chat_view.get("1.0", "end"))
+            self.assertIn(THREAD_HINT.splitlines()[0], app.chat_view.get("1.0", "end"))
+            labels = self._button_labels(root)
+            self.assertIn("Settings", labels)
+            self.assertIn(f"Export {DRAFT_SECTION}", labels)
+            self.assertIn("Sample DI", labels)
+            self.assertNotIn("Run DI zone", labels)
+            self.assertNotIn("Sample DI job", labels)
+            self.assertEqual(app.chat_entry.focus_get(), app.chat_entry)
+        finally:
+            root.destroy()
+
+    def test_sample_di_slash_loads_and_runs_the_zone(self):
+        if not os.environ.get("DISPLAY"):
+            self.skipTest("no display")
+        _isolate_data()
+        import tkinter as tk
+
+        from fpfa.spec_docx import DRAFT_SECTION
+        from fpfa.ui import App
+
+        root = tk.Tk()
+        try:
+            app = App(root)
+            root.update()
+            app.chat_entry.insert(0, "/sample-di")
+            app.send_chat()
+            chat = app.chat_view.get("1.0", "end")
+            results = app.results.get("1.0", "end")
+            self.assertEqual(len(app.pipes.get_children()), 4)
+            self.assertIn("/sample-di", chat)
+            self.assertIn("5.0 gal trim ASSUMED", chat)
+            self.assertIn("Screen limit 30.0 s — ASSUMED from time basis FM", chat)
+            self.assertIn(DRAFT_SECTION, chat)
+            self.assertIn("5.0 gal trim ASSUMED", results)
+            self.assertIn("Screen limit 30.0 s — ASSUMED from time basis FM", results)
+            self.assertIn("not a listed water-delivery-time calculation", results)
+            self.assertIn("Trim: ASSUMED 5 gal", app.assumption_text.get())
+            self.assertIn("30.0 s ASSUMED", app.assumption_text.get())
+            self.assertEqual(app.project["last_run"]["source"], "tool-plan")
+            self.assertEqual(app.chat_log[0]["role"], "user")
+            self.assertEqual(app.chat_log[0]["text"], "/sample-di")
+            self.assertEqual(app.chat_log[1]["role"], "assistant")
+        finally:
+            root.destroy()
+
+    def test_sample_di_chip_runs_the_same_path(self):
+        if not os.environ.get("DISPLAY"):
+            self.skipTest("no display")
+        _isolate_data()
+        import tkinter as tk
+
+        from fpfa.ui import App
+
+        root = tk.Tk()
+        try:
+            app = App(root)
+            root.update()
+            app.sample_di_button.invoke()
+            chat = app.chat_view.get("1.0", "end")
+            self.assertIn("/sample-di", chat)
+            self.assertIn("5.0 gal trim ASSUMED", chat)
+            self.assertEqual(len(app.pipes.get_children()), 4)
+            self.assertIsNotNone(app.project["last_run"])
+            self.assertIn("Zone total is", app.results.get("1.0", "end"))
+        finally:
+            root.destroy()
+
+    def test_chat_does_not_require_a_filled_zone_form(self):
+        if not os.environ.get("DISPLAY"):
+            self.skipTest("no display")
+        _isolate_data()
+        import tkinter as tk
+
+        from fpfa.ui import App
+
+        root = tk.Tk()
+        try:
+            app = App(root)
+            root.update()
+            app.chat_entry.insert(0, "hello")
+            app.send_chat()
+            chat = app.chat_view.get("1.0", "end")
+            self.assertIn("hello", chat)
+            self.assertIn("API key", chat)
+            self.assertIn("/sample-di", chat)
+            self.assertEqual(app.pipes.get_children(), ())
+            self.assertIsNone(app.project.get("last_run"))
+            app.chat_entry.insert(0, "/help")
+            app.send_chat()
+            self.assertIn("/sample-di —", app.chat_view.get("1.0", "end"))
+            app.chat_entry.insert(0, "/not-a-tool")
+            app.send_chat()
+            self.assertIn("/not-a-tool is not a command", app.chat_view.get("1.0", "end"))
+            app.chat_entry.insert(0, "/run")
+            app.send_chat()
+            self.assertIn("Add at least one pipe segment.", app.chat_view.get("1.0", "end"))
+        finally:
+            root.destroy()
+
+    def test_ask_claude_returns_before_the_reply(self):
+        if not os.environ.get("DISPLAY"):
+            self.skipTest("no display")
+        _isolate_data()
+        import threading
+        import time
+        import tkinter as tk
+        from types import SimpleNamespace
+        from unittest.mock import patch
+
+        from fpfa.keystore import save_api_key
+        from fpfa.ui import App
+
+        save_api_key("sk-ant-local-test")
+        started = threading.Event()
+        release = threading.Event()
+
+        class Blocking:
+            def __init__(self, _key):
+                pass
+
+            def create(self, **_kwargs):
+                started.set()
+                release.wait(3)
+                return SimpleNamespace(
+                    stop_reason="end_turn",
+                    content=[SimpleNamespace(type="text", text="threaded reply")],
+                )
+
+        root = tk.Tk()
+        try:
+            app = App(root)
+            root.update()
+            app.chat_entry.insert(0, "Which trim family?")
+            with patch("fpfa.ui.AnthropicMessages", Blocking):
+                app.send_chat()
+                self.assertTrue(started.wait(2))
+                self.assertNotIn("threaded reply", app.chat_view.get("1.0", "end"))
+                self.assertIn("Asking", app.status.get())
+                app.chat_entry.insert(0, "still typing")
+                self.assertEqual(app.chat_entry.get(), "still typing")
+                app.chat_entry.delete(0, "end")
+                release.set()
+                deadline = time.time() + 2
+                while time.time() < deadline:
+                    app._poll()
+                    if "threaded reply" in app.chat_view.get("1.0", "end"):
+                        break
+                    time.sleep(0.02)
+                self.assertIn("threaded reply", app.chat_view.get("1.0", "end"))
+                self.assertIn("Which trim family?", app.chat_view.get("1.0", "end"))
+        finally:
+            root.destroy()
+
+    def test_follow_up_send_includes_earlier_turns(self):
+        if not os.environ.get("DISPLAY"):
+            self.skipTest("no display")
+        _isolate_data()
+        import tkinter as tk
+        from types import SimpleNamespace
+        from unittest.mock import patch
+
+        from fpfa.keystore import save_api_key
+        from fpfa.ui import App
+
+        save_api_key("sk-ant-local-test")
+        seen = []
+
+        class Fast:
+            def __init__(self, _key):
+                pass
+
+            def create(self, **kwargs):
+                seen.append(kwargs["messages"][0]["content"])
+                text = "El/El holds the prime." if len(seen) == 1 else "That follows the first answer."
+                return SimpleNamespace(
+                    stop_reason="end_turn",
+                    content=[SimpleNamespace(type="text", text=text)],
+                )
+
+        root = tk.Tk()
+        try:
+            app = App(root)
+            root.update()
+            with patch("fpfa.ui.AnthropicMessages", Fast):
+                app.chat_entry.insert(0, "Which trim family?")
+                app.send_chat()
+                self._wait_for(app, "El/El holds the prime.")
+                app.chat_entry.insert(0, "explain that recommendation")
+                app.send_chat()
+                self._wait_for(app, "That follows the first answer.")
+            self.assertGreaterEqual(len(seen), 2)
+            self.assertIn("Which trim family?", seen[1])
+            self.assertIn("El/El holds the prime.", seen[1])
+            self.assertIn("explain that recommendation", seen[1])
+            self.assertIn("Earlier turns:", seen[1])
+        finally:
+            root.destroy()
+
+    def _wait_for(self, app, needle: str, timeout: float = 2.0) -> None:
+        import time
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            app._poll()
+            if needle in app.chat_view.get("1.0", "end"):
+                return
+            time.sleep(0.02)
+        self.fail(f"timed out waiting for {needle!r}")
 
 
 if __name__ == "__main__":

@@ -29,15 +29,20 @@ On Linux or macOS the same commands work with `python3` in place of `py`. The ke
 
 Projects are JSON files in that data directory. Override it with `FPFA_DATA_DIR` if you want them somewhere else.
 
-## What you can do in this prototype
+## Conversation-first window
 
-1. Settings. Paste an Anthropic API key. Check key calls the models endpoint for `claude-opus-5-5` and does not generate text.
-2. Projects. Create a job, or load the sample data-hall zone. Record the AHJ, NFPA 13 and NFPA 72 editions, the insurer, and hazard notes.
-3. DI zone. Enter pipe segments (nominal size, schedule, length, role). Blank schedule uses the shop default and is flagged. Run the zone.
-4. Results. Trapped volume, pipe-only and zone-total delivery screens, trim family, releasing truth table, nitrogen C-factor, density and hose. Blank trim (5 gal) and the screen-limit seconds are labeled ASSUMED. Pipe gallons and trip time are calculated. Export a draft Section 21 13 19 `.docx` (double-interlock preaction).
-5. Chat. With a key saved, the same tools and skills are available. Without a key, the zone tool plan still runs.
+The chat thread is the main pane. You can type a question without filling in the zone form. The form sits in a smaller panel under the thread for pipe segments and basis when you want them. It is not required to start.
 
-The sample zone is generic. It is not a constructed building.
+- **Sample DI** (the chip under the composer, or `/sample-di`) creates the sample data-hall double-interlock job and runs the existing zone tool plan. That path does not need an API key. The narrative is posted back into the thread, including the ASSUMED trim line and the ASSUMED screen limit. The same figures stay on the results panel for export.
+- `/run` runs whatever is on the optional zone form.
+- `/new Job name` opens a job. `/help` lists the composer commands.
+- **Settings** and **Export 21 13 19** stay as buttons. Export still needs a finished zone run. The draft section is 21 13 19.
+- A normal message, with a key saved, goes to Claude and includes the earlier turns in that project. The window does not wait on the call. The reply is written into the thread when it arrives. Ask Claude after the tool plan is the checkbox on `/sample-di` and `/run`. Numbers in the tables and the export stay on the tool plan either way.
+- Projects are listed beside the thread. New and Delete manage those files. The sample zone is generic. It is not a constructed building.
+
+Blank trim (5 gal) and the screen-limit seconds are labeled ASSUMED on the optional form, in the thread after a run, in the results panel, and in the export. Pipe gallons and trip time are calculated. A delivery time from these tools is an optimistic screen. It is not a listed water-delivery-time calculation.
+
+Check key in Settings calls the models endpoint for `claude-opus-5-5` and does not generate text.
 
 ## Tests
 
@@ -52,7 +57,7 @@ cd ..\..\app
 py -m unittest discover -s tests
 ```
 
-`calcs/fp/test_formulas.py` is the seed kernel suite (79 tests in this tree). `calcs/fa` is the fire-alarm library suite. Quote-only tests that needed raw code text are skipped, because that text is not in the repo. The app tests run the sample zone, the Word export, the Claude tool loop against a fake response, and the key-file fallback.
+`calcs/fp/test_formulas.py` is the seed kernel suite (79 tests in this tree). `calcs/fa` is the fire-alarm library suite. Quote-only tests that needed raw code text are skipped, because that text is not in the repo. The app tests run the sample zone, the Word export, the Claude tool loop against a fake response, the key-file fallback, and the `/sample-di` starter.
 
 ## Layout
 
@@ -67,4 +72,4 @@ py -m unittest discover -s tests
 
 ## Not in this prototype
 
-No installer. No second model vendor. No foam, clean agent, mist, deluge, or single-interlock design path (those inputs return an RFI and stop). Wet and dry can be named on the form; the finished vertical workflow is the double-interlock zone.
+No installer. No second model vendor. No foam, clean agent, mist, deluge, or single-interlock design path (those inputs return an RFI and stop). Wet and dry can be named on the form; the finished vertical workflow is the double-interlock zone. There is no multi-job inbox yet. A short Ask Claude returns to the window immediately; ordering of long overlapping jobs is later work.
