@@ -1,31 +1,26 @@
 ---
 name: Preaction El/El trim election
 description: >-
-  use this when company-elected double-interlock is pinned (STS + matrix +
-  releasing C&E Boolean consumed when present, else ASSUMED and flagged;
-  packet optional) and you must elect the
-  DI trim family (El/El vs El/Pn vs named SureFire failsafe), including the
-  "what holds the prime chamber shut" air-band rule and the actuator vs
-  low-air-switch collision; SI/NI-as-BOD → Stop
-  RFI-variance (comparison-only); foam prohibited; mist PRACTICE REFUSED;
-  status register every run — not occupancy, density, pump, C&E rewrite,
-  nitrogen C-factor, QOD sizing, or CAD.
+ use this when company-elected double-interlock is pinned (STS + matrix +
+ releasing C&E Boolean consumed when present, else ASSUMED and flagged;
+ packet optional) and you must elect the
+ DI trim family (El/El vs El/Pn vs named SureFire failsafe), including the
+ "what holds the prime chamber shut" air-band rule and the actuator vs
+ low-air-switch collision; SI/NI-as-BOD → Stop
+ RFI-variance (comparison-only); foam prohibited; mist PRACTICE REFUSED;
+ status register every run — not occupancy, density, pump, C&E rewrite,
+ nitrogen C-factor, QOD sizing, or CAD.
 ---
 
 # Preaction El/El trim election
 
-
-Roster language, job names, and local source-file paths were removed when this method was copied into the content pack. Section numbers and the calculation method are unchanged. Verify judgment calls with the engineer of record.
-
-**Intake rule (the engineer of record, 2026-10-07 — overrides any older gate wording below):** The assignment packet is optional and never a gate. Start from exactly what is given. A missing packet, a missing upstream result (STS token, matrix row, occupancy fork, density, C&E, etc.), or a missing input blank is **not** a Stop: run the upstream Skill if practical, otherwise fill the gap with a stated **ASSUMED** value (the value used + why), flag it in the output and the status register, and continue. ASSUMED is not verified. "Never invent" / "refuse invent" rules on project numbers mean do not *silently* invent: label the number ASSUMED; never present an ASSUMED value as a cited code or table value; never freeze a vendor SKU. **Company scope locks stay hard Stops and are not softened by this rule:** wet / dry / double-interlock preaction only; foam prohibited; clean agent not done (hand-away); water mist `PRACTICE REFUSED`; single-interlock / non-interlock / other preaction never the elected system (SI/NI-as-BOD → Stop + `RFI-variance`, comparison-only). Cite section and edition, use `_calc/run.py` for governed math, design to the most-stringent 3-layer basis; Verify with the engineer of record.
+**Intake.** The input packet is optional. A missing input is not a stop: state the value used and why, and label it ASSUMED. Do not present an ASSUMED value as a cited code or table value, and do not freeze a vendor SKU. **Scope lock.** Wet pipe, dry pipe, and double-interlock preaction only. Foam, clean agent, water mist, and single-interlock or non-interlock preaction are out of scope. If one of those is requested as the basis of design, record it and stop. Do not substitute another system and do not size it here. Cite the section and the edition. Decide each parameter by the most stringent of the code floor, the insurer sheet, and the owner standard. Verify judgment calls with the engineer of record.
 
 Reusable DC fire-protection recipe. **This Skill ELECTS the double-interlock trim family** after `suppression-technology-selection` pinned company `double-interlock` and `preaction-releasing-c-and-e-soo` already wrote the controlling releasing Boolean. It does **not** rewrite C&E. It does **not** size QOD/accelerators (hand off to `dry-preaction-water-delivery-screen`). It does **not** elect nitrogen vs air / C-factor (hand off to `nitrogen-inerting-and-c-factor-gate`). It does **not** elect wet/dry/DI (STS owns that).
 
 **Core thesis:** “Failsafe” is not one trim. Three families exist and they collide on **supervisory pressure** and **what happens on loss of releasing power**. **Ask what holds the prime chamber shut** — a pneumatic actuator (El/Pn, and SureFire's power-loss path) needs the actuator band; an NC solenoid (El/El) lets the air serve only the low-air switch / accelerator, so the OEM may allow a lower setting. Mixing a pneumatic-actuator band with a lower El/El low-air switch setting is a **failed election**, not a field adjustment.
 
 **Design practice (lede):** three-layer basis (code floor × insurer × owner), most-stringent **per parameter** (actuation pair, supervisory pressure, failsafe-on-power-loss, listed solenoid/panel pair). Delta vs **NFPA 13-2025**. Cite **section AND edition**. Show-and-verify. Flag `[SYN]` / `[V]`. Status vocabulary every run: `grounded` / `provisional` / `unresolved` / `comparison-only` / `handoff` / `RFI-variance`. Company fence: this Skill’s controlling election is **DI trim only**; SI/NI → Stop + `RFI-variance` / comparison-only; **Foam prohibited**; **Mist = PRACTICE REFUSED**. Caller-path-only. **NO PLACEHOLDER.** Generic — do not copy a hall’s valve SKU or psi onto another job.
-
-Write the election **only** to the path the **caller** names. Do not write into `KNOWLEDGE_BASE`, `EXERCISES`, `_pruner`, `_surveyor`, `_engineer`, `ARCHIVE`, or the root PDF queue.
 
 ---
 
@@ -45,7 +40,7 @@ Comparison-only (never elected here; never the controlling trim BOD):
 
 **Wet / dry without a DI trim need → N/A** (not this Skill). Do not invent a DI trim schedule for a wet-only or dry-pipe-only BOD.
 
-**This Skill does not elect wet | dry | DI.** It **consumes** the STS election and listing/trim/DI rows from `most-stringent-basis-matrix` (plus the completed `dc-fp-assignment-packet`). Controlling company BOD for trim = **DI only**.
+**This Skill does not elect wet | dry | DI.** It **consumes** the STS election and listing/trim/DI rows from `most-stringent-basis-matrix` (plus the completed the input packet). Controlling company BOD for trim = **DI only**.
 
 If the caller presents SI, NI, wet-as-trim-BOD, or dry-as-trim-BOD (with no DI zone) as the basis for this Skill’s election:
 
@@ -75,7 +70,7 @@ If the caller presents SI, NI, wet-as-trim-BOD, or dry-as-trim-BOD (with no DI z
 |---|---|
 | Parameters A–D trim-family election + status register | System-family election (STS) |
 | Collision check (~30 psi actuator vs 7–15 psi El/El) | Occupancy / HC / OH classification |
-| Listed valve + solenoid + panel **by function + listing** | Density × area `_calc` |
+| Listed valve + solenoid + panel **by function + listing** | Density × area `calcs` |
 | Supervisory / low-air setpoints from **elected** opened sheet | Dual-carrier BOD rebuild (consume matrix) |
 | Reciprocal handshakes (C&E / QOD / N₂ / STS / ITM) | Rewriting `preaction_trip` Boolean |
 | Consume packet + STS DI + matrix + C&E Boolean | QOD / accelerator **sizing** / 30 s proof |
@@ -89,14 +84,14 @@ Emit a status token on **(a)** the Hard-scope gate, **(b)** each of Parameters A
 
 | Token | Meaning on this Skill |
 |---|---|
-| `grounded` | Controlling DI + edition + elected family supported by **mined** / opened `opened-file/` WHOLE sheet |
-| `provisional` | Directionally pinned; PDF-held scout sheet or edition hole flagged `[V]` — **never silent `grounded`** |
+| `grounded` | Controlling DI + edition + elected family supported by **mined** / opened WHOLE sheet |
+| `provisional` | Directionally pinned; PDF-held sheet or edition hole flagged `[V]` — **never silent `grounded`** |
 | `unresolved` | STS / matrix / C&E Boolean / carrier / AHJ edition / failsafe posture not given — carried as `ASSUMED` (value + why) and flagged; not a Stop (the packet itself is optional) |
 | `comparison-only` | SI/NI, TFP1421 air band, FM preference ranking — never controlling trim BOD |
 | `handoff` | Peer owns next action (C&E Boolean restamp on Family 3; QOD size; N₂ medium/C; ITM features) |
 | `RFI-variance` | SI/NI/foam/mist (or wet/dry-as-trim-BOD with no DI zone) presented as BOD |
 
-**PDF-held Reliable Bulletin 750 / Viking SureFire F_051704 / FireFlex TOTALPAC N2 SUREFIRE → status ≤ `provisional` + `[V]` until source review WHOLE mine into `opened-file/`.** Unopened OEM for elected valve → `provisional`/`[V]`; pressure carried as a stated `ASSUMED` value (value + why), flagged.
+**PDF-held Reliable Bulletin 750 / Viking SureFire F_051704 / FireFlex TOTALPAC N2 SUREFIRE → status ≤ `provisional` + `[V]` until source review WHOLE mine into .** Unopened OEM for elected valve → `provisional`/`[V]`; pressure carried as a stated `ASSUMED` value (value + why), flagged.
 
 ---
 
@@ -106,7 +101,7 @@ Caller must supply. Do not invent a valve model, psi default, or failsafe postur
 
 | Input | Required | Notes |
 |---|---|---|
-| `dc-fp-assignment-packet` (optional) | no | Packet is **optional, never a gate**. Consume; do not rebuild; do not retrieve `CASE_INDEX`. Missing → proceed from the inputs given; label filled-in values `ASSUMED` (value + why). |
+| the input packet (optional) | no | Packet is **optional, never a gate**. Consume; do not rebuild; do not retrieve `CASE_INDEX`. Missing → proceed from the inputs given; label filled-in values `ASSUMED` (value + why). |
 | **Company-elected `system_type` from STS** | **yes** (inherited) | Must be `double-interlock` (or named DI zone list) from `suppression-technology-selection`. Missing → **not a Stop**: proceed with `ASSUMED` `double-interlock` (with why), flagged. SI/NI as BOD → **Stop** (`RFI-variance`). Wet/dry with no DI zone → **N/A**. |
 | **Consumed `most-stringent-basis-matrix` listing / trim / DI rows** | **yes** when dual-carrier (or when those rows exist) | Consume; do not rebuild. Unresolved controlling listing/trim/DI row → **not a Stop**: carry the more stringent candidate value as `ASSUMED` (value + why), flagged. Never silent-swap carrier. |
 | **Releasing C&E already written** | **yes** | Consume the Boolean from `preaction-releasing-c-and-e-soo`. Do **not** rewrite `preaction_trip`. If C&E still asks the failsafe question → **this Skill answers it**. |
@@ -124,32 +119,31 @@ Do not invent a valve model as a hall default. Specify **by function + listing**
 
 ## 3. Steps
 
-**Trim code pins (added 2026-10-22, pulls 13-20, 13-32):** gauges above and below the water control valve and on the air supply [CODE NFPA 13-2025 §8.3.1.5.1(1),(3); 2022 §8.3.1.3(1),(2)]; hydraulic/pneumatic/mechanical manual operation independent of detection and sprinklers [CODE 2025 §8.3.1.4 / 2022 §8.3.1.2]; test devices per detection zone in 2025 [§8.10.6.1] vs per circuit in 2022 [§8.3.1.7.1] — print the delta; detection per NFPA 72 [CODE 2025 §8.10.2]; dry-pilot air independent of system air [CODE 2025 §8.10.3.11]; aux drains where direction changes trap water, ≥1 in. valve at ≥50 gal trapped [CODE NFPA 13-2022/2025 §16.10.5.1, §16.10.5.2.1]; low-point drain sign at the valve [§16.10.5.3.7]; gauge connections with shutoff + drain [§16.13.2].
-
+**Trim code pins (added 2026-10-22, pulls ):** gauges above and below the water control valve and on the air supply [CODE NFPA 13-2025 §8.3.1.5.1(1),(3); 2022 §8.3.1.3(1),(2)]; hydraulic/pneumatic/mechanical manual operation independent of detection and sprinklers [CODE 2025 §8.3.1.4 / 2022 §8.3.1.2]; test devices per detection zone in 2025 [§8.10.6.1] vs per circuit in 2022 [§8.3.1.7.1] — print the delta; detection per NFPA 72 [CODE 2025 §8.10.2]; dry-pilot air independent of system air [CODE 2025 §8.10.3.11]; aux drains where direction changes trap water, ≥1 in. valve at ≥50 gal trapped [CODE NFPA 13-2022/2025 §16.10.5.1, §16.10.5.2.1]; low-point drain sign at the valve [§16.10.5.3.7]; gauge connections with shutoff + drain [§16.13.2].
 
 ### 3.1 Pin editions
 
 | Instrument | Role | Shop pin | Provenance |
 |---|---|---|---|
-| **NFPA 13** | DI definition (detection **and** sprinkler-system pressure loss). Supervisory air/N₂. | Delta **13-2025**. Enforced often **13-2022**. Licensed C-table `[V]` if unpinned. | DI cap [CODE 2019/2022/2025 §8.3.2.3, pull 13-03]; min supervisory 7 psi [CODE 2025/2022 §8.3.2.5.2; 2019 §8.3.2.4.4; 2016 §7.3.2.4.4, pull 13-01] |
-| **NFPA 72** | Releasing-service control unit | Delta **72-2025** | [CODE NFPA 72-2025 §23.11.1, pull 72-06]; do not invent other subsections |
+| **NFPA 13** | DI definition (detection **and** sprinkler-system pressure loss). Supervisory air/N₂. | Delta **13-2025**. Enforced often **13-2022**. Licensed C-table `[V]` if unpinned. | DI cap [CODE 2019/2022/2025 §8.3.2.3]; min supervisory 7 psi [CODE 2025/2022 §8.3.2.5.2; 2019 §8.3.2.4.4; 2016 §7.3.2.4.4] |
+| **NFPA 72** | Releasing-service control unit | Delta **72-2025** | [CODE NFPA 72-2025 §23.11.1]; do not invent other subsections |
 | **FM DS 2-0** | FM Approved valve + solenoid + panel combination | **Oct 2021 / IR Jan 2024** §2.2.1.12.1.1 | peer-pinned |
 | **FM DS 5-32** | Functional C&E on an FM DC (consume, don’t rewrite) | **Jan 2026** | peer-pinned; preference ranking = `comparison-only` |
-| **Tyco TFP1466** | Current **El/El** DV-5A DI | **TFP1466 · JUNE 2026** | **mined** `opened-file/` |
+| **Tyco TFP1466** | Current **El/El** DV-5A DI | **TFP1466 · JUNE 2026** | **mined** |
 | **Tyco TFP1461** | DV-5A DI **El/Pn** peer | **TFP1461 · JUNE 2026** | **mined** |
 | **Victaulic I-769N** | FireLock NXT DI **El/Pn** peer | **9452 REV C 11/2023** | **mined** |
 | **Viking F_052020** | Model VXD DI **El/Pn** | **Form No. F_052020 Rev 04 December 2025** | **mined** |
 | **Viking F_070889** | DI **El/Pn** peer (optional Family 2) | **Form No. F_070889 Rev 01 June 2025** | **mined** (optional) |
-| **Reliable Bulletin 750** | DDX **Type D** El/El | **Feb 2024** (scout-opened) | **PDF-held** `provisional`/`[V]` |
-| **Viking F_051704** | TRIMPAC SureFire D-2/D-2B failsafe on loss of primary+secondary power | **Rev 01 May 2025** (supersedes the 2013-09-16 copy) | **mined** WHOLE (KB DI air-supply note Run-406): listed as a unit (cULus VLTR/VLTR7; FM Approved Preaction); holding air **not printed** |
-| **Viking F_052220** | Model VXD DI **Electric/Pneu-Lectric (El/El)** | **Form No. F_052220 Rev 01 November 2022** | **mined** (Run-411/412) — §6.1 Table 2 |
-| **Viking F_041523** | Model EA-1 electronic accelerator (El/El rate-trigger 2nd interlock) | **Form No. F_041523 Rev 09 June 2025** | **mined** (Run-411/412) |
+| **Reliable Bulletin 750** | DDX **Type D** El/El | **Feb 2024** (opened) | **PDF-held** `provisional`/`[V]` |
+| **Viking F_051704** | TRIMPAC SureFire D-2/D-2B failsafe on loss of primary+secondary power | **Rev 01 May 2025** (supersedes the 2013-09-16 copy) | **mined** WHOLE (KB DI air-supply note ): listed as a unit (cULus VLTR/VLTR7; FM Approved Preaction); holding air **not printed** |
+| **Viking F_052220** | Model VXD DI **Electric/Pneu-Lectric (El/El)** | **Form No. F_052220 Rev 01 November 2022** | **mined** — §6.1 Table 2 |
+| **Viking F_041523** | Model EA-1 electronic accelerator (El/El rate-trigger 2nd interlock) | **Form No. F_041523 Rev 09 June 2025** | **mined** |
 | **FireFlex TOTALPAC N2 SUREFIRE** | Packaged Viking-based failsafe + N₂ skid IOM | **©2023** | **PDF-held** `provisional`/`[V]` (related HP Dry FM-076E-0-13B is mined — **different doc**) |
 | **Tyco FSV-1 / TFP1386** | Latch-open after trip | **Aug 2022** | fence only — **not** El/El power-fail |
 
 **Do not** treat Viking Preaction TM **F_010808 (19 Feb 2010)** as the current El/El sheet (**mined** historical fence).
 
-**Deleted / forbidden identifiers:** `F_052220_06` (stays forbidden). **Correction (restamp 2026-10-09):** Viking sells the VXD in **both** forms — **F_052020 = VXD El/Pn** and **F_052220 Rev 01 Nov 2022 = VXD Electric/Pneu-Lectric (El/El)**. "VXD" alone does not name a family; identify by **form number + what holds the prime chamber**.
+**Deleted / forbidden identifiers:** `F_052220_06` (stays forbidden). **Correction :** Viking sells the VXD in **both** forms — **F_052020 = VXD El/Pn** and **F_052220 Rev 01 Nov 2022 = VXD Electric/Pneu-Lectric (El/El)**. "VXD" alone does not name a family; identify by **form number + what holds the prime chamber**.
 
 ### 3.2 Confirm prerequisites
 
@@ -180,11 +174,11 @@ System type is DI. Packet (optional) + STS + matrix (when required) present. C&E
 **Family 1 — Electric/Electric (no pneumatic actuator).** Detection circuit **and** low-air / system-pressure switch both required.
 
 - **Tyco TFP1466 DV-5A El/El (JUNE 2026)** — **mined:** two independent events (Zone 1 detection/pull ∧ Zone 2 low-air). Nominal supervisory **~15 psi (1.0 bar)** air or nitrogen, **irrespective of water**. Low-pressure switch **~12 psi (0.8 bar) on decreasing** from 15 (install: 3 psi below system air). Relief typically cracks **~20 psi**. Compatible with optional **Model QRS-2** electronic accelerator (TFP1120/TFP1122 host = **DV-5A El/El** — do **not** invent a VXD+QRS-2 listing). AMD-1 / AMD-3 listed; **no AMD-2** on this El/El sheet. Solenoid separately ordered (TFP2180). **MRA-1** = ~10 min anti-reset latch after trip — **not** dry-pipe-on-dead-panel. Inadequate batteries may **fail to operate the solenoid during a power failure** — that is **not** SureFire failsafe; it is a **closed-valve-on-dead-panel** risk unless the listed panel/battery calc is done. Status path: `grounded` when sheet in hand.
-- **Reliable Bulletin 750 Type D (Feb 2024)** — **PDF-held provisional `[V]`:** Electric/Electric. source review-opened teaching numbers (min supervisory **≥7 psi**; high/low switch **5–6 psi decreasing**; Potter **PFC-4410G3**; **90 h** standby called on that sheet — `[V]` vs current NFPA 72 battery chapter). **Do not mark `grounded` until `opened-file/` WHOLE mine.** Numbers stay for collision teaching only with explicit provenance.
+- **Reliable Bulletin 750 Type D (Feb 2024)** — **PDF-held provisional `[V]`:** Electric/Electric. source review-opened teaching numbers (min supervisory **≥7 psi**; high/low switch **5–6 psi decreasing**; Potter **PFC-4410G3**; **90 h** standby called on that sheet — `[V]` vs current NFPA 72 battery chapter). **Do not mark `grounded` until WHOLE mine.** Numbers stay for collision teaching only with explicit provenance.
 
 - **Viking Model VXD Electric/Pneu-Lectric F_052220 Rev 01 Nov 2022** — **mined:** NC solenoid holds the prime; air feeds the low-air switch only. §6.1 Table 2: **recommended 30 psi (water ≤175) / 50 psi (175–250)**; low-air switch **25 / 45**; compressor 30-on/40-off (50/60). Table 2 rows printed "(release system)" — read as sprinkler-piping supervisory air.
-  - **With EA-1 (F_041523 Rev 09 Jun 2025):** "minimum recommended pressure setting is **10 PSI**" → rotary **setting 1 (10/15/20)**; Table 2's 30 psi = setting 4 (25/30/35) (§8.1 VXD, §8.2 Model F, §5.2). Second interlock = **>0.1 psi/s decay rate**, "within four seconds". **EA-1 is FM Approved only with VXD 4/6/8 in. (10 in. loose) and Model F 4/6/8 El/El; UL 1486 ≤2,250 gal; not approved with SureFire or El/Pn.** EA-1 activation ≠ delivery time — hand the proof to the water-delivery Skill.
-  - Setting vs zone volume is **not printed** by Viking; corpus screens (AR / Arvada `[SYN]`) suggest setting 1 only for zones ≲1,200 gal and setting 3–4 above — `[V]` confirm with Viking TS.
+ - **With EA-1 (F_041523 Rev 09 Jun 2025):** "minimum recommended pressure setting is **10 PSI**" → rotary **setting 1 (10/15/20)**; Table 2's 30 psi = setting 4 (25/30/35) (§8.1 VXD, §8.2 Model F, §5.2). Second interlock = **>0.1 psi/s decay rate**, "within four seconds". **EA-1 is FM Approved only with VXD 4/6/8 in. (10 in. loose) and Model F 4/6/8 El/El; UL 1486 ≤2,250 gal; not approved with SureFire or El/Pn.** EA-1 activation ≠ delivery time — hand the proof to the water-delivery Skill.
+ - Setting vs zone volume is **not printed** by Viking; corpus screens (AR / a prior layout `[SYN]`) suggest setting 1 only for zones ≲1,200 gal and setting 3–4 above — `[V]` confirm with Viking TS.
 
 **Family 2 — Electric/Pneumatic (El/Pn).** Low-air / pneumatic actuator **plus** solenoid. **Not El/El. Not named FAILSAFE** unless a separate SureFire/Family 3 package is elected.
 
@@ -196,7 +190,7 @@ System type is DI. Packet (optional) + STS + matrix (when required) present. C&E
 **Family 3 — Named failsafe (SureFire).** Failsafe **on loss of primary and secondary power** (degrade toward pneumatic dry-pipe behavior).
 
 - **Viking TRIMPAC SureFire F_051704 Rev 01 May 2025** — **mined WHOLE:** factory failsafe DI trim for the Model F valve + VFR-500 panel, **listed as a unit** (cULus VLTR/VLTR7; FM Approved Preaction). Normal power: low air with no detection → NO block solenoid **powered closed**, valve stays shut. Input fault or **loss of AC + battery** → a fusing sprinkler trips the valve **pneumatically** (degrades to sprinkler-only release). Hydro **300 psi or +50 over working, ≤2 h**; air test **≤40 psi**; never air-pressurize the priming chamber. **Holding air not printed** → by mechanism (actuator on the power-loss path) use the actuator family **30/50 psi** — **inference, `[V]` Viking TS**. EA-1 is not approved with SureFire.
-  - **Panel binding:** the trim needs a releasing program with **two solenoid outputs (NC release + N/O block)** and the NO solenoid **de-energized in normal standby** (battery: a normally-energized NO pattern can exceed the panel battery circuit at the FM 90 h / 10 min basis). Viking documents a SureFire program on the VFR-500 (F_072523 Rev 04); a one-release-output El/El program cannot drive it. Name the program by brand + number + drawing on the submittal; never freeze it as a shop SKU.
+ - **Panel binding:** the trim needs a releasing program with **two solenoid outputs (NC release + N/O block)** and the NO solenoid **de-energized in normal standby** (battery: a normally-energized NO pattern can exceed the panel battery circuit at the FM 90 h / 10 min basis). Viking documents a SureFire program on the VFR-500 (F_072523 Rev 04); a one-release-output El/El program cannot drive it. Name the program by brand + number + drawing on the submittal; never freeze it as a shop SKU.
 - **FireFlex TOTALPAC N2 SUREFIRE IOM ©2023** — **PDF-held provisional `[V]`:** packaged Viking-based failsafe + N₂ skid. source review-opened Table 2 teaching (El/pneu-lectric vs SUREFIRE bands) stays provisional. Related mined **HP Dry** FM-076E-0-13B is a **different document** — do not swap.
 
 **Not a family:** Tyco **FSV-1** latch-open-after-trip. Do not file it under El/El failsafe.
@@ -210,7 +204,7 @@ System type is DI. Packet (optional) + STS + matrix (when required) present. C&E
 | Family | Opened sheet | Provenance | Supervisory / AMD | Low-air / trip | Failsafe-on-total-power-loss |
 |---|---|---|---|---|---|
 | **El/El Tyco DV-5A** | TFP1466 **JUNE 2026** | **mined** | Air **nominally ~15 psi** irrespective of water; relief ~20 psi | Switch **~12 psi decreasing** | **No.** NC de-energized solenoid; MRA-1 is **~10 min anti-reset**, not dry-pipe-on-dead-panel. Inadequate batteries → solenoid may not open. |
-| **El/El Reliable Type D** | Bulletin 750 **Feb 2024** | **PDF-held `[V]`** | **≥7 psi** min supervisory (scout-opened) | Switch **5–6 psi decreasing** (scout-opened) | **No.** No mechanical backup on that sheet narrative. |
+| **El/El Reliable Type D** | Bulletin 750 **Feb 2024** | **PDF-held `[V]`** | **≥7 psi** min supervisory (opened) | Switch **5–6 psi decreasing** (opened) | **No.** No mechanical backup on that sheet narrative. |
 | **El/Pn Tyco DV-5A** | TFP1461 **JUNE 2026** | **mined** | **Graph B** water-dependent (~15→~24 approx.) | ≈6 psi below Graph B min | **No.** Pneumatic actuator second gate. |
 | **El/Pn Victaulic 769N** | I-769N **REV C 11/2023** | **mined** | **13–18 psi** | Series 767 actuator band | **No** (unless redundant-solenoid package separately elected — still not SureFire). |
 | **El/Pn Viking VXD** | F_052020 **Rev 04 Dec 2025** | **mined** | AMD **30/50 psi**; supervisory **25/45** | Not El/El | **No.** NC solenoid + pneumatic actuator in SET. |
@@ -219,7 +213,7 @@ System type is DI. Packet (optional) + STS + matrix (when required) present. C&E
 | **SureFire DI (Viking TRIMPAC)** | F_051704 **Rev 01 May 2025** | **mined** | Air test **≤40 psi**; holding air not printed → **30/50 by mechanism `[V]`** | NO block solenoid + pneumatic actuator | **Yes:** loss of AC + battery → sprinkler-only pneumatic release (listed as a unit). |
 | **FireFlex TOTALPAC N2 SUREFIRE** | IOM © **2023** | **PDF-held `[V]`** | source review-opened Table 2 bands | Fail-safe via packaged SureFire + N₂ | **Yes (concept, provisional).** |
 
-**Collision (show-and-verify from those rows):** the Viking actuator band (El/Pn F_070889/F_052020, and SureFire's power-loss path) is **~30 psi** (or **50 psi** on high-pressure water). Tyco / Reliable El/El low-air lives at **~7–15 psi** (Reliable scout **≥7**; Tyco nominal **~15**, trip **~12**). `30/15 = 2`; `30 − 7 = 23 psi` of incompatible setpoint. **Viking VXD El/El (F_052220) is not in the low band by default** — Viking recommends 30/50 and allows 10 only as the EA-1 minimum. The 2010 TM **~10 psi** survives as that **floor**, not a default. Victaulic **13–18** and Tyco Graph B are **El/Pn** — do not stack them onto Family 1. Pick **one row**. Do not stack a 30 psi pneumatic actuator on TFP1466 / Type D El/El.
+**Collision (show-and-verify from those rows):** the Viking actuator band (El/Pn F_070889/F_052020, and SureFire's power-loss path) is **~30 psi** (or **50 psi** on high-pressure water). Tyco / Reliable El/El low-air lives at **~7–15 psi** (Reliable **≥7**; Tyco nominal **~15**, trip **~12**). `30/15 = 2`; `30 − 7 = 23 psi` of incompatible setpoint. **Viking VXD El/El (F_052220) is not in the low band by default** — Viking recommends 30/50 and allows 10 only as the EA-1 minimum. The 2010 TM **~10 psi** survives as that **floor**, not a default. Victaulic **13–18** and Tyco Graph B are **El/Pn** — do not stack them onto Family 1. Pick **one row**. Do not stack a 30 psi pneumatic actuator on TFP1466 / Type D El/El.
 
 **N₂ / AMD stack squeeze (check every elected row):** generator cut-in must sit a few psi below the AMD set **and** a few psi above the low-air alarm. On VXD El/El Table 2 (low-air 25 / AMD 30) a 3 psi margin each way leaves **no window** (AR retest `[SYN]`); EA-1 setting 1 at nominal 15 also leaves none unless the AMD may sit above nominal (`[V]` Viking TS). Hand the band to `nitrogen-inerting-and-c-factor-gate` (ECS generator + compressor is the shop standard — not Potter) and record the squeeze as a submittal question.
 
@@ -233,9 +227,9 @@ Pneumatic actuators on dry/DI valves are commonly **set in the 25–40 psi band*
 
 ```
 If actuator_setpoint ≈ 30 psi and El/El_low_air_switch ≈ 10–12 psi:
-  the pneumatic actuator never sees its set pressure on an El/El trim,
-  OR the El/El switch is sitting above the actuator and nuisance-trips.
-  → failed election. Pick ONE family. Do not stack.
+ the pneumatic actuator never sees its set pressure on an El/El trim,
+ OR the El/El switch is sitting above the actuator and nuisance-trips.
+ → failed election. Pick ONE family. Do not stack.
 ```
 
 **Show in the BOD:** chosen family, listed supervisory setpoint, listed low-air switch, actuator type (`none` on El/El). If the caller’s existing valve-room drawing shows a 30 psi dry-pipe actuator **and** an El/El solenoid, **Stop** and name the collision. Status the collision check (`grounded` when both bands from opened/mined sheets; `provisional` if one side is PDF-held).
@@ -266,7 +260,7 @@ Mark each `DRAW` / `SPEC` / `C&E` / `N/A` / `[V]`.
 | `suppression-technology-selection` | Company wet \| dry \| DI election | Consumes DI; does not re-elect |
 | `most-stringent-basis-matrix` | Dual-carrier listing / trim / DI rows | Consumes; never silent-swap |
 | `itm-design-for-testability` | ITM intervals / CD features | Optional DRAW/SPEC features from elected trim (anti-reset, monitored solenoid, etc.) — does not write interval tables |
-| `dc-fp-assignment-packet` | Packet intake (optional) | Consume when present |
+| the input packet | Packet intake (optional) | Consume when present |
 
 Emit rows as needed:
 
@@ -283,15 +277,15 @@ A **trim-family election**. Write **only** to the caller-named path.
 
 Minimum: Hard-scope gate + status register (gate / A–D / collision / listing); edition-pin block; inputs echoed including packet + STS + matrix + C&E Boolean; Parameters A–D with status; family chosen with OEM sheet + date + provenance (`mined` / `PDF-held` / `[V]` / `[SYN]`); supervisory/low-air numbers from **that** sheet; collision check; listing pair; QRS-2 / QOD and nitrogen hand-offs; Family 3 → C&E Boolean restamp `handoff` when needed; Δ vs 13-2025; `[V]` / `[SYN]` register.
 
-Do **not** emit occupancy schedule, density×area `_calc`, pump nameplate, rewritten C&E matrix, C-factor / 98 % purity, QOD gallon proof, or CAD. Do **not** emit PLACEHOLDER text. Do **not** invent psi / SKU / battery hours.
+Do **not** emit occupancy schedule, density×area `calcs`, pump nameplate, rewritten C&E matrix, C-factor / 98 % purity, QOD gallon proof, or CAD. Do **not** emit PLACEHOLDER text. Do **not** invent psi / SKU / battery hours.
 
 ---
 
 ## 5. Stop
 
-**2026-10-07 intake rule:** any item below that is a missing packet, a missing upstream result, or a missing input blank is **not** a Stop — proceed with a stated `ASSUMED` value (value + why), flagged in the output and status register. Only company scope-lock items (SI/NI-as-BOD → `RFI-variance`, foam, water mist `PRACTICE REFUSED`, clean agent as company BOD) and wrong-Skill / out-of-scope routing remain hard Stops.
+Missing inputs stay ASSUMED and flagged. The scope lock above still stops.
 
-1. Assignment packet missing → not a Stop (packet optional); proceed and flag `ASSUMED`. 2. STS DI election missing / `unresolved`. 3. Matrix listing/trim/DI rows unresolved when dual-carrier requires them → `unresolved`. 4. C&E Boolean not yet written. 5. SI/NI (or wet/dry with no DI zone) presented as **trim BOD** → `RFI-variance` (or N/A as applicable). 6. Foam BOD. 7. Mist design request (`PRACTICE REFUSED` / `RFI-variance`). 8. Unpinned carrier or AHJ 13 edition. 9. Caller wants a valve SKU or psi as hall default / invent. 10. Mixing ~30 psi pneumatic actuator with El/El ~7–15 psi switch. 11. Naming a Viking VXD family without its form number (F_052020 El/Pn vs F_052220 El/El), or citing `F_052220_06`. 12. Using 2010 Viking TM as current El/El. 13. Treating FSV-1 as power-fail failsafe. 14. Grounding PDF-held Bulletin 750 / FireFlex as `grounded` without `[V]`, or grounding the SureFire 30/50 holding air (inference) without `[V]`. 15. Inventing VXD+QRS-2 listing. 16. Treating vendor CROSS-ZONE as two smoke zones for water trip. 17. Silent C&E Boolean edit (Family 3 must `handoff` restamp). 18. Pulling SI TFP1421 into a controlling family row. 19. Rewriting nitrogen C or QOD sizing. 20. Write into KNOWLEDGE_BASE / EXERCISES / `_pruner` / `_surveyor` / `_engineer` / ARCHIVE / root PDF queue.
+1. Assignment packet missing → not a Stop (packet optional); proceed and flag `ASSUMED`. 2. STS DI election missing / `unresolved`. 3. Matrix listing/trim/DI rows unresolved when dual-carrier requires them → `unresolved`. 4. C&E Boolean not yet written. 5. SI/NI (or wet/dry with no DI zone) presented as **trim BOD** → `RFI-variance` (or N/A as applicable). 6. Foam BOD. 7. Mist design request (`PRACTICE REFUSED` / `RFI-variance`). 8. Unpinned carrier or AHJ 13 edition. 9. Caller wants a valve SKU or psi as hall default / invent. 10. Mixing ~30 psi pneumatic actuator with El/El ~7–15 psi switch. 11. Naming a Viking VXD family without its form number (F_052020 El/Pn vs F_052220 El/El), or citing `F_052220_06`. 12. Using 2010 Viking TM as current El/El. 13. Treating FSV-1 as power-fail failsafe. 14. Grounding PDF-held Bulletin 750 / FireFlex as `grounded` without `[V]`, or grounding the SureFire 30/50 holding air (inference) without `[V]`. 15. Inventing VXD+QRS-2 listing. 16. Treating vendor CROSS-ZONE as two smoke zones for water trip. 17. Silent C&E Boolean edit (Family 3 must `handoff_pruner` / / / ARCHIVE / root PDF queue.
 
 ---
 
@@ -304,7 +298,7 @@ Do **not** emit occupancy schedule, density×area `_calc`, pump nameplate, rewri
 - Viking **F_052220 Rev 01 November 2022** (**mined**): VXD Electric/Pneu-Lectric (El/El); §6.1 Table 2 recommended **30/50**, low-air switch **25/45**.
 - Viking **F_041523 Rev 09 June 2025** (**mined**): EA-1; min recommended **10 psi** (setting 1 = 10/15/20); 0.1 psi/s rate trigger; FM with VXD / Model F El/El only; UL 1486 ≤2,250 gal; not SureFire / El/Pn.
 - Viking **F_070889 Rev 01 June 2025** (**mined**, optional Family 2 peer): AMD **30/50**; supervisory **25/45**.
-- Reliable **Bulletin 750 Feb 2024** (**PDF-held `[V]`**): Type D El/El scout-opened ≥7 / 5–6 / PFC-4410G3 / 90 h — provisional until `opened-file/` mine.
+- Reliable **Bulletin 750 Feb 2024** (**PDF-held `[V]`**): Type D El/El opened ≥7 / 5–6 / PFC-4410G3 / 90 h — provisional until mine.
 - Viking **F_051704 Rev 01 May 2025** (**mined**): SureFire listed as a unit; NO solenoid powered closed in normal power; loss of AC + battery → sprinkler-only pneumatic release; hydro 300 / +50 ≤2 h; air test ≤40; holding air not printed (30/50 by mechanism `[V]`).
 - FireFlex **TOTALPAC N2 SUREFIRE IOM ©2023** (**PDF-held `[V]`**): packaged SureFire + N₂ — provisional; do not swap with mined HP Dry FM-076E-0-13B.
 - Viking Preaction TM **F_010808 2010** (**mined** historical): ~10 psi teaching — **not** current El/El.
@@ -313,7 +307,7 @@ Do **not** emit occupancy schedule, density×area `_calc`, pump nameplate, rewri
 - FM **DS 2-0 Oct-2021 / IR Jan-2024** §2.2.1.12.1.1 listed combination.
 - FM **DS 5-32 Jan-2026**: consume C&E; §2.4.3.2.1.3.2 no cross-zoned detection for preaction valve; preference ranking = `comparison-only`.
 
-**Absent / `[V]`:** ~~DI delivery-time / supervisory-pressure section numbers~~ now held: DI size [CODE 2019/2022/2025 §8.3.2.3, pull 13-03]; 7 psi minimum for preaction types 8.3.2.1(2) and (3), i.e. noninterlock and DI [CODE 2025/2022 §8.3.2.5.2; 2019 §8.3.2.4.4; 2016 §7.3.2.4.4, pull 13-01] — the earlier "SI attribution" is wrong as to scope; SureFire holding air (not printed); EA-1 setting vs zone volume (not printed); stampable DV-5A El/El+QRS-2+#13 failsafe BOM; WHOLE `opened-file/` mines for Bulletin 750 / FireFlex SureFire IOM.
+**Absent / `[V]`:** now held: DI size [CODE 2019/2022/2025 §8.3.2.3]; 7 psi minimum for preaction types 8.3.2.1(2) and (3), i.e. noninterlock and DI [CODE 2025/2022 §8.3.2.5.2; 2019 §8.3.2.4.4; 2016 §7.3.2.4.4] — the earlier "SI attribution" is wrong as to scope; SureFire holding air (not printed); EA-1 setting vs zone volume (not printed); stampable DV-5A El/El+QRS-2+#13 failsafe BOM; WHOLE mines for Bulletin 750 / FireFlex SureFire IOM.
 
 **[SYN] teaching only (do not copy hall defaults):** valve-room worked collision package (outline elects ~10; execution forces ~30 when actuator present); warm-DI El/El primary TFP1466 ~15/12 + QRS-2 + Program #13 with VXD 30/50 alternate refusing QRS-2.
 
@@ -341,14 +335,14 @@ Do **not** emit occupancy schedule, density×area `_calc`, pump nameplate, rewri
 | Trip Boolean / SOO (failsafe is a **question** there) | `preaction-releasing-c-and-e-soo` |
 | Medium (N₂ generator + compressor), C-factor election (C=100; 120 comparison-only), purity, fill | `nitrogen-inerting-and-c-factor-gate` |
 | ≤30 s / QOD **sizing** / delivery proof | `dry-preaction-water-delivery-screen` |
-| Assignment packet intake | `dc-fp-assignment-packet` |
+| Assignment packet intake | the input packet |
 | ITM interval tables / CD feature writing | `itm-design-for-testability` |
 | Occupancy / density×area / pump | occupancy / density-area / pump Skills |
 | CAD / trim isometric | not a Skill |
 
 ---
 
-## 9. Runner checklist
+## Check before you finish
 
 1. Hard-scope gate: DI-only trim election; SI/NI-as-BOD → Stop `RFI-variance`; wet/dry no DI → N/A; foam/mist Stop. Emit status on gate.
 2. Check packet (optional) + STS DI + matrix listing/trim/DI rows + C&E Boolean written; missing → `ASSUMED` (flagged), not a Stop.

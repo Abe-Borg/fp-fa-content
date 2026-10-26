@@ -1,37 +1,32 @@
 ---
 name: Multizone preaction zone alignment
 description: >-
-  use this when one white-space hall is too large for a single company-elected
-  wet|dry|double-interlock system and you must subdivide into aligned
-  suppression / VEWFD / power-isolation / impairment zones (packet optional;
-  STS + matrix consumed when present, else ASSUMED and flagged); SI/NI-as-BOD → Stop RFI-variance (comparison-only); foam prohibited;
-  mist PRACTICE REFUSED; status register every run — not density×area from
-  scratch, not ASD port sizing, not El/El trim, not ≤30 s delivery proof, not
-  releasing C&E rewrite.
+ use this when one white-space hall is too large for a single company-elected
+ wet|dry|double-interlock system and you must subdivide into aligned
+ suppression / VEWFD / power-isolation / impairment zones (packet optional;
+ STS + matrix consumed when present, else ASSUMED and flagged); SI/NI-as-BOD → Stop RFI-variance (comparison-only); foam prohibited;
+ mist PRACTICE REFUSED; status register every run — not density×area from
+ scratch, not ASD port sizing, not El/El trim, not ≤30 s delivery proof, not
+ releasing C&E rewrite.
 ---
 
 # Multizone preaction zone alignment
 
-
-Roster language, job names, and local source-file paths were removed when this method was copied into the content pack. Section numbers and the calculation method are unchanged. Verify judgment calls with the engineer of record.
-
-**Intake rule (the engineer of record, 2026-10-07 — overrides any older gate wording below):** The assignment packet is optional and never a gate. Start from exactly what is given. A missing packet, a missing upstream result (STS token, matrix row, occupancy fork, density, C&E, etc.), or a missing input blank is **not** a Stop: run the upstream Skill if practical, otherwise fill the gap with a stated **ASSUMED** value (the value used + why), flag it in the output and the status register, and continue. ASSUMED is not verified. "Never invent" / "refuse invent" rules on project numbers mean do not *silently* invent: label the number ASSUMED; never present an ASSUMED value as a cited code or table value; never freeze a vendor SKU. **Company scope locks stay hard Stops and are not softened by this rule:** wet / dry / double-interlock preaction only; foam prohibited; clean agent not done (hand-away); water mist `PRACTICE REFUSED`; single-interlock / non-interlock / other preaction never the elected system (SI/NI-as-BOD → Stop + `RFI-variance`, comparison-only). Cite section and edition, use `_calc/run.py` for governed math, design to the most-stringent 3-layer basis; Verify with the engineer of record.
+**Intake.** The input packet is optional. A missing input is not a stop: state the value used and why, and label it ASSUMED. Do not present an ASSUMED value as a cited code or table value, and do not freeze a vendor SKU. **Scope lock.** Wet pipe, dry pipe, and double-interlock preaction only. Foam, clean agent, water mist, and single-interlock or non-interlock preaction are out of scope. If one of those is requested as the basis of design, record it and stop. Do not substitute another system and do not size it here. Cite the section and the edition. Decide each parameter by the most stringent of the code floor, the insurer sheet, and the owner standard. Verify judgment calls with the engineer of record.
 
 Reusable DC fire-protection recipe. **This Skill subdivides one oversized white-space hall into independent, cross-system-aligned suppression zones** after `suppression-technology-selection` pinned company-elected `wet` | `dry` | `double-interlock`. It elects **zone count / boundaries / per-zone hardware unit / 1:1 alignment** (suppression ↔ VEWFD ↔ power-isolation ↔ impairment blast-radius), driven by **FM ≤30 s water delivery** (when a dry/DI clock applies) and **impairment continuity**. It does **not** invent an NFPA 13 maximum-system-area section number, re-run density×area, size ASD ports, write El/El trim, **prove** the delivery clock, or rewrite the releasing C&E.
 
 **Core thesis:** at hall scale the binding drivers are usually **insurer delivery time** and **operational blast-radius**, not a code-floor area cap. The basic FM unit is already a **dedicated, sectioned preaction system** (sectional valve + **2-in test line** downstream of the preaction valve). This Skill multiplies that unit until each zone can be proved ≤30 s **and** a single trip/ITM event does not strand the whole hall — then forces **1:1 alignment** so one VEWFD pre-alarm trips one valve and de-energizes one isolation zone.
 
-**Design practice (lede):** three-layer basis (code floor × insurer sheet × owner standard) → **most-stringent union PER PARAMETER** (delivery gate, blast-radius, alignment, per-zone hardware, concurrency hand-off). Report **Δ vs NFPA 13-2025** (directional on system-area / delivery clocks when the floor is unpinned). Cite **section AND edition**. Show-and-verify arithmetic. Flag invented values `[SYN]` / unpinned `[V]`. Status vocabulary every run: `grounded` / `provisional` / `unresolved` / `comparison-only` / `handoff` / `RFI-variance`. Company fence: controlling BOD = **`wet` | `dry` | `double-interlock`** only; SI/NI → Stop + `RFI-variance` / comparison-only; **Foam prohibited**; **Mist = `PRACTICE REFUSED`**. Company-typical white-space preaction multizone path = **DI**; wet allowed for **blast-radius-only** zoning (no FM ≤30 s pretension). Upstream (packet optional; gaps → `ASSUMED`): completed `dc-fp-assignment-packet` + STS company election token + matrix water-delivery / interlock / VEWFD / zoning-relevant rows when dual-carrier. **Do not invent NFPA 13 max-system-area section numbers.** Caller-path-only. **NO PLACEHOLDER.** Generic — do **not** copy NE ~4 × 12,500 ft² SI or Arvada ~5 × 9,600 ft² DI halls onto another job.
+**Design practice (lede):** three-layer basis (code floor × insurer sheet × owner standard) → **most-stringent union PER PARAMETER** (delivery gate, blast-radius, alignment, per-zone hardware, concurrency hand-off). Report **Δ vs NFPA 13-2025** (directional on system-area / delivery clocks when the floor is unpinned). Cite **section AND edition**. Show-and-verify arithmetic. Flag invented values `[SYN]` / unpinned `[V]`. Status vocabulary every run: `grounded` / `provisional` / `unresolved` / `comparison-only` / `handoff` / `RFI-variance`. Company fence: controlling BOD = **`wet` | `dry` | `double-interlock`** only; SI/NI → Stop + `RFI-variance` / comparison-only; **Foam prohibited**; **Mist = `PRACTICE REFUSED`**. Company-typical white-space preaction multizone path = **DI**; wet allowed for **blast-radius-only** zoning (no FM ≤30 s pretension). Upstream (packet optional; gaps → `ASSUMED`): completed the input packet + STS company election token + matrix water-delivery / interlock / VEWFD / zoning-relevant rows when dual-carrier. **Do not invent NFPA 13 max-system-area section numbers.** Caller-path-only. **NO PLACEHOLDER.** Generic — do **not** copy a prior layout ~4 × 12,500 ft² SI or a prior layout ~5 × 9,600 ft² DI halls onto another job.
 
 **Corpus honesty (training ground — never hall defaults):**
 
 | Spine | What it shows | Honesty |
 |---|---|---|
-| NE hyperscale multizone (`hyperscale-datahall-multizone-preaction-zoning-ne`) | ~50,000 ft² → ~4 × ~12,500 ft²; **SI** primary | **`[SYN]` comparison-only / historical training** — never company BOD; never copy as default N or ft² |
-| Arvada whitespace WDT/zoning outline | ~48,000 ft²; **5 DI zones × ~9,600**; WDT ≤30 s volume budget | **`[SYN]` illustrative** company-path shape only — never default N or ft²; delivery **proof** owned by water-delivery |
+| a prior layout hyperscale multizone | ~50,000 ft² → ~4 × ~12,500 ft²; **SI** primary | **`[SYN]` comparison-only / historical training** — never company BOD; never copy as default N or ft² |
+| a prior layout whitespace WDT/zoning outline | ~48,000 ft²; **5 DI zones × ~9,600**; WDT ≤30 s volume budget | **`[SYN]` illustrative** company-path shape only — never default N or ft²; delivery **proof** owned by water-delivery |
 | FM DS 5-32 / DS 2-0 / VEWFD / power notes | Dedicated unit; ≤30 s; 2-in test; no cross-zone; VEWFD zone count; PI §2.8; DS 2-0 ~10–12k experience | **mined** doctrine — experience band is overlay `[V]`, **not** a code max-area invent |
-
-Write the zone-alignment package **only** to the path the **caller** names. Do not write into KNOWLEDGE_BASE, EXERCISES, `_pruner`, `_surveyor`, `_engineer`, ARCHIVE, or the root PDF queue. Look up shop codebook notes **by title**.
 
 ---
 
@@ -51,7 +46,7 @@ Comparison-only (never elected here; never the controlling zoning BOD):
 - Non-interlock preaction
 - Any other preaction type
 
-**This Skill does not elect wet | dry | DI.** It **consumes** the STS company election token and zoning-relevant rows from `most-stringent-basis-matrix` (plus the completed `dc-fp-assignment-packet`). Controlling BOD = `wet` | `dry` | `double-interlock` only. Do **not** invent DI when STS elected wet. Do **not** silent-swap SI→DI.
+**This Skill does not elect wet | dry | DI.** It **consumes** the STS company election token and zoning-relevant rows from `most-stringent-basis-matrix` (plus the completed the input packet). Controlling BOD = `wet` | `dry` | `double-interlock` only. Do **not** invent DI when STS elected wet. Do **not** silent-swap SI→DI.
 
 If the caller presents SI, NI, or another prohibited preaction type as the **basis of design** / controlling mix:
 
@@ -60,7 +55,7 @@ If the caller presents SI, NI, or another prohibited preaction type as the **bas
 3. Return an `RFI-variance` / company-fence gate.
 4. Do **not** silently substitute wet, dry, or double-interlock.
 5. Do **not** emit a controlling zone-alignment package as if SI/NI were company-elected.
-6. Do **not** copy the NE SI ~4 × 12,500 hall as a reusable default.
+6. Do **not** copy the a prior layout SI ~4 × 12,500 hall as a reusable default.
 7. SI/NI (including FM “no interlock-type qualifier” on ≤30 s, and AXA SI preference / FM wet→NI→SI→DI ranking) may appear only as **`comparison-only`** evidence — never the controlling Drivers A–D path.
 
 ### 1.2 Prohibited or handoff-only media
@@ -80,7 +75,7 @@ If the caller presents SI, NI, or another prohibited preaction type as the **bas
 | In scope | Out of scope |
 |---|---|
 | Zone count N / boundaries / per-zone FM hardware unit | System-family election (STS) |
-| 1:1 suppression ↔ VEWFD ↔ power-isolation alignment | Density × area `_calc` (consume named demand row) |
+| 1:1 suppression ↔ VEWFD ↔ power-isolation alignment | Density × area `calcs` (consume named demand row) |
 | Drivers A–D + honesty fence on code max-area | ≤30 s / 60 s **delivery proof** (water-delivery owns) |
 | Tables A+B + own-zone SOO spine | Authoritative releasing C&E / SOO rewrite |
 | Status register + `[SYN]`/`[V]` | ASD port count / transport-time math |
@@ -88,7 +83,7 @@ If the caller presents SI, NI, or another prohibited preaction type as the **bas
 | Consume packet + STS wet\|dry\|DI + matrix rows | Nitrogen C-factor / 98 % / generator SKU |
 | DS 2-0 ~10–12k ft² experience as **overlay `[V]`** | Inventing NFPA 13 max-area § / concurrent-zone pump gpm |
 | | Treating in-hall zones as 2-hr fire areas |
-| | Copying NE SI 4×12.5k or Arvada DI 5×~9.6k as defaults |
+| | Copying a prior layout SI 4×12.5k or a prior layout DI 5×~9.6k as defaults |
 
 ### 1.4 Status register (mandatory every run)
 
@@ -99,8 +94,8 @@ Emit a status token on **(a)** the Hard-scope gate, **(b)** each of Drivers A–
 | `grounded` | Controlling wet\|dry\|DI + edition + claim supported by **mined** sheet / caller geometry / named peer proof method already closed |
 | `provisional` | Directionally pinned; edition or delivery-proof hole flagged `[V]` — **never silent `grounded` on ≤30 s** |
 | `unresolved` | STS / matrix / hall area / carrier / AHJ edition / containment geometry not given — carried as `ASSUMED` (value + why) and flagged; not a Stop (the packet itself is optional) |
-| `comparison-only` | SI/NI, NE SI spine, FM ranking / “no interlock qualifier” — never controlling BOD |
-| `handoff` | Peer owns next action (water-delivery proves ≤30 s; C&E Boolean; PI Fig D.1; density `_calc`; pump concurrency; ASD ports; El/El trim; N₂ medium/C) |
+| `comparison-only` | SI/NI, a prior layout SI spine, FM ranking / “no interlock qualifier” — never controlling BOD |
+| `handoff` | Peer owns next action (water-delivery proves ≤30 s; C&E Boolean; PI Fig D.1; density `calcs`; pump concurrency; ASD ports; El/El trim; N₂ medium/C) |
 | `RFI-variance` | SI/NI/foam/mist (or other fence breach) presented as BOD |
 
 **Unearned ≤30 s claim → never `grounded`.** Keep Table A ≤30 s column at `handoff` / `unresolved` / `provisional` until `dry-preaction-water-delivery-screen` names a proved method. SI evidence → `comparison-only`. Invented N / ft² / 4×12,500 → Stop or `[SYN]` — never hall default.
@@ -113,7 +108,7 @@ Caller must supply. Do not invent a zone count, hall ft², 2×2 grid, or concurr
 
 | Input | Required | Notes |
 |---|---|---|
-| `dc-fp-assignment-packet` (optional) | no | Packet is **optional, never a gate**. Consume; do not rebuild; do not retrieve `CASE_INDEX`. Missing → proceed from the inputs given; label filled-in values `ASSUMED` (value + why). |
+| the input packet (optional) | no | Packet is **optional, never a gate**. Consume; do not rebuild; do not retrieve `CASE_INDEX`. Missing → proceed from the inputs given; label filled-in values `ASSUMED` (value + why). |
 | **Company-elected `system_type` from STS** | **yes** (inherited) | Must be `wet` \| `dry` \| `double-interlock` from `suppression-technology-selection`. Missing → **not a Stop**: proceed with a stated `ASSUMED` value (value + why), flagged. SI/NI as BOD → **Stop** (`RFI-variance`). |
 | **Consumed `most-stringent-basis-matrix` water-delivery / interlock / VEWFD / zoning rows** | **yes** when dual-carrier (or when those rows exist) | Consume; do not rebuild. Unresolved controlling delivery / interlock / VEWFD row → **not a Stop**: carry the more stringent candidate value as `ASSUMED` (value + why), flagged. Never silent-swap FM **30 s** onto an AXA-only job. |
 | **Hall white-space floor area** | **yes** | Single hall (or named sub-area). Missing → **not a Stop**: proceed with a stated `ASSUMED` value (value + why), flagged. Do **not** default to 50,000 / 48,000 / 12,500 / 9,600. |
@@ -124,7 +119,7 @@ Caller must supply. Do not invent a zone count, hall ft², 2×2 grid, or concurr
 | **Owner blast-radius / zone-split posture** | **yes** (may be `none`) | Project-issued fraction out-of-service target, **or** explicit `empty`. NDA → structure-only; may raise, never lower. |
 | **Caller output path** | **yes** | If unnamed, return the package in the response and stop. |
 
-Optional (do not block; flag `[V]` / `handoff` / `comparison-only`): ceiling height vs FM **30 ft** cap; hose + duration already named; simultaneous-zone concurrency posture for pump hand-off; number of proposed risers; SI comparison evidence (NE spine / FM ranking) — never controlling; DS 2-0 ~10–12k experience band as overlay.
+Optional (do not block; flag `[V]` / `handoff` / `comparison-only`): ceiling height vs FM **30 ft** cap; hose + duration already named; simultaneous-zone concurrency posture for pump hand-off; number of proposed risers; SI comparison evidence (a prior layout spine / FM ranking) — never controlling; DS 2-0 ~10–12k experience band as overlay.
 
 **Do not invent** an NFPA 13 §number for maximum system area, a pipe-fill model that "proves" 30 s, a zone count from habit, a concurrent-zone pump demand, or PLACEHOLDER text. *(2026-10-07: this means do not **silently** invent. When a needed project value is not given, use a stated `ASSUMED` value (value + why), flagged — never presented as a cited, listed, or field-verified value; never a frozen vendor SKU.)*
 
@@ -132,13 +127,13 @@ Optional (do not block; flag `[V]` / `handoff` / `comparison-only`): ceiling hei
 
 | Upstream Skill | Consume | Do not |
 |---|---|---|
-| `dc-fp-assignment-packet` | Packet context — **optional** (consume when present) | Rebuild the packet; retrieve `CASE_INDEX` |
+| the input packet | Packet context — **optional** (consume when present) | Rebuild the packet; retrieve `CASE_INDEX` |
 | `suppression-technology-selection` | Elected wet/dry/DI **company election token**; comparison-only / prohibited / `PRACTICE REFUSED` status | Elect a system family; silent-substitute SI→DI |
 | `most-stringent-basis-matrix` | Water-delivery / interlock / VEWFD / zoning-relevant rows; company wet/dry/DI fence; provisional/`[V]` | Rebuild dual-carrier BOD; silent FM↔AXA clock swap |
 | `dry-preaction-water-delivery-screen` | Named proof method / proved vs unproved ≤30 s when present | Invent a V/Q 30 s closeout here |
 | `preaction-releasing-c-and-e-soo` | Own-zone / no-cross-zone Boolean context | Rewrite full C&E matrix |
 | `power-isolation-disconnect-control` | 1:1 PI zone tags / Fig D.1 context when present | Own NEC 645 / Test-Mode architecture here |
-| `density-area-dry-increase` | Named demand row (wet 2,500 vs dry 3,500) | Re-run `_calc` |
+| `density-area-dry-increase` | Named demand row (wet 2,500 vs dry 3,500) | Re-run `calcs` |
 | `asd-vewfd-return-sampling` | 1:1 VEWFD zone tags when present | Size ASD ports / transport here |
 | `preaction-el-el-trim-election` | DI trim family when present | Write trim SKU catalog |
 | `nitrogen-inerting-and-c-factor-gate` | Medium (N₂ generator + compressor) / C-factor election (C=100 design; 120 comparison-only) when dry/DI | Own fill clock or C-factor here |
@@ -154,13 +149,13 @@ If SI/NI/foam/mist is presented as BOD → **Stop** (company scope lock — stay
 | `dry-preaction-water-delivery-screen` | **Prove** ≤30 s / 60 s; elect QOD vs volume-cut vs extra risers | Elect **provisional N** / boundaries; mark ≤30 s status `handoff` / `unresolved` / `proved (cite method)` |
 | `preaction-releasing-c-and-e-soo` | Controlling DI Boolean; **no cross-zone** smoke water trip; full SOO | Zone tags + **own-zone spine** only |
 | `power-isolation-disconnect-control` | NEC 645 / Fig D.1 / Test-Mode / auto-manual isolation | **1:1 PI zone tags** on Tables A+B |
-| `density-area-dry-increase` | `qd` / dry **3,500** vs wet **2,500** `_calc` | **Name** consumed demand row; no `_calc` |
+| `density-area-dry-increase` | `qd` / dry **3,500** vs wet **2,500** `calcs` | **Name** consumed demand row; no `calcs` |
 | `pump-envelope` | Concurrent-zone **supply** flow / tank | Name concurrency assumption `[V]`/`[SYN]`; never freeze gpm |
 | `asd-vewfd-return-sampling` | Port count / transport ≤60 s | **1:1 VEWFD zone tags** |
 | `preaction-el-el-trim-election` | DI trim family / collision | Hand-off row only |
 | `nitrogen-inerting-and-c-factor-gate` | Medium / C / 30-min **fill** | Zone map context only; fill ≠ delivery |
 | `itm-design-for-testability` | 2-in test / drain / supervision **testability** into CD | **Schedule** the 2-in line per zone (FM hardware unit) |
-| `suppression-technology-selection` / `most-stringent-basis-matrix` / `dc-fp-assignment-packet` | Family + matrix + packet | **Consume only** |
+| `suppression-technology-selection` / `most-stringent-basis-matrix` / the input packet | Family + matrix + packet | **Consume only** |
 | `fire-area-compartmentation-schedule` | DP-to-DP / hall-to-hall fire barriers | In-hall zones are **not** fire areas |
 
 Emit rows as needed:
@@ -168,7 +163,7 @@ Emit rows as needed:
 - `HAND OFF — dry-preaction-water-delivery-screen: prove ≤30 s / 60 s (QOD vs volume-cut vs extra risers). This Skill elected provisional N / boundaries only; ≤30 s column is handoff/unresolved until proved.`
 - `HAND OFF — preaction-releasing-c-and-e-soo: full Boolean / abort / exhaust; own-zone-only spine named here. Do not rewrite the matrix.`
 - `HAND OFF — power-isolation-disconnect-control: Fig D.1 / Test-Mode / NEC 645. This Skill only scheduled 1:1 PI tags.`
-- `HAND OFF — density-area-dry-increase: consume named demand row (DI → dry 3500; wet → wet row). No _calc here.`
+- `HAND OFF — density-area-dry-increase: consume named demand row (DI → dry 3500; wet → wet row). No calcs here.`
 - `HAND OFF — pump-envelope: concurrent-zone supply. Concurrency assumption is [V]/[SYN] provisional only.`
 - `HAND OFF — asd-vewfd-return-sampling: ports / transport. 1:1 VEWFD tags only here.`
 - `HAND OFF — preaction-el-el-trim-election: DI trim family.`
@@ -190,11 +185,11 @@ Resolve **enforced** vs **latest** before electing a count. Format every citatio
 | **FM DS 5-32** | DC white-space **≤30 s** to the **single most remote sprinkler**, all preaction arrangements; dedicated sectioned unit | **January 2026**, §2.4.3.2.1.2 / .D; Fig **2.4.3.2.1.2.E** (cite **caption**; body cross-ref typo 2.4.**4** in source — do not invent an alternate Fig) |
 | **FM DS 2-0** | Install overlay; practical system-size experience **~10,000–12,000 ft²**; generic delivery ladder | **Oct-2021 / Interim Rev Jan-2024**, §2.2.1.11.3 experience — **overlay `[V]`**, **not** a fabricated code max-area |
 | **AXA XL** | DI area+N₂ lever; **no 30 s numeric gate** in the shop AXA note | date the *claim* (e.g. Mar-2026 white paper) |
-| **NFPA 72** | One releasing-service control unit per suppression zone (consume; do not rewrite Ch.23) | Enforced vs **72-2025** [CODE NFPA 72-2025 §23.11.1, pull 72-06] |
+| **NFPA 72** | One releasing-service control unit per suppression zone (consume; do not rewrite Ch.23) | Enforced vs **72-2025** [CODE NFPA 72-2025 §23.11.1] |
 
 Look up **by title**: *The Design practice*; *Enforced-vs-latest edition resolver and reference pins*; *Data-center sprinkler and preaction design*; *FM DS 5-32 insurer design basis*; *VEWFD detection & releasing for data centers*; *Power isolation and disconnect control*; *Dry-pipe & double-interlock air supply and water delivery*.
 
-Consume the assignment packet (optional) and any BOD **delivery / interlock / VEWFD** rows. Do not rebuild them. Do not retrieve CASE_INDEX. Do not run `_calc`.
+Consume the assignment packet (optional) and any BOD **delivery / interlock / VEWFD** rows. Do not rebuild them. Do not retrieve CASE_INDEX. Do not run `calcs`.
 
 **Overlay traps:** (1) Quoting an invented NFPA 13 max-system-area § (e.g. worked-package memory of §4.4 / §8.2.3) is **forbidden** — Absent stays Absent. (2) AXA’s DI lever is **area + N₂**, not a 30 s clock — do not blend. (3) FM “no interlock-type qualifier” on ≤30 s and FM preference ranking are **`comparison-only`** vs company SI fence — not permission to run SI as BOD. (4) DS 2-0 ~10–12k ft² is **experience**, not a code max you stamp as §X.Y.
 
@@ -226,11 +221,11 @@ Work the drivers separately. Do **not** invent a fourth "code max area" driver w
 | **C. Cross-system alignment** | Zone boundaries on containment-cell lines; **1:1** suppression ↔ VEWFD ↔ power-isolation; one RCU per suppression zone | VEWFD "number of FP systems/zones"; power isolation "isolate as locally as possible… capability to depower an entire room" (§2.8); releasing: one FACP/RCU per preaction system. | Geometry missing → `[V]` / `unresolved` |
 | **D. Code-floor max system area** | May or may not force further split | **Honesty fence:** do **not** invent NFPA 13 section numbers. If the shop codebook has no pinned max-area / single-interlock volume rule, write **`[V] code-floor area rule unpinned`** and treat subdivision as **insurer/owner-driven**. Never stamp "§X.Y permits one 52,000 ft² system" from memory as corpus. | Absent § → omit or `[V]`; never invent |
 
-**Driver A physics (restamp 2026-10-09 — what the zone-volume screen may and may not say):**
-- **Delivery = trip time + transit time** (Nam, FM Global, *IAFSS FSS-9* 2008; KB *Dry-pipe and DI air supply and water delivery* Run-652). The **60·V/Q fill screen is not a transit model** — trapped air in closed branches means water reaches the open head long before the zone is full; on Nam's FM cases 60·V/Q over-predicts transit **≈2–5×**. A zone that "fails" 60·V/Q is **unproven, not failed**; one that "passes" is not proven either.
+**Driver A physics :**
+- **Delivery = trip time + transit time** (the 2008 study, FM Global, *IAFSS FSS-9* 2008; KB *Dry-pipe and DI air supply and water delivery* ). The **60·V/Q fill screen is not a transit model** — trapped air in closed branches means water reaches the open head long before the zone is full; on the 2008 study's FM cases 60·V/Q over-predicts transit **≈2–5×**. A zone that "fails" 60·V/Q is **unproven, not failed**; one that "passes" is not proven either.
 - **Configuration before volume:** center feed < center-end < side-end; short feed main; riser at the zone centroid. Split the zone only after the feed is fixed.
-- **Accelerator on DI zones:** on a one-head FM criterion the trip term alone can consume the budget above ~400 gal at 15 psig without an accelerator (Arvada retest `[SYN]` screen). Where Viking EA-1 is used: rate trigger 0.1 psi/s, UL 1486 **≤2,250 gal hard cap**, FM only with VXD / Model F El/El (F_041523 Rev 09 Jun 2025); rotary setting vs zone volume is **not printed** → `[V]` Viking TS. Trim election → `preaction-el-el-trim-election`.
-- Arvada retest BOD numbers (target 380–420 gal, ceiling 1,200 gal, setting 4 above) are **layout-steering `[SYN]` limits, not defaults or proof**. A listed delivery-time program per zone + witnessed remote test remain required (`dry-preaction-water-delivery-screen` / commissioning).
+- **Accelerator on DI zones:** on a one-head FM criterion the trip term alone can consume the budget above ~400 gal at 15 psig without an accelerator (a prior layout retest `[SYN]` screen). Where Viking EA-1 is used: rate trigger 0.1 psi/s, UL 1486 **≤2,250 gal hard cap**, FM only with VXD / Model F El/El (F_041523 Rev 09 Jun 2025); rotary setting vs zone volume is **not printed** → `[V]` Viking TS. Trim election → `preaction-el-el-trim-election`.
+- a prior layout retest BOD numbers (target 380–420 gal, ceiling 1,200 gal, setting 4 above) are **layout-steering `[SYN]` limits, not defaults or proof**. A listed delivery-time program per zone + witnessed remote test remain required (`dry-preaction-water-delivery-screen` / commissioning).
 
 **Optional overlay (not Driver D):** FM DS 2-0 §2.2.1.11.3 practical **~10,000–12,000 ft²** system-size experience may inform provisional zone sizing toward the water-delivery volume-cut discussion — label **`[V]` experience overlay**, **not** a code max-area invent, **not** a substitute for Driver A proof.
 
@@ -248,7 +243,7 @@ Every zone is a **dedicated** preaction (or wet sectional) system separate from 
 6. **One releasing-service control unit** per suppression zone (sharing costs battery/supervision; do not chain fragile multi-panel release).
 7. **Actuator-removal impairment** — audible + visual at the releasing panel (NFPA 13 eff. 1-Jan-2021 practice; cite edition when pinned).
 
-Hydraulic **demand row** is **consumed, not recalculated**. **Consume the BOD / density-area row already named** — do **not** default to an SI-flavored wet-basis 0.2/2,500 example as if it were company DI. Typical forks when the row exists: **wet** → wet remote-area row; **DI / dry** → dry **3,500** via **density-area-dry-increase**; never invent `qd`. Name the consumed row; **hand `_calc` to density-area-dry-increase**.
+Hydraulic **demand row** is **consumed, not recalculated**. **Consume the BOD / density-area row already named** — do **not** default to an SI-flavored wet-basis 0.2/2,500 example as if it were company DI. Typical forks when the row exists: **wet** → wet remote-area row; **DI / dry** → dry **3,500** via **density-area-dry-increase**; never invent `qd`. Name the consumed row; **hand `calcs` to density-area-dry-increase**.
 
 ### 3.5 Derive zone count (most-stringent of the binding drivers)
 
@@ -268,7 +263,7 @@ N_zones = tile(containment_cells) # Driver C — geometry must tile without stra
 3. **Driver C** — boundaries on **whole** aisle-containment cells. No pod straddles two preaction systems. Unequal zones are OK if geometry demands it; equal rectangles are not a code requirement.
 4. **Take the most stringent (largest N / smallest A_zone)** among drivers that actually apply. Do not average.
 5. **Code-floor area** — if unpinned, **omit** fabricated § cites. If a licensed primary later pins a max area, re-test whether code exceeds the insurer/owner union (**code can raise N further**).
-6. **Do not default** to NE ~4 × 12,500 or Arvada ~5 × 9,600. Both are `[SYN]` only. Require caller geometry.
+6. **Do not default** to a prior layout ~4 × 12,500 or a prior layout ~5 × 9,600. Both are `[SYN]` only. Require caller geometry.
 
 **Simultaneous-operating-zone assumption** for pump/tank: sprinkler **density** is still one zone's remote area; **supply** may need a concurrency rule. Corpus often has **no** multi-zone concurrency number → carry **`[V]` / `[SYN] 1-zone concurrent as provisional`** and **hand off to pump-envelope**. Do not freeze 1,500 gpm (or any habit gpm) from memory.
 
@@ -291,7 +286,7 @@ Minimum tables:
 | Aligned VEWFD zone | 1:1 tag |
 | Aligned PI zone | 1:1 tag |
 | RCU | one per zone |
-| Demand row named | consume BOD; hand `_calc` |
+| Demand row named | consume BOD; hand `calcs` |
 | ≤30 s status | `handoff` / `unresolved` / `provisional` / `proved (cite method)` — **never unearned `grounded`** |
 
 **Table B — Cross-system alignment**
@@ -302,7 +297,7 @@ Minimum tables:
 
 **Zoning SOO spine (hand the full matrix):** each event acts **only on its own zone**. L2 pre-alarm trips **that** zone's valve only; other zones stay armed and dry. Impairment: open **that** zone's **physical** release disconnect → other zones remain in service. Full Boolean / abort / exhaust rules → **preaction-releasing-c-and-e-soo**. Full Fig D.1 / Test-Mode → **power-isolation-disconnect-control**.
 
-### 3.7 Show-and-verify (this Skill's math — not delivery proof, not `_calc`)
+### 3.7 Show-and-verify (this Skill's math — not delivery proof, not `calcs`)
 
 ```
 A_hall = sum(A_zone_i)
@@ -319,7 +314,7 @@ Do **not** emit a V_pipe / Q_fill "proof" of ≤30 s. That arithmetic, if used a
 
 | Flag | Use |
 |---|---|
-| **`[SYN]`** | Invented hall geometry, fill-model inputs, valve size placeholders, concurrent-zone assumptions, NE/Arvada example numbers used illustratively |
+| **`[SYN]`** | Invented hall geometry, fill-model inputs, valve size placeholders, concurrent-zone assumptions, a prior layout/a prior layout example numbers used illustratively |
 | **`[V]`** | Unpinned NFPA 13 max-area / SI volume treatment, AHJ edition, owner blast-radius fraction, delivery proof method, concurrency rule, DS 2-0 experience overlay |
 | Status tokens | `grounded` / `provisional` / `unresolved` / `comparison-only` / `handoff` / `RFI-variance` on gate, drivers, N, ≤30 s column, concurrency |
 | Grounded sheet numbers | FM ≤30 s (§2.4.3.2.1.2.D), dedicated sectioned unit + 2-in test line (Fig **2.4.3.2.1.2.E** caption), no cross-zone water trip, wet 2,500 / dry 3,500 demand **names** when already in BOD. Cite **section AND edition**. |
@@ -332,17 +327,17 @@ Do **not** emit a V_pipe / Q_fill "proof" of ≤30 s. That arithmetic, if used a
 
 A **zone-alignment package**. Write **only** to the caller-named path.
 
-Minimum: Hard-scope gate + status register (gate / Drivers A–D / elected N / Table A ≤30 s / concurrency); edition-pin block (name the max-area Absent hole); inputs echoed including **packet + STS company election token + matrix** rows; Drivers A–D with honesty fence on code area + optional DS 2-0 experience overlay `[V]`; elected N and boundary rules from **caller geometry**; per-zone FM hardware unit; Tables A+B; named demand row + handoffs; provisional concurrency note; reciprocal handshake rows; show-and-verify; `[SYN]`/`[V]` register; directional Δ vs NFPA 13-2025; corpus honesty that NE SI 4×12.5k and Arvada DI 5×~9.6k were **not** copied as defaults.
+Minimum: Hard-scope gate + status register (gate / Drivers A–D / elected N / Table A ≤30 s / concurrency); edition-pin block (name the max-area Absent hole); inputs echoed including **packet + STS company election token + matrix** rows; Drivers A–D with honesty fence on code area + optional DS 2-0 experience overlay `[V]`; elected N and boundary rules from **caller geometry**; per-zone FM hardware unit; Tables A+B; named demand row + handoffs; provisional concurrency note; reciprocal handshake rows; show-and-verify; `[SYN]`/`[V]` register; directional Δ vs NFPA 13-2025; corpus honesty that a prior layout SI 4×12.5k and a prior layout DI 5×~9.6k were **not** copied as defaults.
 
-Do **not** emit: density×area `_calc` transcript, ASD port math, El/El trim catalog, full releasing C&E matrix, delivery-time closeout claiming 30 s without a named proof method, fire-barrier schedule between in-hall zones, pump nameplate, PLACEHOLDER text, or invented NFPA 13 max-area § numbers.
+Do **not** emit: density×area `calcs` transcript, ASD port math, El/El trim catalog, full releasing C&E matrix, delivery-time closeout claiming 30 s without a named proof method, fire-barrier schedule between in-hall zones, pump nameplate, PLACEHOLDER text, or invented NFPA 13 max-area § numbers.
 
 ---
 
 ## 5. Stop
 
-**2026-10-07 intake rule:** any item below that is a missing packet, a missing upstream result, or a missing input blank is **not** a Stop — proceed with a stated `ASSUMED` value (value + why), flagged in the output and status register. Only company scope-lock items (SI/NI-as-BOD → `RFI-variance`, foam, water mist `PRACTICE REFUSED`, clean agent as company BOD) and wrong-Skill / out-of-scope routing remain hard Stops.
+Missing inputs stay ASSUMED and flagged. The scope lock above still stops.
 
-1. Assignment packet missing → not a Stop (packet optional); proceed and flag `ASSUMED`. 2. STS company election token missing / `unresolved`, or system type missing. 3. SI/NI (or other prohibited preaction) presented as **BOD** → `RFI-variance`. 4. Foam BOD. 5. Mist design request (`PRACTICE REFUSED` / `RFI-variance`). 6. Dual-carrier controlling water-delivery / interlock / VEWFD matrix rows missing when required → `unresolved`. 7. Missing hall area or containment geometry treated as inventable. 8. Unpinned carrier. 9. Unpinned AHJ edition when claiming code forces N zones. 10. Caller demands an **invented NFPA 13 max-system-area section**. 11. Caller asks to **prove ≤30 s** inside this Skill without handing to `dry-preaction-water-delivery-screen`, or to mark unearned ≤30 s `grounded`. 12. Caller asks to rewrite the full releasing C&E, size ASD ports, run density×area `_calc`, elect El/El trim, own nitrogen C/fill, freeze concurrent-zone pump gpm, or treat in-hall zones as 2-hr fire areas. 13. Caller asks to copy NE ~4 × 12,500 SI or Arvada ~5 × 9,600 as hall defaults. 14. Silent-swap FM **30 s** onto an AXA-only job. 15. NDA owner treated as a numeric blast-radius fraction without structure-only posture. 16. Write into KNOWLEDGE_BASE / EXERCISES / `_pruner` / `_surveyor` / `_engineer` / ARCHIVE / root PDF queue.
+1. Assignment packet missing → not a Stop (packet optional); proceed and flag `ASSUMED`. 2. STS company election token missing / `unresolved`, or system type missing. 3. SI/NI (or other prohibited preaction) presented as **BOD** → `RFI-variance`. 4. Foam BOD. 5. Mist design request (`PRACTICE REFUSED` / `RFI-variance`). 6. Dual-carrier controlling water-delivery / interlock / VEWFD matrix rows missing when required → `unresolved`. 7. Missing hall area or containment geometry treated as inventable. 8. Unpinned carrier. 9. Unpinned AHJ edition when claiming code forces N zones. 10. Caller demands an **invented NFPA 13 max-system-area section**. 11. Caller asks to **prove ≤30 s** inside this Skill without handing to `dry-preaction-water-delivery-screen`, or to mark unearned ≤30 s `grounded`. 12. Caller asks to rewrite the full releasing C&E, size ASD ports, run density×area `_calc_pruner` / / / ARCHIVE / root PDF queue.
 
 ---
 
@@ -362,11 +357,11 @@ Shop codebook **by title**.
 
 **Corpus — comparison / illustrative `[SYN]` only (never hall defaults):**
 
-- NE outline `hyperscale-datahall-multizone-preaction-zoning-ne` — ~50k / **4 × ~12,500** / **SI** primary → **`comparison-only` / historical**.
-- Arvada outline `hyperscale-whitespace-hall-tank-vt-vs-hsc-wdt-zoning-amd-n2-bimlod-arvada-co` — ~48k / **5 DI × ~9,600** → company-path **illustrative `[SYN]`** only; WDT proof → water-delivery. Its 2026-10-05 **retest** (Nam trip + transit, EA-1 decay screen) **withdrew** the earlier 60·V/Q "fail ×5" verdict — cite the retest, not the 2026-09-22 package.
-- NE **per-zone SI criteria + NE code-floor fence** package (2026-10-05, `corpus-insufficient`/medium): NE enforces **NFPA 13-2010** (153 NAC 1); the ≤30 s criterion could not be proven for 4 × 12,500 ft² — **SI = `comparison-only`**; use only as negative teaching on zone size.
+- a prior layout outline — ~50k / **4 × ~12,500** / **SI** primary → **`comparison-only` / historical**.
+- a prior layout outline — ~48k / **5 DI × ~9,600** → company-path **illustrative `[SYN]`** only; WDT proof → water-delivery. Its 2026-10-05 **retest** (published trip-and-transit + transit, EA-1 decay screen) **withdrew** the earlier 60·V/Q "fail ×5" verdict — cite the retest, not the 2026-09-22 package.
+- a prior layout **per-zone SI criteria + a prior layout code-floor fence** package (2026-10-05, /medium): a prior layout enforces **NFPA 13-2010** ; the ≤30 s criterion could not be proven for 4 × 12,500 ft² — **SI = `comparison-only`**; use only as negative teaching on zone size.
 
-**Absent / honesty:** licensed NFPA 13-2025 **maximum system area** and **single-interlock volume** treatment as stamped primary section numbers; a layout-independent transit method (Nam trip term is held and validates within ≈8 % on choked cases, under-predicts deep-subsonic cases; transit still needs the listed program / test); multi-zone simultaneous-operating-zone supply rule; company-DI-primary worked package that is not `[SYN]`.
+**Absent / honesty:** licensed NFPA 13-2025 **maximum system area** and **single-interlock volume** treatment as stamped primary section numbers; a layout-independent transit method (published trip-and-transit term is held and validates within ≈8 % on choked cases, under-predicts deep-subsonic cases; transit still needs the listed program / test); multi-zone simultaneous-operating-zone supply rule; company-DI-primary worked package that is not `[SYN]`.
 
 ---
 
@@ -379,7 +374,7 @@ Shop codebook **by title**.
 5. Show-and-verify area fractions and named demand arithmetic. Delivery **proof** is another Skill. Demand row: **consume BOD** (DI → dry 3500 via density-area); never invent SI-flavored defaults.
 6. Status register every run on gate + Drivers A–D + elected N + ≤30 s column + concurrency: `grounded` / `provisional` / `unresolved` / `comparison-only` / `handoff` / `RFI-variance`. Unearned ≤30 s → never `grounded`.
 7. Upstream (packet optional; gaps → `ASSUMED`): packet + STS company election token + matrix rows. Caller-path-only. **NO PLACEHOLDER.**
-8. Honesty. Synthetic fill screens, NE SI 4×12.5k, and Arvada DI 5×~9.6k stay `[SYN]` / comparison or illustrative only. Do not invent NFPA 13 section numbers. Do not mint V/Q 30 s proofs. DS 2-0 ~10–12k = experience overlay `[V]`, not code max.
+8. Honesty. Synthetic fill screens, a prior layout SI 4×12.5k, and a prior layout DI 5×~9.6k stay `[SYN]` / comparison or illustrative only. Do not invent NFPA 13 section numbers. Do not mint V/Q 30 s proofs. DS 2-0 ~10–12k = experience overlay `[V]`, not code max.
 
 ---
 
@@ -388,10 +383,10 @@ Shop codebook **by title**.
 | Work | Where it lives |
 |---|---|
 | Wet / dry / DI election (SI/NI comparison-only) | `suppression-technology-selection` |
-| Assignment packet intake | `dc-fp-assignment-packet` |
+| Assignment packet intake | the input packet |
 | Dual-carrier BOD matrix | `most-stringent-basis-matrix` |
 | Occupancy / HC / OH | occupancy-hazard-fork |
-| Density × area `_calc` | `density-area-dry-increase` |
+| Density × area `calcs` | `density-area-dry-increase` |
 | ≤30 s / 60 s delivery proof, QOD, volume | `dry-preaction-water-delivery-screen` |
 | Releasing C&E + SOO | `preaction-releasing-c-and-e-soo` |
 | Power isolation / NEC 645 / Test-Mode | `power-isolation-disconnect-control` |
@@ -404,11 +399,11 @@ Shop codebook **by title**.
 
 ---
 
-## 9. Runner checklist
+## Check before you finish
 
 1. Hard-scope gate: wet|dry|DI only; SI/NI-as-BOD → Stop `RFI-variance`; foam/mist Stop; wet/no dry clock → blast-radius only (no FM 30 s pretension). Emit status on gate.
 2. Check packet (optional) + STS **company election token** + matrix water-delivery/interlock/VEWFD rows; missing → `ASSUMED` (flagged), not a Stop.
-3. Confirm hall area, carrier, AHJ edition, containment geometry, owner blast-radius posture; Stop tests. Refuse NE/Arvada defaults.
+3. Confirm hall area, carrier, AHJ edition, containment geometry, owner blast-radius posture; Stop tests. Refuse a prior layout/a prior layout defaults.
 4. Pin editions; refuse invented 13 max-area § numbers; note DS 2-0 ~10–12k as overlay `[V]` only.
 5. Consume packet/BOD/matrix rows; do not rebuild. Require STS company election — not “type pinned including SI.”
 6. Work Drivers A–D; honesty fence on code area; status each driver. Optional DS 2-0 experience overlay — not Driver D invent.
@@ -417,6 +412,6 @@ Shop codebook **by title**.
 9. Emit Tables A+B; ≤30 s column never unearned `grounded`; hand delivery proof, C&E, PI, density, ASD, El-El, nitrogen, pump, ITM.
 10. Name concurrency `[V]`/`[SYN]`; hand pump-envelope — never freeze habit gpm.
 11. Show-and-verify area fractions + named demand (consume BOD; DI→dry 3500); Δ vs 13-2025 directional.
-12. Reciprocal handshakes named. Corpus honesty: NE SI / Arvada DI both `[SYN]` only.
+12. Reciprocal handshakes named. Corpus honesty: a prior layout SI / a prior layout DI both `[SYN]` only.
 13. No PLACEHOLDER; no invent § / 30 s proof / zone count / SI-as-BOD.
 14. Write **only** to the caller-named path.

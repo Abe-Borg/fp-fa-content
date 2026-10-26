@@ -1,21 +1,18 @@
 ---
 name: Sprinkler system volume takeoff
 description: >-
-  use this when a dry or double-interlock (DI) preaction zone needs its trapped
-  water volume (gal) from a pipe segment list (takeoff or hydraulic-software pipe
-  report) — gal per segment, per zone, largest single zone, and connected total
-  per riser room / N₂ generator, with NFPA 13 volume-gate flags; feeds
-  dry-preaction-water-delivery-screen and nitrogen-inerting-and-c-factor-gate.
-  Wet / dry / DI only (wet = informational volume only). NOT delivery-time proof,
-  QOD election, N₂ generator selection, C-factor, hydraulics.
+ use this when a dry or double-interlock (DI) preaction zone needs its trapped
+ water volume (gal) from a pipe segment list (takeoff or hydraulic-software pipe
+ report) — gal per segment, per zone, largest single zone, and connected total
+ per riser room / N₂ generator, with NFPA 13 volume-gate flags; feeds
+ dry-preaction-water-delivery-screen and nitrogen-inerting-and-c-factor-gate.
+ Wet / dry / DI only (wet = informational volume only). NOT delivery-time proof,
+ QOD election, N₂ generator selection, C-factor, hydraulics.
 ---
 
 # Sprinkler system volume takeoff
 
-
-Roster language, job names, and local source-file paths were removed when this method was copied into the content pack. Section numbers and the calculation method are unchanged. Verify judgment calls with the engineer of record.
-
-**Intake rule (the engineer of record, 2026-10-07):** the assignment packet is optional and never a gate. Start from what is given. Missing inputs → proceed with a stated `ASSUMED` value (value + why), flagged. Scope-lock items still Stop.
+**Intake.** The input packet is optional. A missing input is not a stop: state the value used and why, and label it ASSUMED. Do not present an ASSUMED value as a cited code or table value, and do not freeze a vendor SKU. **Scope lock.** Wet pipe, dry pipe, and double-interlock preaction only. Foam, clean agent, water mist, and single-interlock or non-interlock preaction are out of scope. If one of those is requested as the basis of design, record it and stop. Do not substitute another system and do not size it here. Cite the section and the edition. Decide each parameter by the most stringent of the code floor, the insurer sheet, and the owner standard. Verify judgment calls with the engineer of record.
 
 Reusable DC fire-protection recipe. Turns a per-zone pipe segment list into gallons. It **does not** prove delivery time (that is `dry-preaction-water-delivery-screen`) and **does not** pick a generator or compressor (that is `nitrogen-inerting-and-c-factor-gate`). It hands those Skills the two numbers they ask for.
 
@@ -54,7 +51,7 @@ segment_gal = L_ft × gal/ft
 
 **Constant verify:** volume of 1 ft = (π/4)·ID²·12 in³; 231 in³ = 1 gal → (π/4)(12)/231 = 9.42478/231 = **0.040800** gal/(ft·in²). ✓
 
-**Table 3 — DEFAULT gal/ft (manufacturer ID governs).** IDs = OD − 2×wall per ASME B36.10M dimensions as also used by ASTM A795 / A135 Sch 10 / Sch 40. Cross-check column = NFPA 13-2025 Table A.8.2.4 (held, corpus `KNOWLEDGE_BASE/opened-file/design-practice-notes-link-batchA-2026-10-13.md` A1) = NFPA 13-2022 Table A.8.2.3 (held, pull 13-59 §2; every cell identical, 3/4 in. Sch 10 blank in both).
+**Table 3 — DEFAULT gal/ft (manufacturer ID governs).** IDs = OD − 2×wall per ASME B36.10M dimensions as also used by ASTM A795 / A135 Sch 10 / Sch 40. Cross-check column = NFPA 13-2025 Table A.8.2.4 (held, corpus A1) = NFPA 13-2022 Table A.8.2.3 (held §2; every cell identical, 3/4 in. Sch 10 blank in both).
 
 | NPS (in.) | Sch 10 ID | Sch 10 gal/ft | 13-2025 A.8.2.4 Sch 10 | Sch 40 ID | Sch 40 gal/ft | 13-2025 A.8.2.4 Sch 40 |
 |---|---|---|---|---|---|---|
@@ -72,22 +69,22 @@ segment_gal = L_ft × gal/ft
 | 10 Sch 10 **sourced** ² / Sch 40 `[SYN]` | 10.374 (0.188 wall) | 4.3909 | not in held table | 10.020 `[SYN]` | 4.0963 `[SYN]` | not in held table |
 | 12 `[SYN]` | 12.390 (0.180 wall) | 6.2633 | not in held table | 11.938 | 5.8146 | not in held table |
 
-² Sch 10 8 and 10 in. IDs from Wheatland Tube Sch 10/Sch 40 Fire Sprinkler Pipe Submittal Sheet (wheatland.com 2021/08; Sch 10 table, raw (path omitted) lines 92, 94): 8 NPS OD 8.625, wall 0.188, ID 8.249 in.; 10 NPS OD 10.750, wall 0.188, ID 10.374 in. (10 NPS marked ** in source; Wheatland Sch 10 is listed for 1–10 NPS, ASTM A135 Type E Grade A). Math: 8 in. 0.0408 × 8.249² = 0.0408 × 68.046 = **2.7763 gal/ft**; 10 in. 0.0408 × 10.374² = 0.0408 × 107.620 = **4.3909 gal/ft** (was [SYN] 10.420 / 4.4299; −0.9 %). Manufacturer data sheet — a job's actual pipe supplier sheet still governs. Sch 40 10 in. and all 12 in. rows stay `[SYN]` (no source; Wheatland stops at 10 NPS Sch 10, 8 NPS Sch 40 in this sheet).
+² Sch 10 8 in. and 10 in. inside diameters are from a manufacturer submittal (8 in. ID 8.249 at 0.188 in. wall; 10 in. ID 10.374 at 0.188 in. wall). The pipe supplier's data sheet governs.
 
 ¹ Sch 10 below 2 in. does not apply under the shop default (branches are Sch 40); rows kept for flexibility (e.g., listed thin-wall or a different owner standard).
 
 Notes:
 - 1–8 in. rows agree with NFPA 13-2025 Table A.8.2.4 to ≤0.001 gal/ft — the formula reproduces the annex table.
-- **10 in. Sch 10 is now sourced (Wheatland, note ²). 12 in. (both schedules) and 10 in. Sch 40 rows remain `[SYN]`** (neither 2022 A.8.2.3 nor 2025 A.8.2.4 goes above 8 in. — confirmed pull 13-59): wall values from ASME B36.10M recalled, not opened in a held source; ASTM A795 Sch 10 walls for 8–12 in. differ from B36.10 Sch 10 (note the NFPA 8 in. Sch 10 = 0.188 wall vs B36.10 0.148). **Use the manufacturer data-sheet ID**; if none, the B36.10 Sch 10 wall is thinner → larger ID → larger gallons, which is the conservative side for volume gates.
+- **10 in. Sch 10 is now sourced (Wheatland, note ²). 12 in. (both schedules) and 10 in. Sch 40 rows remain `[SYN]`** (neither 2022 A.8.2.3 nor 2025 A.8.2.4 goes above 8 in. — confirmed): wall values from ASME B36.10M recalled, not opened in a held source; ASTM A795 Sch 10 walls for 8–12 in. differ from B36.10 Sch 10 (note the NFPA 8 in. Sch 10 = 0.188 wall vs B36.10 0.148). **Use the manufacturer data-sheet ID**; if none, the B36.10 Sch 10 wall is thinner → larger ID → larger gallons, which is the conservative side for volume gates.
 - **Manufacturer ID governs** (thin-wall, Sch 10 "light-wall", Sch 7, dynaflow/eddythread etc. differ). Record the data sheet + rev on the output.
 - CPVC, copper, other types → manufacturer ID only; no default row → `ASSUMED` with flag.
 
-### 3.1 `_calc` op — `pipe_volume` (2026-10-23, `_calc` inc4 R1; do not edit `_calc`)
+### 3.1 `calcs` op — `pipe_volume` (2026-10-23, `calcs` inc4 ; do not edit `calcs`)
 - Run **one step per zone**; IDs come from Table 3 or the data sheet (the op holds **no ID table** — it takes `d_in` as the actual ID). So the op does **not** clear the 12 in. `[SYN]` rows.
 - Constant: op uses π/4·ID²/144·7.48 = 0.0407999 gal/(ft·in²) ≡ 0.0408 here (diff < 0.001 %).
-- Op output is pipe-only (`volume_gal`, `volume_ft3`, `segments_detail`); add fittings % and trim (§4) by hand on the zone summary. Save the JSON + stdout **with the project**, not in `_calc/runs/`.
+- Op output is pipe-only (`volume_gal`, `volume_ft3`, `segments_detail`); add fittings % and trim (§4) by hand on the zone summary. Save the JSON + stdout **with the project**, not in `calcs/runs/`.
 ```
-python3 _calc/run.py zone-volumes.calc.json
+python3 calcs/fp/run.py zone-volumes.calc.json
 {"job":"<project> dry/DI zone volumes","steps":[
  {"id":"zoneA_pipe","op":"pipe_volume","segments":[{"d_in":1.049,"length_ft":1400},{"d_in":4.26,"length_ft":260}]},
  {"id":"zoneA_fill","op":"air_fill_scfm","v_gal":543.58,"p_psig":40,"t_min":30}]}
@@ -133,7 +130,7 @@ Zone total = Σ segment gal × (1 + fittings %) + trim gal.
 | DI | ≤ 500 gal | `DI≤500` [CODE 13-2025 / 13-2022 §8.3.2.3.1.1] |
 | DI | > 500 | `DI>500` — **no 750 gal DI path**; 60 s simultaneous, calc, or table time [13-2025 / 13-2022 §8.3.2.3.1.2–.1.4; QOD permitted §8.3.2.3.2] |
 | Any dry/DI | any | `FM-30s` reminder when FM DS 5-32 controls — volume exemptions do **not** waive the 30 s gate (owned by the delivery screen) |
-| Any dry/DI | any | `PLANS` — total system volume must be on working plans [CODE NFPA 13-2025 §28.1.3(24)(b); 13-2022 §28.1.3(23)(b), pull 13-59] |
+| Any dry/DI | any | `PLANS` — total system volume must be on working plans [CODE NFPA 13-2025 §28.1.3(24)(b); 13-2022 §28.1.3(23)(b)] |
 
 Flags are screens; the delivery screen owns the verdict.
 
@@ -145,12 +142,12 @@ Flags are screens; the delivery screen owns the verdict.
 
 | Item | NFPA 13-2025 (delta) | NFPA 13-2022 (2024 I-Codes floor) | Held |
 |---|---|---|---|
-| Dry capacity 60 s / 500 gal / 750 gal + QOD | §8.2.4, §8.2.4.2, §8.2.4.2.1, §8.2.4.2.2 | §8.2.3.1–§8.2.3.4 | Yes — raw/13-FP006-2025-8.2.4.txt, raw/13-FP006-2022-8.2.3.txt |
+| Dry capacity 60 s / 500 gal / 750 gal + QOD | §8.2.4, §8.2.4.2, §8.2.4.2.1, §8.2.4.2.2 | §8.2.3.1–§8.2.3.4 | Yes —, |
 | Dry calculated delivery | §8.2.4.3, Table 8.2.4.3.2 | §8.2.3.5–.6, Table 8.2.3.6.1 | Yes (same values) |
-| Dry manifold test connection; listed alternative times | §8.2.4.4 (.4.1–.4.3, Table 8.2.4.3.2 times; 4-head = 2+2 on two remote branch lines, 2-head = 2 on remote branch); §8.2.4.5 listed alternative times | §8.2.3.7 | 2025 held — pull 13-59 §1 (A.8.2.4.4 annex not pulled) |
-| DI size (500 gal / 60 s / calc / table) | §8.3.2.3.1.1–.1.4, §8.3.2.3.2 | same numbers; cross-refs 8.2.3.6 → 8.2.4.3 | Yes — raw/13-FP006-2025-8.3.2.3.txt, pull 13-03 |
-| gal/ft table | Table A.8.2.4 | Table A.8.2.3 (A.8.2.3.1: 60 s limit n/a ≤500 gal, or ≤750 gal with QOD) | Both held — 2025 corpus batch A; 2022 pull 13-59 §2. Values identical 3/4–8 in.; table stops at 8 in. |
-| Volume on working plans | §28.1.3(24)(b) | §28.1.3(23)(b) — same text, item renumbered | Both held — pull 13-59 §3 |
+| Dry manifold test connection; listed alternative times | §8.2.4.4 (.4.1–.4.3, Table 8.2.4.3.2 times; 4-head = 2+2 on two remote branch lines, 2-head = 2 on remote branch); §8.2.4.5 listed alternative times | §8.2.3.7 | 2025 held — §1 (A.8.2.4.4 annex not pulled) |
+| DI size (500 gal / 60 s / calc / table) | §8.3.2.3.1.1–.1.4, §8.3.2.3.2 | same numbers; cross-refs 8.2.3.6 → 8.2.4.3 | Yes — |
+| gal/ft table | Table A.8.2.4 | Table A.8.2.3 (A.8.2.3.1: 60 s limit n/a ≤500 gal, or ≤750 gal with QOD) | Both held — the 2025 annex table; 2022 §2. Values identical 3/4–8 in.; table stops at 8 in. |
+| Volume on working plans | §28.1.3(24)(b) | §28.1.3(23)(b) — same text, item renumbered | Both held — §3 |
 
 **Delta 2022 → 2025:** dry size clause renumbered §8.2.3 → §8.2.4 and reframed as "Dry Pipe System Water Delivery" with 500/750 gal moved under the single-orifice §8.2.4.2; gallons and times unchanged. DI §8.3.2.3 unchanged except cross-refs. **Note:** in 2025, §8.2.3 is not the dry capacity clause — cite §8.2.4.
 
@@ -190,5 +187,5 @@ Each zone: `grounded` (all IDs from data sheet or held table, lengths from repor
 ## 9. Stops
 Out-of-scope system type as BOD; segment list absent for every zone (no gallons invented from ft²).
 
-## 10. PE-review register
+## Verify with the engineer of record
 1. Fittings allowance 0 % / +5 % defaults. 2. Trim placeholder 5 gal. 3. Missing riser length = height + 10 ft. 4. 12 in. IDs (and 10 in. Sch 40) `[SYN]` until a manufacturer sheet or ASTM A795 table is held. 5. 2 in. branch line → Sch 40 under the shop default. 6. Corpus core-r5 (2026-10-23) cites "13-2025 §8.2.3.3" for the 500 gal dry exemption — wrong clause for 2025 (held: §8.2.4.2.1; 2022 = §8.2.3.3). Use this Skill's §6 cites, not the package's.
