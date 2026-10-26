@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import subprocess
@@ -92,6 +93,52 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn("10 gal entered on the form. Not assumed.", entered)
         self.assertIn("50.0 s ASSUMED from time basis NFPA-OH", entered)
         self.assertNotIn("Trim: ASSUMED", entered)
+
+    def test_advertised_tool_inputs_replay_the_governing_plan(self):
+        from fpfa.calc_tools import ToolSession
+
+        seen = {}
+
+        def grab(_system, user, _tools, _execute):
+            seen["user"] = user
+            return {"text": "", "tool_calls": []}
+
+        result = self.run(self.root, self.di, self.basis, narrator=grab)
+        payload = json.loads(seen["user"].split("\n\n", 1)[1])
+        advertised = payload["tool_plan_inputs"]
+        recorded = {
+            call["name"]: call["input"]
+            for call in result["transcript"]
+            if call.get("by") == "tool-plan"
+        }
+        self.assertEqual(advertised, recorded)
+        for name in ("dry_delivery_screen", "di_trip_to_water"):
+            self.assertEqual(advertised[name]["t_detect_s"], 8)
+            self.assertEqual(advertised[name]["t_release_s"], 2)
+            self.assertEqual(advertised[name]["t_exhaust_s"], 0)
+        trim_in = advertised["elect_di_trim"]
+        self.assertFalse(trim_in["failsafe_on_total_power_loss"])
+        self.assertEqual(trim_in["supervisory_psi"], 15.0)
+        self.assertEqual(trim_in["medium"], "nitrogen")
+
+        session = ToolSession(self.root)
+        replayed = session.execute("di_trip_to_water", advertised["di_trip_to_water"])
+        governing = result["tools"]["di_trip_to_water"]
+        self.assertAlmostEqual(replayed["t_total_s"], governing["t_total_s"])
+        self.assertFalse(replayed["passes_screen"])
+        self.assertGreater(replayed["t_total_s"], 30)
+        self.assertEqual(self.fmt1(replayed["t_total_s"]), "38.1")
+
+        failsafe = dict(self.di)
+        failsafe["failsafe_on_total_power_loss"] = True
+        held = self.run(self.root, failsafe, self.basis)
+        held_trim = next(
+            call["input"] for call in held["transcript"] if call["name"] == "elect_di_trim"
+        )
+        self.assertTrue(held_trim["failsafe_on_total_power_loss"])
+        replay_trim = session.execute("elect_di_trim", held_trim)
+        self.assertEqual(replay_trim["family"], "named-failsafe")
+        self.assertEqual(held["tools"]["elect_di_trim"]["family"], "named-failsafe")
 
     def test_model_text_is_kept_only_when_it_quotes_the_tool_plan(self):
         first = self.run(self.root, self.di, self.basis)
