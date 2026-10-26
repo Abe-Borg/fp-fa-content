@@ -10,7 +10,7 @@ class T(unittest.TestCase):
     def test_source_text_held(self):
         self.skipTest("raw code text is not stored in this repository")
     def test_natural_gas_bulletin_503_example(self):
-        # USBM Bulletin 503 example (UNT copy, PARA): 80/15/4/1 at 5.3/3.22/2.37/1.86 -> 4.55
+        # USBM Bulletin 503 worked example: 80/15/4/1 at 5.3/3.22/2.37/1.86 -> 4.55
         v = L.lfl_mix({"a": 80, "b": 15, "c": 4, "d": 1}, {"a": 5.3, "b": 3.22, "c": 2.37, "d": 1.86})
         self.assertAlmostEqual(v, 4.55, places=2)
     def test_inert_dropped_and_diluent(self):

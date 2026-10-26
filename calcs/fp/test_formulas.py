@@ -343,7 +343,7 @@ class Batch6DiTripTests(unittest.TestCase):
         with self.assertRaises(CalcError):
             di_trip_to_water(0, 800)
         with self.assertRaises(CalcError):
-            di_trip_to_water(200, 800, basis="AXA")
+            di_trip_to_water(200, 800, basis="UNLISTED")
         with self.assertRaises(CalcError):
             di_trip_to_water(200, 800, t_release_s=-1)
 

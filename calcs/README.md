@@ -29,4 +29,13 @@ python -m unittest discover -s tests
 
 Run that from `calcs/fa`. Tests that only asserted raw code text are skipped. The math tests remain. Charger fixture keys in the battery module stay, because the tests lock those keys; the catalog quotations were removed.
 
+Fixture and test names in this tree are generic. Hand checks are named for the quantity they lock (density, supply, pump, relief valve, high altitude), not for a job, a client, or a city. Both suites include a name scan that fails if one of those names is introduced:
+
+```bash
+# from calcs/fp
+python -m unittest discover -s . -p 'test_*.py'
+# from calcs/fa
+python -m unittest discover -s tests
+```
+
 Do not add job names, client names, personal names, raw NFPA text, or vendor catalogs under this tree.
