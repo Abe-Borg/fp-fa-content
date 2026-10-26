@@ -116,6 +116,59 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn("Design Hazen-Williams C is 100", text)
         self.assertNotIn("sk-ant-", text)
 
+    def test_nfpa_exemption_uses_zone_total_not_pipe_only(self):
+        import math
+
+        from docx import Document
+
+        from fpfa.sample_data import EXAMPLE_DI
+        from fpfa.spec_docx import write_docx
+
+        diameter = 6.065
+        gallons_per_foot = math.pi / 4.0 * diameter * diameter / 144.0 * 7.48
+        di = dict(EXAMPLE_DI)
+        di["segments"] = [{"role": "main", "d_in": diameter, "length_ft": 495.0 / gallons_per_foot}]
+        di["trim_gal"] = 10
+        di["fittings_percent"] = 0
+        di["qod"] = True
+        result = self.run(self.root, di, self.basis)
+        volume = result["tools"]["zone_trapped_volume"]
+        screen = result["tools"]["dry_delivery_screen"]
+        self.assertAlmostEqual(volume["pipe_gal"], 495, delta=0.05)
+        self.assertAlmostEqual(volume["zone_gal"], 505, delta=0.05)
+        self.assertTrue(screen["pipe_only_nfpa_delivery_time_exempt"])
+        self.assertFalse(screen["nfpa_delivery_time_exempt"])
+        self.assertEqual(screen["nfpa_size_cap_gal"], 500)
+        self.assertIn("cap: no", result["narrative"])
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "section.docx"
+            write_docx(path, {"name": "Exemption check", "basis": self.basis}, result)
+            doc = Document(path)
+            rows = [[cell.text for cell in row.cells] for row in doc.tables[1].rows]
+        pipe_row = next(row for row in rows if row[0] == "Pipe only")
+        zone_row = next(row for row in rows if row[0] == "Zone total")
+        self.assertEqual(pipe_row[-1], "—")
+        self.assertEqual(zone_row[-1], "No")
+
+
+class ChatRequestTests(unittest.TestCase):
+    def test_follow_up_includes_prior_turns(self):
+        from fpfa.ui import format_chat_request
+
+        text = format_chat_request(
+            [
+                {"role": "user", "text": "Which trim family?"},
+                {"role": "assistant", "text": "El/El holds the prime with the solenoid."},
+            ],
+            {"insurer": "FM"},
+            {"zone_id": "DH-1"},
+            "explain that recommendation",
+        )
+        self.assertIn("Which trim family?", text)
+        self.assertIn("El/El holds the prime with the solenoid.", text)
+        self.assertIn("explain that recommendation", text)
+        self.assertIn("Earlier turns:", text)
+
 
 class ClaudeLoopTests(unittest.TestCase):
     def test_loop_nudges_and_does_not_force_tools(self):
@@ -269,6 +322,53 @@ class UiSmokeTests(unittest.TestCase):
                 written = app.export_to(Path(tmp) / "draft.docx")
                 self.assertTrue(written.is_file())
                 self.assertGreater(written.stat().st_size, 1000)
+        finally:
+            root.destroy()
+
+    def test_async_results_stay_on_the_project_that_started_them(self):
+        if not os.environ.get("DISPLAY"):
+            self.skipTest("no display")
+        _isolate_data()
+        import tkinter as tk
+
+        from fpfa.projects import load_project, new_project, save_project
+        from fpfa.ui import App
+
+        result = {
+            "source": "tool-plan",
+            "narrative": "ORIGIN-RESULT",
+            "warnings": [],
+            "flags": [],
+            "tools": {
+                "zone_trapped_volume": {"zone_gal": 505.0},
+                "di_trip_to_water": {"t_total_s": 40.0, "passes_screen": False},
+                "elect_di_trim": {"family": "El/El"},
+            },
+        }
+        root = tk.Tk()
+        try:
+            app = App(root)
+            origin = new_project("Origin job")
+            other = new_project("Other job")
+            app.open_project(other["id"])
+            app._finish_run(origin["id"], result, None)
+            self.assertEqual(load_project(origin["id"])["last_run"]["narrative"], "ORIGIN-RESULT")
+            self.assertIsNone(load_project(other["id"]).get("last_run"))
+            self.assertNotIn("ORIGIN-RESULT", app.results.get("1.0", "end"))
+
+            app.open_project(origin["id"])
+            app.chat_log = [{"role": "user", "text": "Which trim family?"}]
+            app._write_form(app.project)
+            save_project(app.project)
+            app.open_project(other["id"])
+            app.chat_log = [{"role": "user", "text": "unrelated"}]
+            app._render_chat()
+            app._finish_chat(origin["id"], "El/El holds the prime with the solenoid.")
+            saved = load_project(origin["id"])["chat"]
+            self.assertEqual(saved[0]["text"], "Which trim family?")
+            self.assertEqual(saved[-1]["text"], "El/El holds the prime with the solenoid.")
+            self.assertEqual(app.chat_log[-1]["text"], "unrelated")
+            self.assertNotIn("solenoid", app.chat_view.get("1.0", "end"))
         finally:
             root.destroy()
 

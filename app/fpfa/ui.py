@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import json
 import queue
 import threading
 import tkinter as tk
@@ -22,6 +23,23 @@ from fpfa.paths import content_root, read_config, write_config
 from fpfa.projects import delete_project, list_projects, load_project, new_project, save_project
 from fpfa.spec_docx import write_docx
 from fpfa.workflow import format_transcript, run_di_zone, system_prompt
+
+
+def format_chat_request(prior_turns: list[dict], basis: dict, di: dict, latest: str) -> str:
+    """One user message that carries the form and the project's earlier chat turns."""
+    lines = []
+    for turn in prior_turns:
+        who = "Designer" if turn.get("role") == "user" else "Assistant"
+        lines.append(f"{who}: {turn.get('text') or ''}")
+    history = "\n\n".join(lines) if lines else "(none)"
+    return (
+        "Project basis and the current zone form follow. "
+        "Use tools for any gallons, seconds, gpm, or releasing logic. "
+        "Earlier chat turns are included so a follow-up can refer to them.\n"
+        f"basis={basis}\nzone={di}\n\n"
+        f"Earlier turns:\n{history}\n\n"
+        f"Designer: {latest}"
+    )
 
 SYSTEM_CHOICES = (
     ("Double-interlock", "di"),
@@ -558,8 +576,9 @@ class App:
         except ValueError as exc:
             messagebox.showerror("DI zone", str(exc))
             return
-        di = self.project["di"]
-        basis = self.project["basis"]
+        origin_id = self.project["id"]
+        di = copy.deepcopy(self.project["di"])
+        basis = copy.deepcopy(self.project["basis"])
         try:
             root = content_root()
         except FileNotFoundError as exc:
@@ -598,7 +617,7 @@ class App:
                 except Exception as exc:
                     result = None
                     error = safe_error(exc)
-                self.queue.put(lambda: self._finish_run(result, error))
+                self.queue.put(lambda oid=origin_id, res=result, err=error: self._finish_run(oid, res, err))
 
             threading.Thread(target=work, daemon=True).start()
             return
@@ -608,20 +627,32 @@ class App:
             messagebox.showerror("DI zone", safe_error(exc))
             self.status.set("The zone did not run.")
             return
-        self._finish_run(result, None)
+        self._finish_run(origin_id, result, None)
 
-    def _finish_run(self, result: dict | None, error: str | None) -> None:
+    def _finish_run(self, origin_id: str, result: dict | None, error: str | None) -> None:
         self._busy = False
+        still_here = self.project is not None and self.project.get("id") == origin_id
         if error or result is None:
-            messagebox.showerror("DI zone", error or "The zone did not run.")
+            if still_here:
+                messagebox.showerror("DI zone", error or "The zone did not run.")
             self.status.set("The zone did not run.")
             return
-        if self.project is not None:
+        if still_here:
             self.project["last_run"] = result
             self._write_form(self.project)
             save_project(self.project)
-        self._show_result(result)
-        self.tabs.select(2)
+            self._show_result(result)
+            self.tabs.select(2)
+        else:
+            try:
+                project = load_project(origin_id)
+            except (OSError, json.JSONDecodeError):
+                self.status.set("The zone finished, and that project is no longer on this machine.")
+                return
+            project["last_run"] = result
+            save_project(project)
+            self.status.set("DI zone finished on another project. Open it to see the results.")
+            return
         if result["source"] == "claude":
             self.status.set(f"Tool plan plus {MODEL_ID}. Tables use the tool plan.")
         else:
@@ -715,6 +746,7 @@ class App:
             messagebox.showinfo("Chat", "Create or open a project first.")
             return
         self.chat_entry.delete(0, "end")
+        origin_id = self.project["id"]
         self._append_chat("user", text)
         key = load_api_key()
         if not key:
@@ -729,21 +761,18 @@ class App:
         self.status.set(f"Asking {MODEL_ID}…")
         basis = self.collect_basis()
         di = self.collect_di()
+        prior = [dict(turn) for turn in self.chat_log[:-1]]
+        request = format_chat_request(prior, basis, di, text)
 
         def work():
             try:
                 root = content_root()
                 client = AnthropicMessages(key)
                 session = ToolSession(root)
-                context = (
-                    "Project basis and the current zone form follow. "
-                    "Use tools for any gallons, seconds, gpm, or releasing logic.\n"
-                    f"basis={basis}\nzone={di}\n\n{text}"
-                )
                 out = run_tool_loop(
                     client.create,
                     system=system_prompt(root),
-                    user_text=context,
+                    user_text=request,
                     tools=SCHEMAS,
                     execute=session.execute,
                     required=[],
@@ -751,16 +780,27 @@ class App:
                 reply = out.get("text") or "(Claude returned no text.)"
             except Exception as exc:
                 reply = safe_error(exc)
-            self.queue.put(lambda: self._finish_chat(reply))
+            self.queue.put(lambda oid=origin_id, answer=reply: self._finish_chat(oid, answer))
 
         threading.Thread(target=work, daemon=True).start()
 
-    def _finish_chat(self, reply: str) -> None:
-        self._append_chat("assistant", reply)
-        if self.project:
+    def _finish_chat(self, origin_id: str, reply: str) -> None:
+        if self.project is not None and self.project.get("id") == origin_id:
+            self._append_chat("assistant", reply)
             self._write_form(self.project)
             save_project(self.project)
-        self.status.set("Chat updated.")
+            self.status.set("Chat updated.")
+            return
+        try:
+            project = load_project(origin_id)
+        except (OSError, json.JSONDecodeError):
+            self.status.set("The chat reply could not be saved.")
+            return
+        chat = list(project.get("chat") or [])
+        chat.append({"role": "assistant", "text": reply})
+        project["chat"] = chat
+        save_project(project)
+        self.status.set("Chat reply saved on another project.")
 
     def open_settings(self) -> None:
         win = tk.Toplevel(self.root)

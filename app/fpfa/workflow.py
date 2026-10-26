@@ -101,6 +101,8 @@ def run_tool_plan(session: ToolSession, di: dict, basis: dict) -> dict[str, Any]
         "system_type": di.get("system_type") or "di",
         **common_time,
     })
+    # The kernel screen exempts on pipe volume. Capacity gates use the zone total.
+    screen = govern_nfpa_exemption(screen, volume["zone_gal"])
     trip = session.execute("di_trip_to_water", {
         "v_gal": volume["zone_gal"],
         **common_time,
@@ -205,6 +207,23 @@ def _plan_transcript(tools: dict[str, Any], di: dict, basis: dict) -> list[dict]
     return calls
 
 
+def govern_nfpa_exemption(screen: dict, zone_gal: float) -> dict:
+    """Size exemption follows the zone total (pipe + fittings + trim).
+
+    ``dry_delivery_screen`` reports the exemption on pipe volume. Timing for that
+    pipe-only screen stays. ``nfpa_delivery_time_exempt`` becomes the zone-total
+    check against the same cap, including the double-interlock rule that a
+    quick-opening device does not raise the 500 gal cap.
+    """
+    governed = dict(screen)
+    cap = float(screen["nfpa_size_cap_gal"])
+    governed["pipe_only_volume_gal"] = float(screen["volume_gal"])
+    governed["pipe_only_nfpa_delivery_time_exempt"] = bool(screen["nfpa_delivery_time_exempt"])
+    governed["exemption_volume_gal"] = float(zone_gal)
+    governed["nfpa_delivery_time_exempt"] = float(zone_gal) <= cap + 1e-9
+    return governed
+
+
 def template_narrative(di: dict, tools: dict[str, Any]) -> str:
     volume = tools["zone_trapped_volume"]
     screen = tools["dry_delivery_screen"]
@@ -231,8 +250,9 @@ def template_narrative(di: dict, tools: dict[str, Any]) -> str:
             f"Zone total is {fmt1(volume['zone_gal'])} gal."
         ),
         (
-            f"NFPA size exemption on the pipe volume against the {screen['nfpa_size_cap_gal']:.0f} gal "
-            f"cap: {exempt}. A quick-opening device does not raise the double-interlock cap. "
+            f"NFPA size exemption on the zone total of {fmt1(volume['zone_gal'])} gal "
+            f"against the {screen['nfpa_size_cap_gal']:.0f} gal cap: {exempt}. "
+            "A quick-opening device does not raise the double-interlock cap. "
             f"The {trip['limit_basis']} {fmt1(trip['limit_s'])} s screen on the zone total {screen_word}: "
             f"t_total {fmt1(trip['t_total_s'])} s. "
             "This screen is not a listed water-delivery-time calculation."
@@ -281,7 +301,7 @@ def _flags(di: dict, tools: dict[str, Any], extra: list[str]) -> list[str]:
     trip = tools["di_trip_to_water"]
     if screen["nfpa_delivery_time_exempt"] and not trip["passes_screen"]:
         flags.append(
-            "Pipe volume is inside the NFPA size cap and the zone-total time screen still misses. "
+            "Zone total is inside the NFPA size cap and the zone-total time screen still misses. "
             "The cap does not close the insurer time screen."
         )
     elif not trip["passes_screen"]:

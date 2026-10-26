@@ -85,8 +85,8 @@ def write_docx(path: Path | str, project: dict, result: dict) -> Path:
     doc.add_heading("Water-delivery screen", level=2)
     doc.add_paragraph(screen["formula"])
     doc.add_paragraph(
-        "Pipe-only screen uses the resolved pipe volume. "
-        "Zone-total screen adds the fittings allowance and trim. The zone total governs."
+        "Pipe-only row is the pipe timing comparison. "
+        "The size exemption uses the zone total (pipe, fittings, and trim) against the cap."
     )
     _table(
         doc,
@@ -100,7 +100,7 @@ def write_docx(path: Path | str, project: dict, result: dict) -> Path:
                 screen["limit_basis"],
                 _yn(screen["passes_screen"]),
                 f"{screen['nfpa_size_cap_gal']:.0f}",
-                _yn(screen["nfpa_delivery_time_exempt"]),
+                "—",
             ],
             [
                 "Zone total",
@@ -110,7 +110,7 @@ def write_docx(path: Path | str, project: dict, result: dict) -> Path:
                 trip["limit_basis"],
                 _yn(trip["passes_screen"]),
                 f"{screen['nfpa_size_cap_gal']:.0f}",
-                "—",
+                _yn(screen["nfpa_delivery_time_exempt"]),
             ],
         ],
     )
