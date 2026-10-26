@@ -1,0 +1,21 @@
+# Class I standpipe election
+
+This note covers whether a Class I standpipe is required and what residual and supervision it carries. It does not size the hall sprinkler demand and it does not replace the pump envelope.
+
+A single-story hall often does not trip a height trigger by itself. A multi-story building or an elevated support structure can. The local adoption of IFC or IBC §905, UFC §9-10, and any owner standard have to be read. Do not treat one city's administrative rule as the model code.
+
+## Residual
+
+NFPA 14 residual at the most remote 2-1/2 in. outlet is 100 psi (NFPA 14-2024 §10.2.6.1 and §10.2.6.1.2; 2019 §7.8.1 and §7.8.1.2). The 65 psi value applies to 1-1/2 in. outlets only.
+
+Other documents in the pack disagree with each other: a federal guide uses a height tier of 65 or 100 psi; a master specification uses outlet size (65 psig at 1-1/2 in., 100 psig at 2-1/2 in.); a manufacturer note allows the authority having jurisdiction to accept 65. Carry 100 psi as the floor. Keep the lower figures as comparison-only. Ask the authority having jurisdiction in writing before using any lower residual. Do not merge them silently.
+
+Demand in gallons per minute follows the enforced NFPA 14 edition (2019 §7.10 is the held cite for the hydraulic demand in that edition). If the adopted code's Chapter 80 has no NFPA 14 row, the edition is `[V]`.
+
+## Manual-dry supervisory air
+
+Where the standpipe is manual-dry, NFPA 14-2024 §8.3.2.1.1 requires supervisory air on the piping, §8.3.2.1.2 sets a 7 psi minimum (lower only if the manufacturer permits), and §8.3.2.1.3 sets a 20 psi maximum (only automatic and semiautomatic systems may exceed it). NFPA 14-2019 §6.1.1 requires monitoring with supervisory air and sets no psi band, so a 7 to 20 psi band is not a 2019 requirement.
+
+Size the compressor to the held dry volume. Do not freeze a compressor model number. The sprinkler nitrogen gate is a different system. Do not reuse its generator selection here.
+
+Hose may be omitted only where the adopted amendment says so and the fire code official approves it in writing. Valves and connections remain. Model IFC 2024 has no §905.1.1; a state amendment that adds that section is local, not model code.

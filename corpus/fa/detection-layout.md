@@ -1,0 +1,21 @@
+# Detection layout: spot smoke, sampling, two levels
+
+## Spot-type smoke
+
+Support rooms (electrical, UPS, mechanical, office, raised floor) use NFPA 72 Chapter 17. Smooth-ceiling spacing is 30 ft nominal, and every ceiling point lies within 0.7 times the spacing (NFPA 72-2025 §17.7.4.2.3.1; 2019 §17.7.3.2.3.1). Sidewall detectors are within 12 in. of the ceiling (§17.7.4.2.1). Do not place the detector in the supply airstream (§17.7.7.3.2).
+
+Area per detector follows the airflow table. Pick the smallest table row whose air changes are at or above the room. Do not interpolate.
+
+Beams: solid joists count as beams. Compare depth to 0.1 of the ceiling height and spacing to 0.4 of the ceiling height (2025 §17.7.4.2.4.3; 2022 §17.7.4.2.4.2; 2019 §17.7.3.2.4.2). Below 0.1 of the height, use smooth spacing. At or above 0.1 of the height and at or above 0.4 of the height between beams, put a detector in each pocket.
+
+2025-only, and practice on earlier editions: the 40 ft ceiling scope on §17.7.4.2.3.1; a girder within 4 in. of the ceiling is a beam (§17.7.4.2.4.2); a gap above the beam over 0.15 of the height permits smooth spacing (§17.7.4.2.4.3(6)).
+
+Under a raised floor, count a separate room at smooth spacing. Those detectors are not the room detection. Where NFPA 76 is adopted, a power room can need more spots than Chapter 17 spacing. That reading is provisional until the 2024 sections are confirmed. Keep detectors out of arc-flash vent paths.
+
+## Data-hall sampling
+
+Very early warning sampling for a data hall follows NFPA 72-2025 §17.7.4.6 and NFPA 75 §9.2.2 (2024 or 2020, as adopted). Where FM insures, FM DS 5-32 §2.4.2.2 (January 2026 reading in the pack): ports in the return air, in the equipment area, and below the raised floor (§2.4.2.2.1); return at 4 ft² per port (§2.4.2.2.3); ceiling single level 200 ft² per port (§2.4.2.2.4); two levels 400 ft² per port (§2.4.2.2.5), and two levels where trays block smoke (§2.4.2.2.6); transport time 60 seconds (§2.4.2.2.7). At or above 5 ft/s, or 60 air changes per hour, slow the ventilation on a pre-alarm (§2.4.2.1.3). The 60 air-change figure is the FM sheet. It is not in NFPA 75-2024 Chapters 4 through 13.
+
+NFPA 76 §8.5.3.1 (2020 or 2024) applies only when that standard is adopted or elected. The stagger between high and low sampling ports is an NFPA 76 rule on that same condition. It is not an NFPA 72 default.
+
+Map owner sampling levels to FM signals with the engineer of record: Alert is supervisory and is not the double-interlock detection leg; Action or Fire 1 is the pre-alarm the company uses as leg 1. See `di-releasing.md`.
