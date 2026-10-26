@@ -14,6 +14,7 @@ from typing import Any, Callable
 from fpfa.calc_tools import REQUIRED_DI_TOOLS, SCHEMAS, ToolSession
 from fpfa.claude_client import MODEL_ID, safe_error
 from fpfa.everyday import EVERYDAY_ROLE, SPECIALIST_ROLES, assemble_system
+from fpfa.modes_loader import MODE_SLUGS, list_modes, normalize_mode
 from fpfa.roles_loader import list_roles
 from fpfa.skills_loader import list_skills
 
@@ -33,9 +34,31 @@ def fmt1(value: Any) -> str:
     return f"{float(value):.1f}"
 
 
-def system_prompt(content_root: Path) -> str:
-    """Shell and indexes from the content pack. Specialist bodies stay in ROLE.md."""
-    return assemble_system(content_root)
+def system_prompt(content_root: Path, mode: str | None = None) -> str:
+    """Shell, active mode, and indexes from the content pack.
+
+    Specialist bodies stay in ROLE.md. Other mode bodies stay in MODE.md.
+    """
+    return assemble_system(content_root, mode)
+
+
+def judgment_label_line() -> str:
+    """Designer judgment the tools did not return. Not ASSUMED and not calculated."""
+    return (
+        "Designer judgment the tools did not return: use best judgment. "
+        "Not a calculated figure."
+    )
+
+
+def label_glossary() -> str:
+    """The three figure labels, kept as different words."""
+    return (
+        "Three labels stay distinct. "
+        "Pipe gallons and t_total are calculated. "
+        "ASSUMED stays on blank trim and on the screen-limit lookup. "
+        "A value the designer types is not assumed. "
+        + judgment_label_line()
+    )
 
 
 def _blank(value: Any) -> bool:
@@ -235,7 +258,7 @@ def form_assumption_lines(trim_text: str, basis: str, content_root: Path) -> lis
         f"Screen limit: {fmt1(limit['limit_s'])} s ASSUMED from time basis {limit['limit_basis']}. "
         "This limit is a lookup, not calculated. Trip time is calculated when the zone runs."
     )
-    return [trim_line, limit_line]
+    return [trim_line, limit_line, judgment_label_line()]
 
 
 def govern_note(result: dict | None) -> str:
@@ -253,13 +276,14 @@ def govern_note(result: dict | None) -> str:
         f"Governing t_total text: {fmt1(trip['t_total_s'])}.",
         trim_assumption_text(volume),
         screen_limit_assumption_text(trip),
+        judgment_label_line(),
         "Do not replace those figures with a number you computed.",
         "A delivery time from dry_delivery_screen or di_trip_to_water is an optimistic screen, "
         "not a listed water-delivery-time calculation.",
     ])
 
 
-def template_narrative(di: dict, tools: dict[str, Any]) -> str:
+def template_narrative(di: dict, tools: dict[str, Any], basis: dict | None = None) -> str:
     volume = tools["zone_trapped_volume"]
     screen = tools["dry_delivery_screen"]
     trip = tools["di_trip_to_water"]
@@ -273,13 +297,13 @@ def template_narrative(di: dict, tools: dict[str, Any]) -> str:
     family = trim.get("family") or "unresolved"
     manual = "on" if truth["manual_station"] else "off"
     user_hose = _float(di.get("hose_gpm") or 0, "Hose")
-    return "\n".join([
+    lines = [
         (
             f"Zone {di.get('zone_id') or '(unnumbered)'} double-interlock preaction. "
             "Draft for the engineer of record."
         ),
         (
-            f"Trapped volume is {fmt1(volume['pipe_gal'])} gal of pipe, "
+            f"Trapped volume is {fmt1(volume['pipe_gal'])} gal of pipe (calculated), "
             f"{fmt1(volume['fittings_gal'])} gal fittings allowance "
             f"({volume['fittings_percent']:g}%), and {trim_assumption_text(volume)}. "
             f"Zone total is {fmt1(volume['zone_gal'])} gal."
@@ -314,7 +338,14 @@ def template_narrative(di: dict, tools: dict[str, Any]) -> str:
             f"(range {hose['duration_range_min'][0]:g}–{hose['duration_range_min'][1]:g}). "
             f"Designer hose is {user_hose:g} gpm."
         ),
-    ])
+    ]
+    if str((basis or {}).get("hazard_notes") or "").strip():
+        lines.append(
+            "Hazard notes are a designer judgment the tools did not return. "
+            "Label: use best judgment."
+        )
+    lines.append(judgment_label_line())
+    return "\n".join(lines)
 
 
 def narrative_checks(text: str, tools: dict[str, Any]) -> dict[str, Any]:
@@ -344,6 +375,7 @@ def _flags(di: dict, tools: dict[str, Any], extra: list[str]) -> list[str]:
     elif not trip["passes_screen"]:
         flags.append("Zone-total delivery screen does not pass.")
     flags.append("Delivery times are an optimistic screen, not a listed water-delivery-time calculation.")
+    flags.append(judgment_label_line())
     user_hose = float(di.get("hose_gpm") or 0)
     table_hose = float(tools["hose_duration"]["hose_total_gpm"])
     if abs(user_hose - table_hose) > 0.01:
@@ -363,6 +395,7 @@ def _user_message(
     basis: dict,
     tools: dict[str, Any],
     plan_inputs: dict[str, dict],
+    mode: str,
 ) -> str:
     """Ask Claude to quote the tool plan. The plan already ran; its figures govern."""
     known = {item["slug"] for item in list_skills(content_root)}
@@ -379,12 +412,15 @@ def _user_message(
     }
     return (
         "The tool plan on this form already ran in the app. Those figures govern the tables and the export.\n"
+        f"Active mode: {mode}. Apply that mode file.\n"
         f"The draft must contain the exact text {governing['zone_gal_text']} and {governing['t_total_s_text']}.\n"
         "Pipe gallons and t_total are calculated. "
         "If the notes below say ASSUMED for trim or the screen limit, write ASSUMED next to that figure. "
-        "Do not describe an ASSUMED value as calculated.\n"
+        "Do not describe an ASSUMED value as calculated. "
+        "A designer judgment the tools did not return is use best judgment, not ASSUMED and not calculated.\n"
         "Read a listed role with read_role before you answer as that specialist. "
         "Read a listed skill with read_skill when you apply that method. "
+        "Read a listed mode with read_mode before you apply a different mode. "
         "You can call several tools in one reply. "
         "If you call a calc tool, use tool_plan_inputs. Do not invent gallons, seconds, gpm, or scfm.\n\n"
         + json.dumps(
@@ -410,11 +446,13 @@ def run_di_zone(
     di: dict,
     basis: dict | None = None,
     narrator: Narrator | None = None,
+    mode: str | None = None,
 ) -> dict[str, Any]:
     basis = dict(basis or {})
+    selected = normalize_mode(mode)
     session = ToolSession(content_root)
     tools, sent = run_tool_plan(session, di, basis)
-    template = template_narrative(di, tools)
+    template = template_narrative(di, tools, basis)
     transcript = _plan_transcript(tools, sent)
     warnings: list[str] = []
     narrative = template
@@ -428,12 +466,18 @@ def run_di_zone(
     missing_roles = [slug for slug in (EVERYDAY_ROLE, *SPECIALIST_ROLES) if slug not in known_roles]
     if missing_roles:
         warnings.append("Content pack is missing roles: " + ", ".join(missing_roles))
+    known_modes = {item["slug"] for item in list_modes(content_root)}
+    missing_modes = [slug for slug in MODE_SLUGS if slug not in known_modes]
+    if selected not in known_modes and selected not in missing_modes:
+        missing_modes.append(selected)
+    if missing_modes:
+        warnings.append("Content pack is missing modes: " + ", ".join(missing_modes))
     if narrator is not None:
         model = MODEL_ID
         try:
             drafted = narrator(
-                system_prompt(content_root),
-                _user_message(content_root, di, basis, tools, sent),
+                system_prompt(content_root, selected),
+                _user_message(content_root, di, basis, tools, sent, selected),
                 SCHEMAS,
                 session.execute,
             )
@@ -483,6 +527,7 @@ def run_di_zone(
         "flags": _flags(di, tools, warnings),
         "inputs": di,
         "basis": basis,
+        "mode": selected,
     }
 
 

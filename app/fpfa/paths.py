@@ -50,7 +50,7 @@ def write_config(updates: dict) -> dict:
 def content_root() -> Path:
     """Repo checkout, FPFA_CONTENT_ROOT, or the folder saved in Settings.
 
-    A content pack has the same top-level layout: skills/, calcs/, corpus/, specs/.
+    A content pack has the same top-level layout: skills/, roles/, modes/, calcs/, corpus/, specs/.
     """
     candidates = []
     env = os.environ.get("FPFA_CONTENT_ROOT")

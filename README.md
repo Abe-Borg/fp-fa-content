@@ -10,7 +10,7 @@ Python, because the calc kernel that already exists is Python and the other desi
 
 The model is Claude Opus 5.5, model id `claude-opus-5-5`, called with the Anthropic Messages API and each user's own API key. That id is the one published on the Claude platform models page for Claude Opus 5.5. The client does not send `temperature`, `top_p`, or `top_k`. It does not disable adaptive thinking, and it does not force `tool_choice` (this model rejects a forced tool).
 
-The everyday path is how a typed question is answered. It loads the shell from `roles/everyday/ROLE.md` and lists the other specialist roles in `roles/<slug>/ROLE.md`. The model reads a specialist with `read_role` and a method with `read_skill` (`skills/<slug>/SKILL.md`). Those files stay in the content pack. Calc tools still run in `calcs/` through the same tool loop. The fixed tool plan in `app/fpfa/workflow.py` still fills the tables and the docx when a narrative disagrees. This path does not add another model vendor, and it does not send the skills to a hosted container runtime.
+The everyday path is how a typed question is answered. It loads the shell from `roles/everyday/ROLE.md` and lists the other specialist roles in `roles/<slug>/ROLE.md`. The model reads a specialist with `read_role` and a method with `read_skill` (`skills/<slug>/SKILL.md`). The Mode menu points at `modes/<slug>/MODE.md` the same way: brainstorm, calculator, synthesis, and mixed. The active mode file is the behavior for that reply. The model reads another mode with `read_mode`. Those files stay in the content pack. Calc tools still run in `calcs/` through the same tool loop. The fixed tool plan in `app/fpfa/workflow.py` still fills the tables and the docx when a narrative disagrees. This path does not add another model vendor, and it does not send the skills to a hosted container runtime.
 
 Deterministic math is never left to the model. The double-interlock screen runs a fixed tool plan on the form. Claude may call the same tools and write the narrative. If that narrative does not quote the tool-plan volume and delivery time, the draft keeps the tool-plan figures. A delivery time from these tools is an optimistic screen. It is not a listed water-delivery-time calculation.
 
@@ -39,10 +39,10 @@ The chat thread is the main pane. You can type a question without filling in the
 - `/run` runs whatever is on the optional zone form.
 - `/new Job name` opens a job. `/help` lists the composer commands.
 - **Settings** and **Export 21 13 19** stay as buttons. Export still needs a finished zone run. The draft section is 21 13 19.
-- A normal message, with a key saved, uses the everyday path and includes the earlier turns in that project. The window does not wait on the call. The reply is written into the thread when it arrives. The path can read a specialist role and a skill, and it can call the calc tools. If a tool plan has already run, the request repeats those governing figures. The chat reply does not replace the tables or the export. Ask Claude after the tool plan is the checkbox on `/sample-di` and `/run`. Numbers in the tables and the export stay on the tool plan either way.
+- A normal message, with a key saved, uses the everyday path and includes the earlier turns in that project. The window does not wait on the call. The reply is written into the thread when it arrives. The path can read a specialist role, a mode, and a skill, and it can call the calc tools. The Mode menu (or `/mode`) chooses brainstorm, calculator, synthesis, or mixed. If a tool plan has already run, the request repeats those governing figures. The chat reply does not replace the tables or the export. Ask Claude after the tool plan is the checkbox on `/sample-di` and `/run`. Numbers in the tables and the export stay on the tool plan either way.
 - Projects are listed beside the thread. New and Delete manage those files. Ctrl+S saves the open job, and closing the window saves it too. A first `/run`, `/help`, or chat message keeps whatever is already on the optional form. The sample zone is generic. It is not a constructed building.
 
-Blank trim (5 gal) and the screen-limit seconds are labeled ASSUMED on the optional form, in the thread after a run, in the results panel, and in the export. Pipe gallons and trip time are calculated. A delivery time from these tools is an optimistic screen. It is not a listed water-delivery-time calculation.
+Blank trim (5 gal) and the screen-limit seconds are labeled ASSUMED on the optional form, in the thread after a run, in the results panel, and in the export. Pipe gallons and trip time are calculated. A value the designer types is not assumed. A designer judgment the tools did not return is labeled use best judgment. That label is not ASSUMED and it is not a calculated figure. A delivery time from these tools is an optimistic screen. It is not a listed water-delivery-time calculation.
 
 Check key in Settings calls the models endpoint for `claude-opus-5-5` and does not generate text.
 
@@ -68,6 +68,7 @@ py -m unittest discover -s tests
 | `app/` | Desktop application |
 | `skills/<slug>/SKILL.md` | Design methods the model must read |
 | `roles/<slug>/ROLE.md` | Specialist role prompts. `everyday` is the chat shell |
+| `modes/<slug>/MODE.md` | Everyday-path modes: brainstorm, calculator, synthesis, mixed |
 | `calcs/fp` | Fire-protection formulas, shop pipe IDs, DI zone screens |
 | `calcs/fa` | Fire-alarm calculation libraries |
 | `specs/` | Optional master-spec markdown (README is not treated as a spec) |
@@ -75,4 +76,4 @@ py -m unittest discover -s tests
 
 ## Not in this prototype
 
-No installer. No second model vendor. No foam, clean agent, mist, deluge, or single-interlock design path (those inputs return an RFI and stop). Wet and dry can be named on the form; the finished vertical workflow is the double-interlock zone. There is no multi-job inbox yet. A short Ask Claude returns to the window immediately; ordering of long overlapping jobs is later work. Brainstorm, calculator, and synthesis are not separate modes yet. The everyday path stays one role until that step.
+No installer. No second model vendor. No foam, clean agent, mist, deluge, or single-interlock design path (those inputs return an RFI and stop). Wet and dry can be named on the form; the finished vertical workflow is the double-interlock zone. There is no multi-job inbox yet. A short Ask Claude returns to the window immediately. Ordering of long overlapping jobs, and labeling results that finish out of order, is later work.

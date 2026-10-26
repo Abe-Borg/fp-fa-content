@@ -559,7 +559,7 @@ class KeyAndSkillTests(unittest.TestCase):
             r"\bAbe\b|DC FP Lead|stay dark|Hyperion|Abraham|\bNovva\b|NEEDS PE REVIEW|/workspace/"
         )
         hits = []
-        for folder in (REPO / "skills", REPO / "calcs", REPO / "roles"):
+        for folder in (REPO / "skills", REPO / "calcs", REPO / "roles", REPO / "modes"):
             for path in folder.rglob("*"):
                 if path.suffix.lower() not in {".py", ".md"} or "__pycache__" in path.parts:
                     continue
@@ -578,9 +578,10 @@ class KeyAndSkillTests(unittest.TestCase):
             self.assertNotIn(banned, text, path.name)
             if path.name == "spec_docx.py":
                 self.assertIn("21 13 19", text)
-        for path in (REPO / "roles").rglob("*.md"):
-            text = path.read_text(encoding="utf-8")
-            self.assertNotIn(banned, text, path.name)
+        for folder in (REPO / "roles", REPO / "modes"):
+            for path in folder.rglob("*.md"):
+                text = path.read_text(encoding="utf-8")
+                self.assertNotIn(banned, text, path.name)
 
 
 class EverydayPathTests(unittest.TestCase):
@@ -633,11 +634,23 @@ class EverydayPathTests(unittest.TestCase):
         self.assertIn("sprinkler-system-volume-takeoff", system)
         self.assertNotIn(body_only, system)
         self.assertNotIn(releasing, system)
+        mode_rule = "Call list_modes and read_mode before you apply a different mode."
+        mixed_body = "This mode may explore an option, quote a calc tool, and draft in the same reply."
+        calculator_body = "This mode answers with tool figures."
+        self.assertIn(mode_rule, everyday)
+        self.assertIn(mode_rule, system)
+        self.assertIn(mixed_body, system)
+        self.assertIn("- calculator:", system)
+        self.assertNotIn(calculator_body, system)
+        self.assertIn("use best judgment", system)
         for path in (REPO / "app" / "fpfa").rglob("*.py"):
             text = path.read_text(encoding="utf-8")
             self.assertNotIn(marker, text, path.name)
+            self.assertNotIn(mode_rule, text, path.name)
             self.assertNotIn(body_only, text, path.name)
             self.assertNotIn(releasing, text, path.name)
+            self.assertNotIn(mixed_body, text, path.name)
+            self.assertNotIn(calculator_body, text, path.name)
         self.assertNotIn("SYSTEM_PROMPT", (REPO / "app" / "fpfa" / "claude_client.py").read_text(encoding="utf-8"))
 
     def test_changed_role_file_is_what_the_prompt_uses(self):
@@ -660,11 +673,29 @@ class EverydayPathTests(unittest.TestCase):
                 "SPECIALIST-BODY-NOT-INLINED\n",
                 encoding="utf-8",
             )
+            mixed = root / "modes" / "mixed"
+            mixed.mkdir(parents=True)
+            (mixed / "MODE.md").write_text(
+                "---\nname: Mixed\ndescription: everyday mix\n---\n\nMODE-SENTENCE from the pack.\n",
+                encoding="utf-8",
+            )
+            brainstorm = root / "modes" / "brainstorm"
+            brainstorm.mkdir()
+            (brainstorm / "MODE.md").write_text(
+                "---\nname: Brainstorm\ndescription: explore options\n---\n\n"
+                "BRAINSTORM-BODY-NOT-INLINED\n",
+                encoding="utf-8",
+            )
+            (root / "modes" / "README.md").write_text("guide, not a mode\n", encoding="utf-8")
             system = assemble_system(root)
             self.assertIn("SHELL-SENTENCE about ASSUMED trim.", system)
+            self.assertIn("MODE-SENTENCE from the pack.", system)
             self.assertIn("fp-sprinkler", system)
             self.assertIn("sprinkler specialist for wet dry and DI", system)
+            self.assertIn("- brainstorm:", system)
+            self.assertIn("explore options", system)
             self.assertNotIn("SPECIALIST-BODY-NOT-INLINED", system)
+            self.assertNotIn("BRAINSTORM-BODY-NOT-INLINED", system)
             self.assertIn("SPECIALIST-BODY-NOT-INLINED", read_role(root, "fp-sprinkler"))
             (root / "roles" / "everyday" / "ROLE.md").unlink()
             with self.assertRaises(FileNotFoundError):
@@ -761,6 +792,162 @@ class EverydayPathTests(unittest.TestCase):
         self.assertTrue(any("missing roles" in item for item in flagged["warnings"]))
         self.assertEqual(flagged["source"], "tool-plan")
         self.assertIn("281.3", flagged["narrative"])
+
+
+class ModeBehaviorTests(unittest.TestCase):
+    def setUp(self):
+        _isolate_data()
+        from fpfa.paths import content_root
+
+        self.root = content_root()
+
+    def test_modes_load_like_roles(self):
+        from fpfa.modes_loader import list_modes, read_mode
+
+        slugs = [item["slug"] for item in list_modes(self.root)]
+        self.assertEqual(slugs, ["brainstorm", "calculator", "mixed", "synthesis"])
+        text = read_mode(self.root, "Calculator")
+        self.assertIn("This mode answers with tool figures.", text)
+        self.assertIn("use best judgment", text)
+        self.assertIn("ASSUMED", text)
+        with self.assertRaises(ValueError):
+            read_mode(self.root, "../roles/everyday/ROLE.md")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            folder = root / "modes" / "calculator"
+            folder.mkdir(parents=True)
+            (folder / "MODE.md").write_text(
+                "---\nname: Calculator\ndescription: quote the tools\n---\n\nBODY-MARKER\n",
+                encoding="utf-8",
+            )
+            (root / "modes" / "README.md").write_text("guide, not a mode\n", encoding="utf-8")
+            found = list_modes(root)
+            self.assertEqual([item["slug"] for item in found], ["calculator"])
+            self.assertEqual(found[0]["description"], "quote the tools")
+            self.assertIn("BODY-MARKER", read_mode(root, "calculator"))
+
+    def test_active_mode_file_is_what_the_prompt_uses(self):
+        from fpfa.everyday import assemble_system, run_everyday
+        from fpfa.modes_loader import read_mode
+
+        calculator = assemble_system(self.root, "calculator")
+        brainstorm = assemble_system(self.root, "brainstorm")
+        self.assertIn("This mode answers with tool figures.", calculator)
+        self.assertNotIn("This mode explores options.", calculator)
+        self.assertIn("This mode explores options.", brainstorm)
+        self.assertNotIn("This mode answers with tool figures.", brainstorm)
+        self.assertIn("- mixed:", calculator)
+        self.assertEqual(calculator, assemble_system(self.root, "CALCULATOR"))
+        self.assertIn(read_mode(self.root, "synthesis"), assemble_system(self.root, "synthesis"))
+        for path in (REPO / "app" / "fpfa").rglob("*.py"):
+            text = path.read_text(encoding="utf-8")
+            self.assertNotIn("This mode explores options.", text, path.name)
+            self.assertNotIn("This mode writes the draft narrative after a zone tool plan.", text, path.name)
+
+    def test_everyday_loop_can_read_a_mode(self):
+        from fpfa.claude_client import MODEL_ID
+        from fpfa.everyday import run_everyday
+
+        class Block:
+            def __init__(self, **kwargs):
+                self.__dict__.update(kwargs)
+
+            def model_dump(self, exclude_none=True):
+                return {key: value for key, value in self.__dict__.items() if value is not None}
+
+        script = [
+            SimpleNamespace(stop_reason="tool_use", content=[
+                Block(type="tool_use", id="toolu_mode", name="read_mode", input={"slug": "brainstorm"}),
+            ]),
+            SimpleNamespace(stop_reason="end_turn", content=[
+                Block(type="text", text="Two options. The open point is use best judgment."),
+            ]),
+        ]
+        seen = []
+
+        def create(**kwargs):
+            seen.append(kwargs)
+            return script[len(seen) - 1]
+
+        out = run_everyday(self.root, create, "Talk through the trim choice.", mode="brainstorm")
+        self.assertEqual(seen[0]["model"], MODEL_ID)
+        self.assertNotIn("tool_choice", seen[0])
+        self.assertNotIn("temperature", seen[0])
+        self.assertNotIn("top_p", seen[0])
+        self.assertNotIn("top_k", seen[0])
+        self.assertNotIn("thinking", seen[0])
+        self.assertIn("This mode explores options.", seen[0]["system"])
+        self.assertNotIn("This mode answers with tool figures.", seen[0]["system"])
+        names = [tool["name"] for tool in seen[0]["tools"]]
+        self.assertIn("read_mode", names)
+        self.assertIn("read_role", names)
+        self.assertIn("zone_trapped_volume", names)
+        self.assertEqual(out["tool_calls"][0]["name"], "read_mode")
+        self.assertIn("This mode explores options.", out["tool_calls"][0]["output"]["text"])
+
+    def test_labels_stay_distinct(self):
+        from fpfa.sample_data import EXAMPLE_BASIS, EXAMPLE_DI
+        from fpfa.ui import chat_request_text, describe_modes
+        from fpfa.workflow import (
+            form_assumption_lines,
+            judgment_label_line,
+            label_glossary,
+            run_di_zone,
+            trim_assumption_text,
+        )
+
+        glossary = label_glossary()
+        judgment = judgment_label_line()
+        self.assertIn("calculated", glossary)
+        self.assertIn("ASSUMED", glossary)
+        self.assertIn("use best judgment", glossary)
+        self.assertIn("use best judgment", judgment)
+        self.assertNotIn("ASSUMED", judgment)
+        blank = trim_assumption_text({"trim_gal": 5, "trim_assumed": True})
+        typed = trim_assumption_text({"trim_gal": 10, "trim_assumed": False})
+        self.assertIn("ASSUMED", blank)
+        self.assertNotIn("use best judgment", blank)
+        self.assertIn("not assumed", typed)
+        self.assertNotIn("ASSUMED", typed)
+        self.assertNotIn("use best judgment", typed)
+        lines = form_assumption_lines("12", "FM", self.root)
+        joined = "\n".join(lines)
+        self.assertIn("12 gal entered on the form. Not assumed.", joined)
+        self.assertIn("30.0 s ASSUMED from time basis FM", joined)
+        self.assertIn(judgment, joined)
+        screen = next(line for line in lines if line.startswith("Screen limit"))
+        trim = next(line for line in lines if line.startswith("Trim:"))
+        self.assertNotIn("use best judgment", screen)
+        self.assertNotIn("use best judgment", trim)
+        result = run_di_zone(self.root, EXAMPLE_DI, EXAMPLE_BASIS, mode="calculator")
+        self.assertEqual(result["mode"], "calculator")
+        self.assertIn("gal of pipe (calculated)", result["narrative"])
+        self.assertIn("t_total 38.1 s is calculated.", result["narrative"])
+        self.assertIn("5.0 gal trim ASSUMED", result["narrative"])
+        self.assertIn("use best judgment", result["narrative"])
+        self.assertIn(judgment, result["flags"])
+        self.assertFalse(any("missing modes" in item for item in result["warnings"]))
+        request = chat_request_text([], {"insurer": "FM"}, {"zone_id": "DH-1"}, "hello", result, "synthesis")
+        self.assertIn("Active mode: synthesis.", request)
+        self.assertIn("Governing zone total text: 281.3.", request)
+        self.assertIn(judgment, request)
+        described = describe_modes(self.root, "mixed")
+        self.assertIn("Active mode: mixed.", described)
+        self.assertIn("brainstorm", described)
+        self.assertIn("(active)", described)
+        self.assertNotIn("This mode may explore an option", described)
+
+    def test_missing_mode_does_not_replace_the_tool_plan(self):
+        from unittest.mock import patch
+
+        from fpfa.sample_data import EXAMPLE_BASIS, EXAMPLE_DI
+        from fpfa.workflow import run_di_zone
+
+        with patch("fpfa.workflow.list_modes", return_value=[]):
+            result = run_di_zone(self.root, EXAMPLE_DI, EXAMPLE_BASIS, mode="calculator")
+        self.assertEqual(result["source"], "tool-plan")
+        self.assertIn("281.3", result["narrative"])
+        self.assertTrue(any("missing modes" in item for item in result["warnings"]))
 
 
 class UiSmokeTests(unittest.TestCase):
@@ -934,9 +1121,71 @@ class UiSmokeTests(unittest.TestCase):
             self.assertIn("Settings", labels)
             self.assertIn(f"Export {DRAFT_SECTION}", labels)
             self.assertIn("Sample DI", labels)
+            self.assertEqual(app.mode_slug.get(), "mixed")
+            self.assertIn("calculator", app.mode_box["values"])
+            self.assertIn("brainstorm", app.mode_box["values"])
+            self.assertIn("synthesis", app.mode_box["values"])
             self.assertNotIn("Run DI zone", labels)
             self.assertNotIn("Sample DI job", labels)
             self.assertEqual(app.chat_entry.focus_get(), app.chat_entry)
+        finally:
+            root.destroy()
+
+    def test_mode_menu_is_saved_and_shapes_the_request(self):
+        if not os.environ.get("DISPLAY"):
+            self.skipTest("no display")
+        _isolate_data()
+        import tkinter as tk
+        from types import SimpleNamespace
+        from unittest.mock import patch
+
+        from fpfa.keystore import save_api_key
+        from fpfa.projects import load_project, new_project, save_project
+        from fpfa.ui import App
+
+        save_api_key("sk-ant-local-test")
+        seen = []
+
+        class Fast:
+            def __init__(self, _key):
+                pass
+
+            def create(self, **kwargs):
+                seen.append(kwargs)
+                return SimpleNamespace(
+                    stop_reason="end_turn",
+                    content=[SimpleNamespace(type="text", text="Calculator quote only.")],
+                )
+
+        root = tk.Tk()
+        try:
+            app = App(root)
+            root.update()
+            app.chat_entry.insert(0, "/mode calculator")
+            app.send_chat()
+            self.assertEqual(app.mode_slug.get(), "calculator")
+            self.assertIn("Active mode: calculator.", app.chat_view.get("1.0", "end"))
+            self.assertNotIn("This mode answers with tool figures.", app.chat_view.get("1.0", "end"))
+            self.assertEqual(app.project["mode"], "calculator")
+            self.assertEqual(load_project(app.project["id"])["mode"], "calculator")
+            other = new_project("Other mode job")
+            other["mode"] = "brainstorm"
+            save_project(other)
+            app.open_project(other["id"])
+            self.assertEqual(app.mode_slug.get(), "brainstorm")
+            app.open_project(load_project(app.project["id"])["id"])
+            with patch("fpfa.ui.AnthropicMessages", Fast):
+                app.mode_slug.set("synthesis")
+                app.chat_entry.insert(0, "draft the zone")
+                app.send_chat()
+                self._wait_for(app, "Calculator quote only.")
+            self.assertIn("Active mode: synthesis.", seen[0]["messages"][0]["content"])
+            self.assertIn(
+                "This mode writes the draft narrative after a zone tool plan.",
+                seen[0]["system"],
+            )
+            self.assertNotIn("This mode explores options.", seen[0]["system"])
+            self.assertEqual(app.project["mode"], "synthesis")
         finally:
             root.destroy()
 
@@ -1138,6 +1387,8 @@ class UiSmokeTests(unittest.TestCase):
             for name in (
                 "read_role",
                 "read_skill",
+                "read_mode",
+                "list_modes",
                 "zone_trapped_volume",
                 "dry_delivery_screen",
                 "di_trip_to_water",
@@ -1145,6 +1396,8 @@ class UiSmokeTests(unittest.TestCase):
                 "releasing_truth_table",
             ):
                 self.assertIn(name, names)
+            self.assertIn("Active mode: mixed.", seen[0])
+            self.assertIn("This mode may explore an option, quote a calc tool, and draft in the same reply.", seen_meta[0]["system"])
         finally:
             root.destroy()
 

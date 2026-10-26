@@ -21,6 +21,7 @@ from fpfa.calc_tools import ToolSession
 from fpfa.claude_client import MODEL_ID, AnthropicMessages, run_tool_loop, safe_error
 from fpfa.everyday import run_everyday
 from fpfa.keystore import clear_api_key, key_status, key_storage_help, load_api_key, save_api_key
+from fpfa.modes_loader import DEFAULT_MODE, MODE_SLUGS, list_modes, normalize_mode
 from fpfa.paths import content_root, read_config, write_config
 from fpfa.projects import delete_project, list_projects, load_project, new_project, save_project
 from fpfa.spec_docx import DRAFT_SECTION, write_docx
@@ -28,6 +29,7 @@ from fpfa.workflow import (
     form_assumption_lines,
     format_transcript,
     govern_note,
+    judgment_label_line,
     run_di_zone,
     screen_limit_assumption_text,
     trim_assumption_text,
@@ -57,13 +59,17 @@ def chat_request_text(
     di: dict,
     latest: str,
     last_run: dict | None = None,
+    mode: str | None = None,
 ) -> str:
     """Everyday-path request. A finished tool plan is repeated so chat cannot replace it."""
     text = format_chat_request(prior_turns, basis, di, latest)
+    slug = normalize_mode(mode)
+    head = f"Active mode: {slug}."
     note = govern_note(last_run)
+    parts = [head, text]
     if note:
-        return text + "\n\n" + note
-    return text
+        parts.append(note)
+    return "\n\n".join(parts)
 
 
 _SLASH_ALIASES = {
@@ -80,8 +86,11 @@ THREAD_HINT = (
     "Settings holds your Anthropic key. Export writes draft Section 21 13 19 after a run.\n"
     "Blank trim and the screen-limit seconds stay labeled ASSUMED. "
     "Pipe gallons and trip time come from the calc tools.\n"
-    "A typed question uses the everyday path. Specialist roles and skills are files "
-    "in the content pack, and numbers come from the calc tools."
+    "A typed question uses the everyday path. Specialist roles, modes, and skills are files "
+    "in the content pack, and numbers come from the calc tools.\n"
+    "The Mode menu points at modes/<slug>/MODE.md "
+    "(brainstorm, calculator, synthesis, mixed). "
+    "Calculated, ASSUMED, and use best judgment stay three different labels."
 )
 
 
@@ -112,11 +121,33 @@ def slash_help_text() -> str:
         "Ctrl+S saves the open job. Closing the window saves it too.\n"
         "Settings holds your Anthropic key. Export writes draft Section "
         f"{DRAFT_SECTION} after a run.\n"
+        "/mode — show the active mode\n"
+        "/mode brainstorm — use that mode file (also calculator, synthesis, mixed)\n"
         "Blank trim and the screen-limit seconds stay labeled ASSUMED. "
         "Pipe gallons and trip time come from the calc tools.\n"
-        "A typed question uses the everyday path. Specialist roles and skills are files "
+        "A designer judgment the tools did not return is use best judgment. "
+        "That label is not ASSUMED and it is not a calculated figure.\n"
+        "A typed question uses the everyday path. Specialist roles, modes, and skills are files "
         "in the content pack, and numbers come from the calc tools."
     )
+
+
+def describe_modes(root: Path, active: str) -> str:
+    """Active mode plus the descriptions stored on each MODE.md."""
+    slug = normalize_mode(active)
+    lines = [
+        f"Active mode: {slug}.",
+        "Mode files live in the content pack as modes/<slug>/MODE.md.",
+    ]
+    found = list_modes(root)
+    if not found:
+        lines.append("This content pack has no mode files.")
+    for item in found:
+        mark = " (active)" if item["slug"] == slug else ""
+        description = item["description"] or item["name"]
+        lines.append(f"- {item['slug']}: {description}{mark}")
+    lines.append("Usage: /mode brainstorm")
+    return "\n".join(lines)
 
 
 def unknown_slash_text(command: str) -> str:
@@ -138,6 +169,9 @@ def chat_run_summary(result: dict) -> str:
         limit_line = screen_limit_assumption_text(trip)
         if limit_line and limit_line not in narrative:
             extras.append(limit_line)
+    judgment = judgment_label_line()
+    if judgment not in narrative:
+        extras.append(judgment)
     extras.append(f"Figures are from the tool plan. Draft export is Section {DRAFT_SECTION}.")
     return "\n\n".join(part for part in (narrative, *extras) if part)
 
@@ -347,6 +381,7 @@ class App:
             lines = [
                 trim_line,
                 "Screen limit: ASSUMED from the time basis lookup, not calculated. " + safe_error(exc),
+                judgment_label_line(),
             ]
         self.assumption_text.set("\n".join(lines))
 
@@ -480,7 +515,8 @@ class App:
                 "Blank schedule uses the shop default (branch and under 2 in = sch 40, mains and cross 2 in and up = sch 10). "
                 "The ID comes from the calc pack. Blank fittings follow the length basis. "
                 "Blank trim is ASSUMED 5 gal (no valve data sheet), not calculated. "
-                "The screen-limit seconds are ASSUMED from the time basis lookup, not calculated."
+                "The screen-limit seconds are ASSUMED from the time basis lookup, not calculated. "
+                "A judgment the tools did not return is use best judgment, not ASSUMED and not calculated."
             ),
             wraplength=720,
         ).pack(anchor="w")
@@ -494,6 +530,7 @@ class App:
                 "Figures in this view come from the tool plan on the form. "
                 "Pipe gallons and t_total are calculated. "
                 "Blank trim and the screen-limit seconds are marked ASSUMED. "
+                "A judgment the tools did not return is use best judgment. "
                 "A delivery time here is an optimistic screen, not a listed water-delivery-time calculation."
             ),
             wraplength=900,
@@ -521,7 +558,17 @@ class App:
         self.chat_view.pack(side="left", fill="both", expand=True)
         self.sample_di_button = ttk.Button(chips, text="Sample DI", command=self.start_sample_di)
         self.sample_di_button.pack(side="left")
-        ttk.Label(chips, text="/sample-di    /run    /help").pack(side="left", padx=8)
+        ttk.Label(chips, text="Mode").pack(side="left", padx=(12, 4))
+        self.mode_slug = tk.StringVar(value=DEFAULT_MODE)
+        self.mode_box = ttk.Combobox(
+            chips,
+            textvariable=self.mode_slug,
+            width=12,
+            state="readonly",
+        )
+        self.mode_box.pack(side="left")
+        self._apply_mode(DEFAULT_MODE)
+        ttk.Label(chips, text="/sample-di    /run    /mode    /help").pack(side="left", padx=8)
         self.ask_claude = tk.BooleanVar(value=False)
         ttk.Checkbutton(
             chips,
@@ -605,6 +652,22 @@ class App:
         self.chat_log = list(project.get("chat") or [])
         self._render_chat()
         self._show_saved_run(project.get("last_run"))
+        self._apply_mode(project.get("mode"))
+
+    def _known_modes(self) -> list[str]:
+        try:
+            found = [item["slug"] for item in list_modes(content_root())]
+        except FileNotFoundError:
+            found = []
+        return found or list(MODE_SLUGS)
+
+    def _apply_mode(self, slug: str | None) -> None:
+        known = self._known_modes()
+        self.mode_box["values"] = known
+        chosen = normalize_mode(slug)
+        if chosen not in known:
+            chosen = DEFAULT_MODE if DEFAULT_MODE in known else known[0]
+        self.mode_slug.set(chosen)
 
     def _apply_di(self, di: dict) -> None:
         self.zone_id.set(di.get("zone_id") or "")
@@ -726,6 +789,7 @@ class App:
         project["basis"] = self.collect_basis()
         project["di"] = self.collect_di()
         project["chat"] = self.chat_log
+        project["mode"] = self.mode_slug.get() or DEFAULT_MODE
 
     def _capture_form(self, project: dict) -> str | None:
         """Copy the widgets onto project. A bad number does not drop the chat."""
@@ -759,6 +823,8 @@ class App:
             self._capture_form(self.project)
             save_project(self.project)
             project = new_project(name)
+            project["mode"] = self.mode_slug.get() or DEFAULT_MODE
+            save_project(project)
             self.refresh_projects(project["id"])
             self.open_project(project["id"])
             return
@@ -792,6 +858,7 @@ class App:
             save_project(self.project)
         project = new_project("Sample data hall DI zone", copy.deepcopy(sample_data.EXAMPLE_BASIS))
         project["di"] = copy.deepcopy(sample_data.EXAMPLE_DI)
+        project["mode"] = self.mode_slug.get() or DEFAULT_MODE
         save_project(project)
         self.refresh_projects(project["id"])
         self.open_project(project["id"])
@@ -861,8 +928,33 @@ class App:
             self._slash_new(raw, argument)
         elif command == "help":
             self._local_exchange(raw, slash_help_text())
+        elif command == "mode":
+            self._slash_mode(raw, argument)
         else:
             self._local_exchange(raw, unknown_slash_text(command))
+
+    def _slash_mode(self, raw: str, argument: str) -> None:
+        argument = argument.strip().lower()
+        if not argument:
+            try:
+                reply = describe_modes(content_root(), self.mode_slug.get())
+            except FileNotFoundError as exc:
+                reply = str(exc)
+            self._local_exchange(raw, reply)
+            return
+        known = self._known_modes()
+        if argument not in known:
+            self._local_exchange(
+                raw,
+                f"No mode {argument}. Known modes: {', '.join(known) or '(none)'}.",
+            )
+            return
+        self._apply_mode(argument)
+        try:
+            reply = describe_modes(content_root(), argument)
+        except FileNotFoundError as exc:
+            reply = str(exc)
+        self._local_exchange(raw, reply)
 
     def delete_job(self) -> None:
         project_id = self._selected_id()
@@ -922,6 +1014,7 @@ class App:
             return
         di = copy.deepcopy(self.project["di"])
         basis = copy.deepcopy(self.project["basis"])
+        mode = self.mode_slug.get()
         try:
             root = content_root()
         except FileNotFoundError as exc:
@@ -961,7 +1054,7 @@ class App:
 
             def work():
                 try:
-                    result = run_di_zone(root, di, basis, narrator=narrator)
+                    result = run_di_zone(root, di, basis, narrator=narrator, mode=mode)
                     error = None
                 except Exception as exc:
                     result = None
@@ -971,7 +1064,7 @@ class App:
             threading.Thread(target=work, daemon=True).start()
             return
         try:
-            result = run_di_zone(root, di, basis, narrator=None)
+            result = run_di_zone(root, di, basis, narrator=None, mode=mode)
         except Exception as exc:
             self._report_run_problem(origin_id, safe_error(exc))
             return
@@ -1090,6 +1183,7 @@ class App:
             "Assumptions vs calculated",
             trim_assumption_text(volume),
             screen_limit_assumption_text(trip),
+            judgment_label_line(),
             "",
             header,
             result.get("narrative") or "",
@@ -1199,7 +1293,8 @@ class App:
                 "This message uses the last saved zone. " + str(exc)
             )
         prior = [dict(turn) for turn in self.chat_log[:-1]]
-        request = chat_request_text(prior, basis, di, text, self.project.get("last_run"))
+        mode = self.mode_slug.get()
+        request = chat_request_text(prior, basis, di, text, self.project.get("last_run"), mode)
         if form_note:
             request = form_note + "\n\n" + request
 
@@ -1207,7 +1302,7 @@ class App:
             try:
                 pack = content_root()
                 client = AnthropicMessages(key)
-                out = run_everyday(pack, client.create, request)
+                out = run_everyday(pack, client.create, request, mode=mode)
                 reply = out.get("text") or "(Claude returned no text.)"
             except Exception as exc:
                 reply = safe_error(exc)
@@ -1303,7 +1398,7 @@ class App:
 
         ttk.Label(
             frame,
-            text="Content pack folder (skills/, roles/, and calcs/ at the top level)",
+            text="Content pack folder (skills/, roles/, modes/, and calcs/ at the top level)",
         ).pack(anchor="w", pady=(16, 4))
         try:
             current = str(content_root())
