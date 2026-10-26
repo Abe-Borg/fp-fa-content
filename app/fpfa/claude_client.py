@@ -14,9 +14,12 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from typing import Any, Callable
 
 MODEL_ID = "claude-opus-5-5"
+_TRANSIENT_STATUS = {408, 409, 429, 500, 502, 503, 504, 529}
+_TRANSIENT_TYPES = {"APIConnectionError", "APITimeoutError", "RateLimitError", "InternalServerError"}
 
 
 def safe_error(exc: BaseException) -> str:
@@ -25,22 +28,26 @@ def safe_error(exc: BaseException) -> str:
     return text[:800]
 
 
+def _transient_api_error(exc: BaseException) -> bool:
+    status = getattr(exc, "status_code", None)
+    if status in _TRANSIENT_STATUS:
+        return True
+    return type(exc).__name__ in _TRANSIENT_TYPES
+
+
 def _wire_block(block: Any) -> dict:
+    """Keep thinking and redacted-thinking blocks intact for the next request."""
     if isinstance(block, dict):
-        return block
+        return dict(block)
     if hasattr(block, "model_dump"):
         return block.model_dump(exclude_none=True)
-    kind = getattr(block, "type", None)
-    data = {"type": kind}
-    if kind == "text":
-        data["text"] = getattr(block, "text", "")
-    elif kind == "tool_use":
-        data["id"] = getattr(block, "id", "")
-        data["name"] = getattr(block, "name", "")
-        data["input"] = getattr(block, "input", {}) or {}
-    elif kind == "thinking":
-        data["thinking"] = getattr(block, "thinking", "")
-        data["signature"] = getattr(block, "signature", "")
+    data = {"type": getattr(block, "type", None)}
+    for key in ("text", "id", "name", "input", "thinking", "signature", "data"):
+        if not hasattr(block, key):
+            continue
+        value = getattr(block, key)
+        if value is not None:
+            data[key] = value
     return data
 
 
@@ -62,6 +69,7 @@ def run_tool_loop(
     called: list[dict] = []
     nudges = 0
     final_text = ""
+    stop_reason = ""
     for _ in range(max_rounds):
         response = create(
             model=MODEL_ID,
@@ -70,12 +78,16 @@ def run_tool_loop(
             tools=tools,
             messages=messages,
         )
+        stop_reason = getattr(response, "stop_reason", None) or ""
         wire = [_wire_block(block) for block in response.content]
-        messages.append({"role": "assistant", "content": wire})
         uses = [block for block in wire if block.get("type") == "tool_use"]
         texts = [block.get("text", "") for block in wire if block.get("type") == "text" and block.get("text")]
         if texts:
             final_text = "\n".join(texts).strip()
+        # A max_tokens cut can leave a tool_use the API will reject on the next turn.
+        if stop_reason == "max_tokens" and uses:
+            break
+        messages.append({"role": "assistant", "content": wire})
         if uses:
             results = []
             for use in uses:
@@ -119,7 +131,12 @@ def run_tool_loop(
             })
             continue
         break
-    return {"text": final_text, "tool_calls": called, "nudges": nudges}
+    return {
+        "text": final_text,
+        "tool_calls": called,
+        "nudges": nudges,
+        "stop_reason": stop_reason,
+    }
 
 
 class AnthropicMessages:
@@ -129,7 +146,8 @@ class AnthropicMessages:
         import anthropic
 
         self.model = model
-        self._client = anthropic.Anthropic(api_key=api_key)
+        # Retries live in create() so a 429 or 529 is visible and bounded.
+        self._client = anthropic.Anthropic(api_key=api_key, timeout=300.0, max_retries=0)
 
     def create(self, **kwargs):
         kwargs.pop("temperature", None)
@@ -138,12 +156,21 @@ class AnthropicMessages:
         thinking = kwargs.get("thinking")
         if isinstance(thinking, dict) and thinking.get("type") == "disabled":
             raise ValueError("claude-opus-5-5 does not accept thinking disabled")
-        # Forced tool use errors on this model. Refuse it here too.
-        choice = kwargs.get("tool_choice")
+        # Forced tool use errors on this model. Leave the choice unset (auto).
+        choice = kwargs.pop("tool_choice", None)
         if isinstance(choice, dict) and choice.get("type") in ("any", "tool"):
             raise ValueError("claude-opus-5-5 rejects forced tool_choice; leave it on auto")
         kwargs.setdefault("model", self.model)
-        return self._client.messages.create(**kwargs)
+        delay = 1.0
+        for attempt in range(3):
+            try:
+                return self._client.messages.create(**kwargs)
+            except Exception as exc:
+                if attempt == 2 or not _transient_api_error(exc):
+                    raise
+                time.sleep(delay)
+                delay *= 2
+        raise RuntimeError("Claude request was not sent")
 
     def check_model(self) -> str:
         info = self._client.models.retrieve(self.model)
@@ -156,6 +183,8 @@ Scope you may help design: wet pipe, dry pipe, and double-interlock preaction sp
 Refuse, in a short paragraph, anything else: foam, foam-water, clean agent, water mist, deluge, single-interlock preaction, and non-interlock preaction. Do not design those systems.
 
 Math rule: gallons, seconds, gpm, psi, scfm, density demand, and the releasing truth table come from tool results. Do not compute them yourself. If a tool returns an error, say so. Quote the tool figures in your draft.
+
+Assumption rule: when a tool result or the request says a trim volume or a screen limit is ASSUMED, repeat ASSUMED next to that figure. Do not describe an ASSUMED trim gallon or an ASSUMED screen limit as calculated. Pipe gallons and t_total are calculated. The screen limit is a basis lookup unless the result says the limit is explicit.
 
 Method rule: design methods are files in the content pack. Call list_skills and read_skill for the method you apply. Do not invent a method when a skill is in the pack.
 

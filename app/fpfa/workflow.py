@@ -75,10 +75,20 @@ def _opt_float(value: Any) -> float | None:
     return float(value)
 
 
-def run_tool_plan(session: ToolSession, di: dict, basis: dict) -> dict[str, Any]:
-    """Run the zone tools in order. Later steps use earlier tool outputs."""
+def run_tool_plan(session: ToolSession, di: dict, basis: dict) -> tuple[dict[str, Any], dict[str, dict]]:
+    """Run the zone tools in order. Later steps use earlier tool outputs.
+
+    The second value is the argument dict actually passed to each tool. The
+    transcript and the Claude request advertise that dict, not a shorter copy.
+    """
     validate_di(di)
-    volume = session.execute("zone_trapped_volume", {
+    sent: dict[str, dict] = {}
+
+    def call(name: str, arguments: dict) -> Any:
+        sent[name] = arguments
+        return session.execute(name, arguments)
+
+    volume = call("zone_trapped_volume", {
         "segments": di.get("segments"),
         "length_basis": di.get("length_basis") or "center_to_center",
         "fittings_percent": _opt_float(di.get("fittings_percent")),
@@ -95,7 +105,7 @@ def run_tool_plan(session: ToolSession, di: dict, basis: dict) -> dict[str, Any]
         "t_exhaust_s": di.get("t_exhaust_s") or 0,
         "basis": di.get("delivery_basis") or "FM",
     }
-    screen = session.execute("dry_delivery_screen", {
+    screen = call("dry_delivery_screen", {
         "segments": pipe_only,
         "qod": bool(di.get("qod")),
         "system_type": di.get("system_type") or "di",
@@ -103,27 +113,27 @@ def run_tool_plan(session: ToolSession, di: dict, basis: dict) -> dict[str, Any]
     })
     # The kernel screen exempts on pipe volume. Capacity gates use the zone total.
     screen = govern_nfpa_exemption(screen, volume["zone_gal"])
-    trip = session.execute("di_trip_to_water", {
+    trip = call("di_trip_to_water", {
         "v_gal": volume["zone_gal"],
         **common_time,
     })
-    hose = session.execute("hose_duration", {
+    hose = call("hose_duration", {
         "hazard": di.get("hazard") or "ordinary",
         "supervised": bool(di.get("supervised")),
     })
-    density = session.execute("density_area", {
+    density = call("density_area", {
         "density_gpm_ft2": di.get("density_gpm_ft2"),
         "base_area_ft2": di.get("base_area_ft2"),
         "area_increase": di.get("area_increase") or 0,
         "hose_gpm": di.get("hose_gpm") or 0,
         "duration_min": hose["duration_min"],
     })
-    nitrogen = session.execute("nitrogen_gate", {
+    nitrogen = call("nitrogen_gate", {
         "v_gal": volume["zone_gal"],
         "p_psig": di.get("supervisory_psig") or 40,
         "t_min": di.get("fill_minutes") or 30,
     })
-    trim = session.execute("elect_di_trim", {
+    trim = call("elect_di_trim", {
         "system_type": di.get("system_type") or "di",
         "prime_held_by": di.get("prime_held_by") or "unknown",
         "failsafe_on_total_power_loss": bool(di.get("failsafe_on_total_power_loss")),
@@ -131,11 +141,11 @@ def run_tool_plan(session: ToolSession, di: dict, basis: dict) -> dict[str, Any]
         "medium": di.get("medium") or "unelected",
         "insurer": (basis or {}).get("insurer") or "",
     })
-    truth = session.execute("releasing_truth_table", {
+    truth = call("releasing_truth_table", {
         "manual_station": bool(di.get("manual_station", True)),
         "insurer": (basis or {}).get("insurer") or "FM",
     })
-    return {
+    tools = {
         "zone_trapped_volume": volume,
         "dry_delivery_screen": screen,
         "di_trip_to_water": trip,
@@ -145,61 +155,16 @@ def run_tool_plan(session: ToolSession, di: dict, basis: dict) -> dict[str, Any]
         "elect_di_trim": trim,
         "releasing_truth_table": truth,
     }
+    return tools, sent
 
 
-def _plan_transcript(tools: dict[str, Any], di: dict, basis: dict) -> list[dict]:
-    """Record the inputs the plan actually sent, paired with the tool output."""
-    volume_in = {
-        "segments": di.get("segments"),
-        "length_basis": di.get("length_basis") or "center_to_center",
-        "fittings_percent": _opt_float(di.get("fittings_percent")),
-        "trim_gal": _opt_float(di.get("trim_gal")),
-    }
-    recorded = {
-        "zone_trapped_volume": volume_in,
-        "dry_delivery_screen": {
-            "segments": [
-                {"d_in": row["d_in"], "length_ft": row["length_ft"]}
-                for row in tools["zone_trapped_volume"]["segments"]
-            ],
-            "q_fill_gpm": di.get("q_fill_gpm"),
-            "qod": bool(di.get("qod")),
-            "system_type": di.get("system_type") or "di",
-            "basis": di.get("delivery_basis") or "FM",
-        },
-        "di_trip_to_water": {
-            "v_gal": tools["zone_trapped_volume"]["zone_gal"],
-            "q_fill_gpm": di.get("q_fill_gpm"),
-            "basis": di.get("delivery_basis") or "FM",
-        },
-        "hose_duration": {"hazard": di.get("hazard") or "ordinary", "supervised": bool(di.get("supervised"))},
-        "density_area": {
-            "density_gpm_ft2": di.get("density_gpm_ft2"),
-            "base_area_ft2": di.get("base_area_ft2"),
-            "area_increase": di.get("area_increase") or 0,
-            "hose_gpm": di.get("hose_gpm") or 0,
-            "duration_min": tools["hose_duration"]["duration_min"],
-        },
-        "nitrogen_gate": {
-            "v_gal": tools["zone_trapped_volume"]["zone_gal"],
-            "p_psig": di.get("supervisory_psig") or 40,
-            "t_min": di.get("fill_minutes") or 30,
-        },
-        "elect_di_trim": {
-            "system_type": di.get("system_type") or "di",
-            "prime_held_by": di.get("prime_held_by") or "unknown",
-            "insurer": (basis or {}).get("insurer") or "",
-        },
-        "releasing_truth_table": {
-            "manual_station": bool(di.get("manual_station", True)),
-            "insurer": (basis or {}).get("insurer") or "FM",
-        },
-    }
+def _plan_transcript(tools: dict[str, Any], sent: dict[str, dict]) -> list[dict]:
+    """Pair each tool output with the arguments run_tool_plan actually passed."""
     calls = []
     for name, output in tools.items():
         calls.append({
             "name": name,
-            "input": recorded.get(name, {}),
+            "input": sent[name],
             "output": output,
             "is_error": False,
             "by": "tool-plan",
@@ -224,6 +189,62 @@ def govern_nfpa_exemption(screen: dict, zone_gal: float) -> dict:
     return governed
 
 
+def trim_assumption_text(volume: dict) -> str:
+    """Say whether trim gallons were typed or filled with the 5 gal assumption."""
+    if "trim_gal" not in volume:
+        return "Trim was not on this result."
+    gallons = fmt1(volume["trim_gal"])
+    if volume.get("trim_assumed"):
+        return (
+            f"{gallons} gal trim ASSUMED (blank trim; 5 gal, no valve data sheet; not calculated)"
+        )
+    return f"{gallons} gal trim (entered on the form, not assumed)"
+
+
+def screen_limit_assumption_text(trip: dict) -> str:
+    """The limit seconds are a basis lookup. t_total is the calculated trip time."""
+    if "limit_s" not in trip or "t_total_s" not in trip:
+        return "Screen limit was not on this result."
+    limit = fmt1(trip["limit_s"])
+    total = fmt1(trip["t_total_s"])
+    basis = trip.get("limit_basis") or ""
+    calculated = f"t_total {total} s is calculated."
+    if basis == "explicit":
+        return (
+            f"Screen limit {limit} s is an explicit value, not a calculated delivery time. {calculated}"
+        )
+    return (
+        f"Screen limit {limit} s — ASSUMED from time basis {basis}. "
+        f"The limit is a lookup, not calculated. {calculated}"
+    )
+
+
+def lookup_screen_limit(content_root: Path, basis: str) -> dict[str, Any]:
+    """Read the screen-limit table from the calc pack. Do not copy the seconds here."""
+    session = ToolSession(content_root)
+    table = session.formulas.DI_LIMITS_S
+    key = str(basis or "FM").strip().upper()
+    if key == "NFPA":
+        key = "NFPA-OH"
+    if key not in table:
+        raise ValueError(f"Time basis {basis!r} has no screen limit in the calc pack.")
+    return {"limit_s": float(table[key]), "limit_basis": key}
+
+
+def form_assumption_lines(trim_text: str, basis: str, content_root: Path) -> list[str]:
+    """Live form copy: blank trim and the basis lookup are ASSUMED, not calculated."""
+    if _blank(trim_text):
+        trim_line = "Trim: ASSUMED 5 gal when Trim gal is blank (no valve data sheet). Not calculated."
+    else:
+        trim_line = f"Trim: {str(trim_text).strip()} gal entered on the form. Not assumed."
+    limit = lookup_screen_limit(content_root, basis)
+    limit_line = (
+        f"Screen limit: {fmt1(limit['limit_s'])} s ASSUMED from time basis {limit['limit_basis']}. "
+        "This limit is a lookup, not calculated. Trip time is calculated when the zone runs."
+    )
+    return [trim_line, limit_line]
+
+
 def template_narrative(di: dict, tools: dict[str, Any]) -> str:
     volume = tools["zone_trapped_volume"]
     screen = tools["dry_delivery_screen"]
@@ -246,15 +267,15 @@ def template_narrative(di: dict, tools: dict[str, Any]) -> str:
         (
             f"Trapped volume is {fmt1(volume['pipe_gal'])} gal of pipe, "
             f"{fmt1(volume['fittings_gal'])} gal fittings allowance "
-            f"({volume['fittings_percent']:g}%), and {fmt1(volume['trim_gal'])} gal trim. "
+            f"({volume['fittings_percent']:g}%), and {trim_assumption_text(volume)}. "
             f"Zone total is {fmt1(volume['zone_gal'])} gal."
         ),
         (
             f"NFPA size exemption on the zone total of {fmt1(volume['zone_gal'])} gal "
             f"against the {screen['nfpa_size_cap_gal']:.0f} gal cap: {exempt}. "
             "A quick-opening device does not raise the double-interlock cap. "
-            f"The {trip['limit_basis']} {fmt1(trip['limit_s'])} s screen on the zone total {screen_word}: "
-            f"t_total {fmt1(trip['t_total_s'])} s. "
+            f"{screen_limit_assumption_text(trip)} "
+            f"The zone-total screen {screen_word}. "
             "This screen is not a listed water-delivery-time calculation."
         ),
         (
@@ -299,6 +320,8 @@ def _flags(di: dict, tools: dict[str, Any], extra: list[str]) -> list[str]:
     flags.extend(tools["elect_di_trim"].get("flags") or [])
     screen = tools["dry_delivery_screen"]
     trip = tools["di_trip_to_water"]
+    if trip.get("limit_basis") != "explicit" and "limit_s" in trip:
+        flags.append(screen_limit_assumption_text(trip))
     if screen["nfpa_delivery_time_exempt"] and not trip["passes_screen"]:
         flags.append(
             "Zone total is inside the NFPA size cap and the zone-total time screen still misses. "
@@ -320,16 +343,44 @@ def _flags(di: dict, tools: dict[str, Any], extra: list[str]) -> list[str]:
     return flags
 
 
-def _user_message(content_root: Path, di: dict, basis: dict) -> str:
+def _user_message(
+    content_root: Path,
+    di: dict,
+    basis: dict,
+    tools: dict[str, Any],
+    plan_inputs: dict[str, dict],
+) -> str:
+    """Ask Claude to quote the tool plan. The plan already ran; its figures govern."""
     known = {item["slug"] for item in list_skills(content_root)}
     present = [slug for slug in DI_SKILL_SLUGS if slug in known]
+    volume = tools["zone_trapped_volume"]
+    trip = tools["di_trip_to_water"]
+    governing = {
+        "zone_gal_text": fmt1(volume["zone_gal"]),
+        "t_total_s_text": fmt1(trip["t_total_s"]),
+        "trim": trim_assumption_text(volume),
+        "screen_limit": screen_limit_assumption_text(trip),
+    }
     return (
-        "Run the double-interlock preaction zone. Read each listed skill with read_skill, "
-        "then call zone_trapped_volume, dry_delivery_screen, di_trip_to_water, elect_di_trim, "
-        "and releasing_truth_table on these inputs. Also call density_area, hose_duration, and "
-        "nitrogen_gate. Quote the tool zone_gal and t_total_s in the draft. "
-        "Do not invent gallons or seconds.\n\n"
-        + json.dumps({"skills_to_read": present, "basis": basis, "inputs": di}, indent=2, default=str)
+        "The tool plan on this form already ran in the app. Those figures govern the tables and the export.\n"
+        f"The draft must contain the exact text {governing['zone_gal_text']} and {governing['t_total_s_text']}.\n"
+        "Pipe gallons and t_total are calculated. "
+        "If the notes below say ASSUMED for trim or the screen limit, write ASSUMED next to that figure. "
+        "Do not describe an ASSUMED value as calculated.\n"
+        "Read a listed skill with read_skill when you apply that method. "
+        "You can call several tools in one reply. "
+        "If you call a calc tool, use tool_plan_inputs. Do not invent gallons, seconds, gpm, or scfm.\n\n"
+        + json.dumps(
+            {
+                "skills_to_read": present,
+                "basis": basis,
+                "inputs": di,
+                "tool_plan_inputs": plan_inputs,
+                "governing": governing,
+            },
+            indent=2,
+            default=str,
+        )
     )
 
 
@@ -344,9 +395,9 @@ def run_di_zone(
 ) -> dict[str, Any]:
     basis = dict(basis or {})
     session = ToolSession(content_root)
-    tools = run_tool_plan(session, di, basis)
+    tools, sent = run_tool_plan(session, di, basis)
     template = template_narrative(di, tools)
-    transcript = _plan_transcript(tools, di, basis)
+    transcript = _plan_transcript(tools, sent)
     warnings: list[str] = []
     narrative = template
     source = "tool-plan"
@@ -360,10 +411,14 @@ def run_di_zone(
         try:
             drafted = narrator(
                 system_prompt(content_root),
-                _user_message(content_root, di, basis),
+                _user_message(content_root, di, basis, tools, sent),
                 SCHEMAS,
                 session.execute,
             )
+            if drafted.get("stop_reason") == "max_tokens":
+                warnings.append(
+                    "Claude stopped because the reply hit the output limit. Tables stay on the tool plan."
+                )
             for call in drafted.get("tool_calls") or []:
                 transcript.append({
                     "name": call.get("name"),

@@ -1,4 +1,8 @@
-"""Draft specification section. Every figure is copied from the tool-plan JSON."""
+"""Draft specification section. Every figure is copied from the tool-plan JSON.
+
+Double-interlock preaction is CSI Section 21 13 19. Dry pipe is a different section
+and is not this export.
+"""
 
 from __future__ import annotations
 
@@ -6,11 +10,21 @@ from pathlib import Path
 
 from docx import Document
 
-from fpfa.workflow import fmt1
+from fpfa.workflow import fmt1, screen_limit_assumption_text, trim_assumption_text
+
+DRAFT_SECTION = "21 13 19"
+DRAFT_HEADING = "Section 21 13 19 — Double-interlock preaction (draft)"
 
 
 def _yn(value) -> str:
     return "Yes" if value else "No"
+
+
+def _limit_cell(row: dict) -> str:
+    text = fmt1(row["limit_s"])
+    if row.get("limit_basis") != "explicit":
+        return f"{text} ASSUMED"
+    return text
 
 
 def _table(doc: Document, headers: list[str], rows: list[list]) -> None:
@@ -41,11 +55,14 @@ def write_docx(path: Path | str, project: dict, result: dict) -> Path:
     di = result.get("inputs") or project.get("di") or {}
 
     doc = Document()
-    doc.add_heading("Section 21 13 16 — Double-interlock preaction (draft)", level=1)
+    doc.core_properties.title = DRAFT_HEADING
+    doc.core_properties.subject = f"Draft Section {DRAFT_SECTION} double-interlock preaction"
+    doc.add_heading(DRAFT_HEADING, level=1)
     doc.add_paragraph(
-        "Draft for review. Verify with the engineer of record. "
+        f"Draft Section {DRAFT_SECTION} for review. Verify with the engineer of record. "
         "The delivery times in this section are an optimistic screen from the trapped volume "
-        "and an assumed fill flow. They are not a listed water-delivery-time calculation."
+        "and an assumed fill flow. They are not a listed water-delivery-time calculation. "
+        "Figures marked ASSUMED were not calculated from the zone."
     )
     doc.add_paragraph(
         f"Project: {project.get('name') or 'Untitled job'}. "
@@ -81,8 +98,7 @@ def write_docx(path: Path | str, project: dict, result: dict) -> Path:
     doc.add_paragraph(
         f"Pipe {fmt1(volume['pipe_gal'])} gal. "
         f"Fittings {fmt1(volume['fittings_gal'])} gal at {volume['fittings_percent']:g}%. "
-        f"Trim {fmt1(volume['trim_gal'])} gal"
-        f"{' (assumed)' if volume.get('trim_assumed') else ''}. "
+        f"{trim_assumption_text(volume)}. "
         f"Zone total {fmt1(volume['zone_gal'])} gal."
     )
 
@@ -100,7 +116,7 @@ def write_docx(path: Path | str, project: dict, result: dict) -> Path:
                 "Pipe only",
                 fmt1(screen["volume_gal"]),
                 fmt1(screen["t_total_s"]),
-                fmt1(screen["limit_s"]),
+                _limit_cell(screen),
                 screen["limit_basis"],
                 _yn(screen["passes_screen"]),
                 f"{screen['nfpa_size_cap_gal']:.0f}",
@@ -110,7 +126,7 @@ def write_docx(path: Path | str, project: dict, result: dict) -> Path:
                 "Zone total",
                 fmt1(volume["zone_gal"]),
                 fmt1(trip["t_total_s"]),
-                fmt1(trip["limit_s"]),
+                _limit_cell(trip),
                 trip["limit_basis"],
                 _yn(trip["passes_screen"]),
                 f"{screen['nfpa_size_cap_gal']:.0f}",
@@ -119,6 +135,7 @@ def write_docx(path: Path | str, project: dict, result: dict) -> Path:
         ],
     )
     doc.add_paragraph(screen["nfpa_basis"])
+    doc.add_paragraph(screen_limit_assumption_text(trip))
     doc.add_paragraph(
         f"Quick-opening device: {_yn(screen['qod'])}. "
         "On double-interlock the quick-opening device does not raise the 500 gal cap."
