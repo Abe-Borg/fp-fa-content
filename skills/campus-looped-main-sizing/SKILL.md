@@ -313,16 +313,18 @@ python3 calcs/fp/run.py path/to/name.calc.json
       "op": "hw",
       "q": "<consumed qd_gpm>",
       "c": "100 (shop lock; Table 3 C = comparison run only)",
-      "id": "<actual internal in.>",
+      "d_in": "<actual internal in.>",
       "length": "<remaining-path ft>"
     }
   ]
 }
 ```
 
-The README contract-demo numbers **`q=900, c=100, id=6.065, length=200`** are **kernel contract-demo values, not job defaults**. `6.065 in.` is Sch. 40 **steel**, not a campus main.
+Keep `id` as the step name (`one_leg_out`). Put the actual internal diameter in `d_in`. A second `id` overwrites the step name, and the batch runner skips `id` as metadata, so `hazen_williams` never receives `d_in`.
 
-**Ad-hoc:** `python3 calcs/fp/run.py hw --q 900 --c 100 --id 6.065 --length 200`
+The README contract-demo numbers **`q=900, c=100, d_in=6.065, length=200`** are **kernel contract-demo values, not job defaults**. `6.065 in.` is Sch. 40 **steel**, not a campus main.
+
+**Ad-hoc:** `python3 calcs/fp/run.py hw --q 900 --c 100 --id 6.065 --length 200`. The command-line flag `--id` is the diameter. The JSON batch key for that same number is `d_in`.
 
 Stdout keys: `p_psi`, `hf_ft`, `psi_per_ft_water`. If stdout disagrees with a hand product, **the kernel wins**. Re-check **nominal vs actual ID**, C from the wrong table, Q missing hose, L = intact perimeter instead of remaining path.
 
