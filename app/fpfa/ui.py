@@ -785,18 +785,24 @@ class App:
             "segments": segments,
         }
 
+    def _selected_mode(self) -> str:
+        return self.mode_slug.get() or DEFAULT_MODE
+
     def _write_form(self, project: dict) -> None:
+        # Selected mode is stored even when a later numeric field is invalid.
+        project["mode"] = self._selected_mode()
         project["basis"] = self.collect_basis()
         project["di"] = self.collect_di()
         project["chat"] = self.chat_log
-        project["mode"] = self.mode_slug.get() or DEFAULT_MODE
 
     def _capture_form(self, project: dict) -> str | None:
-        """Copy the widgets onto project. A bad number does not drop the chat."""
+        """Copy the widgets onto project. A bad number does not drop the chat or the mode."""
+        project["mode"] = self._selected_mode()
         try:
             self._write_form(project)
         except ValueError as exc:
             project["chat"] = self.chat_log
+            project["mode"] = self._selected_mode()
             return str(exc)
         return None
 
@@ -823,7 +829,7 @@ class App:
             self._capture_form(self.project)
             save_project(self.project)
             project = new_project(name)
-            project["mode"] = self.mode_slug.get() or DEFAULT_MODE
+            project["mode"] = self._selected_mode()
             save_project(project)
             self.refresh_projects(project["id"])
             self.open_project(project["id"])
@@ -858,7 +864,7 @@ class App:
             save_project(self.project)
         project = new_project("Sample data hall DI zone", copy.deepcopy(sample_data.EXAMPLE_BASIS))
         project["di"] = copy.deepcopy(sample_data.EXAMPLE_DI)
-        project["mode"] = self.mode_slug.get() or DEFAULT_MODE
+        project["mode"] = self._selected_mode()
         save_project(project)
         self.refresh_projects(project["id"])
         self.open_project(project["id"])

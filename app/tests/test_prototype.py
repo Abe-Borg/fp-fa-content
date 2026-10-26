@@ -1189,6 +1189,85 @@ class UiSmokeTests(unittest.TestCase):
         finally:
             root.destroy()
 
+    def test_mode_persists_when_optional_form_number_is_invalid(self):
+        """A bad optional-form number must not discard a mode change or the chat."""
+        if not os.environ.get("DISPLAY"):
+            self.skipTest("no display")
+        _isolate_data()
+        import tkinter as tk
+        from unittest.mock import patch
+
+        from fpfa.projects import load_project, new_project, save_project
+        from fpfa.ui import App
+
+        def select_project(app, project_id: str) -> None:
+            app.refresh_projects()
+            index = app._ids.index(project_id)
+            app.project_list.selection_clear(0, "end")
+            app.project_list.selection_set(index)
+            app.project_list.event_generate("<<ListboxSelect>>")
+
+        root = tk.Tk()
+        try:
+            app = App(root)
+            root.update()
+            job = new_project("Mode job")
+            job["mode"] = "mixed"
+            job["chat"] = [{"role": "user", "text": "keep this thread"}]
+            save_project(job)
+            other = new_project("Other mode job")
+            other["mode"] = "mixed"
+            save_project(other)
+            app.open_project(job["id"])
+            app.density.set("not-a-number")
+
+            app.chat_entry.insert(0, "/mode calculator")
+            app.send_chat()
+            chat = app.chat_view.get("1.0", "end")
+            self.assertEqual(app.mode_slug.get(), "calculator")
+            self.assertIn("Active mode: calculator.", chat)
+            self.assertIn("keep this thread", chat)
+            self.assertIn("/mode calculator", chat)
+            saved = load_project(job["id"])
+            self.assertEqual(saved["mode"], "calculator")
+            saved_text = [turn.get("text") for turn in saved["chat"]]
+            self.assertIn("keep this thread", saved_text)
+            self.assertIn("/mode calculator", saved_text)
+            self.assertNotIn("not-a-number", json.dumps(saved.get("di")))
+
+            select_project(app, other["id"])
+            self.assertEqual(app.project["id"], other["id"])
+            self.assertEqual(app.mode_slug.get(), "mixed")
+            select_project(app, job["id"])
+            self.assertEqual(app.mode_slug.get(), "calculator")
+            self.assertEqual(load_project(job["id"])["mode"], "calculator")
+            self.assertIn("keep this thread", app.chat_view.get("1.0", "end"))
+
+            app.density.set("not-a-number")
+            app.mode_slug.set("synthesis")
+            with patch("fpfa.ui.messagebox.showerror") as shown:
+                app.save_current()
+            self.assertTrue(shown.called)
+            saved = load_project(job["id"])
+            self.assertEqual(saved["mode"], "synthesis")
+            self.assertIn("keep this thread", [turn.get("text") for turn in saved["chat"]])
+            self.assertNotIn("not-a-number", json.dumps(saved.get("di")))
+
+            app.hose.set("bad-gpm")
+            app.mode_slug.set("brainstorm")
+            select_project(app, other["id"])
+            self.assertEqual(app.project["id"], other["id"])
+            self.assertEqual(load_project(job["id"])["mode"], "brainstorm")
+            select_project(app, job["id"])
+            self.assertEqual(app.mode_slug.get(), "brainstorm")
+            reopened = load_project(job["id"])
+            self.assertEqual(reopened["mode"], "brainstorm")
+            self.assertIn("keep this thread", [turn.get("text") for turn in reopened["chat"]])
+            self.assertIn("/mode calculator", [turn.get("text") for turn in reopened["chat"]])
+            self.assertIn("keep this thread", app.chat_view.get("1.0", "end"))
+        finally:
+            root.destroy()
+
     def test_sample_di_slash_loads_and_runs_the_zone(self):
         if not os.environ.get("DISPLAY"):
             self.skipTest("no display")
