@@ -175,6 +175,24 @@ SCHEMAS = [
         ),
     },
     {
+        "name": "lfl_setpoints",
+        "description": (
+            "Mixture LFL and setpoints from calcs/fa/lib/lfl.py. "
+            "Pass each percent. This tool does not choose a code threshold, an election, or a duration."
+        ),
+        "input_schema": _obj(
+            {
+                "mix": {"type": "object", "description": "Gas name to volume percent or fraction."},
+                "lfl": {"type": "object", "description": "Gas name to component LFL vol%. Use null for an inert."},
+                "screens": {
+                    "type": "array",
+                    "description": "Each item has name, pct, and basis (fuel or diluted). pct is the caller's percent.",
+                },
+            },
+            ["mix", "lfl"],
+        ),
+    },
+    {
         "name": "fp_calc",
         "description": "Run any other op in calcs/fp/formulas.py by name (hazen_williams, pump_envelope, k_factor, and the rest). Pass op and inputs. Do not compute the formula yourself.",
         "input_schema": _obj(
@@ -281,9 +299,45 @@ class ToolSession:
                 manual_station=args.get("manual_station", True),
                 insurer=args.get("insurer") or "FM",
             )
+        if name == "lfl_setpoints":
+            return _lfl_setpoints(self.root, args)
         if name == "fp_calc":
             return self.formulas.dispatch(str(args.get("op") or ""), dict(args.get("inputs") or {}))
         raise KeyError(f"unknown tool {name}")
+
+
+def _lfl_setpoints(content_root: Path, args: dict) -> dict:
+    """Run lfl.setpoints_for. Percents stay whatever the caller passed."""
+    path = Path(content_root) / "calcs" / "fa" / "lib" / "lfl.py"
+    if not path.is_file():
+        raise FileNotFoundError(path)
+    module = _load(path)
+    mix = args.get("mix") or {}
+    table = args.get("lfl") or {}
+    screens = args.get("screens") or []
+    if not isinstance(mix, dict) or not isinstance(table, dict):
+        raise ValueError("mix and lfl must be objects")
+    if not isinstance(screens, list):
+        raise ValueError("screens must be a list")
+    clean_lfl = {}
+    for key, value in table.items():
+        if value is None or value == "":
+            clean_lfl[str(key)] = None
+        else:
+            clean_lfl[str(key)] = float(value)
+    clean_mix = {str(key): float(value) for key, value in mix.items()}
+    clean_screens = []
+    for screen in screens:
+        if not isinstance(screen, dict):
+            raise ValueError("each screen must be an object")
+        if "pct" not in screen:
+            raise ValueError("each screen needs a pct")
+        clean_screens.append({
+            "name": str(screen.get("name") or screen.get("id") or ""),
+            "pct": float(screen["pct"]),
+            "basis": str(screen.get("basis") or ""),
+        })
+    return module.setpoints_for(clean_mix, clean_lfl, clean_screens)
 
 
 def dumps(payload) -> str:

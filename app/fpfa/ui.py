@@ -21,6 +21,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
 from fpfa import sample_data
+from fpfa.bess import bess_chat_summary, bess_govern_note, run_bess_plan
 from fpfa.calc_tools import ToolSession
 from fpfa.claude_client import MODEL_ID, AnthropicMessages, run_tool_loop, safe_error
 from fpfa.everyday import run_everyday
@@ -65,27 +66,36 @@ def chat_request_text(
     latest: str,
     last_run: dict | None = None,
     mode: str | None = None,
+    bess_run: dict | None = None,
 ) -> str:
     """Everyday-path request. A finished tool plan is repeated so chat cannot replace it."""
     text = format_chat_request(prior_turns, basis, di, latest)
     slug = normalize_mode(mode)
     head = f"Active mode: {slug}."
     note = govern_note(last_run)
+    explosion = bess_govern_note(bess_run)
     parts = [head, text]
     if note:
         parts.append(note)
+    if explosion:
+        parts.append(explosion)
     return "\n\n".join(parts)
 
 
 _SLASH_ALIASES = {
     "sample_di": "sample-di",
     "sampledi": "sample-di",
+    "sample_bess": "sample-bess",
+    "samplebess": "sample-bess",
 }
 
 THREAD_HINT = (
     "This thread is the main surface. Ask a question, or start from the sample zone.\n\n"
     "Sample DI (the chip below, or /sample-di) loads the sample data-hall double-interlock "
     "zone and runs the tool plan on this machine. That run does not need an API key.\n"
+    "Sample BESS (the chip below, or /sample-bess) loads a generic Li-ion BESS room and "
+    "runs the explosion-control starter in synthesis mode. That run does not need an API key. "
+    "The LFL tool owns vol% and ppm. An election or a duration the tool did not return stays ASSUMED.\n"
     "/run uses the optional zone form. /new Job name opens a job. /help lists commands.\n"
     "Ctrl+S saves the open job. Closing the window saves it too.\n"
     "Settings holds your Anthropic key. Export writes draft Section 21 13 19 after a run.\n"
@@ -123,6 +133,7 @@ def slash_help_text() -> str:
     return (
         "The chat thread is the main surface. The zone form is optional.\n"
         "/sample-di — load the sample data-hall double-interlock zone and run the tool plan\n"
+        "/sample-bess — load the sample Li-ion BESS room and run the explosion-control starter\n"
         "/run — run the DI zone from the optional form\n"
         "/new Job name — open a job\n"
         "/help — show these commands\n"
@@ -584,6 +595,8 @@ class App:
         self.chat_view.pack(side="left", fill="both", expand=True)
         self.sample_di_button = ttk.Button(chips, text="Sample DI", command=self.start_sample_di)
         self.sample_di_button.pack(side="left")
+        self.sample_bess_button = ttk.Button(chips, text="Sample BESS", command=self.start_sample_bess)
+        self.sample_bess_button.pack(side="left", padx=(6, 0))
         ttk.Label(chips, text="Mode").pack(side="left", padx=(12, 4))
         self.mode_slug = tk.StringVar(value=DEFAULT_MODE)
         self.mode_box = ttk.Combobox(
@@ -594,7 +607,7 @@ class App:
         )
         self.mode_box.pack(side="left")
         self._apply_mode(DEFAULT_MODE)
-        ttk.Label(chips, text="/sample-di    /run    /mode    /help").pack(side="left", padx=8)
+        ttk.Label(chips, text="/sample-di    /sample-bess    /run    /mode    /help").pack(side="left", padx=8)
         self.ask_claude = tk.BooleanVar(value=False)
         ttk.Checkbutton(
             chips,
@@ -744,7 +757,7 @@ class App:
         self._apply_di(project.get("di") or {})
         self.chat_log = list(project.get("chat") or [])
         self._render_chat()
-        self._show_saved_run(project.get("last_run"))
+        self._show_saved_run(project.get("last_run") or project.get("bess_run"))
         self._apply_mode(project.get("mode"))
 
     def _known_modes(self) -> list[str]:
@@ -974,6 +987,31 @@ class App:
         self._append_chat("user", raw)
         self.run_zone(announce=True)
 
+    def _open_bess_project(self) -> None:
+        if self.project:
+            self._capture_form(self.project)
+            save_project(self.project)
+        project = new_project(
+            "Sample Li-ion BESS room",
+            copy.deepcopy(sample_data.EXAMPLE_BESS_BASIS),
+        )
+        project["mode"] = "synthesis"
+        project["bess_inputs"] = copy.deepcopy(sample_data.EXAMPLE_BESS)
+        save_project(project)
+        self.refresh_projects(project["id"])
+        self.open_project(project["id"])
+        self._apply_mode("synthesis")
+        if self.project is not None:
+            self.project["mode"] = "synthesis"
+
+    def start_sample_bess(self, typed: str | None = None) -> None:
+        """Load the generic BESS room and run the explosion-control starter."""
+        raw = (typed or "/sample-bess").strip() or "/sample-bess"
+        self._keep_composer_open()
+        self._open_bess_project()
+        self._append_chat("user", raw)
+        self.run_bess(announce=True)
+
     def start_zone_run(self, typed: str | None = None) -> None:
         raw = (typed or "/run").strip() or "/run"
         self._keep_composer_open()
@@ -1007,6 +1045,8 @@ class App:
     def _dispatch_slash(self, command: str, argument: str, raw: str) -> None:
         if command == "sample-di":
             self.start_sample_di(raw)
+        elif command == "sample-bess":
+            self.start_sample_bess(raw)
         elif command == "run":
             self.start_zone_run(raw)
         elif command == "new":
@@ -1187,6 +1227,209 @@ class App:
         except tk.TclError:
             pass
 
+    def run_bess(self, *, announce: bool = False) -> None:
+        """Explosion-control starter. Does not read the optional zone form."""
+        self._keep_composer_open()
+        if not self.project:
+            self._report_bess_problem(None, "Open a project, or use /sample-bess.", announce=announce)
+            return
+        origin_id = self.project["id"]
+        project_name = self.project.get("name") or "Untitled job"
+        self._apply_mode("synthesis")
+        self.project["mode"] = "synthesis"
+        basis = dict(self.project.get("basis") or {})
+        room = copy.deepcopy(self.project.get("bess_inputs") or sample_data.EXAMPLE_BESS)
+        zone_result = self.project.get("last_run")
+        try:
+            pack = content_root()
+        except FileNotFoundError as exc:
+            self._report_bess_problem(origin_id, str(exc), announce=announce)
+            return
+        use_claude = bool(self.ask_claude.get()) and bool(load_api_key())
+        if use_claude:
+            self._enqueue_bess(
+                origin_id, project_name, pack, room, basis, zone_result, load_api_key(), announce=announce
+            )
+            return
+        self._run_bess_here(
+            origin_id, project_name, pack, room, basis, zone_result, announce=announce
+        )
+
+    def _run_bess_here(
+        self, origin_id, project_name, pack, room, basis, zone_result, *, announce: bool = False
+    ) -> None:
+        """LFL tool plan with no model call. It finishes before the composer returns."""
+        job = self.jobs.record(
+            project_id=origin_id,
+            project_name=project_name,
+            kind="bess",
+            title="Explosion-control starter",
+            status="running",
+        )
+        if announce:
+            self._announce_jobs.add(job.id)
+        try:
+            result = run_bess_plan(
+                pack, room, basis, zone_result=zone_result, narrator=None, mode="synthesis"
+            )
+        except Exception as exc:
+            self.jobs.mark(job.id, "error", safe_error(exc))
+            self._report_bess_problem(origin_id, safe_error(exc), job_id=job.id)
+            return
+        self.jobs.mark(job.id, "done")
+        self._finish_bess(origin_id, result, None, job_id=job.id)
+
+    def _enqueue_bess(
+        self, origin_id, project_name, pack, room, basis, zone_result, key, *, announce: bool = False
+    ) -> None:
+        """Queue a starter that calls the model. The composer stays usable."""
+
+        def work(job_id: str) -> None:
+            def narrator(system, user_text, tools, execute):
+                client = AnthropicMessages(key)
+                return run_tool_loop(
+                    client.create,
+                    system=system,
+                    user_text=user_text,
+                    tools=tools,
+                    execute=execute,
+                    required=["lfl_setpoints", "read_skill"],
+                    max_rounds=16,
+                    max_tokens=16000,
+                )
+
+            try:
+                result = run_bess_plan(
+                    pack,
+                    room,
+                    basis,
+                    zone_result=zone_result,
+                    narrator=narrator,
+                    mode="synthesis",
+                )
+                error = None
+            except Exception as exc:
+                result = None
+                error = safe_error(exc)
+                self.jobs.mark(job_id, "error", error)
+            self.queue.put(
+                lambda oid=origin_id, res=result, err=error, jid=job_id: self._finish_bess(
+                    oid, res, err, job_id=jid
+                )
+            )
+
+        job = self.jobs.submit(
+            project_id=origin_id,
+            project_name=project_name,
+            kind="bess",
+            title="Explosion-control starter",
+            work=work,
+        )
+        if announce:
+            self._announce_jobs.add(job.id)
+        self._keep_composer_open()
+        self.status.set(f"Asking {MODEL_ID}… {job.heading()}")
+        try:
+            self.root.update_idletasks()
+        except tk.TclError:
+            pass
+
+    def _report_bess_problem(
+        self,
+        origin_id: str | None,
+        message: str,
+        job_id: str | None = None,
+        *,
+        announce: bool | None = None,
+    ) -> None:
+        self._keep_composer_open()
+        if origin_id:
+            origin_id = self._destination_id(origin_id, job_id)
+        taken = self._take_announce(job_id)
+        if announce is None:
+            announce = taken
+        else:
+            announce = bool(announce) or taken
+        message = self._with_job_label(job_id, message)
+        still_here = self.project is not None and (origin_id is None or self.project.get("id") == origin_id)
+        if announce and still_here:
+            self.chat_log.append(self._assistant_turn(message, job_id))
+            self._render_chat()
+            self.project["mode"] = "synthesis"
+            self._save_form_or_chat(self.project)
+            save_project(self.project)
+        elif announce and origin_id:
+            self._append_saved_chat(origin_id, message, job_id)
+        elif still_here and origin_id:
+            messagebox.showerror("Explosion-control starter", message)
+        self.status.set(message or "The explosion-control starter did not run.")
+
+    def _finish_bess(
+        self,
+        origin_id: str,
+        result: dict | None,
+        error: str | None,
+        job_id: str | None = None,
+    ) -> None:
+        self._keep_composer_open()
+        origin_id = self._destination_id(origin_id, job_id)
+        announce = self._take_announce(job_id)
+        still_here = self.project is not None and self.project.get("id") == origin_id
+        if error or result is None:
+            message = self._with_job_label(job_id, error or "The explosion-control starter did not run.")
+            if announce and still_here:
+                self.chat_log.append(self._assistant_turn(message, job_id))
+                self._render_chat()
+                self.project["mode"] = "synthesis"
+                self._save_form_or_chat(self.project)
+                save_project(self.project)
+            elif announce:
+                self._append_saved_chat(origin_id, message, job_id)
+            elif still_here:
+                messagebox.showerror("Explosion-control starter", message)
+            self.status.set("The explosion-control starter did not run.")
+            return
+        result = self._stamp_job(result, job_id)
+        summary = self._with_job_label(job_id, bess_chat_summary(result)) if announce else ""
+        if still_here:
+            self.project["bess_run"] = result
+            self.project["mode"] = "synthesis"
+            if summary:
+                self.chat_log.append(self._assistant_turn(summary, job_id))
+                self._render_chat()
+            self._save_form_or_chat(self.project)
+            save_project(self.project)
+            self._show_bess_result(result)
+        else:
+            try:
+                project = load_project(origin_id)
+            except (OSError, json.JSONDecodeError):
+                self.status.set("The starter finished, and that project is no longer on this machine.")
+                return
+            project["bess_run"] = result
+            project["mode"] = "synthesis"
+            if summary:
+                chat = list(project.get("chat") or [])
+                chat.append(self._assistant_turn(summary, job_id))
+                project["chat"] = chat
+            save_project(project)
+            heading = (result or {}).get("job_heading") or ""
+            note = "Explosion-control starter finished on another project. Open it to see the draft."
+            self.status.set(f"{heading}. {note}" if heading else note)
+            return
+        if result.get("source") == "claude":
+            note = f"LFL tool plan plus {MODEL_ID}. The starter uses the tool plan when the draft disagrees."
+            if result.get("warnings"):
+                note = note + " " + result["warnings"][0]
+            self.status.set(self._with_job_label(job_id, note))
+        else:
+            note = "LFL tool plan only."
+            if self.ask_claude.get() and not load_api_key():
+                note = "LFL tool plan only. Save an API key in Settings to ask Claude."
+            elif result.get("warnings"):
+                note = "LFL tool plan only. " + result["warnings"][0]
+            self.status.set(self._with_job_label(job_id, note))
+
     def _report_run_problem(
         self,
         origin_id: str | None,
@@ -1302,7 +1545,9 @@ class App:
     def _show_saved_run(self, result: dict | None) -> None:
         self.results.configure(state="normal")
         self.results.delete("1.0", "end")
-        if result:
+        if result and result.get("kind") == "bess":
+            self._show_bess_result(result)
+        elif result:
             self._show_result(result)
         else:
             self.results.insert(
@@ -1340,6 +1585,40 @@ class App:
             f"Zone {volume['zone_gal']:.1f} gal    t_total {trip['t_total_s']:.1f} s    "
             f"passes screen: {'yes' if trip['passes_screen'] else 'no'}    "
             f"trim family: {trim.get('family') or trim.get('status')}",
+            "",
+            "Flags",
+        ])
+        lines.extend(f"• {flag}" for flag in result.get("flags") or [])
+        if result.get("warnings"):
+            lines.append("")
+            lines.append("Warnings")
+            lines.extend(f"• {item}" for item in result["warnings"])
+        lines.append("")
+        lines.append("Transcript")
+        lines.append(format_transcript(result.get("transcript") or []))
+        self.results.configure(state="normal")
+        self.results.delete("1.0", "end")
+        self.results.insert("1.0", "\n".join(lines))
+        self.results.configure(state="disabled")
+
+    def _show_bess_result(self, result: dict) -> None:
+        source = result.get("source") or "tool-plan"
+        if source == "claude":
+            header = f"Narrative from {result.get('model') or MODEL_ID}. The LFL tool plan governs."
+        else:
+            header = "Narrative from the LFL tool plan."
+        lines = []
+        heading = result.get("job_heading")
+        if heading:
+            lines.append(str(heading))
+            lines.append("")
+        lines.extend([
+            "Explosion-control starter. vol% and ppm come from the LFL tool.",
+            "An election or a duration the tool did not return is ASSUMED.",
+            "Zone gallons and seconds stay on the zone tool plan when one has run.",
+            "",
+            header,
+            result.get("narrative") or "",
             "",
             "Flags",
         ])
@@ -1424,7 +1703,8 @@ class App:
             self._append_chat(
                 "assistant",
                 "Save an Anthropic API key in Settings to talk with Claude. "
-                "/sample-di still loads the sample zone and runs the tool plan on this machine without a key.",
+                "/sample-di still loads the sample zone and runs the tool plan on this machine without a key. "
+                "/sample-bess runs the explosion-control starter the same way.",
             )
             self._save_form_or_chat(self.project)
             save_project(self.project)
@@ -1443,7 +1723,15 @@ class App:
             )
         prior = [dict(turn) for turn in self.chat_log[:-1]]
         mode = self.mode_slug.get()
-        request = chat_request_text(prior, basis, di, text, self.project.get("last_run"), mode)
+        request = chat_request_text(
+            prior,
+            basis,
+            di,
+            text,
+            self.project.get("last_run"),
+            mode,
+            self.project.get("bess_run"),
+        )
         if form_note:
             request = form_note + "\n\n" + request
 

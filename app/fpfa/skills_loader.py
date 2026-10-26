@@ -29,6 +29,87 @@ def list_skills(content_root: Path) -> list[dict]:
     return found
 
 
+def read_starter_cites(content_root: Path, slug: str) -> dict:
+    """Cite list from a skill's starter block. The method body stays in the file.
+
+    A percent in the block is an input. This loader does not invent one.
+    """
+    text = read_skill(content_root, slug)
+    match = re.search(r"(?ms)^```starter\s*\n(.*?)^```\s*$", text)
+    if not match:
+        raise ValueError(f"Skill {slug} has no starter block")
+    return _parse_starter(match.group(1), slug)
+
+
+def _parse_starter(block: str, slug: str) -> dict:
+    screens: list[dict] = []
+    current: dict | None = None
+    election: dict[str, str] = {}
+    duration: dict[str, str] = {}
+    notes: list[str] = []
+    screen_keys = {"pct", "basis", "section", "edition", "path"}
+    for raw in block.splitlines():
+        line = raw.strip()
+        if not line or ":" not in line:
+            continue
+        key, value = line.split(":", 1)
+        key = key.strip()
+        value = value.strip()
+        if key == "screen":
+            current = {"id": value}
+            screens.append(current)
+            continue
+        if key in screen_keys:
+            if current is None:
+                raise ValueError(f"Skill {slug} starter has {key} before a screen")
+            current[key] = value
+            continue
+        if key == "election":
+            current = None
+            election["value"] = value
+            continue
+        if key == "election_section":
+            election["section"] = value
+            continue
+        if key == "duration":
+            current = None
+            duration["value"] = value
+            continue
+        if key == "duration_section":
+            duration["section"] = value
+            continue
+        if key == "note":
+            current = None
+            notes.append(value)
+    if not screens:
+        raise ValueError(f"Skill {slug} starter has no screen")
+    seen = set()
+    for screen in screens:
+        ident = screen.get("id") or ""
+        if not ident or ident in seen:
+            raise ValueError(f"Skill {slug} starter needs a unique screen id")
+        seen.add(ident)
+        if "pct" not in screen or "basis" not in screen or "section" not in screen:
+            raise ValueError(f"Skill {slug} screen {ident} needs pct, basis, and section")
+        try:
+            pct = float(screen["pct"])
+        except ValueError as exc:
+            raise ValueError(f"Skill {slug} screen {ident} pct is not a number") from exc
+        if screen["basis"] not in {"fuel", "diluted"}:
+            raise ValueError(f"Skill {slug} screen {ident} basis must be fuel or diluted")
+        screen["pct"] = pct
+    if not election.get("value"):
+        raise ValueError(f"Skill {slug} starter has no election")
+    if not duration.get("value"):
+        raise ValueError(f"Skill {slug} starter has no duration")
+    return {
+        "screens": screens,
+        "election": election,
+        "duration": duration,
+        "notes": notes,
+    }
+
+
 def read_skill(content_root: Path, slug: str) -> str:
     slug = slug.strip().strip("/").replace("\\", "/")
     if "/" in slug or slug in ("", ".", ".."):

@@ -32,4 +32,24 @@ class T(unittest.TestCase):
         out, gov = L.trigger_paths(5.336)
         self.assertAlmostEqual(out["9.6.5.1.5.4 exhaust"][2], 13340, places=3)
         self.assertAlmostEqual(gov[2], 5336, places=3); self.assertLess(gov[2], 5.336*1e4)
+    def test_setpoints_for_uses_the_caller_percent(self):
+        mix = {"H2":58.0,"CO":9.0,"CO2":22.0,"CH4":5.5,"C2H4":2.5,"C2H6":1.2,"C3H6":0.6,"EMC":0.9,"DMC":0.3}
+        table = {"H2":4.0,"CO":10.9,"CO2":None,"CH4":4.4,"C2H4":2.4,"C2H6":2.4,"C3H6":1.8,"EMC":2.0,"DMC":3.1}
+        fuel = L.lfl_mix(mix, table)
+        diluted = L.lfl_with_diluent(mix, table)
+        vol, ppm = L.setpoint(diluted, 25)
+        out = L.setpoints_for(mix, table, [{"name": "screen", "pct": 25, "basis": "diluted"}])
+        self.assertAlmostEqual(out["lfl_fuel_vol_pct"], fuel)
+        self.assertAlmostEqual(out["lfl_diluted_vol_pct"], diluted)
+        self.assertAlmostEqual(out["setpoints"][0]["vol_pct"], vol)
+        self.assertAlmostEqual(out["setpoints"][0]["ppm"], ppm)
+        self.assertIsNone(out["election"])
+        self.assertIsNone(out["duration"])
+        self.assertEqual(L.setpoints_for(mix, table, [])["setpoints"], [])
+        self.assertEqual(
+            set(L.PATH_PCT),
+            {"9.6.5.1.5.4 exhaust", "9.6.5.6.7 CCR and alarm"},
+        )
+        with self.assertRaises(ValueError):
+            L.setpoints_for(mix, table, [{"name": "x", "pct": 10, "basis": "room"}])
 if __name__ == "__main__": unittest.main()

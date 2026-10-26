@@ -1,6 +1,7 @@
 """Inbox, queue, and workers for long desktop jobs.
 
-A zone run that calls the model, and a typed chat turn, are jobs. submit()
+A zone run that calls the model, a typed chat turn, and an explosion-control
+starter that calls the model are jobs. submit()
 returns as soon as the job is on the queue. Worker threads run the callable.
 The window thread stays free, so the composer can take another message.
 
@@ -17,7 +18,7 @@ import threading
 import uuid
 from dataclasses import dataclass
 
-KINDS = ("zone", "chat")
+KINDS = ("zone", "chat", "bess")
 STATUSES = ("queued", "running", "done", "error")
 _KEY_RE = re.compile(r"sk-ant-[A-Za-z0-9_\-]+")
 
