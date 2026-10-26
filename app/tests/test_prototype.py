@@ -19,6 +19,11 @@ sys.path.insert(0, str(APP_DIR))
 os.environ.setdefault("FPFA_DATA_DIR", tempfile.mkdtemp(prefix="fpfa-test-"))
 
 
+def _bullet_slugs(text: str, start: str, end: str) -> list[str]:
+    chunk = text.split(start, 1)[1].split(end, 1)[0]
+    return re.findall(r"(?m)^- `([a-z0-9-]+)`", chunk)
+
+
 def _isolate_data():
     path = tempfile.mkdtemp(prefix="fpfa-test-")
     os.environ["FPFA_DATA_DIR"] = path
@@ -559,7 +564,7 @@ class KeyAndSkillTests(unittest.TestCase):
             r"\bAbe\b|DC FP Lead|stay dark|Hyperion|Abraham|\bNovva\b|NEEDS PE REVIEW|/workspace/"
         )
         hits = []
-        for folder in (REPO / "skills", REPO / "calcs", REPO / "roles", REPO / "modes"):
+        for folder in (REPO / "skills", REPO / "corpus", REPO / "calcs", REPO / "roles", REPO / "modes"):
             for path in folder.rglob("*"):
                 if path.suffix.lower() not in {".py", ".md"} or "__pycache__" in path.parts:
                     continue
@@ -567,6 +572,65 @@ class KeyAndSkillTests(unittest.TestCase):
                 if banned.search(text):
                     hits.append(str(path.relative_to(REPO)))
         self.assertEqual(hits, [])
+
+    def test_content_pack_inventory_matches_the_indexes(self):
+        """Saturday step 6: the in-repo pack is the index. Corpus search stays unwired."""
+        skills_readme = (REPO / "skills" / "README.md").read_text(encoding="utf-8")
+        tier_a = _bullet_slugs(skills_readme, "Tier A methods", "Tier B methods")
+        tier_b = _bullet_slugs(skills_readme, "Tier B methods", "Specialist role prompts")
+        self.assertEqual(len(tier_a), 18)
+        self.assertEqual(len(tier_b), 24)
+        self.assertEqual(len(set(tier_a + tier_b)), 42)
+        disk = sorted(
+            path.name
+            for path in (REPO / "skills").iterdir()
+            if (path / "SKILL.md").is_file()
+        )
+        self.assertEqual(disk, sorted(tier_a + tier_b))
+
+        corpus_indexed = re.findall(
+            r"(?m)^\| `([^`]+\.md)`",
+            (REPO / "corpus" / "README.md").read_text(encoding="utf-8"),
+        )
+        corpus_disk = sorted(
+            path.relative_to(REPO / "corpus").as_posix()
+            for path in (REPO / "corpus").rglob("*.md")
+            if path.name.lower() != "readme.md"
+        )
+        self.assertEqual(sorted(corpus_indexed), corpus_disk)
+        self.assertEqual(len(corpus_disk), 19)
+        self.assertIn("scope-lock.md", corpus_disk)
+
+        spec_indexed = re.findall(
+            r"(?m)^\| `([^`]+\.md)`",
+            (REPO / "specs" / "README.md").read_text(encoding="utf-8"),
+        )
+        spec_disk = sorted(
+            path.name
+            for path in (REPO / "specs").glob("*.md")
+            if path.name.lower() != "readme.md"
+        )
+        self.assertEqual(sorted(spec_indexed), spec_disk)
+        self.assertEqual(len(spec_disk), 8)
+        self.assertIn("21-13-19-double-interlock-preaction.md", spec_disk)
+        self.assertNotIn("README.md", spec_disk)
+
+        secret = re.compile(r"sk-ant-[A-Za-z0-9_\-]{10,}")
+        leaks = []
+        for folder in (REPO / "skills", REPO / "corpus", REPO / "specs"):
+            for path in folder.rglob("*.md"):
+                if secret.search(path.read_text(encoding="utf-8", errors="replace")):
+                    leaks.append(str(path.relative_to(REPO)))
+        self.assertEqual(leaks, [])
+
+        wired = []
+        for path in (REPO / "app" / "fpfa").rglob("*.py"):
+            text = path.read_text(encoding="utf-8")
+            if re.search(r"""['\"]corpus['\"]""", text):
+                wired.append(str(path.relative_to(REPO)))
+            elif "corpus/" in text and path.name != "paths.py":
+                wired.append(str(path.relative_to(REPO)))
+        self.assertEqual(wired, [])
 
     def test_di_draft_does_not_use_the_dry_pipe_section_number(self):
         banned = "21 13 " + "16"
