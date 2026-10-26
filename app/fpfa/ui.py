@@ -145,7 +145,10 @@ class App:
         try:
             self.root.state("zoomed")
         except tk.TclError:
-            pass
+            try:
+                self.root.attributes("-zoomed", True)
+            except tk.TclError:
+                pass
         self.queue: queue.Queue = queue.Queue()
         self.project: dict | None = None
         self.chat_log: list[dict] = []
@@ -424,20 +427,20 @@ class App:
         self.results.pack(fill="both", expand=True)
 
     def _build_chat(self, parent) -> None:
-        self.chat_view = tk.Text(parent, wrap="word", state="disabled", padx=8, pady=8)
-        self.chat_view.tag_configure("hint", foreground="#5c6b76")
-        scroll = ttk.Scrollbar(parent, command=self.chat_view.yview)
-        self.chat_view.configure(yscrollcommand=scroll.set)
-        scroll.pack(side="right", fill="y")
-        self.chat_view.pack(fill="both", expand=True)
+        chips = ttk.Frame(parent)
+        chips.pack(side="bottom", fill="x", pady=(4, 0))
         row = ttk.Frame(parent)
-        row.pack(fill="x", pady=(6, 0))
+        row.pack(side="bottom", fill="x", pady=(6, 0))
         self.chat_entry = ttk.Entry(row)
         self.chat_entry.pack(side="left", fill="x", expand=True)
         self.chat_entry.bind("<Return>", lambda _event: self.send_chat())
         ttk.Button(row, text="Send", command=self.send_chat).pack(side="left", padx=6)
-        chips = ttk.Frame(parent)
-        chips.pack(fill="x", pady=(4, 0))
+        self.chat_view = tk.Text(parent, wrap="word", state="disabled", padx=8, pady=8, height=16)
+        self.chat_view.tag_configure("hint", foreground="#5c6b76")
+        scroll = ttk.Scrollbar(parent, command=self.chat_view.yview)
+        self.chat_view.configure(yscrollcommand=scroll.set)
+        scroll.pack(side="right", fill="y")
+        self.chat_view.pack(side="left", fill="both", expand=True)
         self.sample_di_button = ttk.Button(chips, text="Sample DI", command=self.start_sample_di)
         self.sample_di_button.pack(side="left")
         ttk.Label(chips, text="/sample-di    /run    /help").pack(side="left", padx=8)
