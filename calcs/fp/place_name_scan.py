@@ -35,7 +35,12 @@ def banned_words() -> list[str]:
 
 
 def banned_pattern() -> re.Pattern[str]:
-    return re.compile(r"\b(?:" + "|".join(banned_words()) + r")\b", re.IGNORECASE)
+    # Non-letters are separators. Word boundaries treat "_" and digits as
+    # word characters, so a snake_case fixture name never matched. A letter
+    # on either side still blocks the match, so a short entry cannot fire
+    # inside a longer word.
+    inner = "|".join(re.escape(word) for word in banned_words())
+    return re.compile(rf"(?<![A-Za-z])(?:{inner})(?![A-Za-z])", re.IGNORECASE)
 
 
 def place_name_hits(root: Path | None = None) -> list[str]:
