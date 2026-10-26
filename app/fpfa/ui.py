@@ -1,4 +1,4 @@
-"""Desktop shell. Projects, basis of design, one DI zone, chat, and settings.
+"""Desktop shell. The chat thread is the main pane. The zone form is optional.
 
 Run from the app directory: python -m fpfa
 """
@@ -9,6 +9,7 @@ import argparse
 import copy
 import json
 import queue
+import re
 import threading
 import tkinter as tk
 import tkinter.font as tkfont
@@ -48,6 +49,78 @@ def format_chat_request(prior_turns: list[dict], basis: dict, di: dict, latest: 
         f"Designer: {latest}"
     )
 
+
+_SLASH_ALIASES = {
+    "sample_di": "sample-di",
+    "sampledi": "sample-di",
+}
+
+THREAD_HINT = (
+    "This thread is the main surface. Ask a question, or start from the sample zone.\n\n"
+    "Sample DI (the chip below, or /sample-di) loads the sample data-hall double-interlock "
+    "zone and runs the tool plan on this machine. That run does not need an API key.\n"
+    "/run uses the optional zone form. /new Job name opens a job. /help lists commands.\n"
+    "Ctrl+S saves the open job. Closing the window saves it too.\n"
+    "Settings holds your Anthropic key. Export writes draft Section 21 13 19 after a run.\n"
+    "Blank trim and the screen-limit seconds stay labeled ASSUMED. "
+    "Pipe gallons and trip time come from the calc tools."
+)
+
+
+def parse_slash_command(text: str) -> tuple[str, str] | None:
+    """Return (command, argument) when the composer text is a slash command.
+
+    A normal question returns None and is sent to Claude. `/sample-di` and
+    `/sample_di` both canonicalize to `sample-di`.
+    """
+    stripped = (text or "").strip()
+    if len(stripped) < 2 or not stripped.startswith("/") or stripped.startswith("//"):
+        return None
+    parts = stripped[1:].split(maxsplit=1)
+    token = parts[0].strip().lower()
+    if not token or not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", token):
+        return None
+    argument = parts[1].strip() if len(parts) > 1 else ""
+    return _SLASH_ALIASES.get(token, token), argument
+
+
+def slash_help_text() -> str:
+    return (
+        "The chat thread is the main surface. The zone form is optional.\n"
+        "/sample-di — load the sample data-hall double-interlock zone and run the tool plan\n"
+        "/run — run the DI zone from the optional form\n"
+        "/new Job name — open a job\n"
+        "/help — show these commands\n"
+        "Ctrl+S saves the open job. Closing the window saves it too.\n"
+        "Settings holds your Anthropic key. Export writes draft Section "
+        f"{DRAFT_SECTION} after a run.\n"
+        "Blank trim and the screen-limit seconds stay labeled ASSUMED. "
+        "Pipe gallons and trip time come from the calc tools."
+    )
+
+
+def unknown_slash_text(command: str) -> str:
+    return f"/{command} is not a command.\n\n" + slash_help_text()
+
+
+def chat_run_summary(result: dict) -> str:
+    """Short thread reply for a finished zone run. Tables stay on the tool plan."""
+    narrative = (result.get("narrative") or "").strip()
+    tools = result.get("tools") or {}
+    extras: list[str] = []
+    volume = tools.get("zone_trapped_volume")
+    trip = tools.get("di_trip_to_water")
+    if isinstance(volume, dict):
+        trim_line = trim_assumption_text(volume)
+        if trim_line and trim_line not in narrative:
+            extras.append(trim_line)
+    if isinstance(trip, dict):
+        limit_line = screen_limit_assumption_text(trip)
+        if limit_line and limit_line not in narrative:
+            extras.append(limit_line)
+    extras.append(f"Figures are from the tool plan. Draft export is Section {DRAFT_SECTION}.")
+    return "\n\n".join(part for part in (narrative, *extras) if part)
+
 SYSTEM_CHOICES = (
     ("Double-interlock", "di"),
     ("Dry", "dry"),
@@ -74,15 +147,85 @@ class App:
         try:
             self.root.state("zoomed")
         except tk.TclError:
-            pass
+            try:
+                self.root.attributes("-zoomed", True)
+            except tk.TclError:
+                pass
         self.queue: queue.Queue = queue.Queue()
         self.project: dict | None = None
         self.chat_log: list[dict] = []
         self._ids: list[str] = []
         self._busy = False
+        self._announce_runs: set[str] = set()
         self._build()
+        try:
+            self._pristine_basis = self.collect_basis()
+            self._pristine_di = self.collect_di()
+        except ValueError:
+            self._pristine_basis = None
+            self._pristine_di = None
         self.refresh_projects()
+        self.root.bind("<Destroy>", self._cancel_afters, add="+")
+        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
+        for sequence in ("<Control-s>", "<Control-S>", "<Command-s>", "<Command-S>"):
+            self.root.bind_all(sequence, self._on_save_key)
         self.root.after(100, self._poll)
+
+    def _cancel_afters(self, event=None) -> None:
+        if event is not None and event.widget is not self.root:
+            return
+        for sequence in ("<Control-s>", "<Control-S>", "<Command-s>", "<Command-S>"):
+            try:
+                self.root.unbind_all(sequence)
+            except tk.TclError:
+                pass
+        try:
+            for after_id in list(self.root.tk.call("after", "info")):
+                self.root.after_cancel(after_id)
+        except tk.TclError:
+            pass
+
+    def _on_save_key(self, event=None):
+        try:
+            if event is not None and event.widget.winfo_toplevel() is not self.root:
+                return
+        except tk.TclError:
+            return
+        self.save_current()
+        return "break"
+
+    def _form_is_dirty(self) -> bool:
+        if self.chat_log:
+            return True
+        if self._pristine_basis is None or self._pristine_di is None:
+            return True
+        try:
+            return (
+                self.collect_basis() != self._pristine_basis
+                or self.collect_di() != self._pristine_di
+            )
+        except ValueError:
+            return True
+
+    def _persist_open_work(self) -> None:
+        """Save an open job, or a form the designer typed before any job existed."""
+        if self.project is None:
+            if not self._form_is_dirty():
+                return
+            self._ensure_project()
+        if self.project is None:
+            return
+        self._capture_form(self.project)
+        save_project(self.project)
+
+    def _on_close(self) -> None:
+        try:
+            self._persist_open_work()
+        finally:
+            try:
+                self.root.destroy()
+            except tk.TclError:
+                pass
 
     def _build(self) -> None:
         default = tkfont.nametofont("TkDefaultFont")
@@ -95,20 +238,26 @@ class App:
 
         header = tk.Frame(self.root, bg="#1f3b4d")
         header.pack(fill="x")
+        titles = tk.Frame(header, bg="#1f3b4d")
+        titles.pack(side="left", fill="x", expand=True)
         tk.Label(
-            header,
+            titles,
             text="FP/FA Design Assistant",
             bg="#1f3b4d",
             fg="white",
             font=("TkDefaultFont", 16, "bold"),
         ).pack(anchor="w", padx=14, pady=(10, 0))
         tk.Label(
-            header,
-            text=f"Wet, dry, and double-interlock preaction    ·    {MODEL_ID}",
+            titles,
+            text=f"Chat first    ·    wet, dry, and double-interlock    ·    {MODEL_ID}",
             bg="#1f3b4d",
             fg="#d6e2ea",
             font=("TkDefaultFont", 10),
         ).pack(anchor="w", padx=14, pady=(0, 10))
+        actions = tk.Frame(header, bg="#1f3b4d")
+        actions.pack(side="right", padx=12, pady=10)
+        ttk.Button(actions, text="Settings", command=self.open_settings).pack(side="left", padx=4)
+        ttk.Button(actions, text=f"Export {DRAFT_SECTION}", command=self.export_docx).pack(side="left", padx=4)
 
         body = ttk.Panedwindow(self.root, orient="horizontal")
         body.pack(fill="both", expand=True)
@@ -116,39 +265,48 @@ class App:
         left = ttk.Frame(body, padding=8)
         body.add(left, weight=0)
         ttk.Label(left, text="Projects").pack(anchor="w")
-        self.project_list = tk.Listbox(left, width=32, height=24, exportselection=False)
+        self.project_list = tk.Listbox(left, width=26, height=18, exportselection=False)
         self.project_list.pack(fill="both", expand=True, pady=6)
         self.project_list.bind("<<ListboxSelect>>", self._on_select)
         buttons = ttk.Frame(left)
         buttons.pack(fill="x")
         ttk.Button(buttons, text="New", command=self.new_job).pack(side="left", padx=(0, 4))
-        ttk.Button(buttons, text="Sample DI job", command=self.new_sample).pack(side="left", padx=4)
         ttk.Button(buttons, text="Delete", command=self.delete_job).pack(side="left", padx=4)
-        ttk.Button(buttons, text="Settings", command=self.open_settings).pack(side="right")
 
-        right = ttk.Frame(body, padding=(4, 8, 8, 8))
+        right = ttk.Panedwindow(body, orient="vertical")
         body.add(right, weight=1)
-        self.tabs = ttk.Notebook(right)
+        self.main_pane = right
+
+        chat_wrap = ttk.Frame(right, padding=(4, 8, 8, 4))
+        right.add(chat_wrap, weight=4)
+        self._build_chat(chat_wrap)
+
+        zone_wrap = ttk.Frame(right, padding=(4, 0, 8, 8))
+        right.add(zone_wrap, weight=1)
+        ttk.Label(
+            zone_wrap,
+            text="Optional zone form. Chat, Sample DI, and /sample-di do not require filling this in.",
+        ).pack(anchor="w")
+        self.assumption_text = tk.StringVar()
+        ttk.Label(
+            zone_wrap,
+            textvariable=self.assumption_text,
+            wraplength=980,
+            justify="left",
+        ).pack(anchor="w", pady=(2, 4))
+        self.tabs = ttk.Notebook(zone_wrap)
         self.tabs.pack(fill="both", expand=True)
         self._build_basis()
         self._build_zone()
         self._build_results()
-        self._build_chat()
+        self.tabs.select(1)
 
-        bar = ttk.Frame(self.root, padding=(10, 6))
+        bar = ttk.Frame(self.root, padding=(10, 4))
         bar.pack(fill="x")
-        self.ask_claude = tk.BooleanVar(value=False)
-        ttk.Checkbutton(
-            bar,
-            text="Ask Claude after the tool plan (your key; numbers stay from the calcs)",
-            variable=self.ask_claude,
-        ).pack(side="left")
-        ttk.Button(bar, text="Run DI zone", command=self.run_zone).pack(side="left", padx=8)
-        ttk.Button(bar, text=f"Export {DRAFT_SECTION}", command=self.export_docx).pack(side="left")
-        ttk.Button(bar, text="Save project", command=self.save_current).pack(side="left", padx=8)
         self.status = tk.StringVar(value=key_status())
-        ttk.Label(bar, textvariable=self.status).pack(side="left", padx=12)
+        ttk.Label(bar, textvariable=self.status).pack(anchor="w")
         self._sync_claude_default()
+        self.root.after(200, self._prefer_chat)
 
     def _labeled(self, parent, text, variable, width=18, row=0, column=0):
         ttk.Label(parent, text=text).grid(row=row, column=column, sticky="w", padx=4, pady=3)
@@ -249,13 +407,6 @@ class App:
         self._combo(form, "Lengths", self.length_label, [label for label, _ in LENGTHS], 5, 0, width=18)
         self._labeled(form, "Fittings %", self.fittings, width=10, row=5, column=2)
         self._labeled(form, "Trim gal", self.trim_gal, width=8, row=5, column=4)
-        self.assumption_text = tk.StringVar()
-        ttk.Label(
-            form,
-            textvariable=self.assumption_text,
-            wraplength=860,
-            justify="left",
-        ).grid(row=8, column=0, columnspan=6, sticky="w", padx=4, pady=(4, 0))
         self.trim_gal.trace_add("write", lambda *_args: self._refresh_assumptions())
         self.delivery_basis.trace_add("write", lambda *_args: self._refresh_assumptions())
         self._refresh_assumptions()
@@ -333,20 +484,41 @@ class App:
         scroll.pack(side="right", fill="y")
         self.results.pack(fill="both", expand=True)
 
-    def _build_chat(self) -> None:
-        tab = ttk.Frame(self.tabs, padding=8)
-        self.tabs.add(tab, text="Chat")
-        self.chat_view = tk.Text(tab, wrap="word", state="disabled")
-        scroll = ttk.Scrollbar(tab, command=self.chat_view.yview)
-        self.chat_view.configure(yscrollcommand=scroll.set)
-        scroll.pack(side="right", fill="y")
-        self.chat_view.pack(fill="both", expand=True)
-        row = ttk.Frame(tab)
-        row.pack(fill="x", pady=(6, 0))
+    def _build_chat(self, parent) -> None:
+        chips = ttk.Frame(parent)
+        chips.pack(side="bottom", fill="x", pady=(4, 0))
+        row = ttk.Frame(parent)
+        row.pack(side="bottom", fill="x", pady=(6, 0))
         self.chat_entry = ttk.Entry(row)
         self.chat_entry.pack(side="left", fill="x", expand=True)
         self.chat_entry.bind("<Return>", lambda _event: self.send_chat())
         ttk.Button(row, text="Send", command=self.send_chat).pack(side="left", padx=6)
+        self.chat_view = tk.Text(parent, wrap="word", state="disabled", padx=8, pady=8, height=16)
+        self.chat_view.tag_configure("hint", foreground="#5c6b76")
+        scroll = ttk.Scrollbar(parent, command=self.chat_view.yview)
+        self.chat_view.configure(yscrollcommand=scroll.set)
+        scroll.pack(side="right", fill="y")
+        self.chat_view.pack(side="left", fill="both", expand=True)
+        self.sample_di_button = ttk.Button(chips, text="Sample DI", command=self.start_sample_di)
+        self.sample_di_button.pack(side="left")
+        ttk.Label(chips, text="/sample-di    /run    /help").pack(side="left", padx=8)
+        self.ask_claude = tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            chips,
+            text="Ask Claude after the tool plan (your key; numbers stay from the calcs)",
+            variable=self.ask_claude,
+        ).pack(side="right")
+        self._render_chat()
+
+    def _prefer_chat(self) -> None:
+        """Keep the thread larger than the optional zone form and ready to type into."""
+        try:
+            self.chat_entry.focus_set()
+            height = self.main_pane.winfo_height()
+            if height > 160:
+                self.main_pane.sashpos(0, int(height * 0.68))
+        except tk.TclError:
+            pass
 
     def _poll(self) -> None:
         try:
@@ -389,8 +561,10 @@ class App:
         project_id = self._selected_id()
         if not project_id:
             return
-        if self.project and self.project.get("id") != project_id:
-            self._write_form(self.project)
+        if self.project and self.project.get("id") == project_id:
+            return
+        if self.project:
+            self._capture_form(self.project)
             save_project(self.project)
         self.open_project(project_id)
 
@@ -533,8 +707,8 @@ class App:
         project["di"] = self.collect_di()
         project["chat"] = self.chat_log
 
-    def _save_form_or_chat(self, project: dict) -> str | None:
-        """Write the form onto the project. A bad number does not drop the chat or the run."""
+    def _capture_form(self, project: dict) -> str | None:
+        """Copy the widgets onto project. A bad number does not drop the chat."""
         try:
             self._write_form(project)
         except ValueError as exc:
@@ -542,41 +716,133 @@ class App:
             return str(exc)
         return None
 
+    def _save_form_or_chat(self, project: dict) -> str | None:
+        """Write the form onto the project. A bad number does not drop the chat or the run."""
+        return self._capture_form(project)
+
     def save_current(self) -> None:
+        self._ensure_project()
         if not self.project:
-            messagebox.showinfo("Save", "Create or open a project first.")
             return
-        try:
-            self._write_form(self.project)
-        except ValueError as exc:
-            messagebox.showerror("Save", str(exc))
-            return
+        error = self._capture_form(self.project)
         save_project(self.project)
         self.refresh_projects(self.project["id"])
+        if error:
+            messagebox.showerror("Save", error)
+            self.status.set(error)
+            return
         self.status.set(f"Saved {self.project['name']}.")
+
+    def _start_named_job(self, name: str) -> None:
+        """Open a new job. A form with no project yet stays. An open project is saved and left behind."""
+        if self.project:
+            self._capture_form(self.project)
+            save_project(self.project)
+            project = new_project(name)
+            self.refresh_projects(project["id"])
+            self.open_project(project["id"])
+            return
+        project = new_project(name)
+        self._capture_form(project)
+        save_project(project)
+        self.project = project
+        self.refresh_projects(project["id"])
+        self.status.set(f"Opened {project.get('name')}. {key_status()}")
 
     def new_job(self) -> None:
         name = simpledialog.askstring("New job", "Job name", parent=self.root)
         if not name:
             return
-        if self.project:
-            self._write_form(self.project)
-            save_project(self.project)
-        project = new_project(name)
-        self.refresh_projects(project["id"])
-        self.open_project(project["id"])
+        self._start_named_job(name)
 
-    def new_sample(self) -> None:
+    def _ensure_project(self) -> None:
+        """Create the first job without painting an empty form over what is already typed."""
         if self.project:
-            self._write_form(self.project)
+            return
+        project = new_project("Untitled job")
+        self._capture_form(project)
+        save_project(project)
+        self.project = project
+        self.refresh_projects(project["id"])
+        self.status.set(f"Opened {project.get('name')}. {key_status()}")
+
+    def _open_sample_project(self) -> None:
+        if self.project:
+            self._capture_form(self.project)
             save_project(self.project)
         project = new_project("Sample data hall DI zone", copy.deepcopy(sample_data.EXAMPLE_BASIS))
         project["di"] = copy.deepcopy(sample_data.EXAMPLE_DI)
         save_project(project)
         self.refresh_projects(project["id"])
         self.open_project(project["id"])
-        self.tabs.select(1)
-        self.status.set("Sample DI zone loaded. Run DI zone to compute it.")
+
+    def new_sample(self) -> None:
+        """Load the sample job and run the DI zone path. Same as the Sample DI chip."""
+        self.start_sample_di()
+
+    def start_sample_di(self, typed: str | None = None) -> None:
+        """Load the sample job and run the existing DI zone path."""
+        raw = (typed or "/sample-di").strip() or "/sample-di"
+        if self._busy:
+            self._ensure_project()
+            self._local_exchange(
+                raw,
+                "A zone run is still going. The composer stays available; this starter was not started again.",
+            )
+            return
+        self._open_sample_project()
+        self._append_chat("user", raw)
+        self._announce_runs.add(self.project["id"])
+        self.run_zone()
+
+    def start_zone_run(self, typed: str | None = None) -> None:
+        raw = (typed or "/run").strip() or "/run"
+        if self._busy:
+            self._ensure_project()
+            self._local_exchange(
+                raw,
+                "A zone run is still going. The composer stays available; this run was not started again.",
+            )
+            return
+        self._ensure_project()
+        self._append_chat("user", raw)
+        self._announce_runs.add(self.project["id"])
+        self.run_zone()
+
+    def _slash_new(self, raw: str, name: str) -> None:
+        name = name.strip()
+        if not name:
+            self._local_exchange(raw, "Usage: /new Job name")
+            return
+        self._start_named_job(name)
+        self._append_chat("user", raw)
+        self._append_chat(
+            "assistant",
+            f"Opened {self.project['name']}. The zone form is optional. /sample-di loads the sample zone and runs it.",
+        )
+        self._capture_form(self.project)
+        save_project(self.project)
+        self.status.set(f"Opened {self.project['name']}.")
+
+    def _local_exchange(self, user_text: str, reply: str) -> None:
+        self._ensure_project()
+        self._append_chat("user", user_text)
+        self._append_chat("assistant", reply)
+        self._save_form_or_chat(self.project)
+        save_project(self.project)
+        self.refresh_projects(self.project["id"])
+
+    def _dispatch_slash(self, command: str, argument: str, raw: str) -> None:
+        if command == "sample-di":
+            self.start_sample_di(raw)
+        elif command == "run":
+            self.start_zone_run(raw)
+        elif command == "new":
+            self._slash_new(raw, argument)
+        elif command == "help":
+            self._local_exchange(raw, slash_help_text())
+        else:
+            self._local_exchange(raw, unknown_slash_text(command))
 
     def delete_job(self) -> None:
         project_id = self._selected_id()
@@ -626,20 +892,20 @@ class App:
         if self._busy:
             return
         if not self.project:
-            messagebox.showinfo("DI zone", "Create or open a project first.")
+            self._report_run_problem(None, "Open a project, or use /sample-di.")
             return
+        origin_id = self.project["id"]
         try:
             self._write_form(self.project)
         except ValueError as exc:
-            messagebox.showerror("DI zone", str(exc))
+            self._report_run_problem(origin_id, str(exc))
             return
-        origin_id = self.project["id"]
         di = copy.deepcopy(self.project["di"])
         basis = copy.deepcopy(self.project["basis"])
         try:
             root = content_root()
         except FileNotFoundError as exc:
-            messagebox.showerror("Content pack", str(exc))
+            self._report_run_problem(origin_id, str(exc))
             return
         use_claude = bool(self.ask_claude.get()) and bool(load_api_key())
         narrator = None
@@ -668,6 +934,10 @@ class App:
         if use_claude:
             self._busy = True
             self.status.set("Running the tool plan, then Claude…")
+            try:
+                self.root.update_idletasks()
+            except tk.TclError:
+                pass
 
             def work():
                 try:
@@ -683,25 +953,67 @@ class App:
         try:
             result = run_di_zone(root, di, basis, narrator=None)
         except Exception as exc:
-            messagebox.showerror("DI zone", safe_error(exc))
-            self.status.set("The zone did not run.")
+            self._report_run_problem(origin_id, safe_error(exc))
             return
         self._finish_run(origin_id, result, None)
 
+    def _report_run_problem(self, origin_id: str | None, message: str) -> None:
+        self._busy = False
+        announce = bool(origin_id) and origin_id in self._announce_runs
+        if origin_id:
+            self._announce_runs.discard(origin_id)
+        still_here = self.project is not None and (origin_id is None or self.project.get("id") == origin_id)
+        if announce and still_here:
+            self._append_chat("assistant", message)
+            self._save_form_or_chat(self.project)
+            save_project(self.project)
+        elif announce and origin_id:
+            self._append_saved_chat(origin_id, message)
+        elif still_here and origin_id:
+            messagebox.showerror("DI zone", message)
+        self.status.set(message or "The zone did not run.")
+
+    def _append_saved_chat(self, origin_id: str, text: str) -> None:
+        try:
+            project = load_project(origin_id)
+        except (OSError, json.JSONDecodeError):
+            self.status.set("The reply could not be saved.")
+            return
+        chat = list(project.get("chat") or [])
+        chat.append({"role": "assistant", "text": text})
+        project["chat"] = chat
+        save_project(project)
+
+    def _take_announce(self, origin_id: str) -> bool:
+        announce = origin_id in self._announce_runs
+        self._announce_runs.discard(origin_id)
+        return announce
+
     def _finish_run(self, origin_id: str, result: dict | None, error: str | None) -> None:
         self._busy = False
+        announce = self._take_announce(origin_id)
         still_here = self.project is not None and self.project.get("id") == origin_id
         if error or result is None:
-            if still_here:
-                messagebox.showerror("DI zone", error or "The zone did not run.")
+            message = error or "The zone did not run."
+            if announce and still_here:
+                self._append_chat("assistant", message)
+                self._save_form_or_chat(self.project)
+                save_project(self.project)
+            elif announce:
+                self._append_saved_chat(origin_id, message)
+            elif still_here:
+                messagebox.showerror("DI zone", message)
             self.status.set("The zone did not run.")
             return
+        summary = chat_run_summary(result) if announce else ""
         if still_here:
             self.project["last_run"] = result
+            if summary:
+                self.chat_log.append({"role": "assistant", "text": summary})
+                self._render_chat()
             form_error = self._save_form_or_chat(self.project)
             save_project(self.project)
             self._show_result(result)
-            self.tabs.select(2)
         else:
             try:
                 project = load_project(origin_id)
@@ -709,6 +1021,10 @@ class App:
                 self.status.set("The zone finished, and that project is no longer on this machine.")
                 return
             project["last_run"] = result
+            if summary:
+                chat = list(project.get("chat") or [])
+                chat.append({"role": "assistant", "text": summary})
+                project["chat"] = chat
             save_project(project)
             self.status.set("DI zone finished on another project. Open it to see the results.")
             return
@@ -733,7 +1049,11 @@ class App:
         if result:
             self._show_result(result)
         else:
-            self.results.insert("1.0", "Run the DI zone to see the volume, delivery screen, trim, and releasing table.")
+            self.results.insert(
+                "1.0",
+                "The thread is where a zone run shows up. "
+                "This panel keeps the tool-plan figures after /sample-di or /run, for export.",
+            )
         self.results.configure(state="disabled")
 
     def _show_result(self, result: dict) -> None:
@@ -776,12 +1096,12 @@ class App:
 
     def export_to(self, path: Path) -> Path:
         if not self.project or not self.project.get("last_run"):
-            raise RuntimeError("Run the DI zone before exporting.")
+            raise RuntimeError("Run /sample-di or /run before exporting.")
         return write_docx(path, self.project, self.project["last_run"])
 
     def export_docx(self) -> None:
         if not self.project or not self.project.get("last_run"):
-            messagebox.showinfo("Export", "Run the DI zone before exporting.")
+            messagebox.showinfo("Export", "Use /sample-di or /run before exporting.")
             return
         path = filedialog.asksaveasfilename(
             parent=self.root,
@@ -802,6 +1122,8 @@ class App:
     def _render_chat(self) -> None:
         self.chat_view.configure(state="normal")
         self.chat_view.delete("1.0", "end")
+        if not self.chat_log:
+            self.chat_view.insert("end", THREAD_HINT + "\n", "hint")
         for turn in self.chat_log:
             who = "You" if turn.get("role") == "user" else "Assistant"
             self.chat_view.insert("end", f"{who}\n{turn.get('text') or ''}\n\n")
@@ -816,36 +1138,59 @@ class App:
         text = self.chat_entry.get().strip()
         if not text:
             return
-        if not self.project:
-            messagebox.showinfo("Chat", "Create or open a project first.")
-            return
         self.chat_entry.delete(0, "end")
+        parsed = parse_slash_command(text)
+        if parsed is not None:
+            command, argument = parsed
+            self._dispatch_slash(command, argument, text)
+            return
+        self._send_chat_message(text)
+
+    def _send_chat_message(self, text: str) -> None:
+        """Ask Claude without blocking the window. The zone form is optional."""
+        self._ensure_project()
         origin_id = self.project["id"]
         self._append_chat("user", text)
+        try:
+            self.root.update_idletasks()
+        except tk.TclError:
+            pass
         key = load_api_key()
         if not key:
             self._append_chat(
                 "assistant",
-                "Save an Anthropic API key in Settings to use chat. "
-                "The DI zone tab still runs the tool plan on this machine without a key.",
+                "Save an Anthropic API key in Settings to talk with Claude. "
+                "/sample-di still loads the sample zone and runs the tool plan on this machine without a key.",
             )
-            self._write_form(self.project)
+            self._save_form_or_chat(self.project)
             save_project(self.project)
+            self.status.set(key_status())
             return
         self.status.set(f"Asking {MODEL_ID}…")
-        basis = self.collect_basis()
-        di = self.collect_di()
+        try:
+            basis = self.collect_basis()
+            di = self.collect_di()
+            form_note = ""
+        except ValueError as exc:
+            basis = dict(self.project.get("basis") or {})
+            di = copy.deepcopy(self.project.get("di") or {})
+            form_note = (
+                "The optional zone form was not read because a value is not a number. "
+                "This message uses the last saved zone. " + str(exc)
+            )
         prior = [dict(turn) for turn in self.chat_log[:-1]]
         request = format_chat_request(prior, basis, di, text)
+        if form_note:
+            request = form_note + "\n\n" + request
 
         def work():
             try:
-                root = content_root()
+                pack = content_root()
                 client = AnthropicMessages(key)
-                session = ToolSession(root)
+                session = ToolSession(pack)
                 out = run_tool_loop(
                     client.create,
-                    system=system_prompt(root),
+                    system=system_prompt(pack),
                     user_text=request,
                     tools=SCHEMAS,
                     execute=session.execute,
@@ -965,12 +1310,7 @@ class App:
         """Create the sample job and run the local tool plan. Does not call Claude."""
         write_config({"key_backend": "file"})
         self.ask_claude.set(False)
-        project = new_project("Sample data hall DI zone", copy.deepcopy(sample_data.EXAMPLE_BASIS))
-        project["di"] = copy.deepcopy(sample_data.EXAMPLE_DI)
-        save_project(project)
-        self.refresh_projects(project["id"])
-        self.open_project(project["id"])
-        self.run_zone()
+        self.start_sample_di()
 
 
 def capture_window(root: tk.Tk, path: Path) -> None:
