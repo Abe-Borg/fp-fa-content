@@ -4,7 +4,7 @@ Size the private fire main after density-area has a company-scoped wet, dry, or 
 
 The loop carries the full demand with one leg out of service. Pick diameter from the actual inside diameter, not a nominal size. Place sectional valves so one impairment does not take the campus out. NFPA 24 is the code floor for private mains. The pack's delta baseline is NFPA 24-2025. An unamended 2024 I-Code adoption typically enforces NFPA 24-2022. Licensed NFPA 24-2025 text is not in the codebook, so every section pin is `[V]` until that book is checked. The monograph map used here is underground in Chapter 10 and sizing in Chapter 13.
 
-Hazen-Williams friction on the leg uses the same relation as the rest of the pack: pressure loss per foot is 4.52 × Q^1.85 / (C^1.85 × d^4.87), with Q in gpm and d in inches. `calcs/fp` op `hazen_williams` evaluates it. C comes from the pipe material and age (`pump-and-supply.md`), not from a round number chosen to make the leg pass.
+Hazen-Williams friction on the leg uses the same relation as the rest of the pack: pressure loss per foot is 4.52 × Q^1.85 / (C^1.85 × d^4.87), with Q in gpm and d in inches. `calcs/fp` op `hazen_williams` evaluates it. Campus-loop design locks C at 100 for every underground material. The material-and-age C table is comparison-only on this note. Do not size the leg on a higher tabulated C. The hydrant-supply method uses that material-and-age lookup for a different purpose: a one-segment relocation of the supply test when the pipe age is known (`pump-and-supply.md`). That lookup does not set the loop's design C.
 
 ## Which fire-flow method binds
 
