@@ -40,8 +40,12 @@ def read_skill(content_root: Path, slug: str) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def spec_notes(content_root: Path, limit: int = 3, chars: int = 4000) -> list[dict]:
-    """Optional master language from specs/*.md. README is the folder guide, not a spec."""
+def spec_notes(content_root: Path, limit: int = 12, chars: int = 4000) -> list[dict]:
+    """Master language from specs/*.md. README is the folder guide, not a spec.
+
+    The cap covers the in-scope section set. A cap of three dropped
+    Section 21 13 19 once the earlier section files sorted first.
+    """
     folder = content_root / "specs"
     notes = []
     if not folder.is_dir():
