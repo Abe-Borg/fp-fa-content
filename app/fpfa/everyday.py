@@ -18,6 +18,8 @@ from fpfa.roles_loader import list_roles, read_role
 from fpfa.skills_loader import list_skills, spec_notes
 
 EVERYDAY_ROLE = "everyday"
+# Drafting roles the zone narrative is asked to read. The QA specialist is
+# listed with them from the pack. The blind check is a separate turn.
 SPECIALIST_ROLES = (
     "fp-sprinkler",
     "fa-releasing",
