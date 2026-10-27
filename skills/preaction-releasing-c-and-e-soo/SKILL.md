@@ -144,7 +144,7 @@ Optional (do not block; flag `[V]` / `handoff`): occupancy-hazard-fork schedule 
 | the input packet | Packet context — **optional** (consume when present) | Rebuild the packet; retrieve `CASE_INDEX` |
 | `suppression-technology-selection` | Elected wet/dry/DI; comparison-only / prohibited / `PRACTICE REFUSED` status | Elect a system family; silent-substitute SI→DI |
 | `most-stringent-basis-matrix` | Releasing / VEWFD / power-isolation / clean-agent rows; company wet/dry/DI fence; provisional/`[V]` | Rebuild dual-carrier BOD |
-| `asd-vewfd-return-sampling` / detection package | L1/L2/L3 settings + zone tags | Re-size ports / transport time |
+| `fa-asd-vewfd-data-hall-sampling-layout` / detection package | L1/L2/L3 settings + zone tags | Re-size ports / transport time |
 | `power-isolation-disconnect-control` | Initiation-level election / EPO structure | Invent L2 or L3 as an FM section pin |
 | `preaction-el-el-trim-election` | DI variant + failsafe answer when present | Write trim catalog here |
 | `nitrogen-inerting-and-c-factor-gate` | Day-one N₂ context on dry/DI | Re-derive purity / C |
@@ -582,7 +582,7 @@ Shop codebook **by title**. **FM DS 5-32 Jan-2026:** §2.4.1.1 ranking (**compar
 | ITM intervals / design-for-testability | `itm-design-for-testability` |
 | Assignment packet | the input packet |
 | Wet vs SI vs DI vs gas **selection** | `suppression-technology-selection` |
-| ASD port count / transport-time sizing | `asd-vewfd-return-sampling` |
+| ASD port count / transport-time sizing | `fa-asd-vewfd-data-hall-sampling-layout` |
 | Valve/trim catalog, El/El **hardware election** | `preaction-el-el-trim-election` (hand-off row only here) |
 | Nitrogen purity / C-factor | `nitrogen-inerting-and-c-factor-gate` |
 | Prove 30/60 water-delivery fill | `dry-preaction-water-delivery-screen` / hydraulics / IST |

@@ -15,7 +15,7 @@ description: >-
 
 **Intake.** The input packet is optional. A missing input is not a stop: state the value used and why, and label it ASSUMED. Do not present an ASSUMED value as a cited code or table value, and do not freeze a vendor SKU. **Scope lock.** Wet pipe, dry pipe, and double-interlock preaction only. Foam, clean agent, water mist, and single-interlock or non-interlock preaction are out of scope. If one of those is requested as the basis of design, record it and stop. Do not substitute another system and do not size it here. Cite the section and the edition. Decide each parameter by the most stringent of the code floor, the insurer sheet, and the owner standard. Verify judgment calls with the engineer of record.
 
-Reusable DC fire-protection recipe. **Two branches, one Skill:** (1) **genset-room combustion / radiator air openings**; (2) **raised-floor panel free area (OA%)** for hall return or makeup. Occupancy is already pinned. This Skill does **not** freeze a pump nameplate (`pump-envelope`). It does **not** size ASD pipe (`asd-vewfd-return-sampling` **consumes** OA% / CFM). It does **not** CAD louvers. It does **not** elect the suppression family — it **consumes** STS `wet` | `dry` | `DI` and records free-area / opening consequences.
+Reusable DC fire-protection recipe. **Two branches, one Skill:** (1) **genset-room combustion / radiator air openings**; (2) **raised-floor panel free area (OA%)** for hall return or makeup. Occupancy is already pinned. This Skill does **not** freeze a pump nameplate (`pump-envelope`). It does **not** size ASD pipe (`fa-asd-vewfd-data-hall-sampling-layout` **consumes** OA% / CFM). It does **not** CAD louvers. It does **not** elect the suppression family — it **consumes** STS `wet` | `dry` | `DI` and records free-area / opening consequences.
 
 **Core thesis:** Free area is **OA% × panel area × count**, not a louver guess. Genset combustion air is **OEM scfm**, not a 1 in²/kW folklore number unless the cited mechanical code actually says that **and** is open. **DS 5-20 is electrical testing** (including ATS *tests*) — not this Skill. **DS 5-23** is facility emergency/standby **generators**. Pump-room ventilation lives in **DS 3-7** — hand off, do not rewrite `pump-envelope`. Separate `Q_comb` / `Q_rad` when OEM or UFC C-4 F says so. Declare **face vs free-area** `v` before `n_panels`.
 
@@ -75,7 +75,7 @@ If the caller presents single-interlock, non-interlock, or another prohibited pr
 |---|---|
 | Branch A: OEM `Q_comb` / `Q_rad` → `A_free` / louver gross | System-family election (`suppression-technology-selection`) |
 | Branch B: OA% × panel area × count → `n_panels` / `A_return` | Occupancy re-class (`occupancy-hazard-fork`) |
-| Face vs free-area `v` honesty; UFC C-4 F separate streams | ASD pipe / ports / transport (`asd-vewfd-return-sampling` **consumes** OA%/CFM) |
+| Face vs free-area `v` honesty; UFC C-4 F separate streams | ASD pipe / ports / transport (`fa-asd-vewfd-data-hall-sampling-layout` **consumes** OA%/CFM) |
 | DS 5-23 manufacturer + interlock; Tate datasheet pins | Pump nameplate / DS 3-7 pump-room recipe (`pump-envelope`) |
 | Status register + reciprocal handshakes | Dual-carrier BOD authorship (matrix — consume+return) |
 | Consume packet + STS + matrix(when dual) + occupancy | Louver CAD; invent OEM Q; clean-agent relief vents as company BOD |
@@ -129,7 +129,7 @@ Caller must supply. Do **not** invent OEM scfm, OA%, or `v`. Do not treat SI/NI 
 | `suppression-technology-selection` | Elected wet/dry/DI **company election token** | Elect a system family; silent-substitute SI→DI; treat mist/foam as BOD |
 | `occupancy-hazard-fork` | Occupancy / space class — consumed when present (else `ASSUMED`, flagged) | Re-classify occupancy here |
 | `most-stringent-basis-matrix` | **Opening / OA% / genset-air** rows when dual-carrier | Rebuild dual-carrier BOD; Stop-away forever; invent opening numbers |
-| `asd-vewfd-return-sampling` | Hands OA%/CFM **to** ASD (ASD does **not** currently name this Skill by id) | Size ASD ports / transport here |
+| `fa-asd-vewfd-data-hall-sampling-layout` | Hands OA%/CFM **to** ASD (ASD does **not** currently name this Skill by id) | Size ASD ports / transport here |
 | `pump-envelope` | Pump-room diesel air / DS 3-7 | Import 0.75 in²/hp onto facility genset |
 | `itm-design-for-testability` | DS 5-20 / ATS ITM confusion | Treat DS 5-20 as opening sizing |
 
@@ -137,12 +137,12 @@ If SI/NI/foam/mist is presented as BOD → **Stop** (company scope lock — stay
 
 ### 2.2 Reciprocal handshakes (required rows)
 
-**Outbound this restamp only.** Do **not** restamp peers. Note: `asd-vewfd-return-sampling` consumes OA%/CFM conceptually but **does not currently name this Skill by id** inbound.
+**Outbound this restamp only.** Do **not** restamp peers. Note: `fa-asd-vewfd-data-hall-sampling-layout` consumes OA%/CFM conceptually but **does not currently name this Skill by id** inbound.
 
 | Peer | They own | This Skill owns |
 |---|---|---|
 | `pump-envelope` | Pump listed envelope; DS 3-7 §§2.4.17–2.4.25 pump-room air; `calcs/fp` `louver` identity | Facility genset openings (OEM + DS 5-23); refuse DS 3-7 import onto genset |
-| `asd-vewfd-return-sampling` | ASD ports / chamber / transport / SOO | Supply OA% / CFM@SP / `n_panels` / `A_return` — do not size ports here |
+| `fa-asd-vewfd-data-hall-sampling-layout` | ASD ports / chamber / transport / SOO | Supply OA% / CFM@SP / `n_panels` / `A_return` — do not size ports here |
 | `itm-design-for-testability` | Lifecycle ITM; DS 5-20 / ATS tests | Hand DS 5-20 confusion here → ITM; DS 5-20 ≠ openings |
 | the input packet | Assignment context (component `combustion-air`) | **Consume only** — optional; absent → proceed, flag `ASSUMED` |
 | `occupancy-hazard-fork` | Occupancy / HC/OH pin | Consume only; do not re-classify |
@@ -159,7 +159,7 @@ Example lines:
 - `HAND OFF — most-stringent-basis-matrix: opening/OA%/genset-air rows when dual. Consume; return here after.`
 - `HAND OFF — the input packet: optional. Missing → proceed from given inputs; flag `ASSUMED`.`
 - `HAND OFF — occupancy-hazard-fork: occupancy pin. Consume only.`
-- `HAND OFF — asd-vewfd-return-sampling: consume OA%/CFM from here (peer does not yet name this Skill inbound).`
+- `HAND OFF — fa-asd-vewfd-data-hall-sampling-layout: consume OA%/CFM from here (peer does not yet name this Skill inbound).`
 - `HAND OFF — pump-envelope: DS 3-7 pump-room air / nameplate. Not facility genset.`
 - `HAND OFF — itm-design-for-testability: DS 5-20 / ATS ITM. Not openings.`
 - `HAND OFF — density-area-dry-increase / hydrant-supply-curve: Not this Skill.`
@@ -284,7 +284,7 @@ If Q is `[SYN]`, `n_panels` is `[SYN]`. ASD Skill **consumes** `n_panels` / CFM;
 
 ### 3.5 Hand-offs
 
-- `HAND OFF — asd-vewfd-return-sampling` with panel OA% + CFM@SP / `n_panels` / `A_return`.
+- `HAND OFF — fa-asd-vewfd-data-hall-sampling-layout` with panel OA% + CFM@SP / `n_panels` / `A_return`.
 - `HAND OFF — pump-envelope` / DS 3-7 if the room is a **pump** room, not a genset room.
 - `HAND OFF — itm-design-for-testability` if ATS testing (DS 5-20 / 2-81) was confused with this opening calc.
 - Clean-agent relief free area → hand-away only (company does not design).
@@ -346,7 +346,7 @@ Do not emit: occupancy reclass, density×area, pump nameplate, ASD hole schedule
 | Dual-carrier per-parameter authorship (opening/OA%/genset-air) | `most-stringent-basis-matrix` — **consume**, then return here |
 | Assignment packet authorship | the input packet — **consume only** |
 | Pump envelope / combustion air of **diesel fire pump** | `pump-envelope` + DS 3-7 |
-| ASD ports / transport time | `asd-vewfd-return-sampling` (this Skill **supplies OA%**; peer does not yet name this Skill inbound) |
+| ASD ports / transport time | `fa-asd-vewfd-data-hall-sampling-layout` (this Skill **supplies OA%**; peer does not yet name this Skill inbound) |
 | ATS ITM / electrical testing | `itm-design-for-testability` (DS 5-20 / 2-81) |
 | Density × area / hydrant curve | `density-area-dry-increase` / `hydrant-supply-curve` — **Not-this** |
 | Clean-agent relief-vent free area | Hand-away only — company does **not** design clean agent |

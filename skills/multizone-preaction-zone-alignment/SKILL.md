@@ -134,7 +134,7 @@ Optional (do not block; flag `[V]` / `handoff` / `comparison-only`): ceiling hei
 | `preaction-releasing-c-and-e-soo` | Own-zone / no-cross-zone Boolean context | Rewrite full C&E matrix |
 | `power-isolation-disconnect-control` | 1:1 PI zone tags / Fig D.1 context when present | Own NEC 645 / Test-Mode architecture here |
 | `density-area-dry-increase` | Named demand row (wet 2,500 vs dry 3,500) | Re-run `calcs` |
-| `asd-vewfd-return-sampling` | 1:1 VEWFD zone tags when present | Size ASD ports / transport here |
+| `fa-asd-vewfd-data-hall-sampling-layout` | 1:1 VEWFD zone tags when present | Size ASD ports / transport here |
 | `preaction-el-el-trim-election` | DI trim family when present | Write trim SKU catalog |
 | `nitrogen-inerting-and-c-factor-gate` | Medium (N₂ generator + compressor) / C-factor election (C=100 design; 120 comparison-only) when dry/DI | Own fill clock or C-factor here |
 | `pump-envelope` | Concurrency flow when present | Freeze concurrent-zone gpm from habit |
@@ -151,7 +151,7 @@ If SI/NI/foam/mist is presented as BOD → **Stop** (company scope lock — stay
 | `power-isolation-disconnect-control` | NEC 645 / Fig D.1 / Test-Mode / auto-manual isolation | **1:1 PI zone tags** on Tables A+B |
 | `density-area-dry-increase` | `qd` / dry **3,500** vs wet **2,500** `calcs` | **Name** consumed demand row; no `calcs` |
 | `pump-envelope` | Concurrent-zone **supply** flow / tank | Name concurrency assumption `[V]`/`[SYN]`; never freeze gpm |
-| `asd-vewfd-return-sampling` | Port count / transport ≤60 s | **1:1 VEWFD zone tags** |
+| `fa-asd-vewfd-data-hall-sampling-layout` | Port count / transport ≤60 s | **1:1 VEWFD zone tags** |
 | `preaction-el-el-trim-election` | DI trim family / collision | Hand-off row only |
 | `nitrogen-inerting-and-c-factor-gate` | Medium / C / 30-min **fill** | Zone map context only; fill ≠ delivery |
 | `itm-design-for-testability` | 2-in test / drain / supervision **testability** into CD | **Schedule** the 2-in line per zone (FM hardware unit) |
@@ -165,7 +165,7 @@ Emit rows as needed:
 - `HAND OFF — power-isolation-disconnect-control: Fig D.1 / Test-Mode / NEC 645. This Skill only scheduled 1:1 PI tags.`
 - `HAND OFF — density-area-dry-increase: consume named demand row (DI → dry 3500; wet → wet row). No calcs here.`
 - `HAND OFF — pump-envelope: concurrent-zone supply. Concurrency assumption is [V]/[SYN] provisional only.`
-- `HAND OFF — asd-vewfd-return-sampling: ports / transport. 1:1 VEWFD tags only here.`
+- `HAND OFF — fa-asd-vewfd-data-hall-sampling-layout: ports / transport. 1:1 VEWFD tags only here.`
 - `HAND OFF — preaction-el-el-trim-election: DI trim family.`
 - `HAND OFF — nitrogen-inerting-and-c-factor-gate: medium / C / fill (fill ≠ delivery).`
 - `HAND OFF — itm-design-for-testability: 2-in test-line testability into CD.`
@@ -201,7 +201,7 @@ Consume the assignment packet (optional) and any BOD **delivery / interlock / VE
 
 - Density × area / dry +30 % / 2,500→3,500 → **density-area-dry-increase**
 - Pump envelope / hydrant curve / simultaneous-zone **flow calc** → **pump-envelope** (this Skill may **name** a concurrency assumption as `[V]` / `[SYN]` and hand off)
-- ASD port count / transport ≤60 s math → **asd-vewfd-return-sampling**
+- ASD port count / transport ≤60 s math → **fa-asd-vewfd-data-hall-sampling-layout**
 - Authoritative C&E matrix / SOO → **preaction-releasing-c-and-e-soo**
 - Delivery-time **proof** (listed program, ITC water test, QOD election) → **dry-preaction-water-delivery-screen**
 - Power-isolation architecture / NEC 645 / Test-Mode → **power-isolation-disconnect-control**
@@ -390,7 +390,7 @@ Shop codebook **by title**.
 | ≤30 s / 60 s delivery proof, QOD, volume | `dry-preaction-water-delivery-screen` |
 | Releasing C&E + SOO | `preaction-releasing-c-and-e-soo` |
 | Power isolation / NEC 645 / Test-Mode | `power-isolation-disconnect-control` |
-| ASD port / transport sizing | `asd-vewfd-return-sampling` |
+| ASD port / transport sizing | `fa-asd-vewfd-data-hall-sampling-layout` |
 | El/El trim catalog | `preaction-el-el-trim-election` |
 | N₂ / C-factor / 30-min fill | `nitrogen-inerting-and-c-factor-gate` |
 | DP-to-DP fire barriers | `fire-area-compartmentation-schedule` |
