@@ -649,7 +649,7 @@ Rules:
 | ITM and design-for-testability | `itm-design-for-testability` |
 | Commissioning and acceptance | `commissioning-ist-acceptance-packet` |
 | Assignment packet retrieval/adaptation | the input packet |
-| Transformer or power-block water spray | out of scope |
+| Outdoor oil-filled transformer water spray | `power-block-transformer-water-spray` (does not replace wet, dry, or double-interlock for the building) |
 | ESS isolation, venting, duration, and Li-ion room basis | `ess-isolation-venting-and-duration` |
 | VEWFD layout and detection | Detection/releasing Skill |
 | CAD, BIM, delegated design | Outside Skills |
@@ -805,7 +805,7 @@ Use section and edition/date for every code, insurer, or standard requirement.
 5. Single-interlock and non-interlock are `comparison-only` — never company election.
 6. Foam is prohibited.
 7. Mist is `PRACTICE REFUSED`.
-8. Clean agent, hybrid, aerosol, hypoxic, water spray, and other special media are record-only and routed (`handoff`).
+8. Clean agent, hybrid, aerosol, hypoxic, building deluge, and other special media are record-only and routed (`handoff`). Outdoor oil-filled transformer water spray is `power-block-transformer-water-spray`. It does not replace wet, dry, or double-interlock for the building.
 9. A barred objective is foreclosed, not traded away.
 10. Do not reject gaseous technology solely because of airflow.
 11. Preserve the vendor’s valid lifecycle argument even when rejecting the concept.

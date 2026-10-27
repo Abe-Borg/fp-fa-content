@@ -10,7 +10,7 @@ The election is made in `suppression-technology-selection` and consumed by the o
 
 ## Out of scope
 
-Foam, clean agent, water mist, deluge, and water spray are out of scope. Record the request and stop. Do not size them here.
+Foam, clean agent, and water mist are out of scope. Record the request and stop. Do not size them here. Building deluge is out of scope. Outdoor oil-filled transformer water spray is `power-block-transformer-water-spray`. It does not replace wet pipe, dry pipe, or double-interlock for the building.
 
 Single-interlock and non-interlock preaction are comparison-only. If either is offered as the basis of design, record it, stop, and return an RFI. Do not substitute double-interlock.
 

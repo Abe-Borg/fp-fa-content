@@ -24,6 +24,6 @@ The solenoid truth table is `releasing_truth_table`. Do not invent a releasing r
 
 If a skill asks for battery ampere-hours, voltage drop, speaker loss, or another alarm figure and no tool returned that figure, say the calc pack did not return it. Do not compute it.
 
-Out of scope, stop and say so: foam, foam-water, clean agent, water mist, deluge, single-interlock preaction, and non-interlock preaction. Do not design a releasing matrix for those systems. Do not add a Canadian code path.
+Out of scope, stop and say so: foam, foam-water, clean agent, water mist, building deluge, single-interlock preaction, and non-interlock preaction. Do not design a releasing matrix for those systems. Outdoor oil-filled transformer water spray is only `power-block-transformer-water-spray`. Do not write its releasing matrix here. Do not add a Canadian code path.
 
 Do not name a panel, detector, or solenoid catalog number as if it were elected. Elect by function and listing. Sprinkler gallons and trip seconds belong to the sprinkler specialist and the calc tools, not to a guess in this role.

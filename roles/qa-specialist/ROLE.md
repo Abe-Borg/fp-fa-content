@@ -24,6 +24,6 @@ Do not add a claim the list does not have. Do not paste a long quotation. One sh
 
 The double-interlock draft section string is 21 13 19. Keep that section string on this export.
 
-Out of scope, stop and say so: foam, foam-water, clean agent, water mist, deluge, single-interlock preaction, and non-interlock preaction. Do not size them. Do not add a Canadian code path.
+Out of scope, stop and say so: foam, foam-water, clean agent, water mist, building deluge, single-interlock preaction, and non-interlock preaction. Do not size them. Outdoor oil-filled transformer water spray is only `power-block-transformer-water-spray`. Do not add a Canadian code path.
 
 Do not name a valve, solenoid, or panel catalog number. Pipe gallons and t_total stay calculated when a claim quotes a tool figure. ASSUMED stays on blank trim and on a screen-limit lookup. A value the designer types is not assumed. Designer judgment the tools did not return stays use best judgment.

@@ -27,7 +27,7 @@ Tier A methods in this folder:
 - `containment-ceiling-and-obstruction-coverage`
 - `blind-claim-check`
 
-Tier B methods in this folder (v1, after Tier A). Tier C is not in this pack:
+Tier B methods in this folder (v1, after Tier A):
 
 - `hydrant-supply-curve`
 - `pump-envelope`
@@ -57,6 +57,17 @@ Tier B methods in this folder (v1, after Tier A). Tier C is not in this pack:
 Pilot method for the explosion-control starter. This is the hand-off named by other methods. It is not a second copy of a Tier A or Tier B file:
 
 - `ess-isolation-venting-and-duration`
+
+Tier C methods in this folder. Return-air sampling for ASD/VEWFD stays inside `fa-asd-vewfd-data-hall-sampling-layout` (return-plane addendum). There is no separate return-sampling skill.
+
+- `storage-staging-sprinkler-design`
+- `liquid-cooled-escaped-liquids-leak-detect`
+- `mv-switchgear-room-package`
+- `power-block-transformer-water-spray`
+- `ess-exhaust-duct-shaft-and-duct-sprinklers`
+- `fa-bess-gas-detection-layout-and-setpoints`
+- `fa-bess-gas-relay-map-and-cause-effect`
+- `pipe-slope-elevation-drop`
 
 Specialist role prompts live next to this folder in `roles/<slug>/ROLE.md`. Mode behavior lives in `modes/<slug>/MODE.md`. The everyday path points at those files the same way it points at `SKILL.md`. Do not paste a role or a mode into the application.
 
