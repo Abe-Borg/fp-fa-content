@@ -80,6 +80,12 @@ class NitrogenAndScreenTests(unittest.TestCase):
         self.assertLess(out["friction_ratio_c100_vs_c120"], 0.73)
         fill = di_zone.formulas.air_fill_scfm(281.3, 40, 30)
         self.assertAlmostEqual(out["scfm_gauge_basis"], fill["scfm_gauge_basis"], places=6)
+        self.assertAlmostEqual(out["scfm_abs_basis"], fill["scfm_abs_basis"], places=6)
+        self.assertGreater(out["scfm_abs_basis"], out["scfm_gauge_basis"])
+        self.assertIn(f"{out['scfm_gauge_basis']:.2f}", out["fill_bases"])
+        self.assertIn(f"{out['scfm_abs_basis']:.2f}", out["fill_bases"])
+        self.assertIn("Gauge-basis", out["fill_bases"])
+        self.assertIn("Absolute-basis", out["fill_bases"])
 
     def test_example_zone_misses_fm_30s_and_stays_under_500(self):
         segments = [

@@ -8,6 +8,7 @@ arguments, or is unreachable, the tables still use this plan.
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 from typing import Any, Callable
 
@@ -67,9 +68,12 @@ def _blank(value: Any) -> bool:
 
 def _float(value: Any, label: str) -> float:
     try:
-        return float(value)
+        number = float(value)
     except (TypeError, ValueError) as exc:
         raise ValueError(f"{label} must be a number") from exc
+    if not math.isfinite(number):
+        raise ValueError(f"{label} must be a finite number")
+    return number
 
 
 def validate_di(di: dict) -> None:
@@ -85,10 +89,16 @@ def validate_di(di: dict) -> None:
         raise ValueError("Fill flow must be greater than 0 gpm.")
 
 
-def _opt_float(value: Any) -> float | None:
+def _opt_float(value: Any, label: str) -> float | None:
     if _blank(value):
         return None
-    return float(value)
+    try:
+        number = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{label} must be a number") from exc
+    if not math.isfinite(number):
+        raise ValueError(f"{label} must be a finite number")
+    return number
 
 
 def run_tool_plan(session: ToolSession, di: dict, basis: dict) -> tuple[dict[str, Any], dict[str, dict]]:
@@ -107,8 +117,8 @@ def run_tool_plan(session: ToolSession, di: dict, basis: dict) -> tuple[dict[str
     volume = call("zone_trapped_volume", {
         "segments": di.get("segments"),
         "length_basis": di.get("length_basis") or "center_to_center",
-        "fittings_percent": _opt_float(di.get("fittings_percent")),
-        "trim_gal": _opt_float(di.get("trim_gal")),
+        "fittings_percent": _opt_float(di.get("fittings_percent"), "Fittings percent"),
+        "trim_gal": _opt_float(di.get("trim_gal"), "Trim"),
     })
     pipe_only = [
         {"d_in": row["d_in"], "length_ft": row["length_ft"]}
@@ -153,7 +163,7 @@ def run_tool_plan(session: ToolSession, di: dict, basis: dict) -> tuple[dict[str
         "system_type": di.get("system_type") or "di",
         "prime_held_by": di.get("prime_held_by") or "unknown",
         "failsafe_on_total_power_loss": bool(di.get("failsafe_on_total_power_loss")),
-        "supervisory_psi": _opt_float(di.get("supervisory_psi")),
+        "supervisory_psi": _opt_float(di.get("supervisory_psi"), "Supervisory pressure"),
         "medium": di.get("medium") or "unelected",
         "insurer": (basis or {}).get("insurer") or "",
     })
@@ -322,7 +332,7 @@ def template_narrative(di: dict, tools: dict[str, Any], basis: dict | None = Non
         ),
         (
             f"Design Hazen-Williams C is {nitrogen['design_c']}. "
-            f"Gauge-basis fill rate is {nitrogen['scfm_gauge_basis']:.2f} scfm."
+            f"{nitrogen['fill_bases']}"
         ),
         (
             f"Releasing: {truth['boolean']}. Manual station {manual}. "

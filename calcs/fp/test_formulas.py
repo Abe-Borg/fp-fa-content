@@ -166,6 +166,26 @@ class VolumeFillTests(unittest.TestCase):
     def test_air_fill_viking_shortcut(self):
         r = air_fill_scfm(1000, 40, 30)
         self.assertAlmostEqual(r["scfm_gauge_basis"], 12.1, delta=0.1)
+        self.assertGreater(r["scfm_abs_basis"], r["scfm_gauge_basis"])
+        self.assertIn(f"Gauge-basis fill rate is {r['scfm_gauge_basis']:.2f} scfm", r["fill_bases"])
+        self.assertIn(f"Absolute-basis fill rate is {r['scfm_abs_basis']:.2f} scfm", r["fill_bases"])
+
+    def test_positive_inputs_reject_non_finite(self):
+        import math
+        from formulas import _as_float, _require_positive, di_trip_to_water
+        for bad in ("1e309", math.inf, math.nan, "-inf"):
+            with self.assertRaises(CalcError):
+                _as_float("q_fill_gpm", bad)
+            with self.assertRaises(CalcError):
+                _require_positive("q_fill_gpm", bad)
+            with self.assertRaises(CalcError):
+                di_trip_to_water(100, bad)
+            with self.assertRaises(CalcError):
+                air_fill_scfm(100, bad, 30)
+        with self.assertRaises(CalcError):
+            _require_positive("q_fill_gpm", 0)
+        with self.assertRaises(CalcError):
+            _require_positive("q_fill_gpm", -1)
 
     def test_pipe_volume_rejects_empty(self):
         with self.assertRaises(CalcError):
@@ -632,6 +652,15 @@ class Batch9CompressorN2Tests(unittest.TestCase):
         r = compressor_n2_sizing(self.SYS, 30)
         self.assertEqual(r["largest_system_id"], "DI-1")
         self.assertAlmostEqual(r["compressor_scfm_gauge"], 750*40/(7.48*14.7*30), places=6)
+        self.assertGreater(r["compressor_scfm_abs"], r["compressor_scfm_gauge"])
+        self.assertIn(
+            f"Compressor gauge-basis fill rate is {r['compressor_scfm_gauge']:.2f} scfm",
+            r["fill_bases"],
+        )
+        self.assertIn(
+            f"Compressor absolute-basis fill rate is {r['compressor_scfm_abs']:.2f} scfm",
+            r["fill_bases"],
+        )
 
     def test_n2_on_campus_total(self):
         from formulas import compressor_n2_sizing

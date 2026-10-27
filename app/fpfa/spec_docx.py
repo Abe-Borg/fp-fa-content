@@ -179,13 +179,23 @@ def write_docx(path: Path | str, project: dict, result: dict) -> Path:
     )
 
     doc.add_heading("Nitrogen and demand", level=2)
+    pressure = di.get("supervisory_psig") or 40
+    minutes = di.get("fill_minutes") or 30
     doc.add_paragraph(
         f"Design Hazen-Williams C is {nitrogen['design_c']}. "
         f"Comparison C {nitrogen['comparison_c']} multiplies friction by about "
         f"{nitrogen['friction_ratio_c100_vs_c120']:.3f} and is not the design value. "
-        f"Gauge-basis fill {nitrogen['scfm_gauge_basis']:.2f} scfm "
-        f"at {di.get('supervisory_psig') or 40} psig in {di.get('fill_minutes') or 30} min. "
+        f"{nitrogen['fill_bases']} "
+        f"Both rates use {pressure} psig and {minutes} min. "
         f"{nitrogen['formula']}."
+    )
+    _table(
+        doc,
+        ["Fill basis", "scfm"],
+        [
+            ["Gauge", f"{nitrogen['scfm_gauge_basis']:.2f}"],
+            ["Absolute", f"{nitrogen['scfm_abs_basis']:.2f}"],
+        ],
     )
     doc.add_paragraph(
         f"Design area {density['design_area_ft2']:.0f} ft2. "

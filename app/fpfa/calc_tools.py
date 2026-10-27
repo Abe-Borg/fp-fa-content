@@ -91,7 +91,14 @@ SCHEMAS = [
     },
     {
         "name": "dry_delivery_screen",
-        "description": "Pipe-only volume, NFPA size cap, and optimistic trip-to-water screen from formulas.dry_delivery_screen. Not a listed water-delivery calculation. Double-interlock has a 500 gal cap; a quick-opening device does not raise it.",
+        "description": (
+            "Pipe timing, NFPA size cap, and optimistic trip-to-water screen from formulas.dry_delivery_screen. "
+            "Not a listed water-delivery calculation. Timing stays on pipe volume. "
+            "Pass trim_gal and fittings_percent when the zone has them. "
+            "nfpa_delivery_time_exempt then uses the zone total (pipe + fittings + trim) "
+            "through the same rule as /run. Omitted fittings_percent counts as 0 when trim_gal is passed. "
+            "Double-interlock has a 500 gal cap; a quick-opening device does not raise it."
+        ),
         "input_schema": _obj(
             {
                 "segments": {"type": "array"},
@@ -102,6 +109,8 @@ SCHEMAS = [
                 "t_exhaust_s": {"type": "number"},
                 "basis": {"type": "string", "description": "FM or NFPA-OH"},
                 "system_type": {"type": "string", "description": "dry or di"},
+                "trim_gal": {"type": "number", "description": "Trim gallons to include in the size exemption. Omit for a pipe-only screen."},
+                "fittings_percent": {"type": "number", "description": "Fittings allowance percent. Used with trim_gal for the zone-total exemption."},
             },
             ["segments", "q_fill_gpm", "system_type"],
         ),
@@ -145,7 +154,11 @@ SCHEMAS = [
     },
     {
         "name": "nitrogen_gate",
-        "description": "Design C is 100. Fill scfm is formulas.air_fill_scfm. Do not emit C=120 as the design value.",
+        "description": (
+            "Design C is 100. Fill scfm is formulas.air_fill_scfm. "
+            "The result states the gauge-basis rate and the absolute-basis rate. Quote both. "
+            "Do not emit C=120 as the design value."
+        ),
         "input_schema": _obj(
             {"v_gal": {"type": "number"}, "p_psig": {"type": "number"}, "t_min": {"type": "number"}},
             ["v_gal"],
@@ -254,7 +267,7 @@ class ToolSession:
                 args.get("trim_gal"),
             )
         if name == "dry_delivery_screen":
-            return self.formulas.dry_delivery_screen(
+            screen = self.formulas.dry_delivery_screen(
                 args.get("segments"),
                 args.get("q_fill_gpm"),
                 qod=args.get("qod", False),
@@ -264,6 +277,7 @@ class ToolSession:
                 basis=args.get("basis") or "FM",
                 system_type=args.get("system_type") or "di",
             )
+            return _govern_delivery_exemption(self.formulas, screen, args)
         if name == "di_trip_to_water":
             return self.formulas.di_trip_to_water(
                 args.get("v_gal"),
@@ -342,3 +356,37 @@ def _lfl_setpoints(content_root: Path, args: dict) -> dict:
 
 def dumps(payload) -> str:
     return json.dumps(payload, indent=2, default=str)
+
+
+def _number_was_passed(args: dict, key: str) -> bool:
+    if key not in args:
+        return False
+    value = args[key]
+    if value is None:
+        return False
+    if isinstance(value, str) and not value.strip():
+        return False
+    return True
+
+
+def _govern_delivery_exemption(formulas, screen: dict, args: dict) -> dict:
+    """Size exemption follows the zone total when trim or fittings were passed.
+
+    Timing on the pipe-only screen stays. ``govern_nfpa_exemption`` is the same
+    helper ``/run`` uses. A call with neither trim nor fittings stays pipe-only.
+    """
+    trim_passed = _number_was_passed(args, "trim_gal")
+    fittings_passed = _number_was_passed(args, "fittings_percent")
+    if not trim_passed and not fittings_passed:
+        return screen
+    trim = formulas._require_non_negative("trim_gal", args["trim_gal"]) if trim_passed else 0.0
+    fittings = (
+        formulas._require_non_negative("fittings_percent", args["fittings_percent"])
+        if fittings_passed else 0.0
+    )
+    pipe = float(screen["volume_gal"])
+    zone_gal = pipe * (1.0 + fittings / 100.0) + trim
+    # Local import: workflow imports this module at load time.
+    from fpfa.workflow import govern_nfpa_exemption
+
+    return govern_nfpa_exemption(screen, zone_gal)

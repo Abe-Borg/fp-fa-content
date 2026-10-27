@@ -307,6 +307,178 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn("not assumed", body)
         self.assertNotIn("trim ASSUMED", body)
 
+    def test_fill_flow_rejects_non_finite(self):
+        import math
+
+        from fpfa.calc_tools import ToolSession
+        from fpfa.sample_data import EXAMPLE_DI
+        from fpfa.workflow import validate_di
+
+        formulas = ToolSession(self.root).formulas
+        for bad in ("1e309", "inf", "nan", math.inf, math.nan):
+            di = json.loads(json.dumps(EXAMPLE_DI))
+            di["q_fill_gpm"] = bad
+            with self.assertRaises(ValueError) as caught:
+                validate_di(di)
+            self.assertIn("finite", str(caught.exception).lower())
+            with self.assertRaises(ValueError):
+                self.run(self.root, di, self.basis)
+            with self.assertRaises(formulas.CalcError):
+                formulas._as_float("q_fill_gpm", bad)
+            with self.assertRaises(formulas.CalcError):
+                formulas._require_positive("q_fill_gpm", bad)
+            with self.assertRaises(formulas.CalcError):
+                formulas.di_trip_to_water(100, bad)
+            with self.assertRaises(formulas.CalcError):
+                formulas.air_fill_scfm(100, bad, 30)
+
+        for bad in (0, -5, "0"):
+            di = json.loads(json.dumps(EXAMPLE_DI))
+            di["q_fill_gpm"] = bad
+            with self.assertRaises(ValueError) as caught:
+                validate_di(di)
+            self.assertIn("greater than 0", str(caught.exception))
+
+        di = json.loads(json.dumps(EXAMPLE_DI))
+        di["trim_gal"] = "1e309"
+        with self.assertRaises(ValueError) as caught:
+            self.run(self.root, di, self.basis)
+        self.assertIn("finite", str(caught.exception).lower())
+
+        session = ToolSession(self.root)
+        with self.assertRaises(formulas.CalcError):
+            session.execute("zone_trapped_volume", {
+                "segments": [{"d_in": 4.026, "length_ft": 10}],
+                "trim_gal": "1e309",
+                "fittings_percent": 0,
+            })
+        with self.assertRaises(formulas.CalcError):
+            session.execute("dry_delivery_screen", {
+                "segments": [{"d_in": 4.026, "length_ft": 10}],
+                "q_fill_gpm": "1e309",
+                "system_type": "di",
+            })
+        with self.assertRaises(formulas.CalcError):
+            formulas._require_positive("q_fill_gpm", 0)
+
+    def test_compressor_n2_reports_gauge_and_absolute(self):
+        from docx import Document
+
+        from fpfa.calc_tools import ToolSession
+        from fpfa.spec_docx import write_docx
+
+        result = self.run(self.root, self.di, self.basis)
+        nitrogen = result["tools"]["nitrogen_gate"]
+        gauge = f"{nitrogen['scfm_gauge_basis']:.2f}"
+        absolute = f"{nitrogen['scfm_abs_basis']:.2f}"
+        self.assertNotEqual(gauge, absolute)
+        self.assertGreater(nitrogen["scfm_abs_basis"], nitrogen["scfm_gauge_basis"])
+        self.assertIn(f"Gauge-basis fill rate is {gauge} scfm", nitrogen["fill_bases"])
+        self.assertIn(f"Absolute-basis fill rate is {absolute} scfm", nitrogen["fill_bases"])
+        self.assertIn(f"Gauge-basis fill rate is {gauge} scfm", result["narrative"])
+        self.assertIn(f"Absolute-basis fill rate is {absolute} scfm", result["narrative"])
+
+        session = ToolSession(self.root)
+        chat = session.execute("nitrogen_gate", {
+            "v_gal": result["tools"]["zone_trapped_volume"]["zone_gal"],
+            "p_psig": 40,
+            "t_min": 30,
+        })
+        self.assertIn(f"Gauge-basis fill rate is {gauge} scfm", chat["fill_bases"])
+        self.assertIn(f"Absolute-basis fill rate is {absolute} scfm", chat["fill_bases"])
+
+        sized = session.execute("fp_calc", {
+            "op": "compressor_n2_sizing",
+            "inputs": {
+                "systems": [
+                    {"id": "A", "v_gal": 750, "p_psig": 40},
+                    {"id": "B", "v_gal": 500, "p_psig": 40},
+                ],
+                "t_min": 30,
+            },
+        })
+        self.assertGreater(sized["compressor_scfm_abs"], sized["compressor_scfm_gauge"])
+        self.assertGreater(sized["n2_campus_scfm_abs"], sized["n2_campus_scfm_gauge"])
+        self.assertIn(
+            f"Compressor gauge-basis fill rate is {sized['compressor_scfm_gauge']:.2f} scfm",
+            sized["fill_bases"],
+        )
+        self.assertIn(
+            f"Compressor absolute-basis fill rate is {sized['compressor_scfm_abs']:.2f} scfm",
+            sized["fill_bases"],
+        )
+        self.assertIn(
+            f"N2 campus gauge-basis fill rate is {sized['n2_campus_scfm_gauge']:.2f} scfm",
+            sized["fill_bases"],
+        )
+        self.assertIn(
+            f"N2 campus absolute-basis fill rate is {sized['n2_campus_scfm_abs']:.2f} scfm",
+            sized["fill_bases"],
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "section.docx"
+            write_docx(path, {"name": "Sample data hall DI zone", "basis": self.basis}, result)
+            doc = Document(path)
+            text = "\n".join(paragraph.text for paragraph in doc.paragraphs)
+            fill_rows = None
+            for table in doc.tables:
+                rows = [[cell.text for cell in row.cells] for row in table.rows]
+                text += "\n" + "\n".join(" | ".join(row) for row in rows)
+                if rows and rows[0][:2] == ["Fill basis", "scfm"]:
+                    fill_rows = rows
+        self.assertEqual(fill_rows, [
+            ["Fill basis", "scfm"],
+            ["Gauge", gauge],
+            ["Absolute", absolute],
+        ])
+        self.assertIn(f"Gauge-basis fill rate is {gauge} scfm", text)
+        self.assertIn(f"Absolute-basis fill rate is {absolute} scfm", text)
+
+    def test_chat_exemption_uses_zone_total_when_trim_is_present(self):
+        import math
+
+        from fpfa.calc_tools import ToolSession
+        from fpfa.workflow import govern_nfpa_exemption
+
+        diameter = 6.065
+        gallons_per_foot = math.pi / 4.0 * diameter * diameter / 144.0 * 7.48
+        segments = [{"d_in": diameter, "length_ft": 495.0 / gallons_per_foot}]
+        session = ToolSession(self.root)
+        volume = session.execute("zone_trapped_volume", {
+            "segments": segments,
+            "fittings_percent": 0,
+            "trim_gal": 10,
+        })
+        self.assertAlmostEqual(volume["pipe_gal"], 495, delta=0.05)
+        self.assertAlmostEqual(volume["zone_gal"], 505, delta=0.05)
+
+        pipe_only = session.execute("dry_delivery_screen", {
+            "segments": segments,
+            "q_fill_gpm": 500,
+            "system_type": "di",
+            "qod": True,
+        })
+        self.assertTrue(pipe_only["nfpa_delivery_time_exempt"])
+        self.assertNotIn("exemption_volume_gal", pipe_only)
+
+        chat = session.execute("dry_delivery_screen", {
+            "segments": segments,
+            "q_fill_gpm": 500,
+            "system_type": "di",
+            "qod": True,
+            "trim_gal": 10,
+            "fittings_percent": 0,
+        })
+        governed = govern_nfpa_exemption(pipe_only, volume["zone_gal"])
+        self.assertFalse(chat["nfpa_delivery_time_exempt"])
+        self.assertTrue(chat["pipe_only_nfpa_delivery_time_exempt"])
+        self.assertEqual(chat["nfpa_size_cap_gal"], 500)
+        self.assertEqual(chat["nfpa_delivery_time_exempt"], governed["nfpa_delivery_time_exempt"])
+        self.assertAlmostEqual(chat["exemption_volume_gal"], governed["exemption_volume_gal"], places=6)
+        self.assertAlmostEqual(chat["exemption_volume_gal"], 505, delta=0.05)
+        self.assertAlmostEqual(chat["t_total_s"], pipe_only["t_total_s"], places=6)
+
 
 class ChatRequestTests(unittest.TestCase):
     def test_slash_commands_and_sample_di_aliases(self):
