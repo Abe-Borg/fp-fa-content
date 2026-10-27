@@ -2,7 +2,7 @@
 
 Desktop prototype for hyperscale data-center fire protection and fire alarm designers. The scope is wet pipe, dry pipe, and double-interlock preaction sprinklers, plus the detection and releasing that trip them. Foam, clean agent, water mist, deluge, and single-interlock preaction are out of scope.
 
-The app reads methods from `skills/`, calculations from `calcs/`, and optional draft language from `specs/`. It does not hardcode those methods. Point it at another folder with the same layout (`FPFA_CONTENT_ROOT`, or Settings) when a content pack is downloaded later. `corpus/` is reserved for reference notes the next pass can search.
+The app reads methods from `skills/`, calculations from `calcs/`, and optional draft language from `specs/`. It does not hardcode those methods. Point it at another folder with the same layout (`FPFA_CONTENT_ROOT`, or Settings). Settings can also check the release feed and install a newer pack. `corpus/` is reserved for reference notes the next pass can search.
 
 ## Why this stack
 
@@ -32,6 +32,45 @@ py -m fpfa
 On Linux or macOS the same commands work with `python3` in place of `py`. The key is stored in a user-only file under `~/.local/share/fpfa-assistant` (or `$XDG_DATA_HOME`), mode `0600` where the filesystem allows it. Set `FPFA_USE_KEYRING=1` before starting the app to use the system keyring instead. A missing keyring on those desktops can open a blocking password dialog, so the file is the default there.
 
 Projects are JSON files in that data directory. Override it with `FPFA_DATA_DIR` if you want them somewhere else.
+
+## Content updates
+
+Settings shows the content version, **Check for updates**, and a short changelog. The check reads a manifest, downloads a newer zip, verifies sha256, and then points the saved content folder at the new tree. Until that pointer moves, the app keeps the last good pack. If the saved folder is missing or incomplete, the app uses the bundled seed: this checkout when you run from source, or the seed folder shipped with a packaged app.
+
+The API key and the project files live in the data directory. A content update leaves them there.
+
+The default feed is the `manifest.json` asset on the latest GitHub Release:
+
+`https://github.com/Abe-Borg/fp-fa-content/releases/latest/download/manifest.json`
+
+A static URL that serves the same JSON works for a mirror or a test. The feed can also be the GitHub API document for the latest release (`https://api.github.com/repos/Abe-Borg/fp-fa-content/releases/latest`). The app then downloads the `manifest.json` asset named in that document. The manifest lists `version`, `created`, `sha256`, `filename`, and `changelog`. `min_app_version` is optional.
+
+`FPFA_CONTENT_FEED_URL` overrides the feed for this process. `FPFA_CONTENT_ROOT` pins the content folder, and a check leaves that folder in place. `FPFA_CONTENT_UPDATES=0` skips the launch check. A packaged app checks on launch. A source checkout checks on launch after a feed has been saved, or when the feed override is set. Offline, the window still opens and the last good pack stays in place.
+
+Installed packs live under `content-packs/` in the data directory. The app keeps the current pack and one previous pack. The app does not search `corpus/` yet. The pack still carries that folder for a later pass.
+
+## Release pack
+
+Build the zip and manifest from this checkout:
+
+```bash
+python3 scripts/build_content_pack.py --version 2026.10.1 --out dist --changelog "Short note"
+```
+
+The zip includes `skills/`, `calcs/`, `corpus/`, `specs/`, `modes/`, and `roles/`, plus `pack.json`. The build omits `app/`, project files, API keys, `__pycache__`, `_sources`, and path names for foam, clean agent, Canada, and vendor catalogs. Scope-lock sentences that name those systems as out of scope stay in the skill files. The manifest sha256 is the zip file.
+
+Pushing a tag `content-v2026.10.1` runs `.github/workflows/content-pack.yml`, which publishes `manifest.json` and the zip as Release assets. The tag message becomes the changelog when it has text. A chat command that opens a curation pull request is not wired.
+
+## Packaging
+
+From `app/` on the machine that should run the app:
+
+```bat
+py -m pip install -r requirements.txt pyinstaller
+py packaging\build_app.py
+```
+
+On Linux or macOS, use `python3` in place of `py`. PyInstaller builds for the OS it is running on, so a Windows `.exe` comes from a Windows run (`app\dist\fpfa\fpfa.exe`, or `packaging\build_app.ps1`). A Linux run writes `app/dist/fpfa/fpfa`. The folder includes a seed content pack, and the packaged app checks the release feed on launch. Smoke that Linux binary with `FPFA_CONTENT_UPDATES=0 ./dist/fpfa/fpfa --demo --quit` from `app/`. That runs the seed pack and the sample tool plan. It does not produce `fpfa.exe`. `python3 packaging/build_app.py --seed-only` writes the seed folder and stops before PyInstaller. An MSI is outside this prototype. Windows Credential Manager still has to be confirmed on a Windows machine where `pywin32` is installed.
 
 ## Conversation-first window
 
@@ -64,7 +103,7 @@ cd ..\..\app
 py -m unittest discover -s tests
 ```
 
-`calcs/fp/test_formulas.py` is the seed kernel suite (79 tests in this tree). `calcs/fa` is the fire-alarm library suite. Quote-only tests that needed raw code text are skipped, because that text is not in the repo. The app tests run the sample zone, the Word export, the blind claim check before that export, the Claude tool loop against a fake response, the key-file fallback, the `/sample-di` starter, the `/sample-bess` explosion-control starter, the inbox queue (workers, composer stays usable, out-of-order results stay on their job), and the `/heavy` hosted hatch (one cloud session, text-only prompt, reply back in the same thread, a failed session delete is visible, close and process exit delete an in-flight session, ordinary paths do not call it).
+`calcs/fp/test_formulas.py` is the seed kernel suite (79 tests in this tree). `calcs/fa` is the fire-alarm library suite. Quote-only tests that needed raw code text are skipped, because that text is not in the repo. The app tests run the sample zone, the Word export, the blind claim check before that export, the Claude tool loop against a fake response, the key-file fallback, the `/sample-di` starter, the `/sample-bess` explosion-control starter, the inbox queue (workers, composer stays usable, out-of-order results stay on their job), and the `/heavy` hosted hatch (one cloud session, text-only prompt, reply back in the same thread, a failed session delete is visible, close and process exit delete an in-flight session, ordinary paths do not call it). Content-pack tests serve a local manifest and zip. Those tests do not need a display.
 
 Window tests need a display and the `tkinter` module (`python3-tk` on Debian or Ubuntu). Without that module, importing the window fails and those tests do not run. A run with `DISPLAY` unset skips the window tests and still runs the rest.
 
@@ -83,4 +122,4 @@ Window tests need a display and the `tkinter` module (`python3-tk` on Debian or 
 
 ## Not in this prototype
 
-No installer and no automatic content-pack update. No second model vendor. No foam, clean agent, mist, deluge, or single-interlock design path (those inputs return an RFI and stop). Wet and dry can be named on the form; the finished vertical workflow is the double-interlock zone. The inbox queues long jobs on workers and labels a result with the job it belongs to. The blind claim check is a `claim` job on the Messages path. `/heavy` is the only hosted container path, and it is text-only on the zone packet already computed on this machine. The app does not search `corpus/` yet.
+An MSI is outside this prototype. `packaging/build_app.py` builds a distributable folder, and on Windows that folder contains an `.exe` with a seed content pack. Settings can install a newer pack from the release feed. Publishing a pack from chat is not wired; a `content-v` tag runs the release workflow. Windows Credential Manager still has to be confirmed on a Windows machine. No second model vendor. No foam, clean agent, mist, deluge, or single-interlock design path (those inputs return an RFI and stop). Wet and dry can be named on the form; the finished vertical workflow is the double-interlock zone. The inbox queues long jobs on workers and labels a result with the job it belongs to. The blind claim check is a `claim` job on the Messages path. `/heavy` is the only hosted container path, and it is text-only on the zone packet already computed on this machine. The app does not search `corpus/` yet.

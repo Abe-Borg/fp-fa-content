@@ -899,6 +899,13 @@ class KeyAndSkillTests(unittest.TestCase):
         wired = []
         for path in (REPO / "app" / "fpfa").rglob("*.py"):
             text = path.read_text(encoding="utf-8")
+            # The pack builder names the corpus folder it copies into a release zip.
+            # It does not search that folder. Search stays unwired.
+            if path.name == "content_pack.py":
+                self.assertNotIn("spec_notes", text)
+                self.assertNotIn("list_skills", text)
+                self.assertNotIn("read_skill", text)
+                continue
             if re.search(r"""['\"]corpus['\"]""", text):
                 wired.append(str(path.relative_to(REPO)))
             elif "corpus/" in text and path.name != "paths.py":
