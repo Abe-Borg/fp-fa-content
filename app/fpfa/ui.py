@@ -35,9 +35,9 @@ from fpfa.claim_check import (
     write_packet_files,
 )
 from fpfa.claude_client import MODEL_ID, AnthropicMessages, run_tool_loop, safe_error
-from fpfa.everyday import assemble_system, run_everyday
+from fpfa.everyday import run_everyday
 from fpfa.jobs import JobInbox, label_result
-from fpfa.managed import anthropic_request, run_heavy_job
+from fpfa.managed import anthropic_request, reply_with_delete_status, run_heavy_job, session_system
 from fpfa.keystore import clear_api_key, key_status, key_storage_help, load_api_key, save_api_key
 from fpfa.modes_loader import DEFAULT_MODE, MODE_SLUGS, list_modes, normalize_mode
 from fpfa.paths import content_root, read_config, write_config
@@ -54,20 +54,42 @@ from fpfa.workflow import (
 )
 
 
-def format_chat_request(prior_turns: list[dict], basis: dict, di: dict, latest: str) -> str:
-    """One user message that carries the form and the project's earlier chat turns."""
+def format_chat_request(
+    prior_turns: list[dict],
+    basis: dict,
+    di: dict,
+    latest: str,
+    *,
+    hosted: bool = False,
+) -> str:
+    """One user message that carries the form and the project's earlier chat turns.
+
+    hosted is the text-only /heavy packet. It does not ask for desktop tools.
+    """
     lines = []
     for turn in prior_turns:
         who = "Designer" if turn.get("role") == "user" else "Assistant"
         lines.append(f"{who}: {turn.get('text') or ''}")
     history = "\n\n".join(lines) if lines else "(none)"
+    if hosted:
+        lead = (
+            "Project basis and the current zone form follow. "
+            "This message is the already-computed zone packet. "
+            "Reason from these figures only. "
+            "Do not call read_role, read_skill, read_mode, or a calc tool. "
+            "Earlier chat turns are included so a follow-up can refer to them.\n"
+        )
+    else:
+        lead = (
+            "Project basis and the current zone form follow. "
+            "Use tools for any gallons, seconds, gpm, or releasing logic. "
+            "Earlier chat turns are included so a follow-up can refer to them.\n"
+        )
     return (
-        "Project basis and the current zone form follow. "
-        "Use tools for any gallons, seconds, gpm, or releasing logic. "
-        "Earlier chat turns are included so a follow-up can refer to them.\n"
-        f"basis={basis}\nzone={di}\n\n"
-        f"Earlier turns:\n{history}\n\n"
-        f"Designer: {latest}"
+        lead
+        + f"basis={basis}\nzone={di}\n\n"
+        + f"Earlier turns:\n{history}\n\n"
+        + f"Designer: {latest}"
     )
 
 
@@ -79,9 +101,15 @@ def chat_request_text(
     last_run: dict | None = None,
     mode: str | None = None,
     bess_run: dict | None = None,
+    *,
+    hosted: bool = False,
 ) -> str:
-    """Everyday-path request. A finished tool plan is repeated so chat cannot replace it."""
-    text = format_chat_request(prior_turns, basis, di, latest)
+    """Everyday-path request. A finished tool plan is repeated so chat cannot replace it.
+
+    hosted=True is the /heavy packet: the same figures, without a request to
+    call read_role, read_skill, read_mode, or a calc tool.
+    """
+    text = format_chat_request(prior_turns, basis, di, latest, hosted=hosted)
     slug = normalize_mode(mode)
     head = f"Active mode: {slug}."
     note = govern_note(last_run)
@@ -123,6 +151,8 @@ THREAD_HINT = (
     "A long job runs on a worker, so this composer stays usable. "
     "A result is labeled with the job it belongs to and is saved on that project.\n"
     "/heavy is the only path that uses the hosted runtime. "
+    "It is text-only reasoning on the already-computed zone packet. "
+    "It does not call read_role, read_skill, read_mode, or a calc tool. "
     "Its reply is written back into this thread."
 )
 
@@ -150,7 +180,9 @@ def slash_help_text() -> str:
         "/sample-di — load the sample data-hall double-interlock zone and run the tool plan\n"
         "/sample-bess — load the sample Li-ion BESS room and run the explosion-control starter\n"
         "/run — run the DI zone from the optional form\n"
-        "/heavy task — hosted runtime for that heavy job; the reply comes back into this thread\n"
+        "/heavy task — text-only hosted reasoning on the zone packet already in the message; "
+        "the reply comes back into this thread. "
+        "It does not call read_role, read_skill, read_mode, or a calc tool.\n"
         "/new Job name — open a job\n"
         "/help — show these commands\n"
         "Ctrl+S saves the open job. Closing the window saves it too.\n"
@@ -168,7 +200,8 @@ def slash_help_text() -> str:
         "The inbox beside Projects lists zone runs, chat turns, claim checks, and heavy jobs. "
         "A long job runs on a worker. The composer stays usable. "
         "A finished result is labeled with the job it belongs to and is saved on that project.\n"
-        "/heavy is the only hosted path. A typed question, /sample-di, /sample-bess, "
+        "/heavy is the only hosted path. It does not mount the content pack. "
+        "A typed question, /sample-di, /sample-bess, "
         "and /run do not use it."
     )
 
@@ -256,7 +289,8 @@ class App:
         self.jobs: JobInbox | None = None
         self._build()
         self.jobs = JobInbox(worker_count=2, on_change=self._on_jobs_changed)
-        # Agent and cloud environment ids for later /heavy calls. Not a session.
+        # Cached agent and cloud environment ids for later /heavy calls.
+        # Not a session. Session cleanup does not delete these.
         self._managed_resources: dict = {}
         try:
             self._pristine_basis = self.collect_basis()
@@ -286,6 +320,8 @@ class App:
             pass
         jobs = getattr(self, "jobs", None)
         if jobs is not None:
+            # close() deletes a hosted session that is still polling.
+            # The delete runs off this thread and is joined for a short bound.
             jobs.close()
 
     def _on_save_key(self, event=None):
@@ -1087,6 +1123,7 @@ class App:
             self.project.get("last_run"),
             mode,
             self.project.get("bess_run"),
+            hosted=True,
         )
         if form_note:
             request_text = form_note + "\n\n" + request_text
@@ -1094,15 +1131,13 @@ class App:
 
         def work(job_id: str) -> None:
             try:
-                pack = content_root()
-                system = assemble_system(pack, mode)
                 out = run_heavy_job(
                     anthropic_request(key),
-                    system=system,
+                    system=session_system(),
                     user_text=request_text,
                     resources=resources,
                 )
-                reply = (out.get("text") or "").strip() or "(The hosted run returned no text.)"
+                reply = reply_with_delete_status(out)
             except Exception as exc:
                 reply = safe_error(exc)
                 self.jobs.mark(job_id, "error", reply)

@@ -556,6 +556,7 @@ class ChatRequestTests(unittest.TestCase):
         self.assertIn("/sample-di", help_text)
         self.assertIn("/sample-bess", help_text)
         self.assertIn("/heavy", help_text)
+        self.assertIn("text-only", help_text)
         self.assertIn(DRAFT_SECTION, help_text)
         self.assertIn("ASSUMED", help_text)
         self.assertIn("Ctrl+S", help_text)
@@ -590,6 +591,16 @@ class ChatRequestTests(unittest.TestCase):
         self.assertIn("El/El holds the prime with the solenoid.", text)
         self.assertIn("explain that recommendation", text)
         self.assertIn("Earlier turns:", text)
+        self.assertIn("Use tools for any gallons", text)
+        from fpfa.ui import chat_request_text
+
+        hosted = chat_request_text([], {"insurer": "FM"}, {"zone_id": "DH-1"}, "review", hosted=True)
+        everyday = chat_request_text([], {"insurer": "FM"}, {"zone_id": "DH-1"}, "review")
+        self.assertIn("already-computed zone packet", hosted)
+        self.assertIn("Do not call read_role, read_skill, read_mode", hosted)
+        self.assertNotIn("Use tools for any gallons", hosted)
+        self.assertIn("Use tools for any gallons", everyday)
+        self.assertNotIn("already-computed zone packet", everyday)
 
 
 class ClaudeLoopTests(unittest.TestCase):
@@ -3061,6 +3072,11 @@ class ManagedAgentTests(unittest.TestCase):
     def setUp(self):
         _isolate_data()
 
+    def tearDown(self):
+        from fpfa.managed import release_active_sessions
+
+        release_active_sessions()
+
     def _request(self, events, session_status="running"):
         calls = []
 
@@ -3084,9 +3100,21 @@ class ManagedAgentTests(unittest.TestCase):
 
     def test_heavy_job_uses_one_cloud_session_and_returns_its_text(self):
         from fpfa.claude_client import MODEL_ID
-        from fpfa.managed import HEAVY_NOTE, MODEL_ID as managed_model, run_heavy_job
+        from fpfa.managed import (
+            HEAVY_NOTE,
+            HEAVY_TEXT_ONLY,
+            MODEL_ID as managed_model,
+            run_heavy_job,
+            session_system,
+        )
 
         self.assertEqual(managed_model, "claude-opus-5-5")
+        prompt = session_system()
+        self.assertIn(HEAVY_TEXT_ONLY, prompt)
+        self.assertIn(HEAVY_NOTE, prompt)
+        self.assertNotIn("Call read_role", prompt)
+        self.assertNotIn("Call read_skill", prompt)
+        self.assertNotIn("Call read_mode", prompt)
         events = [
             {
                 "type": "agent.message",
@@ -3108,7 +3136,7 @@ class ManagedAgentTests(unittest.TestCase):
         resources = {}
         out = run_heavy_job(
             request,
-            system="PACK-ROLE",
+            system=prompt,
             user_text="check the room",
             resources=resources,
         )
@@ -3116,15 +3144,24 @@ class ManagedAgentTests(unittest.TestCase):
         self.assertEqual(out["model"], MODEL_ID)
         self.assertEqual(out["runtime"], "managed-agents")
         self.assertNotIn("sess_test", out["text"])
+        self.assertTrue(out["session_delete"]["ok"])
+        self.assertEqual(out["session_delete"]["session_id"], "sess_test")
+        self.assertEqual(out["session_delete"]["error"], "")
         posts = [call for call in calls if call[0] == "POST" and call[1] == "/v1/sessions"]
         self.assertEqual(len(posts), 1)
         self.assertEqual(sum(1 for call in calls if call[0] == "DELETE"), 1)
         self.assertFalse(any(call[1].startswith("/v1/messages") for call in calls))
         session = posts[0][2]
+        self.assertEqual(set(session), {"agent", "environment_id", "initial_events"})
         self.assertEqual(session["agent"]["model"], {"id": "claude-opus-5-5"})
         self.assertEqual(session["agent"]["type"], "agent_with_overrides")
-        self.assertIn("PACK-ROLE", session["agent"]["system"])
+        self.assertEqual(session["agent"]["system"], prompt)
+        self.assertIn("text-only reasoning on the already-computed zone packet", session["agent"]["system"])
         self.assertIn(HEAVY_NOTE, session["agent"]["system"])
+        self.assertNotIn("Call read_role", session["agent"]["system"])
+        self.assertNotIn("Call read_skill", session["agent"]["system"])
+        self.assertNotIn("Call read_mode", session["agent"]["system"])
+        self.assertNotIn("You are the design assistant", session["agent"]["system"])
         self.assertEqual(len(session["initial_events"]), 1)
         self.assertEqual(session["initial_events"][0]["type"], "user.message")
         self.assertNotIn("multiagent", session)
@@ -3134,6 +3171,8 @@ class ManagedAgentTests(unittest.TestCase):
         self.assertNotIn("unrestricted", json.dumps(env))
         agent = next(call[2] for call in calls if call[1] == "/v1/agents")
         self.assertEqual(agent["model"], "claude-opus-5-5")
+        self.assertEqual(agent["system"], prompt)
+        self.assertEqual(set(agent), {"name", "model", "system", "tools"})
         toolset = agent["tools"][0]
         self.assertEqual(toolset["default_config"]["enabled"], False)
         enabled = {item["name"] for item in toolset["configs"] if item.get("enabled")}
@@ -3145,7 +3184,7 @@ class ManagedAgentTests(unittest.TestCase):
         calls.clear()
         again = run_heavy_job(
             request,
-            system="PACK-AGAIN",
+            system=prompt,
             user_text="next check",
             resources=resources,
         )
@@ -3169,7 +3208,7 @@ class ManagedAgentTests(unittest.TestCase):
         ]
         calls, request = self._request(events)
         with self.assertRaises(RuntimeError) as caught:
-            run_heavy_job(request, system="PACK", user_text="check the room")
+            run_heavy_job(request, user_text="check the room")
         self.assertIn("no second conversation", str(caught.exception))
         self.assertNotIn("partial", str(caught.exception))
         self.assertEqual(sum(1 for call in calls if call[0] == "POST" and call[1] == "/v1/sessions"), 1)
@@ -3184,7 +3223,6 @@ class ManagedAgentTests(unittest.TestCase):
         with self.assertRaises(RuntimeError) as caught:
             run_heavy_job(
                 request,
-                system="PACK",
                 user_text="check the room",
                 sleep=lambda seconds: sleeps.append(seconds),
                 max_polls=2,
@@ -3204,7 +3242,7 @@ class ManagedAgentTests(unittest.TestCase):
             raise RuntimeError(f"upstream {secret}")
 
         with self.assertRaises(RuntimeError) as caught:
-            run_heavy_job(request, system="PACK", user_text="check the room")
+            run_heavy_job(request, user_text="check the room")
         self.assertNotIn(secret, str(caught.exception))
         self.assertIn("[key]", str(caught.exception))
 
@@ -3217,6 +3255,7 @@ class ManagedAgentTests(unittest.TestCase):
             seen["beta"] = req.get_header("Anthropic-beta")
             seen["version"] = req.get_header("Anthropic-version")
             seen["key"] = req.get_header("X-api-key")
+            seen["timeout"] = timeout
             raise urllib.error.HTTPError(
                 req.full_url,
                 400,
@@ -3231,6 +3270,7 @@ class ManagedAgentTests(unittest.TestCase):
         self.assertEqual(seen["beta"], "managed-agents-2026-04-01")
         self.assertEqual(seen["version"], "2023-06-01")
         self.assertEqual(seen["key"], "sk-ant-local-test")
+        self.assertEqual(seen["timeout"], 120)
         self.assertNotIn(secret, str(http_caught.exception))
         self.assertIn("[key]", str(http_caught.exception))
 
@@ -3243,6 +3283,351 @@ class ManagedAgentTests(unittest.TestCase):
         with self.assertRaises(RuntimeError) as messages:
             blocked("POST", "/v1/messages", None)
         self.assertIn("Messages API", str(messages.exception))
+
+    def test_everyday_system_text_is_not_sent_on_the_hosted_path(self):
+        from fpfa.everyday import assemble_system
+        from fpfa.managed import run_heavy_job
+        from fpfa.paths import content_root
+
+        calls = []
+
+        def request(method, path, body):
+            calls.append(path)
+            raise AssertionError((method, path))
+
+        with self.assertRaises(ValueError) as caught:
+            run_heavy_job(
+                request,
+                system=assemble_system(content_root(), "mixed"),
+                user_text="check the room",
+            )
+        self.assertIn("text-only", str(caught.exception))
+        self.assertEqual(calls, [])
+
+    def test_failed_session_delete_is_visible_and_can_be_retried(self):
+        from fpfa.managed import (
+            DELETE_FAILURE_NOTE,
+            active_session_ids,
+            delete_active_sessions,
+            reply_with_delete_status,
+            run_heavy_job,
+        )
+
+        events = [
+            {
+                "type": "agent.message",
+                "content": [{"type": "text", "text": "HEAVY-REPLY"}],
+            },
+            {
+                "type": "session.status_idle",
+                "stop_reason": {"type": "end_turn"},
+            },
+        ]
+        secret = "sk-ant-" + "abc123secret"
+        deletes = {"n": 0}
+
+        def request(method, path, body):
+            if method == "POST" and path == "/v1/environments":
+                return {"id": "env_test"}
+            if method == "POST" and path == "/v1/agents":
+                return {"id": "agent_test"}
+            if method == "POST" and path == "/v1/sessions":
+                return {"id": "sess_leak", "status": "running"}
+            if method == "GET" and "/events" in path:
+                return {"data": events, "next_page": None}
+            if method == "GET" and path == "/v1/sessions/sess_leak":
+                return {"id": "sess_leak", "status": "idle"}
+            if method == "DELETE" and path == "/v1/sessions/sess_leak":
+                deletes["n"] += 1
+                if deletes["n"] == 1:
+                    raise RuntimeError(f"network down {secret}")
+                return {}
+            raise AssertionError((method, path))
+
+        with self.assertLogs("fpfa.managed", level="ERROR") as captured:
+            out = run_heavy_job(request, user_text="check the room", sleep=lambda _seconds: None)
+        self.assertEqual(out["text"], "HEAVY-REPLY")
+        self.assertFalse(out["session_delete"]["ok"])
+        self.assertEqual(out["session_delete"]["session_id"], "sess_leak")
+        self.assertIn("network down", out["session_delete"]["error"])
+        self.assertNotIn(secret, out["session_delete"]["error"])
+        self.assertIn("[key]", out["session_delete"]["error"])
+        self.assertIn("sess_leak", active_session_ids())
+        logged = "\n".join(captured.output)
+        self.assertIn("hosted session delete failed", logged)
+        self.assertIn("sess_leak", logged)
+        self.assertIn("network down", logged)
+        self.assertNotIn(secret, logged)
+        reply = reply_with_delete_status(out)
+        self.assertIn("HEAVY-REPLY", reply)
+        self.assertIn(DELETE_FAILURE_NOTE, reply)
+        retried = delete_active_sessions()
+        self.assertEqual(deletes["n"], 2)
+        self.assertEqual(retried[-1]["ok"], True)
+        self.assertNotIn("sess_leak", active_session_ids())
+
+    def test_failed_delete_on_a_failed_job_is_visible(self):
+        from fpfa.managed import active_session_ids, run_heavy_job
+
+        def request(method, path, body):
+            if method == "POST" and path == "/v1/environments":
+                return {"id": "env_test"}
+            if method == "POST" and path == "/v1/agents":
+                return {"id": "agent_test"}
+            if method == "POST" and path == "/v1/sessions":
+                return {"id": "sess_fail", "status": "running"}
+            if method == "GET":
+                return {"data": []}
+            if method == "DELETE":
+                raise RuntimeError("network down")
+            raise AssertionError((method, path))
+
+        with self.assertLogs("fpfa.managed", level="ERROR") as captured:
+            with self.assertRaises(RuntimeError) as caught:
+                run_heavy_job(
+                    request,
+                    user_text="check the room",
+                    sleep=lambda _seconds: None,
+                    max_polls=1,
+                )
+        message = str(caught.exception)
+        self.assertIn("did not finish", message)
+        self.assertIn("The hosted session was not deleted", message)
+        self.assertIn("network down", message)
+        self.assertIn("sess_fail", active_session_ids())
+        self.assertTrue(any("network down" in line for line in captured.output))
+
+    def test_close_deletes_an_in_flight_heavy_session(self):
+        import threading
+
+        from fpfa.jobs import JobInbox
+        from fpfa.managed import run_heavy_job
+
+        deleted = []
+        in_poll = threading.Event()
+        release = threading.Event()
+
+        def request(method, path, body):
+            if method == "POST" and path == "/v1/environments":
+                return {"id": "env_test"}
+            if method == "POST" and path == "/v1/agents":
+                return {"id": "agent_test"}
+            if method == "POST" and path == "/v1/sessions":
+                return {"id": "sess_inflight", "status": "running"}
+            if method == "DELETE":
+                deleted.append(path)
+                return {}
+            if method == "GET" and "/events" in path:
+                in_poll.set()
+                release.wait(5)
+                return {"data": []}
+            if method == "GET":
+                return {"id": "sess_inflight", "status": "running"}
+            raise AssertionError((method, path))
+
+        inbox = JobInbox(worker_count=1)
+        try:
+            inbox.submit(
+                project_id="p",
+                project_name="Zone",
+                kind="heavy",
+                title="check",
+                work=lambda _job_id: run_heavy_job(
+                    request,
+                    user_text="check the room",
+                    sleep=lambda _seconds: None,
+                    max_polls=3,
+                ),
+            )
+            self.assertTrue(in_poll.wait(2))
+            self.assertEqual(deleted, [])
+            inbox.close()
+            self.assertEqual(deleted, ["/v1/sessions/sess_inflight"])
+            self.assertTrue(any(thread.is_alive() for thread in inbox._threads))
+        finally:
+            release.set()
+            for thread in inbox._threads:
+                thread.join(timeout=2)
+            self.assertFalse(any(thread.is_alive() for thread in inbox._threads))
+
+    def test_delete_in_progress_stays_visible_to_shutdown(self):
+        import threading
+        import time
+
+        from fpfa.managed import (
+            active_session_ids,
+            delete_active_sessions,
+            delete_session,
+            register_active_session,
+        )
+
+        started = threading.Event()
+        release = threading.Event()
+
+        def request(method, path, body):
+            if method == "DELETE":
+                started.set()
+                release.wait(5)
+                raise RuntimeError("network down")
+            raise AssertionError((method, path))
+
+        register_active_session("sess_busy", request)
+        holder: dict = {}
+
+        def run() -> None:
+            holder["status"] = delete_session(request, "sess_busy")
+
+        worker = threading.Thread(target=run, daemon=True)
+        worker.start()
+        try:
+            self.assertTrue(started.wait(2))
+            self.assertIn("sess_busy", active_session_ids())
+            began = time.monotonic()
+            with self.assertLogs("fpfa.managed", level="ERROR") as captured:
+                statuses = delete_active_sessions(deadline=0.3)
+                self.assertLess(time.monotonic() - began, 1.0)
+                release.set()
+                worker.join(2)
+            self.assertIn("sess_busy", active_session_ids())
+            self.assertTrue(statuses)
+            self.assertTrue(all(not item.get("ok") for item in statuses))
+            self.assertFalse(any(item.get("skipped") for item in statuses))
+            self.assertTrue(any(item.get("pending") for item in statuses))
+            logged = "\n".join(captured.output)
+            self.assertIn("still in progress", logged)
+            self.assertIn("sess_busy", logged)
+            self.assertIn("network down", logged)
+        finally:
+            release.set()
+            worker.join(2)
+        self.assertFalse(holder["status"]["ok"])
+        self.assertIn("network down", holder["status"]["error"])
+        self.assertIn("sess_busy", active_session_ids())
+
+    def test_shutdown_observes_an_inflight_delete_that_succeeds(self):
+        import threading
+        import time
+
+        from fpfa.managed import active_session_ids, delete_active_sessions, delete_session, register_active_session
+
+        started = threading.Event()
+        release = threading.Event()
+        calls = []
+
+        def request(method, path, body):
+            if method == "DELETE":
+                calls.append(path)
+                started.set()
+                release.wait(5)
+                return {}
+            raise AssertionError((method, path))
+
+        register_active_session("sess_done", request)
+        worker = threading.Thread(target=lambda: delete_session(request, "sess_done"), daemon=True)
+        worker.start()
+        self.assertTrue(started.wait(2))
+        threading.Thread(target=lambda: (time.sleep(0.1), release.set()), daemon=True).start()
+        statuses = delete_active_sessions(deadline=2.0)
+        worker.join(2)
+        self.assertEqual(calls, ["/v1/sessions/sess_done"])
+        self.assertTrue(any(item.get("ok") for item in statuses))
+        self.assertFalse(any(item.get("skipped") for item in statuses))
+        self.assertNotIn("sess_done", active_session_ids())
+
+    def test_close_bounds_a_slow_session_delete(self):
+        import threading
+        import time
+
+        from fpfa.jobs import JobInbox
+        from fpfa.managed import active_session_ids, register_active_session
+
+        started = threading.Event()
+        release = threading.Event()
+
+        def request(method, path, body):
+            if method == "DELETE":
+                started.set()
+                release.wait(30)
+                return {}
+            raise AssertionError((method, path))
+
+        register_active_session("sess_slow", request)
+        inbox = JobInbox(worker_count=1)
+        try:
+            began = time.monotonic()
+            with self.assertLogs("fpfa.managed", level="ERROR") as captured:
+                inbox.close()
+            elapsed = time.monotonic() - began
+            self.assertLess(elapsed, 2.5)
+            self.assertGreater(elapsed, 0.4)
+            self.assertTrue(started.wait(1))
+            self.assertIn("sess_slow", active_session_ids())
+            self.assertTrue(any("still in progress" in line and "sess_slow" in line for line in captured.output))
+        finally:
+            release.set()
+            deadline = time.time() + 2
+            while time.time() < deadline and "sess_slow" in active_session_ids():
+                time.sleep(0.01)
+
+    def test_process_exit_deletes_an_in_flight_hosted_session(self):
+        import subprocess
+        import textwrap
+
+        log_path = Path(tempfile.mkdtemp(prefix="fpfa-del-")) / "del.log"
+        script = textwrap.dedent(
+            f"""
+            import sys
+            import time
+            sys.path.insert(0, {str(APP_DIR)!r})
+            from fpfa.jobs import JobInbox
+            from fpfa.managed import active_session_ids, run_heavy_job
+
+            log_path = {str(log_path)!r}
+
+            def request(method, path, body):
+                if method == "POST" and path == "/v1/environments":
+                    return {{"id": "env"}}
+                if method == "POST" and path == "/v1/agents":
+                    return {{"id": "ag"}}
+                if method == "POST" and path == "/v1/sessions":
+                    return {{"id": "sess_exit"}}
+                if method == "DELETE":
+                    with open(log_path, "a", encoding="utf-8") as handle:
+                        handle.write("DELETE " + path + "\\n")
+                    return {{}}
+                return {{"data": []}}
+
+            inbox = JobInbox(worker_count=1)
+            inbox.submit(
+                project_id="p",
+                project_name="Zone",
+                kind="heavy",
+                title="check",
+                work=lambda job_id: run_heavy_job(
+                    request,
+                    user_text="check",
+                    sleep=time.sleep,
+                    poll_seconds=30,
+                    max_polls=5,
+                ),
+            )
+            for _ in range(100):
+                if active_session_ids():
+                    break
+                time.sleep(0.02)
+            else:
+                raise SystemExit(2)
+            """
+        )
+        proc = subprocess.run(
+            [sys.executable, "-c", script],
+            capture_output=True,
+            text=True,
+            timeout=20,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr + proc.stdout)
+        self.assertTrue(log_path.is_file(), proc.stderr)
+        self.assertIn("DELETE /v1/sessions/sess_exit", log_path.read_text(encoding="utf-8"))
 
     def test_hatch_does_not_paste_a_role_or_send_ordinary_modules(self):
         from fpfa.managed import HEAVY_NOTE
@@ -3274,6 +3659,9 @@ class ManagedAgentTests(unittest.TestCase):
             self.assertNotIn("run_heavy_job", body, name)
         heavy = ui.split("def start_heavy(", 1)[1].split("\n    def ", 1)[0]
         self.assertIn("run_heavy_job", heavy)
+        self.assertIn("session_system()", heavy)
+        self.assertIn("reply_with_delete_status", heavy)
+        self.assertNotIn("assemble_system", heavy)
 
     def _wait_for(self, app, needle: str, timeout: float = 2.0) -> None:
         import time
@@ -3330,8 +3718,16 @@ class ManagedAgentTests(unittest.TestCase):
             self.assertEqual(app.project["id"], project_id)
             self.assertEqual([row["id"] for row in list_projects()], before)
             self.assertTrue(seen["thread"].startswith("fpfa-worker-"))
-            self.assertIn("You are the design assistant inside a desktop application", seen["system"])
+            from fpfa.managed import session_system
+
+            self.assertEqual(seen["system"], session_system())
+            self.assertNotIn("You are the design assistant", seen["system"])
+            self.assertNotIn("Call read_role", seen["system"])
+            self.assertNotIn("Call read_skill", seen["system"])
+            self.assertNotIn("Call read_mode", seen["system"])
             self.assertIn("check the room", seen["user_text"])
+            self.assertIn("already-computed zone packet", seen["user_text"])
+            self.assertNotIn("Use tools for any gallons", seen["user_text"])
             self.assertNotIn("sk-ant", seen["user_text"])
             reply = app.chat_log[-1]["text"]
             job_id = app.chat_log[-1]["job_id"]
@@ -3439,7 +3835,12 @@ class ManagedAgentTests(unittest.TestCase):
             self.assertIn("Governing zone total text: 281.3.", seen["user_text"])
             self.assertIn("38.1", seen["user_text"])
             self.assertIn("Active mode: calculator.", seen["user_text"])
-            self.assertIn("calculator", seen["system"])
+            self.assertIn("already-computed zone packet", seen["user_text"])
+            self.assertNotIn("Use tools for any gallons", seen["user_text"])
+            from fpfa.managed import session_system
+
+            self.assertEqual(seen["system"], session_system())
+            self.assertNotIn("Call the calc tool", seen["system"])
             self.assertIn("| heavy |", app.chat_view.get("1.0", "end"))
             saved = json.dumps(app.project.get("di"))
             self.assertNotIn("not-a-number", saved)
