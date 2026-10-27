@@ -26,6 +26,7 @@ from fpfa import sample_data
 from fpfa.bess import bess_chat_summary, bess_govern_note, run_bess_plan
 from fpfa.calc_tools import ToolSession
 from fpfa.claim_check import (
+    PACKAGE_STATUS,
     build_packet,
     claim_dir,
     judge,
@@ -1849,8 +1850,9 @@ class App:
             initialfile=f"{self.project.get('name', 'di-zone')}.docx",
         )
         if not path:
+            note = (outcome or {}).get("status_line") or PACKAGE_STATUS
             self.status.set(
-                f"Claim check passed. Export of Section {DRAFT_SECTION} was not written."
+                f"{note} Export of Section {DRAFT_SECTION} was not written."
             )
             return
         try:
@@ -1912,7 +1914,7 @@ class App:
             self._offer_export(outcome, export_result)
             return
         if outcome["all_supported"]:
-            self.status.set(self._with_job_label(job_id, f"Every claim on Section {DRAFT_SECTION} is Supported."))
+            self.status.set(self._with_job_label(job_id, outcome.get("status_line") or PACKAGE_STATUS))
             return
         self.status.set(self._with_job_label(job_id, outcome["block_reason"]))
 

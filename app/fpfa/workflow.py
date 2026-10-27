@@ -369,6 +369,24 @@ def narrative_checks(text: str, tools: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+# The heading run_di_zone used to append when the model draft missed the tool plan.
+# Anything after it is rejected prose and is not part of the export.
+_REJECTED_DRAFT = "\nModel draft (tables govern if the figures differ):"
+
+
+def governing_narrative(text: str) -> str:
+    """Narrative written beside the tables.
+
+    A model draft that does not quote the tool-plan volume and delivery time
+    is not part of this text. The tool-plan narrative stays.
+    """
+    raw = text or ""
+    index = raw.find(_REJECTED_DRAFT)
+    if index >= 0:
+        raw = raw[:index]
+    return raw.strip()
+
+
 def _flags(di: dict, tools: dict[str, Any], extra: list[str]) -> list[str]:
     flags: list[str] = []
     flags.extend(tools["zone_trapped_volume"].get("flags") or [])
@@ -513,8 +531,7 @@ def run_di_zone(
                     "The model draft did not quote the tool-plan zone volume and delivery time. "
                     "Tables and the narrative below use the tool plan."
                 )
-                if model_text:
-                    narrative = template + "\n\nModel draft (tables govern if the figures differ):\n" + model_text
+                narrative = template
             have = {call["name"] for call in transcript if call.get("by") == "claude" and not call.get("is_error")}
             skipped = [name for name in REQUIRED_DI_TOOLS if name not in have]
             if skipped:

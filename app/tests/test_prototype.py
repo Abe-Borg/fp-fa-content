@@ -37,8 +37,10 @@ def _isolate_data():
 def _support_every_claim():
     """Messages.create stand-in that marks every numbered claim Supported.
 
-    The production gate still treats NOT PULLED as open, so this stand-in is
-    allowed to be wrong on that cite.
+    This stand-in is not proof the narrative was checked. The production gate
+    still treats NOT PULLED as open, rejects a cite that only repeats the
+    claim, and rejects Supported when a figure in the claim is absent from
+    the cite.
     """
     from fpfa.claim_check import numbered_bodies, split_checker_request
 
@@ -191,6 +193,9 @@ class WorkflowTests(unittest.TestCase):
         rejected = self.run(self.root, self.di, self.basis, narrator=bad)
         self.assertEqual(rejected["source"], "tool-plan")
         self.assertIn(volume, rejected["narrative"])
+        self.assertIn(total, rejected["narrative"])
+        self.assertNotIn("40 gallons", rejected["narrative"])
+        self.assertNotIn("Model draft (tables govern", rejected["narrative"])
         self.assertTrue(any("tool-plan" in item for item in rejected["warnings"]))
 
         def boom(_system, _user, _tools, _execute):
@@ -200,6 +205,55 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(failed["source"], "tool-plan")
         self.assertIn(volume, failed["narrative"])
         self.assertNotIn("sk-ant-secretvalue", " ".join(failed["warnings"]))
+
+    def test_rejected_model_draft_is_absent_from_the_docx(self):
+        from docx import Document
+
+        from fpfa.spec_docx import write_docx
+
+        first = self.run(self.root, self.di, self.basis)
+        volume = self.fmt1(first["tools"]["zone_trapped_volume"]["zone_gal"])
+        total = self.fmt1(first["tools"]["di_trip_to_water"]["t_total_s"])
+        marker = "REJECTED-PROSE about 750 gal and 12 seconds."
+
+        def bad(_system, _user, _tools, _execute):
+            return {"text": marker, "tool_calls": []}
+
+        rejected = self.run(self.root, self.di, self.basis, narrator=bad)
+        self.assertEqual(rejected["source"], "tool-plan")
+        self.assertNotIn(marker, rejected["narrative"])
+        self.assertIn(volume, rejected["narrative"])
+        self.assertIn(total, rejected["narrative"])
+
+        def doc_text(result) -> str:
+            with tempfile.TemporaryDirectory() as tmp:
+                path = Path(tmp) / "section.docx"
+                write_docx(path, {"name": "Sample data hall DI zone", "basis": self.basis}, result)
+                doc = Document(path)
+                text = "\n".join(paragraph.text for paragraph in doc.paragraphs)
+                for table in doc.tables:
+                    for row in table.rows:
+                        text += "\n" + " | ".join(cell.text for cell in row.cells)
+                return text
+
+        text = doc_text(rejected)
+        self.assertNotIn(marker, text)
+        self.assertNotIn("Model draft (tables govern", text)
+        self.assertIn(volume, text)
+        self.assertIn(total, text)
+        self.assertIn("Section 21 13 19", text)
+
+        legacy = dict(rejected)
+        legacy["narrative"] = (
+            rejected["narrative"]
+            + "\n\nModel draft (tables govern if the figures differ):\n"
+            + marker
+        )
+        legacy_text = doc_text(legacy)
+        self.assertNotIn(marker, legacy_text)
+        self.assertNotIn("Model draft (tables govern", legacy_text)
+        self.assertIn(volume, legacy_text)
+        self.assertIn(total, legacy_text)
 
     def test_docx_uses_tool_numbers(self):
         from docx import Document
@@ -3493,7 +3547,7 @@ class BlindClaimCheckTests(unittest.TestCase):
 
         return run_di_zone(self.root, EXAMPLE_DI, EXAMPLE_BASIS)
 
-    def test_sample_claims_come_from_tool_cites(self):
+    def test_sample_claims_come_from_the_exported_narrative(self):
         from fpfa.claim_check import (
             BLIND_CLAIM_SKILL,
             build_packet,
@@ -3510,16 +3564,23 @@ class BlindClaimCheckTests(unittest.TestCase):
         result = self._sample()
         packet = build_packet(result)
         self.assertEqual(packet["section"], "21 13 19")
-        self.assertEqual(packet["claim_count"], 4)
-        self.assertIn("NFPA 13-2025 §8.3.2.3.1.1 requires DI 500 gal; QOD does not extend.", packet["claims"])
-        self.assertIn("§8.3.2.3.2", packet["claims"])
-        self.assertIn("Table 19.2.3.1.2", packet["claims"])
-        self.assertIn("§19.2.3.1.3", packet["claims"])
+        self.assertEqual(packet["claim_count"], 12)
+        self.assertIn("Zone total is 281.3 gal", packet["claims"])
+        self.assertIn("t_total 38.1 s is calculated", packet["claims"])
+        self.assertIn("281.3", packet["claims"])
+        self.assertIn("38.1", packet["claims"])
         self.assertNotIn("NOT PULLED", packet["sources"])
+        self.assertIn("PACKAGE ASSERTION (not a retrieved standard passage)", packet["sources"])
+        self.assertIn("DI 500 gal; QOD does not extend", packet["sources"])
+        self.assertNotIn("requires DI 500 gal; QOD does not extend", packet["claims"])
+        self.assertNotIn("requires NFPA 13-2025 Table", packet["claims"])
         self.assertNotIn("Draft for the engineer of record", packet["claims"])
-        self.assertNotIn("281.3", packet["claims"] + packet["sources"])
-        self.assertNotIn("38.1", packet["claims"] + packet["sources"])
         self.assertNotIn("ranks double-interlock", packet["claims"])
+        for claim_line, source_line in zip(
+            packet["claims"].splitlines(), packet["sources"].splitlines(), strict=True
+        ):
+            requirement = claim_line.split(" requires ", 1)[1]
+            self.assertNotIn(requirement, source_line)
         skill = read_skill(self.root, BLIND_CLAIM_SKILL)
         self.assertIn("A checker who reads the draft tends to agree with its mistakes.", skill)
         self.assertIn("<section>-claims.md", skill)
@@ -3545,6 +3606,10 @@ class BlindClaimCheckTests(unittest.TestCase):
         create = _support_every_claim()
         outcome = judge(self.root, packet, create)
         self.assertTrue(outcome["all_supported"])
+        self.assertFalse(outcome["checked_against_standard"])
+        self.assertIn("did not compare the narrative to the standard", outcome["thread"])
+        self.assertIn("Engineer-of-record review still applies", outcome["thread"])
+        self.assertNotIn("Every claim is Supported.", outcome["thread"])
         self.assertIn("1. Supported.", outcome["verdict"])
         self.assertEqual(create.seen[0]["model"], "claude-opus-5-5")
         self.assertNotIn("temperature", create.seen[0])
@@ -3575,18 +3640,21 @@ class BlindClaimCheckTests(unittest.TestCase):
         result["basis"]["hazard_notes"] = "HAZARD-NOTE-MARKER stays with the designer."
         packet = build_packet(result)
         request = checker_request(packet["claims"], packet["sources"])
-        self.assertIn("5. NOT PULLED", packet["sources"])
+        open_lines = [line for line in packet["sources"].splitlines() if "NOT PULLED" in line]
+        self.assertEqual(open_lines, ["13. NOT PULLED"])
         self.assertIn("§29.2.1.1", packet["claims"])
+        self.assertIn("281.3", packet["claims"])
         self.assertIn("NOT PULLED", request)
         self.assertNotIn("HAZARD-NOTE-MARKER", request)
         self.assertNotIn("Draft for the engineer of record", request)
         self.assertNotIn("HAZARD-NOTE-MARKER", checker_request(packet["claims"], packet["sources"]))
         outcome = judge(self.root, packet, _support_every_claim())
         self.assertFalse(outcome["all_supported"])
-        open_line = next(line for line in outcome["verdict"].splitlines() if line.startswith("5. "))
-        self.assertTrue(open_line.startswith("5. Source not found."))
+        self.assertFalse(outcome["checked_against_standard"])
+        open_line = next(line for line in outcome["verdict"].splitlines() if line.startswith("13. "))
+        self.assertTrue(open_line.startswith("13. Source not found."))
         self.assertNotIn("Supported", open_line)
-        self.assertIn("Open claims: 5", outcome["block_reason"])
+        self.assertIn("Open claims: 13", outcome["block_reason"])
         self.assertTrue(any(line.startswith("1. Supported.") for line in outcome["verdict"].splitlines()))
 
     def test_missing_checker_does_not_export(self):
@@ -3599,6 +3667,54 @@ class BlindClaimCheckTests(unittest.TestCase):
         self.assertEqual(outcome["verdict"], "")
         self.assertIn("did not run", outcome["thread"])
         self.assertNotIn("Supported.", outcome["thread"])
+
+    def test_shared_section_and_uncited_figure_stay_in_the_packet(self):
+        from fpfa.claim_check import _from_model, build_packet
+
+        result = self._sample()
+        before = build_packet(result)
+        result["narrative"] += (
+            "\nPer NFPA 13-2025 §8.3.2.3.1.1 a double-interlock zone may hold 750 gal with a QOD."
+            "\nZone total is 999.9 gal."
+        )
+        packet = build_packet(result)
+        self.assertNotEqual(packet["claims"], before["claims"])
+        self.assertIn("750", packet["claims"])
+        self.assertIn("999.9", packet["claims"])
+        self.assertIn("§8.3.2.3.1.1", packet["claims"])
+        for claim_line, source_line in zip(
+            packet["claims"].splitlines(), packet["sources"].splitlines(), strict=True
+        ):
+            if "750" in claim_line:
+                self.assertIn("PACKAGE ASSERTION", source_line)
+                self.assertNotIn("NOT PULLED", source_line)
+                self.assertNotIn("750", source_line)
+                self.assertNotIn(claim_line.split(" requires ", 1)[1], source_line)
+            if "999.9" in claim_line:
+                self.assertIn("PACKAGE ASSERTION", source_line)
+                self.assertNotIn("999.9", source_line)
+        lied = "\n".join(
+            f'{number}. Supported. Cite: "x"' for number in range(1, packet["claim_count"] + 1)
+        )
+        outcome = _from_model(packet, lied)
+        self.assertFalse(outcome["all_supported"])
+        self.assertFalse(outcome["checked_against_standard"])
+        self.assertIn("Not supported.", outcome["verdict"])
+
+    def test_echoed_tool_cite_is_not_supported(self):
+        from fpfa.claim_check import _from_model
+
+        packet = {
+            "section": "21 13 19",
+            "claims": "1. NFPA 13-2025 §8.3.2.3.1.1 requires DI 500 gal; QOD does not extend.",
+            "sources": "1. NFPA 13-2025 §8.3.2.3.1.1. DI 500 gal; QOD does not extend.",
+            "claim_count": 1,
+            "draft_token": "echo",
+        }
+        outcome = _from_model(packet, '1. Supported. Cite: "same string"')
+        self.assertFalse(outcome["all_supported"])
+        self.assertFalse(outcome["checked_against_standard"])
+        self.assertTrue(outcome["verdict"].startswith("1. Not supported."))
 
     def test_export_writes_sidecars_only_after_support(self):
         if not os.environ.get("DISPLAY"):
@@ -3650,10 +3766,13 @@ class BlindClaimCheckTests(unittest.TestCase):
                 self.assertNotIn("tools", create.seen[0])
             chat = app.chat_view.get("1.0", "end")
             self.assertIn("| claim |", chat)
-            self.assertIn("Every claim is Supported.", chat)
+            self.assertIn("did not compare the narrative to the standard", chat)
+            self.assertIn("Engineer-of-record review still applies", chat)
+            self.assertNotIn("Every claim is Supported.", chat)
             self.assertEqual(app.project["id"], origin_id)
             self.assertEqual([row["id"] for row in list_projects()], before)
             self.assertTrue(app.project["claim_check"]["all_supported"])
+            self.assertFalse(app.project["claim_check"]["checked_against_standard"])
             kinds = {job.kind for job in app.jobs.snapshot()}
             self.assertIn("zone", kinds)
             self.assertIn("claim", kinds)
@@ -3743,9 +3862,12 @@ class BlindClaimCheckTests(unittest.TestCase):
                         break
                     time.sleep(0.02)
             self.assertIn("| claim |", saved)
-            self.assertIn("Every claim is Supported.", saved)
+            self.assertIn("did not compare the narrative to the standard", saved)
+            self.assertIn("Engineer-of-record review still applies", saved)
+            self.assertNotIn("Every claim is Supported.", saved)
             self.assertNotIn("| claim |", app.chat_view.get("1.0", "end"))
             self.assertEqual(load_project(origin_id)["claim_check"]["all_supported"], True)
+            self.assertEqual(load_project(origin_id)["claim_check"]["checked_against_standard"], False)
             self.assertIsNone(load_project(other_id).get("claim_check"))
             self.assertEqual({row["id"] for row in list_projects()}, set(before))
             self.assertEqual(dialogs, [])

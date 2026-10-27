@@ -10,7 +10,13 @@ from pathlib import Path
 
 from docx import Document
 
-from fpfa.workflow import fmt1, judgment_label_line, screen_limit_assumption_text, trim_assumption_text
+from fpfa.workflow import (
+    fmt1,
+    governing_narrative,
+    judgment_label_line,
+    screen_limit_assumption_text,
+    trim_assumption_text,
+)
 
 DRAFT_SECTION = "21 13 19"
 DRAFT_HEADING = "Section 21 13 19 — Double-interlock preaction (draft)"
@@ -212,7 +218,7 @@ def write_docx(path: Path | str, project: dict, result: dict) -> Path:
         )
 
     doc.add_heading("Draft narrative", level=2)
-    for paragraph in (result.get("narrative") or "").split("\n"):
+    for paragraph in governing_narrative(result.get("narrative") or "").split("\n"):
         if paragraph.strip():
             doc.add_paragraph(paragraph.strip())
 
