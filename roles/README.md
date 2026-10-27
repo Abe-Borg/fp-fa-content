@@ -12,5 +12,6 @@ Roles in this pack:
 - `fp-sprinkler` — wet, dry, and double-interlock sprinkler screens
 - `fa-releasing` — detection and releasing that trip those systems
 - `spec-draft` — narrative after a tool-plan run, including section 21 13 19
+- `qa-specialist` — blind claim check before that section is exported
 
 Mode behavior lives next to this folder in `modes/<slug>/MODE.md` (brainstorm, calculator, synthesis, mixed). These role files do not switch modes. Keep section numbers that the app already uses. Do not add job names, client names, personal names, raw standards text, or a vendor catalog.

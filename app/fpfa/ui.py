@@ -1,8 +1,9 @@
 """Desktop shell. The chat thread is the main pane. The zone form is optional.
 
-Long zone runs, chat turns, and heavy jobs are on the inbox. Workers run them
-so the composer stays usable. A result is labeled with its job and stored on
-the project that started it. Only /heavy uses the hosted runtime.
+Long zone runs, chat turns, the blind claim check, and heavy jobs are on the
+inbox. Workers run them so the composer stays usable. A result is labeled
+with its job and stored on the project that started it. Only /heavy uses the
+hosted runtime.
 
 Run from the app directory: python -m fpfa
 """
@@ -14,6 +15,7 @@ import copy
 import json
 import queue
 import re
+import sys
 import threading
 import tkinter as tk
 import tkinter.font as tkfont
@@ -23,6 +25,14 @@ from tkinter import filedialog, messagebox, simpledialog, ttk
 from fpfa import sample_data
 from fpfa.bess import bess_chat_summary, bess_govern_note, run_bess_plan
 from fpfa.calc_tools import ToolSession
+from fpfa.claim_check import (
+    build_packet,
+    claim_dir,
+    judge,
+    same_packet,
+    unanswered,
+    write_packet_files,
+)
 from fpfa.claude_client import MODEL_ID, AnthropicMessages, run_tool_loop, safe_error
 from fpfa.everyday import assemble_system, run_everyday
 from fpfa.jobs import JobInbox, label_result
@@ -99,7 +109,8 @@ THREAD_HINT = (
     "The LFL tool owns vol% and ppm. An election or a duration the tool did not return stays ASSUMED.\n"
     "/run uses the optional zone form. /new Job name opens a job. /help lists commands.\n"
     "Ctrl+S saves the open job. Closing the window saves it too.\n"
-    "Settings holds your Anthropic key. Export writes draft Section 21 13 19 after a run.\n"
+    "Settings holds your Anthropic key. Export writes draft Section 21 13 19 after a run "
+    "and a blind claim check in this thread. That check is not the hosted runtime.\n"
     "Blank trim and the screen-limit seconds stay labeled ASSUMED. "
     "Pipe gallons and trip time come from the calc tools.\n"
     "A typed question uses the everyday path. Specialist roles, modes, and skills are files "
@@ -107,7 +118,7 @@ THREAD_HINT = (
     "The Mode menu points at modes/<slug>/MODE.md "
     "(brainstorm, calculator, synthesis, mixed). "
     "Calculated, ASSUMED, and use best judgment stay three different labels.\n"
-    "The inbox beside Projects lists zone runs, chat turns, and heavy jobs. "
+    "The inbox beside Projects lists zone runs, chat turns, claim checks, and heavy jobs. "
     "A long job runs on a worker, so this composer stays usable. "
     "A result is labeled with the job it belongs to and is saved on that project.\n"
     "/heavy is the only path that uses the hosted runtime. "
@@ -143,7 +154,8 @@ def slash_help_text() -> str:
         "/help — show these commands\n"
         "Ctrl+S saves the open job. Closing the window saves it too.\n"
         "Settings holds your Anthropic key. Export writes draft Section "
-        f"{DRAFT_SECTION} after a run.\n"
+        f"{DRAFT_SECTION} after a run and a blind claim check in this thread. "
+        "That check is not the hosted runtime.\n"
         "/mode — show the active mode\n"
         "/mode brainstorm — use that mode file (also calculator, synthesis, mixed)\n"
         "Blank trim and the screen-limit seconds stay labeled ASSUMED. "
@@ -152,7 +164,7 @@ def slash_help_text() -> str:
         "That label is not ASSUMED and it is not a calculated figure.\n"
         "A typed question uses the everyday path. Specialist roles, modes, and skills are files "
         "in the content pack, and numbers come from the calc tools.\n"
-        "The inbox beside Projects lists zone runs, chat turns, and heavy jobs. "
+        "The inbox beside Projects lists zone runs, chat turns, claim checks, and heavy jobs. "
         "A long job runs on a worker. The composer stays usable. "
         "A finished result is labeled with the job it belongs to and is saved on that project.\n"
         "/heavy is the only hosted path. A typed question, /sample-di, /sample-bess, "
@@ -1727,15 +1739,108 @@ class App:
         self.results.insert("1.0", "\n".join(lines))
         self.results.configure(state="disabled")
 
-    def export_to(self, path: Path) -> Path:
+    def export_to(self, path: Path, create=None) -> Path:
+        """Run the blind claim check, post it here, then write the docx if it passes.
+
+        create() is Messages.create. Without it, a saved key is used. With no
+        key, the checker does not run and the file is not written.
+        """
         if not self.project or not self.project.get("last_run"):
             raise RuntimeError("Run /sample-di or /run before exporting.")
-        return write_docx(path, self.project, self.project["last_run"])
+        snapshot = copy.deepcopy(self.project["last_run"])
+        outcome = self._claim_outcome(create, snapshot)
+        job = self.jobs.record(
+            project_id=self.project["id"],
+            project_name=self.project.get("name") or "Untitled job",
+            kind="claim",
+            title=f"Section {DRAFT_SECTION} claim check",
+            status="done",
+        )
+        self._store_claim(self.project, outcome, job.id)
+        write_packet_files(claim_dir(self.project["id"]), outcome)
+        self.chat_log.append(self._assistant_turn(self._with_job_label(job.id, outcome["thread"]), job.id))
+        self._render_chat()
+        self._save_form_or_chat(self.project)
+        save_project(self.project)
+        if not outcome["all_supported"]:
+            raise RuntimeError(outcome["block_reason"])
+        return self._write_export(Path(path), outcome, snapshot)
 
     def export_docx(self) -> None:
         if not self.project or not self.project.get("last_run"):
             messagebox.showinfo("Export", "Use /sample-di or /run before exporting.")
             return
+        self.start_claim_check(offer_export=True)
+
+    def start_claim_check(self, offer_export: bool = False) -> None:
+        """Queue the blind claim check on this project. The composer stays usable."""
+        self._keep_composer_open()
+        self._ensure_project()
+        if not self.project or not self.project.get("last_run"):
+            messagebox.showinfo("Export", "Use /sample-di or /run before exporting.")
+            return
+        snapshot = copy.deepcopy(self.project["last_run"])
+        packet = build_packet(snapshot)
+        stored = self.project.get("claim_check") or {}
+        if offer_export and stored.get("all_supported") and same_packet(stored, packet):
+            self._offer_export(stored)
+            return
+        origin_id = self.project["id"]
+        project_name = self.project.get("name") or "Untitled job"
+        key = load_api_key()
+
+        def work(job_id: str) -> None:
+            try:
+                if key:
+                    outcome = judge(content_root(), packet, AnthropicMessages(key).create)
+                else:
+                    outcome = unanswered(packet)
+            except Exception as exc:
+                message = safe_error(exc)
+                self.jobs.mark(job_id, "error", message)
+                self.queue.put(
+                    lambda oid=origin_id, err=message, jid=job_id, offer=offer_export: self._finish_claim(
+                        oid, None, err, jid, offer
+                    )
+                )
+                return
+            self.queue.put(
+                lambda oid=origin_id, found=outcome, jid=job_id, offer=offer_export, snap=snapshot: self._finish_claim(
+                    oid, found, None, jid, offer, snap
+                )
+            )
+
+        job = self.jobs.submit(
+            project_id=origin_id,
+            project_name=project_name,
+            kind="claim",
+            title=f"Section {DRAFT_SECTION} claim check",
+            work=work,
+        )
+        self._keep_composer_open()
+        self.status.set(f"Claim check… {job.heading()}")
+
+    def _claim_outcome(self, create, result=None) -> dict:
+        packet = build_packet(result if result is not None else self.project["last_run"])
+        if create is None:
+            key = load_api_key()
+            if not key:
+                return unanswered(packet)
+            create = AnthropicMessages(key).create
+        return judge(content_root(), packet, create)
+
+    def _store_claim(self, project: dict, outcome: dict, job_id: str | None) -> None:
+        stored = dict(outcome)
+        if job_id:
+            stored["job_id"] = job_id
+        project["claim_check"] = stored
+
+    def _write_export(self, path: Path, outcome: dict, result=None) -> Path:
+        written = write_docx(path, self.project, result if result is not None else self.project["last_run"])
+        write_packet_files(written.parent, outcome)
+        return written
+
+    def _offer_export(self, outcome: dict, result=None) -> None:
         path = filedialog.asksaveasfilename(
             parent=self.root,
             title=f"Export draft Section {DRAFT_SECTION}",
@@ -1744,13 +1849,72 @@ class App:
             initialfile=f"{self.project.get('name', 'di-zone')}.docx",
         )
         if not path:
+            self.status.set(
+                f"Claim check passed. Export of Section {DRAFT_SECTION} was not written."
+            )
             return
         try:
-            written = self.export_to(Path(path))
+            written = self._write_export(Path(path), outcome, result)
         except Exception as exc:
             messagebox.showerror("Export", safe_error(exc))
             return
         self.status.set(f"Exported {written}")
+
+    def _finish_claim(
+        self,
+        origin_id: str,
+        outcome: dict | None,
+        error: str | None,
+        job_id: str | None = None,
+        offer_export: bool = False,
+        export_result: dict | None = None,
+    ) -> None:
+        """Post the check into the project thread that started it."""
+        self._keep_composer_open()
+        origin_id = self._destination_id(origin_id, job_id)
+        still_here = self.project is not None and self.project.get("id") == origin_id
+        if error or outcome is None:
+            message = self._with_job_label(job_id, error or "The claim check did not finish.")
+            if still_here:
+                self.chat_log.append(self._assistant_turn(message, job_id))
+                self._render_chat()
+                self._save_form_or_chat(self.project)
+                save_project(self.project)
+            else:
+                self._append_saved_chat(origin_id, message, job_id)
+            self.status.set(message)
+            return
+        message = self._with_job_label(job_id, outcome["thread"])
+        if still_here:
+            self._store_claim(self.project, outcome, job_id)
+            write_packet_files(claim_dir(origin_id), outcome)
+            self.chat_log.append(self._assistant_turn(message, job_id))
+            self._render_chat()
+            self._save_form_or_chat(self.project)
+            save_project(self.project)
+        else:
+            try:
+                project = load_project(origin_id)
+            except (OSError, json.JSONDecodeError):
+                self.status.set("The claim check finished, and that project is no longer on this machine.")
+                return
+            self._store_claim(project, outcome, job_id)
+            write_packet_files(claim_dir(origin_id), outcome)
+            chat = list(project.get("chat") or [])
+            chat.append(self._assistant_turn(message, job_id))
+            project["chat"] = chat
+            save_project(project)
+            heading = self._with_job_label(job_id, "")
+            note = "Claim check saved on the project that started it."
+            self.status.set(f"{heading} {note}".strip())
+            return
+        if outcome["all_supported"] and offer_export:
+            self._offer_export(outcome, export_result)
+            return
+        if outcome["all_supported"]:
+            self.status.set(self._with_job_label(job_id, f"Every claim on Section {DRAFT_SECTION} is Supported."))
+            return
+        self.status.set(self._with_job_label(job_id, outcome["block_reason"]))
 
     def _render_chat(self) -> None:
         self.chat_view.configure(state="normal")
@@ -2057,7 +2221,10 @@ def main(argv: list[str] | None = None) -> None:
                 root.update()
                 capture_window(root, shot / "di_zone_results.png")
             if args.export:
-                app.export_to(Path(args.export))
+                try:
+                    app.export_to(Path(args.export))
+                except RuntimeError as exc:
+                    sys.stderr.write(str(exc) + "\n")
             if args.quit:
                 root.destroy()
 

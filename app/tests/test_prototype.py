@@ -34,6 +34,33 @@ def _isolate_data():
     return Path(path)
 
 
+def _support_every_claim():
+    """Messages.create stand-in that marks every numbered claim Supported.
+
+    The production gate still treats NOT PULLED as open, so this stand-in is
+    allowed to be wrong on that cite.
+    """
+    from fpfa.claim_check import numbered_bodies, split_checker_request
+
+    seen = []
+
+    def create(**kwargs):
+        seen.append(kwargs)
+        claims, sources = split_checker_request(kwargs["messages"][0]["content"])
+        source_map = numbered_bodies(sources)
+        lines = []
+        for number in numbered_bodies(claims):
+            cite = source_map.get(number, "")
+            lines.append(f'{number}. Supported. Cite: "{cite}"')
+        return SimpleNamespace(
+            stop_reason="end_turn",
+            content=[SimpleNamespace(type="text", text="\n".join(lines))],
+        )
+
+    create.seen = seen
+    return create
+
+
 class WorkflowTests(unittest.TestCase):
     def setUp(self):
         _isolate_data()
@@ -740,7 +767,10 @@ class EverydayPathTests(unittest.TestCase):
         from fpfa.roles_loader import list_roles, read_role
 
         slugs = [item["slug"] for item in list_roles(self.root)]
-        self.assertEqual(slugs, ["everyday", "fa-releasing", "fp-sprinkler", "spec-draft"])
+        self.assertEqual(
+            slugs,
+            ["everyday", "fa-releasing", "fp-sprinkler", "qa-specialist", "spec-draft"],
+        )
         text = read_role(self.root, "fp-sprinkler")
         self.assertIn("Pipe-only volume is not the exemption volume.", text)
         self.assertIn("ASSUMED", text)
@@ -776,6 +806,11 @@ class EverydayPathTests(unittest.TestCase):
         self.assertIn("- fp-sprinkler:", system)
         self.assertIn("- fa-releasing:", system)
         self.assertIn("- spec-draft:", system)
+        self.assertIn("- qa-specialist:", system)
+        self.assertIn("Blind claim check before export of section 21 13 19.", system)
+        qa_body = "Judge each numbered claim from the cites file alone."
+        self.assertIn(qa_body, (REPO / "roles" / "qa-specialist" / "ROLE.md").read_text(encoding="utf-8"))
+        self.assertNotIn(qa_body, system)
         self.assertIn("sprinkler-system-volume-takeoff", system)
         self.assertNotIn(body_only, system)
         self.assertNotIn(releasing, system)
@@ -796,6 +831,7 @@ class EverydayPathTests(unittest.TestCase):
             self.assertNotIn(releasing, text, path.name)
             self.assertNotIn(mixed_body, text, path.name)
             self.assertNotIn(calculator_body, text, path.name)
+            self.assertNotIn(qa_body, text, path.name)
         self.assertNotIn("SYSTEM_PROMPT", (REPO / "app" / "fpfa" / "claude_client.py").read_text(encoding="utf-8"))
 
     def test_changed_role_file_is_what_the_prompt_uses(self):
@@ -932,6 +968,8 @@ class EverydayPathTests(unittest.TestCase):
         self.assertIn("spec-draft", seen["user"])
         payload = json.loads(seen["user"].split("\n\n", 1)[1])
         self.assertEqual(payload["roles_to_read"], ["fp-sprinkler", "fa-releasing", "spec-draft"])
+        self.assertNotIn("qa-specialist", payload["roles_to_read"])
+        self.assertIn("- qa-specialist:", seen["system"])
         with patch("fpfa.workflow.list_roles", return_value=[]):
             flagged = run_di_zone(self.root, EXAMPLE_DI, EXAMPLE_BASIS)
         self.assertTrue(any("missing roles" in item for item in flagged["warnings"]))
@@ -1124,9 +1162,14 @@ class UiSmokeTests(unittest.TestCase):
             self.assertIn("30.0 s ASSUMED", app.assumption_text.get())
             self.assertIsNotNone(app.project["last_run"])
             with tempfile.TemporaryDirectory() as tmp:
-                written = app.export_to(Path(tmp) / "draft.docx")
+                blocked = Path(tmp) / "blocked.docx"
+                with self.assertRaises(RuntimeError):
+                    app.export_to(blocked)
+                self.assertFalse(blocked.exists())
+                written = app.export_to(Path(tmp) / "draft.docx", create=_support_every_claim())
                 self.assertTrue(written.is_file())
                 self.assertGreater(written.stat().st_size, 1000)
+                self.assertIn("| claim |", app.chat_view.get("1.0", "end"))
         finally:
             root.destroy()
 
@@ -1849,11 +1892,12 @@ class UiSmokeTests(unittest.TestCase):
             self.assertNotEqual(str(app.chat_entry.cget("state")), "disabled")
             self.assertNotEqual(str(app.send_button.cget("state")), "disabled")
             with tempfile.TemporaryDirectory() as tmp:
-                written = app.export_to(Path(tmp) / "draft.docx")
+                written = app.export_to(Path(tmp) / "draft.docx", create=_support_every_claim())
                 doc = Document(written)
                 text = "\n".join(p.text for p in doc.paragraphs)
                 self.assertIn("Section 21 13 19", text)
                 self.assertNotIn(job_id, text)
+                self.assertIn("| claim |", app.chat_view.get("1.0", "end"))
         finally:
             root.destroy()
 
@@ -2981,7 +3025,7 @@ class ManagedAgentTests(unittest.TestCase):
         self.assertNotIn("You are the design assistant", client)
         self.assertNotIn("NFPA 69", client)
         self.assertIn(HEAVY_NOTE.split(".")[0], client)
-        for name in ("everyday.py", "workflow.py", "bess.py", "claude_client.py"):
+        for name in ("everyday.py", "workflow.py", "bess.py", "claude_client.py", "claim_check.py"):
             text = (REPO / "app" / "fpfa" / name).read_text(encoding="utf-8")
             self.assertNotIn("managed-agents", text, name)
             self.assertNotIn("run_heavy_job", text, name)
@@ -2994,6 +3038,11 @@ class ManagedAgentTests(unittest.TestCase):
             "run_bess",
             "_enqueue_bess",
             "_run_bess_here",
+            "export_docx",
+            "export_to",
+            "start_claim_check",
+            "_finish_claim",
+            "_claim_outcome",
         ):
             body = ui.split(f"def {name}(", 1)[1].split("\n    def ", 1)[0]
             self.assertNotIn("run_heavy_job", body, name)
@@ -3254,6 +3303,358 @@ class ManagedAgentTests(unittest.TestCase):
             self.assertEqual(load_project(other_id).get("last_run"), None)
             other_chat = json.dumps(load_project(other_id).get("chat") or [])
             self.assertNotIn("HEAVY-REPLY", other_chat)
+        finally:
+            release.set()
+            root.destroy()
+
+
+class BlindClaimCheckTests(unittest.TestCase):
+    def setUp(self):
+        _isolate_data()
+        from fpfa.paths import content_root
+
+        self.root = content_root()
+
+    def _sample(self):
+        from fpfa.sample_data import EXAMPLE_BASIS, EXAMPLE_DI
+        from fpfa.workflow import run_di_zone
+
+        return run_di_zone(self.root, EXAMPLE_DI, EXAMPLE_BASIS)
+
+    def test_sample_claims_come_from_tool_cites(self):
+        from fpfa.claim_check import (
+            BLIND_CLAIM_SKILL,
+            build_packet,
+            checker_request,
+            checker_system,
+            claims_filename,
+            judge,
+            sources_filename,
+            verdict_filename,
+        )
+        from fpfa.roles_loader import read_role
+        from fpfa.skills_loader import read_skill
+
+        result = self._sample()
+        packet = build_packet(result)
+        self.assertEqual(packet["section"], "21 13 19")
+        self.assertEqual(packet["claim_count"], 4)
+        self.assertIn("NFPA 13-2025 §8.3.2.3.1.1 requires DI 500 gal; QOD does not extend.", packet["claims"])
+        self.assertIn("§8.3.2.3.2", packet["claims"])
+        self.assertIn("Table 19.2.3.1.2", packet["claims"])
+        self.assertIn("§19.2.3.1.3", packet["claims"])
+        self.assertNotIn("NOT PULLED", packet["sources"])
+        self.assertNotIn("Draft for the engineer of record", packet["claims"])
+        self.assertNotIn("281.3", packet["claims"] + packet["sources"])
+        self.assertNotIn("38.1", packet["claims"] + packet["sources"])
+        self.assertNotIn("ranks double-interlock", packet["claims"])
+        skill = read_skill(self.root, BLIND_CLAIM_SKILL)
+        self.assertIn("A checker who reads the draft tends to agree with its mistakes.", skill)
+        self.assertIn("<section>-claims.md", skill)
+        self.assertIn("<section>-sources.md", skill)
+        self.assertIn("<section>-claimcheck.md", skill)
+        self.assertIn("Supported", skill)
+        self.assertIn("Not supported", skill)
+        self.assertIn("Source not found", skill)
+        self.assertEqual(claims_filename(), "21-13-19-claims.md")
+        self.assertEqual(sources_filename(), "21-13-19-sources.md")
+        self.assertEqual(verdict_filename(), "21-13-19-claimcheck.md")
+        request = checker_request(packet["claims"], packet["sources"])
+        self.assertTrue(request.startswith("21-13-19-claims.md\n"))
+        self.assertIn("\n\n21-13-19-sources.md\n", request)
+        self.assertNotIn("Draft for the engineer of record", request)
+        self.assertNotIn("Part 1 — General", request)
+        self.assertEqual(checker_system(self.root), read_role(self.root, "qa-specialist").strip())
+        self.assertNotIn("Part 1 — General", checker_system(self.root))
+        self.assertNotIn(
+            "A checker who reads the draft tends to agree with its mistakes.",
+            checker_system(self.root),
+        )
+        create = _support_every_claim()
+        outcome = judge(self.root, packet, create)
+        self.assertTrue(outcome["all_supported"])
+        self.assertIn("1. Supported.", outcome["verdict"])
+        self.assertEqual(create.seen[0]["model"], "claude-opus-5-5")
+        self.assertNotIn("temperature", create.seen[0])
+        self.assertNotIn("top_p", create.seen[0])
+        self.assertNotIn("top_k", create.seen[0])
+        self.assertNotIn("tool_choice", create.seen[0])
+        self.assertNotIn("thinking", create.seen[0])
+        self.assertNotIn("tools", create.seen[0])
+        self.assertEqual(create.seen[0]["messages"][0]["content"], request)
+        self.assertEqual(create.seen[0]["system"], checker_system(self.root))
+        module = (REPO / "app" / "fpfa" / "claim_check.py").read_text(encoding="utf-8")
+        self.assertNotIn("A checker who reads the draft tends to agree with its mistakes.", module)
+        self.assertNotIn("NFPA 69", module)
+        self.assertNotIn("8.3.2.3.1.1", module)
+        dry = "21 13 " + "16"
+        self.assertNotIn(dry, module)
+        self.assertNotIn(dry, packet["claims"])
+        self.assertNotIn(dry, outcome["verdict"])
+        self.assertNotIn(dry, (REPO / "roles" / "qa-specialist" / "ROLE.md").read_text(encoding="utf-8"))
+
+    def test_unretrieved_cite_stays_open_even_when_the_model_says_supported(self):
+        from fpfa.claim_check import build_packet, checker_request, judge
+
+        result = self._sample()
+        result["narrative"] += (
+            "\nNFPA 13-2025 §29.2.1.1 requires a 200 psi test for two hours."
+        )
+        result["basis"]["hazard_notes"] = "HAZARD-NOTE-MARKER stays with the designer."
+        packet = build_packet(result)
+        request = checker_request(packet["claims"], packet["sources"])
+        self.assertIn("5. NOT PULLED", packet["sources"])
+        self.assertIn("§29.2.1.1", packet["claims"])
+        self.assertIn("NOT PULLED", request)
+        self.assertNotIn("HAZARD-NOTE-MARKER", request)
+        self.assertNotIn("Draft for the engineer of record", request)
+        self.assertNotIn("HAZARD-NOTE-MARKER", checker_request(packet["claims"], packet["sources"]))
+        outcome = judge(self.root, packet, _support_every_claim())
+        self.assertFalse(outcome["all_supported"])
+        open_line = next(line for line in outcome["verdict"].splitlines() if line.startswith("5. "))
+        self.assertTrue(open_line.startswith("5. Source not found."))
+        self.assertNotIn("Supported", open_line)
+        self.assertIn("Open claims: 5", outcome["block_reason"])
+        self.assertTrue(any(line.startswith("1. Supported.") for line in outcome["verdict"].splitlines()))
+
+    def test_missing_checker_does_not_export(self):
+        from fpfa.claim_check import build_packet, unanswered
+
+        packet = build_packet(self._sample())
+        outcome = unanswered(packet)
+        self.assertFalse(outcome["all_supported"])
+        self.assertEqual(outcome["checker"], "absent")
+        self.assertEqual(outcome["verdict"], "")
+        self.assertIn("did not run", outcome["thread"])
+        self.assertNotIn("Supported.", outcome["thread"])
+
+    def test_export_writes_sidecars_only_after_support(self):
+        if not os.environ.get("DISPLAY"):
+            self.skipTest("no display")
+        import tkinter as tk
+        from unittest.mock import patch
+
+        from docx import Document
+
+        from fpfa.claim_check import claim_dir, claims_filename, verdict_filename
+        from fpfa.projects import list_projects
+        from fpfa.ui import App
+
+        root = tk.Tk()
+        try:
+            app = App(root)
+            root.update()
+            app.chat_entry.insert(0, "/sample-di")
+            app.send_chat()
+            origin_id = app.project["id"]
+            before = [row["id"] for row in list_projects()]
+
+            def explode(*_args, **_kwargs):
+                raise AssertionError("hosted runtime")
+
+            with tempfile.TemporaryDirectory() as tmp, patch("fpfa.ui.run_heavy_job", explode):
+                blocked = Path(tmp) / "blocked.docx"
+                with self.assertRaises(RuntimeError) as caught:
+                    app.export_to(blocked)
+                self.assertIn("did not run", str(caught.exception))
+                self.assertFalse(blocked.exists())
+                held = claim_dir(origin_id)
+                self.assertTrue((held / claims_filename()).is_file())
+                self.assertFalse((held / verdict_filename()).is_file())
+                create = _support_every_claim()
+                written = app.export_to(Path(tmp) / "draft.docx", create=create)
+                doc = Document(written)
+                text = "\n".join(p.text for p in doc.paragraphs)
+                dry = "21 13 " + "16"
+                self.assertIn("Section 21 13 19", text)
+                self.assertNotIn(dry, text)
+                self.assertTrue((written.parent / verdict_filename()).is_file())
+                verdict = (written.parent / verdict_filename()).read_text(encoding="utf-8")
+                self.assertIn("Supported.", verdict)
+                self.assertNotIn(dry, verdict)
+                self.assertNotIn("Draft for the engineer of record", verdict)
+                user = create.seen[0]["messages"][0]["content"]
+                self.assertNotIn("Draft for the engineer of record", user)
+                self.assertNotIn("tools", create.seen[0])
+            chat = app.chat_view.get("1.0", "end")
+            self.assertIn("| claim |", chat)
+            self.assertIn("Every claim is Supported.", chat)
+            self.assertEqual(app.project["id"], origin_id)
+            self.assertEqual([row["id"] for row in list_projects()], before)
+            self.assertTrue(app.project["claim_check"]["all_supported"])
+            kinds = {job.kind for job in app.jobs.snapshot()}
+            self.assertIn("zone", kinds)
+            self.assertIn("claim", kinds)
+            self.assertNotIn("heavy", kinds)
+        finally:
+            root.destroy()
+
+    def test_claim_job_stays_on_the_project_that_started_it(self):
+        if not os.environ.get("DISPLAY"):
+            self.skipTest("no display")
+        import threading
+        import time
+        import tkinter as tk
+        from unittest.mock import patch
+
+        from fpfa.keystore import save_api_key
+        from fpfa.projects import list_projects, load_project
+        from fpfa.ui import App
+
+        started = threading.Event()
+        release = threading.Event()
+        seen = {}
+
+        class Hold:
+            def __init__(self, _key):
+                pass
+
+            def create(self, **kwargs):
+                seen["user"] = kwargs["messages"][0]["content"]
+                seen["system"] = kwargs["system"]
+                seen["keys"] = set(kwargs)
+                seen["thread"] = threading.current_thread().name
+                started.set()
+                release.wait(3)
+                from fpfa.claim_check import numbered_bodies, split_checker_request
+
+                claims, sources = split_checker_request(kwargs["messages"][0]["content"])
+                numbered = numbered_bodies
+                source_map = numbered(sources)
+                lines = [
+                    f'{number}. Supported. Cite: "{source_map.get(number, "")}"'
+                    for number in numbered(claims)
+                ]
+                return SimpleNamespace(
+                    stop_reason="end_turn",
+                    content=[SimpleNamespace(type="text", text="\n".join(lines))],
+                )
+
+        root = tk.Tk()
+        try:
+            app = App(root)
+            root.update()
+            app.ask_claude.set(False)
+            app.chat_entry.insert(0, "/sample-di")
+            app.send_chat()
+            origin_id = app.project["id"]
+            save_api_key("sk-ant-local-test")
+
+            def explode(*_args, **_kwargs):
+                raise AssertionError("hosted runtime")
+
+            dialogs = []
+
+            def no_dialog(*_args, **_kwargs):
+                dialogs.append("dialog")
+                return ""
+
+            with patch("fpfa.ui.run_heavy_job", explode), patch("fpfa.ui.AnthropicMessages", Hold), patch(
+                "fpfa.ui.filedialog.asksaveasfilename", no_dialog
+            ):
+                app.export_docx()
+                self.assertTrue(started.wait(2))
+                self.assertTrue(seen["thread"].startswith("fpfa-worker-"))
+                self.assertNotEqual(str(app.chat_entry.cget("state")), "disabled")
+                app.chat_entry.insert(0, "/new Other hall")
+                app.send_chat()
+                other_id = app.project["id"]
+                self.assertNotEqual(other_id, origin_id)
+                before = [row["id"] for row in list_projects()]
+                release.set()
+                deadline = time.time() + 2
+                saved = ""
+                while time.time() < deadline:
+                    app._poll()
+                    saved = json.dumps(load_project(origin_id).get("chat") or [])
+                    if "| claim |" in saved:
+                        break
+                    time.sleep(0.02)
+            self.assertIn("| claim |", saved)
+            self.assertIn("Every claim is Supported.", saved)
+            self.assertNotIn("| claim |", app.chat_view.get("1.0", "end"))
+            self.assertEqual(load_project(origin_id)["claim_check"]["all_supported"], True)
+            self.assertIsNone(load_project(other_id).get("claim_check"))
+            self.assertEqual({row["id"] for row in list_projects()}, set(before))
+            self.assertEqual(dialogs, [])
+            self.assertNotIn("Draft for the engineer of record", seen["user"])
+            self.assertNotIn("Part 1 — General", seen["user"])
+            self.assertNotIn("Part 1 — General", seen["system"])
+            self.assertIn("Judge each numbered claim from the cites file alone.", seen["system"])
+            for banned in ("temperature", "top_p", "top_k", "tool_choice", "thinking", "tools"):
+                self.assertNotIn(banned, seen["keys"])
+            self.assertIn("claim", {job.kind for job in app.jobs.snapshot()})
+            self.assertNotIn("heavy", {job.kind for job in app.jobs.snapshot()})
+        finally:
+            release.set()
+            root.destroy()
+
+    def test_export_keeps_the_draft_that_was_checked(self):
+        if not os.environ.get("DISPLAY"):
+            self.skipTest("no display")
+        import threading
+        import time
+        import tkinter as tk
+        from unittest.mock import patch
+
+        from docx import Document
+
+        from fpfa.claim_check import numbered_bodies, split_checker_request
+        from fpfa.keystore import save_api_key
+        from fpfa.ui import App
+
+        started = threading.Event()
+        release = threading.Event()
+
+        class Hold:
+            def __init__(self, _key):
+                pass
+
+            def create(self, **kwargs):
+                started.set()
+                release.wait(3)
+                claims, sources = split_checker_request(kwargs["messages"][0]["content"])
+                source_map = numbered_bodies(sources)
+                lines = [
+                    f'{number}. Supported. Cite: "{source_map.get(number, "")}"'
+                    for number in numbered_bodies(claims)
+                ]
+                return SimpleNamespace(
+                    stop_reason="end_turn",
+                    content=[SimpleNamespace(type="text", text="\n".join(lines))],
+                )
+
+        root = tk.Tk()
+        try:
+            app = App(root)
+            root.update()
+            app.ask_claude.set(False)
+            app.chat_entry.insert(0, "/sample-di")
+            app.send_chat()
+            save_api_key("sk-ant-local-test")
+            with tempfile.TemporaryDirectory() as tmp:
+                target = Path(tmp) / "draft.docx"
+
+                def save_as(*_args, **_kwargs):
+                    return str(target)
+
+                with patch("fpfa.ui.AnthropicMessages", Hold), patch(
+                    "fpfa.ui.filedialog.asksaveasfilename", save_as
+                ):
+                    app.export_docx()
+                    self.assertTrue(started.wait(2))
+                    app.project["last_run"]["narrative"] = "MUTATED-NARRATIVE"
+                    release.set()
+                    deadline = time.time() + 2
+                    while time.time() < deadline and not target.is_file():
+                        app._poll()
+                        time.sleep(0.02)
+                    app._poll()
+                self.assertTrue(target.is_file())
+                text = "\n".join(p.text for p in Document(target).paragraphs)
+                self.assertIn("Draft for the engineer of record", text)
+                self.assertIn("281.3", text)
+                self.assertNotIn("MUTATED-NARRATIVE", text)
         finally:
             release.set()
             root.destroy()
