@@ -83,7 +83,7 @@ If the caller presents single-interlock, non-interlock, or another prohibited pr
 | HAC Path 1/2/3 / open + fusible-link prohibition | System-family election (`suppression-technology-selection`) |
 | Deflector datum + Path 2 panel window | Occupancy / HC/OH re-class (`occupancy-hazard-fork`) |
 | Test A (DS 2-0) + Test B (DS 5-32) separate columns | Density×area `calcs` (`density-area-dry-increase`) |
-| EC concealed map + nothing-recommended | ASD/VEWFD return-sampling (`asd-vewfd-return-sampling`) |
+| EC concealed map + nothing-recommended | ASD/VEWFD return-sampling (`fa-asd-vewfd-data-hall-sampling-layout`) |
 | Spacing window 7–12 ft / 64–130 ft² (schedule limits) | Head (x,y,z) / CAD / RCP / hydraulic tree |
 | Status register + reciprocal handshakes | Dual-carrier BOD authorship (matrix — consume+return) |
 | Consume packet + STS + matrix(when dual) + fork + density | Invent hall 36k/26/10/11.4 defaults; mint AXA Class 4651 |
@@ -145,7 +145,7 @@ Caller must supply. Do **not** invent a hall. Do not treat SI/NI as company BOD.
 | `occupancy-hazard-fork` | HC/OH schedule — consumed when present (else `ASSUMED`, flagged) | Re-classify occupancy here |
 | `density-area-dry-increase` | `q_spr` / `system_type` / design area — consumed when present (else `ASSUMED`, flagged) | Re-run density×area `calcs` |
 | `most-stringent-basis-matrix` | **Geometry / carrier / obstruction** rows when dual-carrier; company fence | Rebuild dual-carrier BOD; Stop-away forever; silent FM↔AXA Class 4651 swap |
-| `asd-vewfd-return-sampling` | Below-floor VEWFD omission / return-sampling plane handoff | Size ASD ports here |
+| `fa-asd-vewfd-data-hall-sampling-layout` | Below-floor VEWFD omission / return-sampling plane handoff | Size ASD ports here |
 | `preaction-releasing-c-and-e-soo` | Consumes Path 2 drop-out limb SOO from this Skill | Rewrite full C&E here |
 | `dry-preaction-water-delivery-screen` | Delivery-clock companion when STS is dry/DI | Prove ≤30 s fill here |
 | `itm-design-for-testability` | Path 2 lid fail-to-drop → ITM of panels | Emit ITM interval calendar here |
@@ -164,7 +164,7 @@ If SI/NI/foam/mist is presented as BOD → **Stop** (company scope lock — stay
 | `most-stringent-basis-matrix` | Per-parameter union / geometry·carrier·obstruction rows | **Consume only** when dual — then elect path + schedule **here** |
 | `suppression-technology-selection` | Family election wet\|dry\|DI + fence status | **Consume only**; hand family under company fence; mist = `PRACTICE REFUSED`; foam prohibited |
 | the input packet | Assignment context | **Consume only** — optional; absent → proceed, flag `ASSUMED` |
-| `asd-vewfd-return-sampling` | Return-sampling plane / 60-ACH interlock sizing | Below-floor VEWFD omission handoff; do not size ports here |
+| `fa-asd-vewfd-data-hall-sampling-layout` | Return-sampling plane / 60-ACH interlock sizing | Below-floor VEWFD omission handoff; do not size ports here |
 | `preaction-releasing-c-and-e-soo` | Authoritative full preaction C&E / Boolean | Path 2 **drop-out limb SOO only** |
 | `dry-preaction-water-delivery-screen` | Delivery clock when STS is dry/DI | Geometry does not prove ≤30 s |
 | `itm-design-for-testability` | Lifecycle ITM / Path 2 lid fail-to-drop ITM | Name ITM of panels; do not emit interval calendar |
@@ -180,7 +180,7 @@ Example lines:
 - `HAND OFF — the input packet: optional. Missing → proceed from given inputs; flag `ASSUMED`.`
 - `HAND OFF — occupancy-hazard-fork: HC/OH. Consume only.`
 - `HAND OFF — density-area-dry-increase: q_spr / system_type. Consume only.`
-- `HAND OFF — asd-vewfd-return-sampling: return-sampling plane / below-floor VEWFD.`
+- `HAND OFF — fa-asd-vewfd-data-hall-sampling-layout: return-sampling plane / below-floor VEWFD.`
 - `HAND OFF — preaction-releasing-c-and-e-soo: full C&E; this Skill writes Path 2 drop-out limb only.`
 - `HAND OFF — dry-preaction-water-delivery-screen: delivery clock when dry/DI.`
 - `HAND OFF — itm-design-for-testability: Path 2 lid fail-to-drop ITM.`
@@ -300,7 +300,7 @@ If a square-grid method check lands at 11.4 ft, half-spacing **5.70 ft > 4.0 ft*
 
 **DS 5-32 §2.4.3.4.1.1 is more stringent** than a generic HC-1 concealed-space read. Carry **separate schedule rows**; do not add concealed + ceiling flows. Concurrent remote-area is a **hydraulic question — not this Skill**.
 
-Below-floor VEWFD omission (DS 5-32 §2.4.2.1.6) → **asd-vewfd-return-sampling**.
+Below-floor VEWFD omission (DS 5-32 §2.4.2.1.6) → **fa-asd-vewfd-data-hall-sampling-layout**.
 
 ### 3.8 Spacing / coverage window (schedule limits, not a CAD grid)
 
@@ -396,7 +396,7 @@ Also stop: treating ≥12 psi as proven; treating SI “sized as wet” as DS 2-
 | System-family election wet\|dry\|DI; mist/foam fence | `suppression-technology-selection` — **consume only**; mist BOD = `PRACTICE REFUSED`; foam prohibited; SI/NI-as-BOD → `RFI-variance` |
 | Dual-carrier per-parameter authorship (geometry/carrier/obstruction) | `most-stringent-basis-matrix` — **consume**, then return here |
 | Assignment packet authorship | the input packet — **consume only** |
-| Return-sampling plane / 60-ACH interlock sizing | `asd-vewfd-return-sampling` |
+| Return-sampling plane / 60-ACH interlock sizing | `fa-asd-vewfd-data-hall-sampling-layout` |
 | Releasing C&E / full SOO | `preaction-releasing-c-and-e-soo` (this Skill only writes the **drop-out limb**) |
 | Dry/DI delivery clock ≤30 s | `dry-preaction-water-delivery-screen` |
 | Path 2 lid fail-to-drop ITM intervals | `itm-design-for-testability` |

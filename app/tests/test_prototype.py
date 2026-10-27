@@ -829,6 +829,20 @@ class KeyAndSkillTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             read_skill(root, "../calcs/fp/formulas.py")
 
+    def test_apparatus_water_spray_is_an_allowed_exception(self):
+        everyday = (REPO / "roles" / "everyday" / "ROLE.md").read_text(encoding="utf-8")
+        lock = (REPO / "corpus" / "scope-lock.md").read_text(encoding="utf-8")
+        for text in (everyday, lock):
+            lowered = text.lower()
+            self.assertIn("outdoor oil-filled transformer apparatus water spray", lowered)
+            self.assertIn("power-block-transformer-water-spray", text)
+            self.assertIn("foam", lowered)
+            self.assertIn("clean agent", lowered)
+            self.assertIn("single-interlock", lowered)
+            self.assertRegex(text, r"Canada|Canadian")
+        self.assertNotIn("water spray are out of scope", lock)
+        self.assertIn("not a building deluge system", everyday)
+
     def test_pack_has_no_roster_or_client_names(self):
         banned = re.compile(
             r"\bAbe\b|DC FP Lead|stay dark|Hyperion|Abraham|\bNovva\b|NEEDS PE REVIEW|/workspace/"
@@ -848,18 +862,32 @@ class KeyAndSkillTests(unittest.TestCase):
         skills_readme = (REPO / "skills" / "README.md").read_text(encoding="utf-8")
         tier_a = _bullet_slugs(skills_readme, "Tier A methods", "Tier B methods")
         tier_b = _bullet_slugs(skills_readme, "Tier B methods", "Pilot method")
-        pilot = _bullet_slugs(skills_readme, "Pilot method", "Specialist role prompts")
+        pilot = _bullet_slugs(skills_readme, "Pilot method", "Tier C methods")
+        tier_c = _bullet_slugs(skills_readme, "Tier C methods", "Specialist role prompts")
         self.assertEqual(len(tier_a), 18)
         self.assertEqual(len(tier_b), 24)
         self.assertEqual(pilot, ["ess-isolation-venting-and-duration"])
+        self.assertEqual(
+            tier_c,
+            [
+                "storage-staging-sprinkler-design",
+                "liquid-cooled-escaped-liquids-leak-detect",
+                "mv-switchgear-room-package",
+                "power-block-transformer-water-spray",
+                "ess-exhaust-duct-shaft-and-duct-sprinklers",
+                "fa-bess-gas-detection-layout-and-setpoints",
+                "fa-bess-gas-relay-map-and-cause-effect",
+                "pipe-slope-elevation-drop",
+            ],
+        )
         self.assertEqual(len(set(tier_a + tier_b)), 42)
-        self.assertNotIn(pilot[0], tier_a + tier_b)
+        self.assertNotIn(pilot[0], tier_a + tier_b + tier_c)
         disk = sorted(
             path.name
             for path in (REPO / "skills").iterdir()
             if (path / "SKILL.md").is_file()
         )
-        self.assertEqual(disk, sorted(tier_a + tier_b + pilot))
+        self.assertEqual(disk, sorted(tier_a + tier_b + pilot + tier_c))
 
         corpus_indexed = re.findall(
             r"(?m)^\| `([^`]+\.md)`",

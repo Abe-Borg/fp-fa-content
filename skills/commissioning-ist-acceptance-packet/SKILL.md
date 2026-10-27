@@ -152,7 +152,7 @@ If SI/NI/foam/mist is presented as BOD → **Stop** (company scope lock — stay
 | `multizone-preaction-zone-alignment` | Zone count N / 1:1 alignment | Per-zone acceptance acts when zones exist |
 | `suppression-technology-selection` / `most-stringent-basis-matrix` / the input packet | Family + matrix + packet | **Consume only** |
 | `nitrogen-inerting-and-c-factor-gate` | Medium / C / fill; ITM 3→10 eligibility lever | Baseline “originally installed with nitrogen” y/n capture only |
-| `asd-vewfd-return-sampling` | ASD port / transport design math | App. C heated-wire + ASD ≤60 s **witness** when VEWFD |
+| `fa-asd-vewfd-data-hall-sampling-layout` | ASD port / transport design math | App. C heated-wire + ASD ≤60 s **witness** when VEWFD |
 
 Emit one `HAND OFF — <peer>: <what they own>` line per open peer dependency. Do **not** restamp `power-isolation-disconnect-control` from this Skill.
 

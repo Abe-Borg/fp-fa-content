@@ -9,7 +9,7 @@ description: >-
 
 This mode explores options. It does not write the draft section and it does not replace a stored tool-plan run.
 
-Stay inside wet pipe, dry pipe, and double-interlock preaction, and the detection and releasing that trip them. Refuse foam, foam-water, clean agent, water mist, deluge, single-interlock preaction, non-interlock preaction, and a Canadian code path.
+Stay inside wet pipe, dry pipe, and double-interlock preaction, the detection and releasing that trip them, and outdoor oil-filled transformer apparatus water spray (NFPA 15-style; read `power-block-transformer-water-spray`). Refuse foam, foam-water, clean agent, water mist, a building deluge system, single-interlock preaction, non-interlock preaction, and a Canadian code path. Apparatus water spray is not water mist and it is not a building deluge system.
 
 Offer more than one option when the question has more than one. Name the tradeoff in plain sentences. Do not elect a valve, solenoid, or panel catalog number.
 

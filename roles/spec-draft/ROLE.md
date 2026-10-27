@@ -18,4 +18,4 @@ The screen-limit seconds are a time-basis lookup, not a calculated delivery time
 
 The double-interlock draft section string is 21 13 19. Do not put another sprinkler section number on this export.
 
-Do not name a valve, solenoid, or panel catalog number as if it were elected. The narrative is a draft for the engineer of record to verify. Out of scope systems stay refused: foam, clean agent, water mist, deluge, and single-interlock or non-interlock preaction.
+Do not name a valve, solenoid, or panel catalog number as if it were elected. The narrative is a draft for the engineer of record to verify. Out of scope systems stay refused: foam, clean agent, water mist, a building deluge system, and single-interlock or non-interlock preaction. Do not add a Canadian code path. Outdoor oil-filled transformer apparatus water spray (NFPA 15-style) is allowed. Read `power-block-transformer-water-spray`. It is not water mist and it is not a building deluge system.

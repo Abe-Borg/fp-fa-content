@@ -154,7 +154,7 @@ Optional (do not block; flag `[V]` / `handoff` / `comparison-only`): A/B UPS top
 | `commissioning-ist-acceptance-packet` | App. D **witness** handshake when Test Mode / dual-AHJ applies | Own witness scripts / invent MDP-UPS tag lists for IST |
 | `multizone-preaction-zone-alignment` | PI-Zn 1:1 tags when present | Elect N / boundaries here |
 | `ess-isolation-venting-and-duration` | >20 kWh/rack hand-off target when crossed | Invent ESS sprinkler/vent design here |
-| `asd-vewfd-return-sampling` | Initiation / VEWFD peer context when present | Size ASD ports / transport here |
+| `fa-asd-vewfd-data-hall-sampling-layout` | Initiation / VEWFD peer context when present | Size ASD ports / transport here |
 | `dry-preaction-water-delivery-screen` | Named water-arrival inequality input when present | Own design-stage ≤30 s volume/QOD screen; invent fake code ≤30 s fill |
 
 If SI/NI/foam/mist is presented as BOD → **Stop** (company scope lock — stays hard). If the assignment packet is missing, or elected `system_type` is missing / `unresolved`, or dual-carrier controlling PI / releasing / VEWFD / carrier rows are missing when required, or P1/releasing C&E is missing when gated → **not a Stop**: proceed with a stated `ASSUMED` value (value + why), flagged; for a missing STS token assume a company family (wet | dry | DI only) and say why.
@@ -167,7 +167,7 @@ If SI/NI/foam/mist is presented as BOD → **Stop** (company scope lock — stay
 | `commissioning-ist-acceptance-packet` | App. D **Test Mode witness** line; dual-AHJ acceptance acts | Disconnect **means** / Fig D.1 architecture / Test Mode **capability** |
 | `multizone-preaction-zone-alignment` | Zone count N / 1:1 PA↔VEWFD↔PI alignment | Consume **PI-Zn tags**; retain whole-room escalation |
 | `ess-isolation-venting-and-duration` | >20 kWh/rack ESS sprinkler / vent / duration | ≤20 kWh show-and-verify; hand-off above the line |
-| `asd-vewfd-return-sampling` | ASD port / transport design math | Initiation / VEWFD trigger peer only |
+| `fa-asd-vewfd-data-hall-sampling-layout` | ASD port / transport design math | Initiation / VEWFD trigger peer only |
 | `dry-preaction-water-delivery-screen` | Design-stage ≤30 s volume / QOD screen | Consume water-arrival inequality; isolate-before-water ordering only |
 | `suppression-technology-selection` | Family election + fence status | **Consume only** wet\|dry\|DI token |
 | `most-stringent-basis-matrix` | Per-parameter union / carrier rows | **Consume only** |
@@ -181,7 +181,7 @@ Example lines:
 - `HAND OFF — commissioning-ist-acceptance-packet: App. D Test Mode witness / dual-AHJ. This Skill owns means / Fig D.1 / Test Mode capability.`
 - `HAND OFF — multizone-preaction-zone-alignment: PI-Zn 1:1 tags / N. This Skill consumes tags; retains whole-room escalation.`
 - `HAND OFF — ess-isolation-venting-and-duration: >20 kWh/rack ESS path. This Skill showed ≤20 kWh math or handed off.`
-- `HAND OFF — asd-vewfd-return-sampling: ports / transport. Initiation peer only here.`
+- `HAND OFF — fa-asd-vewfd-data-hall-sampling-layout: ports / transport. Initiation peer only here.`
 - `HAND OFF — dry-preaction-water-delivery-screen: design-stage ≤30 s proof. This Skill only orders isolate-before-water.`
 
 ---
@@ -418,7 +418,7 @@ Do **not** emit: full water-path C&E rewrite, ASD port math, density×area, ESS 
 | Full releasing C&E + SOO (water path) | **`preaction-releasing-c-and-e-soo`** (hand P1 cells only) |
 | App. D Test Mode **witness** / dual-AHJ acceptance stack | **`commissioning-ist-acceptance-packet`** (this Skill = means) |
 | Multizone PA/VEWFD/PI alignment | **`multizone-preaction-zone-alignment`** |
-| ASD port / transport sizing | **`asd-vewfd-return-sampling`** |
+| ASD port / transport sizing | **`fa-asd-vewfd-data-hall-sampling-layout`** |
 | Density × area / design-stage ≤30 s delivery proof | **`density-area-dry-increase`** / **`dry-preaction-water-delivery-screen`** |
 | ESS sprinkler / venting / duration | **`ess-isolation-venting-and-duration`** |
 | MV switchgear room FP | **`mv-switchgear-room-package`** — DS 5-19 room package; **not** 645 ITE EPO and not built here |

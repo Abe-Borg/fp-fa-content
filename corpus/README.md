@@ -4,15 +4,15 @@ Paraphrased decision logs and edition pins for a later search pass. One topic pe
 
 The training-tree knowledge base was not in this checkout. These notes are the in-scope decision logs distilled from the v1 skills already in the pack, not a copy of a source archive. They are not a reprint of a standard. A numeric screen sits next to its edition and section. Where a licensed primary is not held, the note says `[V]` and does not invent a section.
 
-Out of this folder: raw standards text, vendor catalogs, source-pull archives, job names, client names, and personal names. Foam, clean agent, and water mist are out of scope (the guard is in `scope-lock.md` only). Jurisdictions outside the stated NFPA, IBC, and IFC basis are out of scope. Single-interlock and non-interlock preaction are comparison-only. They are never the basis of design.
+Out of this folder: raw standards text, vendor catalogs, source-pull archives, job names, client names, and personal names. Foam, clean agent, and water mist are out of scope (the guard is in `scope-lock.md` only). A building deluge system is out of scope. Outdoor oil-filled transformer apparatus water spray (NFPA 15-style) is allowed and is sized in `power-block-transformer-water-spray`. Jurisdictions outside the stated NFPA, IBC, and IFC basis are out of scope. Canada stays out of scope. Single-interlock and non-interlock preaction are comparison-only. They are never the basis of design.
 
-Company systems in these notes: wet pipe, dry pipe, and double-interlock preaction, plus pumps, nitrogen, compressors, and the Division 21 and Division 28 fire-alarm work those systems need.
+Company systems in these notes: wet pipe, dry pipe, and double-interlock preaction, outdoor oil-filled transformer apparatus water spray, plus pumps, nitrogen, compressors, and the Division 21 and Division 28 fire-alarm work those systems need.
 
 Spec language is not here. When specs are ingested, double-interlock draft language belongs in CSI 21 13 19.
 
 | File | What it holds | Skill to read for the method |
 | --- | --- | --- |
-| `scope-lock.md` | Wet / dry / double-interlock fence | `suppression-technology-selection` |
+| `scope-lock.md` | Wet / dry / double-interlock fence, plus outdoor transformer water spray | `suppression-technology-selection`, `power-block-transformer-water-spray` |
 | `fp/edition-pins.md` | Unamended 2024 I-Code reference pins | `most-stringent-basis-matrix` |
 | `fp/water-delivery-screen.md` | Volume caps and 60 s / 30 s clocks | `dry-preaction-water-delivery-screen` |
 | `fp/nitrogen-compressor-and-c-factor.md` | C = 100, two-number fill | `nitrogen-inerting-and-c-factor-gate` |
