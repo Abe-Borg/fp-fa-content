@@ -31,12 +31,18 @@ description: >-
 |---|---|---|
 | Smoke or heat in BESS room | Fire alarm | CODE |
 | Waterflow | Fire alarm | PARA |
-| Gas at or above 10% LFL (low) | Alarm, own BESS GAS zone | CODE on the 9.6.5.6.7 path: 855-2023 9.6.5.6.7(5)(b) requires an alarm signal above 10% LFL (, DC FA Design practice 2026-10-23). Rate path rooms: alarm as [PRACTICE], same class. Never supervisory. Label PRACTICE |
+| Gas at or above 10% LFL (low) | Alarm, own BESS GAS zone | CODE on the 9.6.5.6.7 path: 855-2023 9.6.5.6.7(5)(b) requires an alarm signal above 10% LFL (Design practice, 2026-10-23). Rate path rooms: alarm as [PRACTICE], same class. Never supervisory. Label PRACTICE |
 | Gas at high setpoint | Alarm (gas) | PARA |
 | Off-gas VOC early warning (if separate) | Supervisory | PARA, Verify with the engineer of record |
 | Gas detection fault or power loss | Trouble | CODE |
 | Exhaust fan or airflow loss, makeup air not proven, damper not open, HOA off Auto | Supervisory | CODE for supervision (IFC 2024 1207.6.1.2.3); class Verify with the engineer of record, conservative supervisory |
 | Preaction supervisory (low air, valve, N2) | Supervisory | CODE |
+| ASD / VEWFD Alert (DI hall) | Supervisory | [OWNER, synthetic] default. Confirm against the owner program on the job |
+| Fire 1 or Action (FM DI leg 1), alone | Alarm (also EVACS alert) | [OWNER] FM map; class as fire alarm to the station |
+| DI release (leg 1 AND low air): solenoid, EVACS pre-discharge, release NAC | Alarm | [PRACTICE] row; basis FM DS 5-32 §2.4.3.2.1.3 [OWNER] plus NFPA 72-2025 §17.19.2.2.2 [CODE] for low air. Not §23.8.5.4.3 |
+| Releasing circuit open, EVACS amplifier failure, loss of primary | Trouble | [CODE] releasing circuit open is Table 14.4.3.2 item 18(9); amplifier failure and loss of primary are NFPA 72-2025 §10.19.1.1 to .1.3 where that path applies |
+
+Alarm receipt within 90 s, and supervisory and trouble receipt, follow NFPA 72-2025 Table 14.4.3.2 items 4(1) and 3(4) [CODE]. Feed these rows to `fa-integrated-systems-test-matrix`.
 - Classing gas alarm as supervisory only is a flag. Verify with the engineer of record. Conservative: alarm. Confirm with AHJ and station whether gas alarm is dispatched to the fire department.
 
 ## Service selection (all DC jobs, from a worked example)

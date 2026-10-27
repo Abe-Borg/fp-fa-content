@@ -43,7 +43,12 @@ description: >-
   - No relocation / no partial: Level **0, 1, 2, 3, or 4** (§24.3.14.4.1).
   - Partial / relocation: >=2 h -> Level 2 or 3 or .4.6; >=1 h and <2 h -> Level **4** or .4.6; <1 h -> .4.6 only.
   - .4.6: Class N or X with Level 1, separated per .4.6.3. Under .4.6, §12.3.8 and §23.6.1 do not apply.
-  - Class N shared segments: where two redundant Class N amplifier pathways share a head-end or switch segment, route them on separate segments so one failure cannot drop both. Head-end fault isolation counts only if shown on the riser [PARA NFPA 72 12.3.6(5), VERIFY section text; Design practice design practice, ; Verify with the engineer of record].
+  - Class N shared segments: where two redundant Class N amplifier pathways share a head-end or switch segment, route them on separate segments so one failure cannot drop both. Pin the edition first, then cite that edition's item. Do not mix item numbers across editions.
+    - Shared segment: NFPA 72-2022 12.3.6(5) does not permit primary and redundant pathways to share traffic over the same physical segment. NFPA 72-2025 12.3.6(7) requires that primary and redundant paths do not share traffic over the same physical segment. [CODE]
+    - Single fault on one pathway that affects another: 2022 12.3.6(3); 2025 12.3.6(5) [CODE]. Where one segment carries two different pathways, cite both items for that edition (strictest defensible reading) [PRACTICE].
+    - Item map 2022 to 2025 [PARA]: (1) to (1) and (3); (1) Exception to (2); (2) to (4); (3) to (5); (4) to (6); (5) to (7).
+    - Item (1) scope, 2022 vs 2025: Verify with the engineer of record. Default: provide the redundant path in both editions [PRACTICE]. Annex A.12.3.6 is an open gap; annex silence is not a close.
+    - Show the separate segments on the riser.
 - **Scope delta [PARA] of held [CODE]:** on 2022/2025 the partial-evac rules (.4.3 to .4.6.4) apply, per §24.3.14.4.2, to the communication and control circuit pathways between a room or rated enclosure containing fire alarm equipment and other room(s) or rated enclosure(s) containing fire alarm equipment required for occupant notification (72-20 / 72-05b). On 2019, §24.3.14.4.1 has no such limit; §24.3.14.3 applies the rules to notification and communications circuits and other circuits necessary to ensure the continued operation of the emergency communications system (72-23). State which pathways the election covers.
 
 ### ECF relay location [CODE] §21.2.4
@@ -72,7 +77,7 @@ description: >-
 4. For partial evacuation on 2022/2025, if building rating is 1-2 h and Level 4 is elected, confirm the edition has Level 4. On 2019 use L2/3 or an exception path instead.
 5. ECF: if Class D -> exempt. Else if edition is 2025 and metal raceway/armored and distance <=20 ft -> PASS. Else if distance <=3 ft -> PASS. Else FAIL (relocate, add raceway on 2025, or redesign as Class D).
 6. Note §12.3.8.1 SAME across held. Note §12.6.1 / §12.6.2 200 s as SAME 2019 / 2022 / 2025 [CODE]; cite the restore rule as §12.2.3.4 (2019) or §12.2.3.5 (2022 / 2025). If using .4.6, state that §12.3.8 does not apply under that path. For partial evac, state which pathways the election covers (scope delta above).
-7. On FM DI VEWFD jobs carry: the s2.4.1.1 DI flag; the separate s2.4.3.2.1.3 no-cross-zone flag against the company cross-zoned first-knock default (design practice); and the item 7 map: owner Action or Fire 1 = FM pre-alarm (alarm-level, arms the DI detection leg); NFPA 76 Alert stays supervisory (no building NAC, never a release leg). Which of Action or Fire 1 is ASSUMED unless the owner sequence says; see `fa-two-level-detection-stagger-and-fm-mapping`.
+7. On FM DI VEWFD jobs carry: the s2.4.1.1 DI flag; the s2.4.3.2.1.3 no-cross-zone note (company FM default is single leg AND low air, which complies; flag only if the owner forces two-leg cross-zone [OWNER]); and the item 7 map: owner Action or Fire 1 = FM pre-alarm (alarm-level, arms the DI detection leg); NFPA 76 Alert stays supervisory (no building NAC, never a release leg). Which of Action or Fire 1 is ASSUMED unless the owner sequence says; see `fa-two-level-detection-stagger-and-fm-mapping`.
 
 ## Output
 Edition pin; allowed Levels table; elected Level with [CODE]/[PRACTICE] labels; ECF PASS/FAIL by edition; SAME-row note; FM DI / VEWFD flags; open the edition text only if a real gap appears (Levels / EVACS / ECF / 200 s older-ed is held; 72-40 closed 2026-10-16).

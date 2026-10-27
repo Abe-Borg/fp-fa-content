@@ -52,7 +52,7 @@ Full port, return and head layout: `fa-asd-vewfd-data-hall-sampling-layout`. Rel
  - Fire 1 when Action is the map: alarm-level, building NAC yes, SOC notify, not a separate leg (leg 1 is already set by Action in a rising sequence) [OWNER]. If the owner wants Fire 1 OR'd into leg 1 as a backup, label it [OWNER] and show it in the truth table. Vent slow-down already started on Action.
  - Fire 2: alarm, not the leg on FM jobs [OWNER].
 5. Check: no row lets a supervisory signal sound NACs or arm a release. Fix before handoff.
-6. FM flags: s2.4.1.1 (standing DI flag, above) and s2.4.3.2.1.3 no cross-zone vs company cross-zoned first-knock default.
+6. FM flags: s2.4.1.1 (standing DI flag, above). s2.4.3.2.1.3 no cross-zone: company FM default is single leg (Fire 1 or Action) AND low air, which complies. Flag only where the owner standard forces two-leg cross-zone [OWNER]. Two-leg is [PRACTICE] on non-FM jobs only.
 7. Non-FM jobs: map is [OWNER]; the Alert-is-supervisory rule still holds where 76 is in the basis.
 
 ## Output
