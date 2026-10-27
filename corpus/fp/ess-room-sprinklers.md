@@ -1,0 +1,19 @@
+# Lithium-ion energy-storage room sprinklers
+
+In-rack backup at or below 20 kWh, and the sheet loop above that line, are `li-ion-bbu.md`. Detection, gas trips, and standby hours are `../fa/ess-room-detection.md`. Explosion control is `ess-explosion-control.md`. Separation hours are `../fa/bess-separation.md`. This note is the water design of a dedicated room. The insurer sheet is FM DS 5-33, January 2024 interim.
+
+Sprinklers cool the surroundings and the structure. The sheet states there is currently no way to extinguish a lithium-ion energy-storage fire with sprinklers, and that no fire-protection system is FM Approved for the application (§3.2 and Appendix C.5). Say that in the basis so the density is not judged as an extinguishment design. One module has taken the whole rack in the tests the sheet relies on. Gaseous protection and water mist are out of scope.
+
+Section 2.4.1 designs automatic sprinklers at 0.30 gpm/ft² over the room area, plus 250 gpm hose. The room-area basis is there because a test fire outgrew a 2,500 ft² array. Duration is 45 minutes times the number of adjacent racks (§2.4.2). `density-area.md` records the IFC 2024 §1207.5.5 reading of 0.30 gpm/ft² over the room or 2,500 ft², whichever is smaller. On an FM job the room-area basis is the more stringent layer when the room is larger than 2,500 ft². The 45-minute multiplier is a different axis from the 60-minute hazard-category duration. Do not copy either duration from another room.
+
+Adjacent means the racks that lack the separation in §2.3.5. Indoors, that separation is 6 ft from an accessible face to noncombustible materials and to the accessible face of the next rack, and 9 ft to combustibles. It does not depend on chemistry. An accessible face is a door, a vent, or a side that can be opened. A face without a test that shows the fire stayed in the rack of origin is assumed to propagate. Outdoor containers use a different pair: 5 ft for lithium iron phosphate and 13 ft for nickel-manganese-cobalt, or 8 ft with a wall documented to at least 1 hour (§2.3.2). The indoor room does not inherit the shorter lithium-iron-phosphate test clearances.
+
+Where the water supply cannot support the duration, §2.4.2.1 allows noncombustible floor-to-ceiling partitions with FM Approved firestops, perpendicular to the rack face, projecting at least 12 in, spaced so the available water covers the racks between them. A solid metal back is required on the non-aisle side unless the rack already has one. Partition spacing is a schematic decision tied to the tank.
+
+The tested array behind the research was K5.6 quick-response, 165 °F, 10 ft by 10 ft, about 1 ft below a 15 ft ceiling. Higher ceilings are outside that array. The sheet's own text says the tests covered limited chemistries and cannot be extrapolated. Treat 0.30 gpm/ft² as FM policy for the room, and still require the hazard-mitigation analysis and the listing tests the adopted energy-storage standard names.
+
+Location preference, best first: outdoors, a dedicated building, an exterior cutoff room, an interior corner room with at least two exterior walls, then an interior cutoff room with at least one exterior wall (§2.3.1.1). There is no listed option for a room with no exterior wall. Wet pipe is the cleaner room system because the demand is the whole room and the hazard grows quickly. A dry or double-interlock room has to show that the delivery delay is compatible with the tested propagation. The company election still comes from `system-election.md`. Do not swap families only to avoid a freeze (`freeze-heat-trace.md`).
+
+Large-scale test ceilings and chemistry are `[V]` until the product's report is in the file. Do not copy another room's gallon total.
+
+The hall method `density-area-dry-increase` does not size this room. Hand the room demand to `pump-envelope` after the separation and the duration are fixed.

@@ -1,0 +1,17 @@
+# Lithium-ion room explosion control and exhaust
+
+Sprinklers do not address this hazard (`ess-room-sprinklers.md`). Gas setpoints already summarized for the fire-alarm designer are `../fa/ess-room-detection.md`. The envelope is `damage-limiting-construction.md`. The duct, once the exhaust exists, is `ess-exhaust-duct-shaft-and-duct-sprinklers` after this note decides the rate. FM DS 5-33 (January 2024 interim) and the adopted NFPA 855 edition are two frameworks. Meet both. Neither replaces the other.
+
+On the FM path the room has damage-limiting construction using propane as the representative gas (`damage-limiting-construction.md`). Hydrogen is not the fuel group for that sheet. Normal air circulation is at least 1 cfm/ft² (§2.3.3.5 and §2.3.4.4). Emergency exhaust is 2.5 cfm/ft² of floor, started by an FM Approved hydrogen detector at 10 percent of the lower explosive limit, which also isolates the batteries electrically and exhausts outdoors (§2.5.5). Ducts are noncombustible. Make-up inlets are in exterior walls, remote from the exhaust, and suction is at or near the ceiling. Termination stays clear of intakes and doors.
+
+On the code path, IFC 2024 and NFPA 855-2023 as pinned in `../fa/ess-room-detection.md` require explosion control and allow prevention or venting. NFPA 855-2026 §9.7.6.7.3 is a later text that makes NFPA 69 the default and keeps an NFPA 68 partial-volume evaluation. Do not drop 2026 section numbers onto a job the fire code pins to an earlier edition. Where NFPA 69 combustible-concentration reduction is the chosen path, size the flow from the tested gas generation to hold the room at or below 25 percent of the mixture lower flammable limit. The FM 2.5 cfm/ft² rate is a floor under that calculation, not a substitute for it. A worked room in the source material needed several times 2.5 cfm/ft². That room's airflow is not a number to copy. Use the product's gas data.
+
+Take the stricter trigger. FM alarms and isolates at 10 percent of the lower explosive limit. The prevention objective of 25 percent is a higher concentration. Design the alarm at 10 percent on an FM job. Early off-gas detection is a separate layer. Flammable-gas detectors are a poor sole means of seeing the start of thermal runaway, because the first vapors are dilute. FM's architecture is one or more detectors at the batteries and at least one reference detector in open air, compared so the trip is not an absolute room threshold (§3.4.2.2). Show the reference detector on the drawings.
+
+Early electrical isolation uses either high cell temperature, with the threshold from the manufacturer at full state of charge and with most cells in the module monitored, or off-gas detection (§2.5.3.3). Isolation stops electrical abuse. It does not stop thermal runaway that started from heat or from physical damage. A handful of sensors in a module is not that monitoring.
+
+Exhaust power and the 24-hour standby question are `../fa/ess-room-detection.md`. A general HVAC shutdown does not stop this exhaust (`../fa/bess-separation.md`). Location of the room, with an exterior wall, is `ess-room-sprinklers.md` and `damage-limiting-construction.md`.
+
+Gaseous suppression is out of scope and is not explosion control.
+
+The prevention-calculation method is `ess-isolation-venting-and-duration`. The duct-sprinkler method is `ess-exhaust-duct-shaft-and-duct-sprinklers`. The gas layout is `fa-bess-gas-detection-layout-and-setpoints`.
