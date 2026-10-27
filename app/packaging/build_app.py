@@ -3,7 +3,9 @@
 
 PyInstaller builds for the OS it is running on. A Windows run writes
 fpfa.exe. A Linux run writes a Linux folder. The packaged app checks the
-release feed on launch. An MSI is outside this script.
+release feed on launch. On Windows, packaging/build_installer.ps1 compiles
+the setup exe after this script. Upload fpfa-setup-<version>.exe to a
+GitHub Release.
 
 From the app directory:
 
