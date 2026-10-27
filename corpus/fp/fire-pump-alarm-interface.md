@@ -22,7 +22,7 @@ On the controllers examined, that list does not land on one strip:
 
 Do not copy terminal letters from one manufacturer onto another.
 
-Overcurrent thresholds on these controllers annunciate. They do not trip. That matches the decision to let the pump run. Ask the submittal to confirm that no trip can be turned on.
+Alarm-only overcurrent and overload thresholds on these controllers annunciate. They do not trip, so a running overload does not stop the pump. That is separate from locked-rotor protection. NFPA 20 §10.4.4 requires a controller-mounted locked-rotor trip. Keep that trip. Ask the submittal to confirm that the alarm-only thresholds cannot be configured as a trip, and that the locked-rotor trip is still in the controller.
 
 Reduced-voltage starting changes the conductor count. Across-the-line, autotransformer, and solid-state starters are three conductors plus ground at 125 percent of full-load current. Part-winding and wye-delta starters are six conductors plus ground, sized at 125 percent of about half and about 58 percent of full-load current. The 100 hp and generator cases that require reduced voltage are `fire-pump-controller.md`. Decide the conduit at the one-line.
 
