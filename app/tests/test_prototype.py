@@ -295,12 +295,14 @@ class ChatRequestTests(unittest.TestCase):
         self.assertEqual(parse_slash_command("/run now"), ("run", "now"))
         self.assertEqual(parse_slash_command("/new Hall zone"), ("new", "Hall zone"))
         self.assertEqual(parse_slash_command("/help"), ("help", ""))
+        self.assertEqual(parse_slash_command("/heavy check the room"), ("heavy", "check the room"))
         self.assertIsNone(parse_slash_command("explain the trim"))
         self.assertIsNone(parse_slash_command(""))
         self.assertIsNone(parse_slash_command("/"))
         help_text = slash_help_text()
         self.assertIn("/sample-di", help_text)
         self.assertIn("/sample-bess", help_text)
+        self.assertIn("/heavy", help_text)
         self.assertIn(DRAFT_SECTION, help_text)
         self.assertIn("ASSUMED", help_text)
         self.assertIn("Ctrl+S", help_text)
@@ -2783,6 +2785,482 @@ class BessStarterTests(unittest.TestCase):
         finally:
             release.set()
             root.destroy()
+
+
+class ManagedAgentTests(unittest.TestCase):
+    def setUp(self):
+        _isolate_data()
+
+    def _request(self, events, session_status="running"):
+        calls = []
+
+        def request(method, path, body):
+            calls.append((method, path, body))
+            if method == "POST" and path == "/v1/environments":
+                return {"id": "env_test"}
+            if method == "POST" and path == "/v1/agents":
+                return {"id": "agent_test"}
+            if method == "POST" and path == "/v1/sessions":
+                return {"id": "sess_test", "status": "running"}
+            if method == "GET" and "/events" in path:
+                return {"data": events, "next_page": None}
+            if method == "GET" and path == "/v1/sessions/sess_test":
+                return {"id": "sess_test", "status": session_status}
+            if method == "DELETE" and path == "/v1/sessions/sess_test":
+                return {}
+            raise AssertionError((method, path))
+
+        return calls, request
+
+    def test_heavy_job_uses_one_cloud_session_and_returns_its_text(self):
+        from fpfa.claude_client import MODEL_ID
+        from fpfa.managed import HEAVY_NOTE, MODEL_ID as managed_model, run_heavy_job
+
+        self.assertEqual(managed_model, "claude-opus-5-5")
+        events = [
+            {
+                "type": "agent.message",
+                "processed_at": "2026-10-27T00:00:02Z",
+                "content": [{"type": "text", "text": "SECOND"}],
+            },
+            {
+                "type": "agent.message",
+                "processed_at": "2026-10-27T00:00:01Z",
+                "content": [{"type": "text", "text": "FIRST"}],
+            },
+            {
+                "type": "session.status_idle",
+                "processed_at": "2026-10-27T00:00:03Z",
+                "stop_reason": {"type": "end_turn"},
+            },
+        ]
+        calls, request = self._request(events)
+        resources = {}
+        out = run_heavy_job(
+            request,
+            system="PACK-ROLE",
+            user_text="check the room",
+            resources=resources,
+        )
+        self.assertEqual(out["text"], "FIRST\nSECOND")
+        self.assertEqual(out["model"], MODEL_ID)
+        self.assertEqual(out["runtime"], "managed-agents")
+        self.assertNotIn("sess_test", out["text"])
+        posts = [call for call in calls if call[0] == "POST" and call[1] == "/v1/sessions"]
+        self.assertEqual(len(posts), 1)
+        self.assertEqual(sum(1 for call in calls if call[0] == "DELETE"), 1)
+        self.assertFalse(any(call[1].startswith("/v1/messages") for call in calls))
+        session = posts[0][2]
+        self.assertEqual(session["agent"]["model"], {"id": "claude-opus-5-5"})
+        self.assertEqual(session["agent"]["type"], "agent_with_overrides")
+        self.assertIn("PACK-ROLE", session["agent"]["system"])
+        self.assertIn(HEAVY_NOTE, session["agent"]["system"])
+        self.assertEqual(len(session["initial_events"]), 1)
+        self.assertEqual(session["initial_events"][0]["type"], "user.message")
+        self.assertNotIn("multiagent", session)
+        env = next(call[2] for call in calls if call[1] == "/v1/environments")
+        self.assertEqual(env["config"]["type"], "cloud")
+        self.assertEqual(env["config"]["networking"]["type"], "limited")
+        self.assertNotIn("unrestricted", json.dumps(env))
+        agent = next(call[2] for call in calls if call[1] == "/v1/agents")
+        self.assertEqual(agent["model"], "claude-opus-5-5")
+        toolset = agent["tools"][0]
+        self.assertEqual(toolset["default_config"]["enabled"], False)
+        enabled = {item["name"] for item in toolset["configs"] if item.get("enabled")}
+        self.assertNotIn("web_search", enabled)
+        self.assertNotIn("web_fetch", enabled)
+        wire = json.dumps([call[2] for call in calls if call[2] is not None])
+        for banned in ("temperature", "top_p", "top_k", "tool_choice", "thinking"):
+            self.assertNotIn(f'"{banned}"', wire)
+        calls.clear()
+        again = run_heavy_job(
+            request,
+            system="PACK-AGAIN",
+            user_text="next check",
+            resources=resources,
+        )
+        self.assertEqual(again["text"], "FIRST\nSECOND")
+        self.assertFalse(any(call[1] == "/v1/agents" for call in calls))
+        self.assertFalse(any(call[1] == "/v1/environments" for call in calls))
+        self.assertEqual(sum(1 for call in calls if call[0] == "POST" and call[1] == "/v1/sessions"), 1)
+
+    def test_paused_hosted_run_is_not_continued_as_another_conversation(self):
+        from fpfa.managed import run_heavy_job
+
+        events = [
+            {
+                "type": "agent.message",
+                "content": [{"type": "text", "text": "partial"}],
+            },
+            {
+                "type": "session.status_idle",
+                "stop_reason": {"type": "requires_action"},
+            },
+        ]
+        calls, request = self._request(events)
+        with self.assertRaises(RuntimeError) as caught:
+            run_heavy_job(request, system="PACK", user_text="check the room")
+        self.assertIn("no second conversation", str(caught.exception))
+        self.assertNotIn("partial", str(caught.exception))
+        self.assertEqual(sum(1 for call in calls if call[0] == "POST" and call[1] == "/v1/sessions"), 1)
+        self.assertEqual(sum(1 for call in calls if call[0] == "DELETE"), 1)
+        self.assertFalse(any(call[0] == "POST" and call[1].endswith("/events") for call in calls))
+
+    def test_timeout_deletes_the_session(self):
+        from fpfa.managed import run_heavy_job
+
+        calls, request = self._request([])
+        sleeps = []
+        with self.assertRaises(RuntimeError) as caught:
+            run_heavy_job(
+                request,
+                system="PACK",
+                user_text="check the room",
+                sleep=lambda seconds: sleeps.append(seconds),
+                max_polls=2,
+                poll_seconds=5,
+            )
+        self.assertIn("did not finish", str(caught.exception))
+        self.assertEqual(sleeps, [5])
+        self.assertEqual(sum(1 for call in calls if call[0] == "DELETE"), 1)
+        self.assertEqual(sum(1 for call in calls if call[0] == "POST" and call[1] == "/v1/sessions"), 1)
+
+    def test_hosted_error_scrubs_an_api_key(self):
+        from fpfa.managed import anthropic_request, run_heavy_job
+
+        secret = "sk-ant-" + "abc123secret"
+
+        def request(method, path, body):
+            raise RuntimeError(f"upstream {secret}")
+
+        with self.assertRaises(RuntimeError) as caught:
+            run_heavy_job(request, system="PACK", user_text="check the room")
+        self.assertNotIn(secret, str(caught.exception))
+        self.assertIn("[key]", str(caught.exception))
+
+        import io
+        import urllib.error
+
+        seen = {}
+
+        def opener(req, timeout=120):
+            seen["beta"] = req.get_header("Anthropic-beta")
+            seen["version"] = req.get_header("Anthropic-version")
+            seen["key"] = req.get_header("X-api-key")
+            raise urllib.error.HTTPError(
+                req.full_url,
+                400,
+                "bad",
+                hdrs=None,
+                fp=io.BytesIO(f'{{"error":"{secret}"}}'.encode("utf-8")),
+            )
+
+        client = anthropic_request("sk-ant-local-test", opener=opener)
+        with self.assertRaises(RuntimeError) as http_caught:
+            client("POST", "/v1/sessions", {"agent": "agent_test"})
+        self.assertEqual(seen["beta"], "managed-agents-2026-04-01")
+        self.assertEqual(seen["version"], "2023-06-01")
+        self.assertEqual(seen["key"], "sk-ant-local-test")
+        self.assertNotIn(secret, str(http_caught.exception))
+        self.assertIn("[key]", str(http_caught.exception))
+
+        def refuse(req, timeout=120):
+            raise AssertionError("network")
+
+        blocked = anthropic_request("sk-ant-local-test", opener=refuse)
+        with self.assertRaises(ValueError):
+            blocked("POST", "/v1/agents", {"temperature": 0, "tool_choice": {"type": "any"}, "thinking": {"type": "disabled"}})
+        with self.assertRaises(RuntimeError) as messages:
+            blocked("POST", "/v1/messages", None)
+        self.assertIn("Messages API", str(messages.exception))
+
+    def test_hatch_does_not_paste_a_role_or_send_ordinary_modules(self):
+        from fpfa.managed import HEAVY_NOTE
+
+        client = (REPO / "app" / "fpfa" / "managed.py").read_text(encoding="utf-8")
+        self.assertNotIn("You are the design assistant", client)
+        self.assertNotIn("NFPA 69", client)
+        self.assertIn(HEAVY_NOTE.split(".")[0], client)
+        for name in ("everyday.py", "workflow.py", "bess.py", "claude_client.py"):
+            text = (REPO / "app" / "fpfa" / name).read_text(encoding="utf-8")
+            self.assertNotIn("managed-agents", text, name)
+            self.assertNotIn("run_heavy_job", text, name)
+        ui = (REPO / "app" / "fpfa" / "ui.py").read_text(encoding="utf-8")
+        for name in (
+            "_send_chat_message",
+            "run_zone",
+            "_enqueue_zone",
+            "_run_zone_here",
+            "run_bess",
+            "_enqueue_bess",
+            "_run_bess_here",
+        ):
+            body = ui.split(f"def {name}(", 1)[1].split("\n    def ", 1)[0]
+            self.assertNotIn("run_heavy_job", body, name)
+        heavy = ui.split("def start_heavy(", 1)[1].split("\n    def ", 1)[0]
+        self.assertIn("run_heavy_job", heavy)
+
+    def _wait_for(self, app, needle: str, timeout: float = 2.0) -> None:
+        import time
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            app._poll()
+            if needle in app.chat_view.get("1.0", "end"):
+                return
+            time.sleep(0.02)
+        self.fail(f"timed out waiting for {needle!r}")
+
+    def test_heavy_reply_lands_in_the_same_thread(self):
+        if not os.environ.get("DISPLAY"):
+            self.skipTest("no display")
+        import threading
+        import tkinter as tk
+        from unittest.mock import patch
+
+        from fpfa.keystore import save_api_key
+        from fpfa.projects import list_projects
+        from fpfa.ui import App
+
+        save_api_key("sk-ant-local-test")
+        seen = {}
+
+        def fake_ok(request, *, system, user_text, resources=None, **kwargs):
+            seen["thread"] = threading.current_thread().name
+            seen["system"] = system
+            seen["user_text"] = user_text
+            return {
+                "text": "HEAVY-REPLY",
+                "model": "claude-opus-5-5",
+                "runtime": "managed-agents",
+            }
+
+        class Boom:
+            def __init__(self, *_args, **_kwargs):
+                raise AssertionError("ordinary Messages client")
+
+        root = tk.Tk()
+        try:
+            app = App(root)
+            root.update()
+            project_id = None
+            app.chat_entry.insert(0, "/new Hall zone")
+            app.send_chat()
+            project_id = app.project["id"]
+            before = [row["id"] for row in list_projects()]
+            app.chat_entry.insert(0, "/heavy check the room")
+            with patch("fpfa.ui.run_heavy_job", fake_ok), patch("fpfa.ui.AnthropicMessages", Boom):
+                app.send_chat()
+                self._wait_for(app, "HEAVY-REPLY")
+            self.assertEqual(app.project["id"], project_id)
+            self.assertEqual([row["id"] for row in list_projects()], before)
+            self.assertTrue(seen["thread"].startswith("fpfa-worker-"))
+            self.assertIn("You are the design assistant inside a desktop application", seen["system"])
+            self.assertIn("check the room", seen["user_text"])
+            self.assertNotIn("sk-ant", seen["user_text"])
+            reply = app.chat_log[-1]["text"]
+            job_id = app.chat_log[-1]["job_id"]
+            self.assertIn("HEAVY-REPLY", reply)
+            self.assertIn("| heavy |", reply)
+            self.assertIn(job_id, reply)
+            self.assertIn("Hall zone", reply)
+            self.assertIn("check the room", reply)
+            self.assertTrue(reply.startswith(f"Job {job_id} |"))
+            self.assertIsNone(app.project.get("last_run"))
+            self.assertIsNone(app.project.get("bess_run"))
+            self.assertNotEqual(str(app.chat_entry.cget("state")), "disabled")
+            inbox = "\n".join(app.inbox_list.get(0, "end"))
+            self.assertIn("heavy", inbox)
+            self.assertIn("back in this thread", app.status.get())
+        finally:
+            root.destroy()
+
+    def test_ordinary_paths_do_not_call_the_hosted_runtime(self):
+        if not os.environ.get("DISPLAY"):
+            self.skipTest("no display")
+        import tkinter as tk
+        from types import SimpleNamespace
+        from unittest.mock import patch
+
+        from fpfa.keystore import save_api_key
+        from fpfa.ui import App
+
+        save_api_key("sk-ant-local-test")
+
+        def explode(*_args, **_kwargs):
+            raise AssertionError("hosted runtime")
+
+        class Fast:
+            def __init__(self, _key):
+                pass
+
+            def create(self, **_kwargs):
+                return SimpleNamespace(
+                    stop_reason="end_turn",
+                    content=[SimpleNamespace(type="text", text="CHAT-REPLY")],
+                )
+
+        root = tk.Tk()
+        try:
+            app = App(root)
+            root.update()
+            app.ask_claude.set(False)
+            with patch("fpfa.ui.run_heavy_job", explode):
+                app.chat_entry.insert(0, "/sample-di")
+                app.send_chat()
+                self.assertIn("281.3", app.chat_view.get("1.0", "end"))
+                app.ask_claude.set(False)
+                app.chat_entry.insert(0, "/sample-bess")
+                app.send_chat()
+                self.assertIn("4.11", app.chat_view.get("1.0", "end"))
+                app.chat_entry.insert(0, "which trim")
+                with patch("fpfa.ui.AnthropicMessages", Fast):
+                    app.send_chat()
+                    self._wait_for(app, "CHAT-REPLY")
+            kinds = {job.kind for job in app.jobs.snapshot()}
+            self.assertIn("zone", kinds)
+            self.assertIn("bess", kinds)
+            self.assertIn("chat", kinds)
+            self.assertNotIn("heavy", kinds)
+        finally:
+            root.destroy()
+
+    def test_heavy_keeps_the_tool_plan_and_the_mode(self):
+        if not os.environ.get("DISPLAY"):
+            self.skipTest("no display")
+        import tkinter as tk
+        from unittest.mock import patch
+
+        from fpfa.keystore import save_api_key
+        from fpfa.ui import App
+
+        save_api_key("sk-ant-local-test")
+        seen = {}
+
+        def fake_ok(request, *, system, user_text, resources=None, **kwargs):
+            seen["user_text"] = user_text
+            seen["system"] = system
+            return {"text": "HEAVY-REPLY", "model": "claude-opus-5-5", "runtime": "managed-agents"}
+
+        root = tk.Tk()
+        try:
+            app = App(root)
+            root.update()
+            app.ask_claude.set(False)
+            app.chat_entry.insert(0, "/sample-di")
+            app.send_chat()
+            zone_gal = app.project["last_run"]["tools"]["zone_trapped_volume"]["zone_gal"]
+            app.chat_entry.insert(0, "/mode calculator")
+            app.send_chat()
+            app.density.set("not-a-number")
+            app.chat_entry.insert(0, "/heavy review the zone")
+            with patch("fpfa.ui.run_heavy_job", fake_ok):
+                app.send_chat()
+                self._wait_for(app, "HEAVY-REPLY")
+            self.assertEqual(app.mode_slug.get(), "calculator")
+            self.assertEqual(app.project["mode"], "calculator")
+            self.assertEqual(app.project["last_run"]["tools"]["zone_trapped_volume"]["zone_gal"], zone_gal)
+            self.assertIn("281.3", app.results.get("1.0", "end"))
+            self.assertIn("Governing zone total text: 281.3.", seen["user_text"])
+            self.assertIn("38.1", seen["user_text"])
+            self.assertIn("Active mode: calculator.", seen["user_text"])
+            self.assertIn("calculator", seen["system"])
+            self.assertIn("| heavy |", app.chat_view.get("1.0", "end"))
+            saved = json.dumps(app.project.get("di"))
+            self.assertNotIn("not-a-number", saved)
+        finally:
+            root.destroy()
+
+    def test_heavy_without_a_key_stays_local(self):
+        if not os.environ.get("DISPLAY"):
+            self.skipTest("no display")
+        import tkinter as tk
+        from unittest.mock import patch
+
+        from fpfa.keystore import clear_api_key
+        from fpfa.ui import App
+
+        clear_api_key()
+
+        def explode(*_args, **_kwargs):
+            raise AssertionError("hosted runtime")
+
+        root = tk.Tk()
+        try:
+            app = App(root)
+            root.update()
+            app.chat_entry.insert(0, "/heavy check the room")
+            with patch("fpfa.ui.run_heavy_job", explode):
+                app.send_chat()
+            self.assertIn("Settings", app.chat_view.get("1.0", "end"))
+            self.assertNotIn("heavy", [job.kind for job in app.jobs.snapshot()])
+            self.assertEqual(len(list_projects_ids(app)), 1)
+        finally:
+            root.destroy()
+
+    def test_heavy_reply_stays_on_the_project_that_started_it(self):
+        if not os.environ.get("DISPLAY"):
+            self.skipTest("no display")
+        import threading
+        import tkinter as tk
+        from unittest.mock import patch
+
+        from fpfa.keystore import save_api_key
+        from fpfa.projects import load_project
+        from fpfa.ui import App
+
+        save_api_key("sk-ant-local-test")
+        started = threading.Event()
+        release = threading.Event()
+
+        def blocking(request, *, system, user_text, resources=None, **kwargs):
+            started.set()
+            release.wait(3)
+            return {"text": "HEAVY-REPLY", "model": "claude-opus-5-5", "runtime": "managed-agents"}
+
+        root = tk.Tk()
+        try:
+            app = App(root)
+            root.update()
+            app.chat_entry.insert(0, "/new Origin hall")
+            app.send_chat()
+            origin_id = app.project["id"]
+            app.chat_entry.insert(0, "/heavy check the room")
+            with patch("fpfa.ui.run_heavy_job", blocking):
+                app.send_chat()
+                self.assertTrue(started.wait(2))
+                self.assertNotEqual(str(app.chat_entry.cget("state")), "disabled")
+                app.chat_entry.insert(0, "still typing")
+                self.assertEqual(app.chat_entry.get(), "still typing")
+                app.chat_entry.delete(0, "end")
+                app.chat_entry.insert(0, "/new Other hall")
+                app.send_chat()
+                other_id = app.project["id"]
+                self.assertNotEqual(other_id, origin_id)
+                release.set()
+                deadline_text = "HEAVY-REPLY"
+                import time
+                deadline = time.time() + 2
+                saved = ""
+                while time.time() < deadline:
+                    app._poll()
+                    saved = json.dumps(load_project(origin_id).get("chat") or [])
+                    if deadline_text in saved:
+                        break
+                    time.sleep(0.02)
+            self.assertIn("HEAVY-REPLY", saved)
+            self.assertIn("| heavy |", saved)
+            self.assertNotIn("HEAVY-REPLY", app.chat_view.get("1.0", "end"))
+            self.assertEqual(load_project(other_id).get("last_run"), None)
+            other_chat = json.dumps(load_project(other_id).get("chat") or [])
+            self.assertNotIn("HEAVY-REPLY", other_chat)
+        finally:
+            release.set()
+            root.destroy()
+
+
+def list_projects_ids(app):
+    return list(app._ids)
 
 
 if __name__ == "__main__":

@@ -1,13 +1,14 @@
 """Inbox, queue, and workers for long desktop jobs.
 
-A zone run that calls the model, a typed chat turn, and an explosion-control
-starter that calls the model are jobs. submit()
+A zone run that calls the model, a typed chat turn, an explosion-control
+starter that calls the model, and a heavy job are jobs. submit()
 returns as soon as the job is on the queue. Worker threads run the callable.
 The window thread stays free, so the composer can take another message.
 
-Each job keeps the project id it was started with. A result is labeled with
-that job. Callers write the result onto that project, including when a later
-job finishes first.
+A heavy job is the only kind that may call the hosted runtime. The worker
+still posts the result back through the same inbox. Each job keeps the
+project id it was started with. A result is labeled with that job. Callers
+write the result onto that project, including when a later job finishes first.
 """
 
 from __future__ import annotations
@@ -18,7 +19,7 @@ import threading
 import uuid
 from dataclasses import dataclass
 
-KINDS = ("zone", "chat", "bess")
+KINDS = ("zone", "chat", "bess", "heavy")
 STATUSES = ("queued", "running", "done", "error")
 _KEY_RE = re.compile(r"sk-ant-[A-Za-z0-9_\-]+")
 
@@ -60,7 +61,7 @@ class Job:
 
     def inbox_line(self) -> str:
         name = _clean_name(self.project_name)
-        return f"{self.status:<7} {self.kind:<4} {name}  {self.id}"
+        return f"{self.status:<7} {self.kind:<5} {name}  {self.id}"
 
 
 def label_result(heading: str, body: str) -> str:
