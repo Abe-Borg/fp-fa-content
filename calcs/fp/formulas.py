@@ -37,12 +37,22 @@ Number = Union[int, float]
 
 
 def _as_float(name: str, value: Any) -> float:
+    """Parse a real number. Reject bools, non-numbers, inf, and nan.
+
+    ``float("1e309")`` is inf on IEEE-754. A later ``<= 0`` check does not
+    catch it, and dividing by that fill flow collapses the trip time.
+    """
+    import math
+
     if isinstance(value, bool) or value is None:
         raise CalcError(f"{name} must be a number")
     try:
-        return float(value)
+        number = float(value)
     except (TypeError, ValueError) as exc:
         raise CalcError(f"{name} must be a number") from exc
+    if not math.isfinite(number):
+        raise CalcError(f"{name} must be a finite number")
+    return number
 
 
 def _require_positive(name: str, value: Number) -> float:
@@ -320,20 +330,37 @@ def pipe_volume(segments: Any) -> dict[str, Any]:
             "volume_gal": total, "volume_ft3": total / 7.48}
 
 
+def fill_bases_text(gauge: float, absolute: float, subject: str = "") -> str:
+    """Label both fill rates. This does not elect gauge or absolute."""
+    if subject:
+        return (
+            f"{subject} gauge-basis fill rate is {gauge:.2f} scfm. "
+            f"{subject} absolute-basis fill rate is {absolute:.2f} scfm."
+        )
+    return (
+        f"Gauge-basis fill rate is {gauge:.2f} scfm. "
+        f"Absolute-basis fill rate is {absolute:.2f} scfm."
+    )
+
+
 def air_fill_scfm(v_gal: Number, p_psig: Number, t_min: Number = 30.0) -> dict[str, Any]:
     """Compressor / N2 fill rate to restore system pressure in t_min.
 
     KB / Viking basis (gauge): scfm = V*P/(7.48*14.7*T)  (0.012*gal at 40 psig, 30 min).
     Also reports the absolute-pressure (conservative) variant V*(P+14.7)/(7.48*14.7*T).
     Restore rule: NFPA 13-2025 8.2.7.3 (30 min) -- cite in the package, not here.
+    ``fill_bases`` states both rates. It does not pick one.
     """
     v = _require_positive("v_gal", v_gal)
     p = _require_positive("p_psig", p_psig)
     t = _require_positive("t_min", t_min)
+    gauge = v * p / (7.48 * 14.7 * t)
+    absolute = v * (p + 14.7) / (7.48 * 14.7 * t)
     return {"formula": "air/N2 fill scfm = V*P/(7.48*14.7*T)",
-            "scfm_gauge_basis": v * p / (7.48 * 14.7 * t),
-            "scfm_abs_basis": v * (p + 14.7) / (7.48 * 14.7 * t),
-            "free_air_scf_gauge": v * p / (7.48 * 14.7)}
+            "scfm_gauge_basis": gauge,
+            "scfm_abs_basis": absolute,
+            "free_air_scf_gauge": v * p / (7.48 * 14.7),
+            "fill_bases": fill_bases_text(gauge, absolute)}
 
 
 
@@ -356,11 +383,17 @@ def compressor_n2_sizing(systems: Any, t_min: Number = 30.0) -> dict[str, Any]:
                      "p_psig": float(sy["p_psig"]), "scfm_gauge": r["scfm_gauge_basis"],
                      "scfm_abs": r["scfm_abs_basis"]})
     big = max(rows, key=lambda x: x["scfm_abs"])
+    campus_gauge = sum(x["scfm_gauge"] for x in rows)
+    campus_abs = sum(x["scfm_abs"] for x in rows)
     return {"systems": rows, "largest_system_id": big["id"],
             "compressor_scfm_gauge": big["scfm_gauge"], "compressor_scfm_abs": big["scfm_abs"],
-            "n2_campus_scfm_gauge": sum(x["scfm_gauge"] for x in rows),
-            "n2_campus_scfm_abs": sum(x["scfm_abs"] for x in rows),
+            "n2_campus_scfm_gauge": campus_gauge,
+            "n2_campus_scfm_abs": campus_abs,
             "connected_v_gal": sum(x["v_gal"] for x in rows),
+            "fill_bases": " ".join((
+                fill_bases_text(big["scfm_gauge"], big["scfm_abs"], "Compressor"),
+                fill_bases_text(campus_gauge, campus_abs, "N2 campus"),
+            )),
             "basis": "compressor: NFPA 13-2025 s8.2.7.3 30-min fill on largest system; "
                      "N2: connected total of the systems on this run (design practice, not code; verify with the engineer of record)"}
 

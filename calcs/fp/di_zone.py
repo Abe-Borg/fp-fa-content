@@ -109,16 +109,12 @@ def zone_trapped_volume(segments: Any, length_basis: str = "center_to_center",
         else:
             fittings_percent = 0.0
             flags.append("fittings allowance 0% (center-to-center lengths already include fitting bodies)")
-    fittings_percent = float(fittings_percent)
-    if fittings_percent < 0:
-        raise formulas.CalcError("fittings_percent must be >= 0")
+    fittings_percent = formulas._require_non_negative("fittings_percent", fittings_percent)
     trim_assumed = trim_gal is None or trim_gal == ""
     if trim_assumed:
         trim_gal = 5.0
         flags.append("ASSUMED trim volume 5 gal (no valve data sheet). Verify with the engineer of record.")
-    trim_gal = float(trim_gal)
-    if trim_gal < 0:
-        raise formulas.CalcError("trim_gal must be >= 0")
+    trim_gal = formulas._require_non_negative("trim_gal", trim_gal)
     pipe_gal = float(pipe["volume_gal"])
     zone = pipe_gal * (1.0 + fittings_percent / 100.0) + trim_gal
     detailed = []
@@ -140,7 +136,7 @@ def zone_trapped_volume(segments: Any, length_basis: str = "center_to_center",
 
 
 def nitrogen_gate(v_gal: Any, p_psig: Any = 40.0, t_min: Any = 30.0) -> dict[str, Any]:
-    """Design C is 100. Fill rate is formulas.air_fill_scfm. C=120 is not the design value."""
+    """Design C is 100. Fill rate is formulas.air_fill_scfm on both bases. C=120 is not the design value."""
     fill = formulas.air_fill_scfm(v_gal, p_psig, t_min)
     ratio = (100.0 / 120.0) ** 1.85
     return {
