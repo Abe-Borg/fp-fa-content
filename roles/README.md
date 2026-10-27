@@ -9,7 +9,7 @@ Each file starts with YAML frontmatter (`name`, `description`) and then the role
 Roles in this pack:
 
 - `everyday` — shell for a typed question
-- `fp-sprinkler` — wet, dry, and double-interlock sprinkler screens
+- `fp-sprinkler` — wet, dry, and double-interlock sprinkler screens, plus the outdoor transformer water-spray exception in `power-block-transformer-water-spray`
 - `fa-releasing` — detection and releasing that trip those systems
 - `spec-draft` — narrative after a tool-plan run, including section 21 13 19
 - `qa-specialist` — blind claim check before that section is exported

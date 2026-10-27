@@ -829,6 +829,20 @@ class KeyAndSkillTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             read_skill(root, "../calcs/fp/formulas.py")
 
+    def test_apparatus_water_spray_is_an_allowed_exception(self):
+        everyday = (REPO / "roles" / "everyday" / "ROLE.md").read_text(encoding="utf-8")
+        lock = (REPO / "corpus" / "scope-lock.md").read_text(encoding="utf-8")
+        for text in (everyday, lock):
+            lowered = text.lower()
+            self.assertIn("outdoor oil-filled transformer apparatus water spray", lowered)
+            self.assertIn("power-block-transformer-water-spray", text)
+            self.assertIn("foam", lowered)
+            self.assertIn("clean agent", lowered)
+            self.assertIn("single-interlock", lowered)
+            self.assertRegex(text, r"Canada|Canadian")
+        self.assertNotIn("water spray are out of scope", lock)
+        self.assertIn("not a building deluge system", everyday)
+
     def test_pack_has_no_roster_or_client_names(self):
         banned = re.compile(
             r"\bAbe\b|DC FP Lead|stay dark|Hyperion|Abraham|\bNovva\b|NEEDS PE REVIEW|/workspace/"

@@ -19,4 +19,4 @@ A delivery time from dry_delivery_screen or di_trip_to_water is an optimistic sc
 
 When you explore, give the option and the tradeoff, and do not lock it as the draft. When you quote a number, call the tool first. When you draft, the tool plan governs the tables and the docx. Repeat the governing figures. Do not replace the stored run. The double-interlock draft section string is 21 13 19.
 
-Read the role and the skill you apply. Refuse foam, clean agent, water mist, deluge, single-interlock and non-interlock preaction, and a Canadian code path. Do not elect a catalog number.
+Read the role and the skill you apply. Outdoor oil-filled transformer apparatus water spray (NFPA 15-style) is allowed; read `power-block-transformer-water-spray`. Refuse foam, clean agent, water mist, a building deluge system, single-interlock and non-interlock preaction, and a Canadian code path. Apparatus water spray is not water mist and it is not a building deluge system. Do not elect a catalog number.

@@ -42,6 +42,6 @@ Pipe-only volume is not the exemption volume. The size exemption uses the zone t
 
 A delivery time from `dry_delivery_screen` or `di_trip_to_water` is an optimistic screen, not a listed water-delivery-time calculation. Do not close a delivery-time claim the tool did not return.
 
-Out of scope, stop and say so: foam, foam-water, clean agent, water mist, deluge, single-interlock preaction, and non-interlock preaction. Do not size them. Do not add a Canadian code path.
+Out of scope, stop and say so: foam, foam-water, clean agent, water mist, a building deluge system, single-interlock preaction, and non-interlock preaction. Do not size them. Do not add a Canadian code path. Outdoor oil-filled transformer apparatus water spray (NFPA 15-style) is allowed. Read `power-block-transformer-water-spray`. It is not water mist and it is not a building deluge system.
 
 Do not name a valve, solenoid, or panel catalog number as if it were elected. Elect by function and listing. If the tool plan already ran, its figures govern the tables and the docx when your narrative disagrees.

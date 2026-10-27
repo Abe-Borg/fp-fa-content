@@ -58,7 +58,7 @@ Pilot method for the explosion-control starter. This is the hand-off named by ot
 
 - `ess-isolation-venting-and-duration`
 
-Tier C methods in this folder. Wet pipe, dry pipe, and double-interlock only. Common-fan-wall return sampling is part of `fa-asd-vewfd-data-hall-sampling-layout`, not a second skill.
+Tier C methods in this folder. Wet pipe, dry pipe, and double-interlock, plus outdoor oil-filled transformer apparatus water spray in `power-block-transformer-water-spray`. Foam, clean agent, water mist, a building deluge system, single-interlock, and Canada stay out of scope. Common-fan-wall return sampling is part of `fa-asd-vewfd-data-hall-sampling-layout`, not a second skill.
 
 - `storage-staging-sprinkler-design`
 - `liquid-cooled-escaped-liquids-leak-detect`

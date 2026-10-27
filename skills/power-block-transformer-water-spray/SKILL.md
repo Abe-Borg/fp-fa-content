@@ -413,7 +413,7 @@ Do **not** emit: white-space density×area transcript, full DS 7-32 plant redesi
 
 ## Stop
 
-A missing input is not a stop. Proceed with a stated ASSUMED value (the value and why), flagged in the output and the status register. Company scope locks stay hard stops: single-interlock or non-interlock as the basis of design, foam, water mist, deluge, and clean agent as the basis of design.
+A missing input is not a stop. Proceed with a stated ASSUMED value (the value and why), flagged in the output and the status register. Company scope locks stay hard stops: single-interlock or non-interlock as the basis of design, foam, water mist, a building deluge system, and clean agent as the basis of design. Apparatus water spray for an outdoor oil-filled transformer stays in scope.
 
 1. SI/NI (or other prohibited preaction) presented as **basis of design** on room hand-off / packet → `RFI-variance`. Foam-as-BOD → Stop. Mist-as-BOD → `PRACTICE REFUSED`. Clean-agent / foam / mist as company BOD → Stop / hand-away only.
 2. Missing the optional input packet → not a Stop (packet optional). Missing STS when room hand-off → `ASSUMED` (flagged), not a Stop. Missing matrix special-hazard/dual rows when dual → `ASSUMED` (flagged), not a Stop / handoff then return. Missing occupancy when rooms → `ASSUMED` (flagged), not a Stop.
