@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import os
 import queue
 import re
 import sys
@@ -35,12 +36,26 @@ from fpfa.claim_check import (
     write_packet_files,
 )
 from fpfa.claude_client import MODEL_ID, AnthropicMessages, run_tool_loop, safe_error
+from fpfa.content_update import (
+    ContentUpdateError,
+    UpdateResult,
+    check_for_content_update,
+    content_status_line,
+    content_version_text,
+    current_changelog,
+    format_changelog,
+    remember_feed_url,
+    remember_selected_root,
+    resolved_feed_url,
+    update_banner,
+    updates_on_launch,
+)
 from fpfa.everyday import run_everyday
 from fpfa.jobs import JobInbox, label_result
 from fpfa.managed import anthropic_request, reply_with_delete_status, run_heavy_job, session_system
 from fpfa.keystore import clear_api_key, key_status, key_storage_help, load_api_key, save_api_key
 from fpfa.modes_loader import DEFAULT_MODE, MODE_SLUGS, list_modes, normalize_mode
-from fpfa.paths import content_root, read_config, write_config
+from fpfa.paths import content_root, is_content_pack, read_config, write_config
 from fpfa.projects import delete_project, list_projects, load_project, new_project, save_project
 from fpfa.spec_docx import DRAFT_SECTION, write_docx
 from fpfa.workflow import (
@@ -138,7 +153,9 @@ THREAD_HINT = (
     "The LFL tool owns vol% and ppm. An election or a duration the tool did not return stays ASSUMED.\n"
     "/run uses the optional zone form. /new Job name opens a job. /help lists commands.\n"
     "Ctrl+S saves the open job. Closing the window saves it too.\n"
-    "Settings holds your Anthropic key. Export writes draft Section 21 13 19 after a run "
+    "Settings holds your Anthropic key and Check for updates. "
+    "A content pack update leaves the API key and projects on this machine. "
+    "Export writes draft Section 21 13 19 after a run "
     "and a blind claim check in this thread. That check is not the hosted runtime.\n"
     "Blank trim and the screen-limit seconds stay labeled ASSUMED. "
     "Pipe gallons and trip time come from the calc tools.\n"
@@ -186,7 +203,9 @@ def slash_help_text() -> str:
         "/new Job name — open a job\n"
         "/help — show these commands\n"
         "Ctrl+S saves the open job. Closing the window saves it too.\n"
-        "Settings holds your Anthropic key. Export writes draft Section "
+        "Settings holds your Anthropic key and Check for updates. "
+        "A content pack update leaves the API key and projects on this machine. "
+        "Export writes draft Section "
         f"{DRAFT_SECTION} after a run and a blind claim check in this thread. "
         "That check is not the hosted runtime.\n"
         "/mode — show the active mode\n"
@@ -280,6 +299,9 @@ class App:
             except tk.TclError:
                 pass
         self.queue: queue.Queue = queue.Queue()
+        self._content_check_running = False
+        self._changelog_view = None
+        self._settings_version = None
         self.project: dict | None = None
         self.chat_log: list[dict] = []
         self._ids: list[str] = []
@@ -304,6 +326,7 @@ class App:
         for sequence in ("<Control-s>", "<Control-S>", "<Command-s>", "<Command-S>"):
             self.root.bind_all(sequence, self._on_save_key)
         self.root.after(100, self._poll)
+        self.root.after(600, self._maybe_check_content_on_launch)
 
     def _cancel_afters(self, event=None) -> None:
         if event is not None and event.widget is not self.root:
@@ -398,8 +421,21 @@ class App:
         ttk.Button(actions, text="Settings", command=self.open_settings).pack(side="left", padx=4)
         ttk.Button(actions, text=f"Export {DRAFT_SECTION}", command=self.export_docx).pack(side="left", padx=4)
 
+        self.content_banner = tk.StringVar(value="")
+        self.banner = tk.Label(
+            self.root,
+            textvariable=self.content_banner,
+            justify="left",
+            anchor="w",
+            wraplength=1100,
+            bg="#e7f0f5",
+            fg="#1f3b4d",
+            padx=14,
+            pady=6,
+        )
         body = ttk.Panedwindow(self.root, orient="horizontal")
         body.pack(fill="both", expand=True)
+        self.main_body = body
 
         left = ttk.Frame(body, padding=8)
         body.add(left, weight=0)
@@ -452,6 +488,8 @@ class App:
         bar.pack(fill="x")
         self.status = tk.StringVar(value=key_status())
         ttk.Label(bar, textvariable=self.status).pack(anchor="w")
+        self.content_status = tk.StringVar(value=content_status_line())
+        ttk.Label(bar, textvariable=self.content_status).pack(anchor="w")
         self._sync_claude_default()
         self.root.after(200, self._prefer_chat)
 
@@ -2113,11 +2151,90 @@ class App:
         note = "Heavy job saved on the project that started it."
         self.status.set(f"{heading}. {note}" if heading else note)
 
+    def _set_content_banner(self, text: str) -> None:
+        self.content_banner.set(text)
+        try:
+            if text:
+                if not self.banner.winfo_ismapped():
+                    self.banner.pack(fill="x", before=self.main_body)
+            elif self.banner.winfo_ismapped():
+                self.banner.pack_forget()
+        except tk.TclError:
+            pass
+
+    def _show_changelog(self, lines: list[str]) -> None:
+        widget = getattr(self, "_changelog_view", None)
+        if widget is None:
+            return
+        try:
+            widget.configure(state="normal")
+            widget.delete("1.0", "end")
+            widget.insert("1.0", format_changelog(lines))
+            widget.configure(state="disabled")
+        except tk.TclError:
+            self._changelog_view = None
+
+    def _maybe_check_content_on_launch(self) -> None:
+        try:
+            if not self.root.winfo_exists():
+                return
+        except tk.TclError:
+            return
+        if not updates_on_launch():
+            return
+        self._start_content_check(manual=False)
+
+    def _start_content_check(self, *, manual: bool, url: str | None = None, status_var=None) -> None:
+        if self._content_check_running:
+            return
+        self._content_check_running = True
+
+        def work():
+            try:
+                result = check_for_content_update(url, apply=True)
+            except Exception as exc:
+                result = UpdateResult(
+                    status="error",
+                    message=safe_error(exc),
+                    version=content_version_text(),
+                )
+            self.queue.put(
+                lambda result=result: self._finish_content_check(
+                    result, manual=manual, status_var=status_var
+                )
+            )
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _finish_content_check(self, result, *, manual: bool, status_var=None) -> None:
+        self._content_check_running = False
+        version_line = content_status_line()
+        if result.status == "updated":
+            self._set_content_banner(update_banner(result.version, result.changelog or []))
+            self.content_status.set(version_line)
+        elif result.status in {"offline", "error", "rejected", "needs_app"} and not manual:
+            self.content_status.set(f"{version_line} (still the last good pack)")
+        else:
+            self.content_status.set(version_line)
+        version_var = getattr(self, "_settings_version", None)
+        if version_var is not None:
+            try:
+                version_var.set(f"Content version: {content_version_text()}")
+            except tk.TclError:
+                self._settings_version = None
+        if status_var is not None:
+            try:
+                status_var.set(result.message)
+            except tk.TclError:
+                pass
+        shown = result.changelog if result.changelog is not None else current_changelog()
+        self._show_changelog(shown)
+
     def open_settings(self) -> None:
         win = tk.Toplevel(self.root)
         win.title("Settings")
         win.transient(self.root)
-        win.geometry("680x460")
+        win.geometry("720x640")
         frame = ttk.Frame(win, padding=12)
         frame.pack(fill="both", expand=True)
         ttk.Label(frame, text=f"Model  {MODEL_ID}").pack(anchor="w")
@@ -2177,26 +2294,83 @@ class App:
         ttk.Button(row, text="Clear key", command=clear).pack(side="left", padx=6)
         ttk.Button(row, text="Check key", command=check).pack(side="left")
 
+        self._settings_version = tk.StringVar(value=f"Content version: {content_version_text()}")
+        ttk.Label(frame, textvariable=self._settings_version).pack(anchor="w", pady=(16, 4))
+        ttk.Label(
+            frame,
+            text=(
+                "Check for updates downloads a newer content pack and switches to it "
+                "after sha256 matches. The API key and projects stay on this machine."
+            ),
+            wraplength=660,
+        ).pack(anchor="w")
+        content_line = tk.StringVar(value="")
+        ttk.Label(frame, textvariable=content_line, wraplength=660).pack(anchor="w", pady=(4, 4))
+        feed_var = tk.StringVar(value=resolved_feed_url())
+        ttk.Label(frame, text="Content feed URL").pack(anchor="w")
+        ttk.Entry(frame, textvariable=feed_var, width=78).pack(anchor="w", fill="x")
+
+        def check_updates():
+            typed = feed_var.get().strip()
+            try:
+                used = remember_feed_url(typed)
+            except ContentUpdateError as exc:
+                content_line.set(str(exc))
+                return
+            feed_var.set(used)
+            content_line.set("Checking for a content pack…")
+            self._start_content_check(manual=True, url=used, status_var=content_line)
+
+        ttk.Button(frame, text="Check for updates", command=check_updates).pack(anchor="w", pady=(6, 4))
+        ttk.Label(frame, text="What's new").pack(anchor="w")
+        self._changelog_view = tk.Text(frame, height=5, wrap="word")
+        self._changelog_view.insert("1.0", format_changelog(current_changelog()))
+        self._changelog_view.configure(state="disabled")
+        self._changelog_view.pack(anchor="w", fill="x", pady=(2, 8))
+        changelog_widget = self._changelog_view
+        version_var = self._settings_version
+
+        def close_settings():
+            if getattr(self, "_changelog_view", None) is changelog_widget:
+                self._changelog_view = None
+            if getattr(self, "_settings_version", None) is version_var:
+                self._settings_version = None
+            win.destroy()
+
+        win.protocol("WM_DELETE_WINDOW", close_settings)
+
         ttk.Label(
             frame,
             text="Content pack folder (skills/, roles/, modes/, and calcs/ at the top level)",
-        ).pack(anchor="w", pady=(16, 4))
+        ).pack(anchor="w", pady=(8, 4))
         try:
             current = str(content_root())
         except FileNotFoundError:
             current = read_config().get("content_root") or ""
         root_var = tk.StringVar(value=current)
-        ttk.Entry(frame, textvariable=root_var, width=70).pack(anchor="w", fill="x")
+        ttk.Entry(frame, textvariable=root_var, width=78).pack(anchor="w", fill="x")
 
         def save_root():
             folder = root_var.get().strip()
-            write_config({"content_root": folder})
+            path = Path(folder).expanduser()
+            if not is_content_pack(path):
+                content_line.set(
+                    "That folder needs skills/ and calcs/fp/formulas.py. The current pack was left as it is."
+                )
+                return
+            remember_selected_root(str(path))
             try:
                 resolved = content_root()
             except FileNotFoundError as exc:
-                status.set(str(exc))
+                content_line.set(str(exc))
                 return
-            status.set(f"Content pack: {resolved}")
+            self.content_status.set(content_status_line())
+            if self._settings_version is not None:
+                self._settings_version.set(f"Content version: {content_version_text()}")
+            if os.environ.get("FPFA_CONTENT_ROOT"):
+                content_line.set(f"Saved {path}. This run uses {resolved} because FPFA_CONTENT_ROOT is set.")
+            else:
+                content_line.set(f"Content pack: {resolved}")
 
         ttk.Button(frame, text="Save content pack", command=save_root).pack(anchor="w", pady=8)
 
