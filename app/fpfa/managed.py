@@ -6,14 +6,28 @@ Anthropic-hosted container), waits for that session to finish, and returns
 the reply text. The caller posts that text into the desktop thread that
 started the job. This module does not open a second conversation.
 
+The hosted turn is text-only reasoning on the zone packet already in the
+user message. The container is not given skills/, roles/, modes/, or calcs/,
+and it has no network to fetch them. This module does not tell the model to
+call read_role, read_skill, read_mode, or a calc tool. Those tools exist
+only on the desktop Messages path.
+
 The model id stays claude-opus-5-5. Requests do not send temperature, top_p,
-top_k, tool_choice, or a thinking field. The role and the mode stay in the
-content pack; the caller passes the system text it loaded.
+top_k, tool_choice, or a thinking field. The cached agent id and cloud
+environment id are reused for later heavy jobs in this process. They are
+not sessions, and session cleanup does not delete them.
+
+A session id is registered while the poll runs. The job deletes it before
+returning. A failed delete is logged and returned on the result, and the id
+stays registered. Inbox close and process exit delete whatever is still
+registered, including a poll that the worker has not finished.
 """
 
 from __future__ import annotations
 
+import atexit
 import json
+import logging
 import re
 import threading
 import time
@@ -45,8 +59,31 @@ HEAVY_NOTE = (
     "Do not quote raw standard text."
 )
 
-# File tools inside the container. Web search and web fetch stay off, and the
-# sandbox network allows no hosts, so this job cannot pull a page.
+# The container cannot see the content pack. Say so, and do not send the
+# everyday system text, which tells the model to call desktop tools.
+HEAVY_TEXT_ONLY = (
+    "This hosted path is text-only reasoning on the already-computed zone packet "
+    "in the user message. "
+    "skills/, roles/, modes/, and calcs/ are not mounted here, and this container "
+    "has no network to fetch them. "
+    "Do not call read_role, read_skill, read_mode, list_roles, list_skills, list_modes, "
+    "or a calc tool. Those tools exist only on the desktop Messages path. "
+    "The container file tools cannot see the content pack. "
+    "Do not use them to recompute a zone. "
+    "Figures already in the user message govern. "
+    "Scope stays wet pipe, dry pipe, and double-interlock preaction. "
+    "Do not design foam, clean agent, water mist, deluge, single-interlock, or a Canadian path."
+)
+
+DELETE_FAILURE_NOTE = (
+    "The hosted session was not deleted. "
+    "The failure is in the fpfa.managed log. "
+    "Closing the app retries the delete."
+)
+
+# Sandbox file tools only. Web search and web fetch stay off, and the sandbox
+# network allows no hosts. Nothing here mounts the content pack or adds a
+# custom tool for read_role, read_skill, read_mode, or calcs.
 HEAVY_TOOLS = [
     {
         "type": "agent_toolset_20260401",
@@ -64,17 +101,60 @@ HEAVY_TOOLS = [
 
 Request = Callable[[str, str, dict | None], Any]
 
+_log = logging.getLogger("fpfa.managed")
+_active_lock = threading.Lock()
+_active_sessions: dict[str, Request] = {}
+
 
 def scrub_text(text: str) -> str:
     return _KEY_RE.sub("[key]", text or "")[:800]
 
 
-def session_system(pack_system: str) -> str:
-    """Pack text the caller loaded, plus the hatch note. No role is stored here."""
-    pack = (pack_system or "").strip()
-    if not pack:
-        return HEAVY_NOTE
-    return pack + "\n\n" + HEAVY_NOTE
+def session_system() -> str:
+    """Text-only hatch prompt plus HEAVY_NOTE.
+
+    The everyday role, the mode file, and the skill list are not included.
+    They tell the model to call tools this container does not have.
+    """
+    return HEAVY_TEXT_ONLY + "\n\n" + HEAVY_NOTE
+
+
+def delete_failure_note(status: dict | None) -> str:
+    """Designer-facing line when a hosted session is still up. Empty when the delete worked."""
+    if not isinstance(status, dict) or status.get("ok", True):
+        return ""
+    return DELETE_FAILURE_NOTE
+
+
+def reply_with_delete_status(result: dict) -> str:
+    """Reply text, plus a line when the session delete failed."""
+    reply = (result.get("text") or "").strip() or "(The hosted run returned no text.)"
+    note = delete_failure_note(result.get("session_delete"))
+    if not note:
+        return reply
+    return reply + "\n\n" + note
+
+
+def active_session_ids() -> list[str]:
+    with _active_lock:
+        return list(_active_sessions)
+
+
+def register_active_session(session_id: str, request: Request) -> None:
+    if not session_id:
+        return
+    with _active_lock:
+        _active_sessions[session_id] = request
+
+
+def release_active_sessions() -> None:
+    """Drop registered session ids without DELETE.
+
+    Tests call this so a fake request is not invoked again at process exit.
+    Closing the app and process exit call delete_active_sessions instead.
+    """
+    with _active_lock:
+        _active_sessions.clear()
 
 
 def _reject_forbidden(value: Any) -> None:
@@ -164,6 +244,11 @@ def _send(request: Request, method: str, path: str, body: dict | None) -> dict:
 
 
 def _ensure_environment(request: Request, resources: dict) -> str:
+    """Return the cached cloud environment id.
+
+    Later heavy jobs in this process reuse it on purpose. It is not a
+    session, and session cleanup does not delete it.
+    """
     existing = resources.get("environment_id")
     if existing:
         return str(existing)
@@ -187,6 +272,12 @@ def _ensure_environment(request: Request, resources: dict) -> str:
 
 
 def _ensure_agent(request: Request, resources: dict) -> str:
+    """Return the cached agent id.
+
+    Later heavy jobs in this process reuse it on purpose. It is not a
+    session, and session cleanup does not delete it. The stored system
+    text is the text-only hatch prompt. Each session sends that same prompt.
+    """
     existing = resources.get("agent_id")
     if existing:
         return str(existing)
@@ -197,7 +288,7 @@ def _ensure_agent(request: Request, resources: dict) -> str:
         {
             "name": "FPFA heavy job",
             "model": MODEL_ID,
-            "system": HEAVY_NOTE,
+            "system": session_system(),
             "tools": HEAVY_TOOLS,
         },
     )
@@ -283,11 +374,55 @@ def _error_message(events: list[dict]) -> str:
     return "The hosted run ended before a reply."
 
 
-def _delete_session(request: Request, session_id: str) -> None:
+def delete_session(request: Request, session_id: str) -> dict:
+    """DELETE one hosted session and record the outcome.
+
+    A failure is logged and the id is put back so a later close or process
+    exit can retry. A session another caller already removed is skipped.
+    The error text is scrubbed before it is logged or returned.
+
+    request is the caller's handle. After the id is taken off the registry,
+    the stored callable performs the DELETE so a second caller does not
+    send another one. request is kept so a caller can show which handle it
+    intended, and so the two stay the same object for a registered session.
+    """
+    if request is None:
+        raise ValueError("A session delete needs the request that opened it.")
+    with _active_lock:
+        stored = _active_sessions.pop(session_id, None)
+    if stored is None:
+        return {"ok": True, "session_id": session_id, "error": "", "skipped": True}
+    failed: BaseException | None = None
     try:
-        request("DELETE", f"/v1/sessions/{session_id}", None)
-    except Exception:
-        return
+        stored("DELETE", f"/v1/sessions/{session_id}", None)
+    except Exception as exc:
+        failed = exc
+    except BaseException:
+        with _active_lock:
+            _active_sessions.setdefault(session_id, stored)
+        raise
+    if failed is not None:
+        error = scrub_text(str(failed) or type(failed).__name__)
+        with _active_lock:
+            _active_sessions.setdefault(session_id, stored)
+        _log.error(
+            "hosted session delete failed session_id=%s error=%s",
+            session_id,
+            error or "delete failed",
+        )
+        return {"ok": False, "session_id": session_id, "error": error or "delete failed"}
+    return {"ok": True, "session_id": session_id, "error": ""}
+
+
+def delete_active_sessions() -> list[dict]:
+    """DELETE every hosted session still registered.
+
+    Inbox close and process exit call this. The job's own delete removes
+    the id first, so a finished job is not deleted twice.
+    """
+    with _active_lock:
+        pending = list(_active_sessions.items())
+    return [delete_session(request, session_id) for session_id, request in pending]
 
 
 def _wait_for_reply(
@@ -339,8 +474,8 @@ def _wait_for_reply(
 def run_heavy_job(
     request: Request,
     *,
-    system: str,
     user_text: str,
+    system: str | None = None,
     resources: dict | None = None,
     sleep: Callable[[float], None] | None = None,
     max_polls: int = 150,
@@ -348,17 +483,33 @@ def run_heavy_job(
 ) -> dict:
     """Run one heavy job and return its reply text.
 
-    resources caches the agent and the cloud environment for later heavy jobs
-    in this process. The session is deleted before this function returns, so
-    the hosted run is not left as a second conversation.
+    resources caches the agent id and the cloud environment id for later
+    heavy jobs in this process. Those ids are reused on purpose. This
+    function does not delete them.
+
+    system, when passed, must be session_system(). Everyday role, mode, and
+    skill text is refused so it cannot land on the wire. The session prompt
+    is always the text-only hatch prompt.
+
+    The session is registered for the poll and deleted before this function
+    returns. A failed delete stays on session_delete and in the log, and the
+    id stays registered for inbox close and process exit.
     """
     task = (user_text or "").strip()
     if not task:
         raise ValueError("A heavy job needs a task.")
+    prompt = session_system()
+    if system is not None and system != prompt:
+        raise ValueError(
+            "A heavy job sends the text-only hatch prompt. "
+            "It does not send everyday role, mode, or skill instructions."
+        )
     if resources is None:
         resources = {}
     pause = sleep or time.sleep
     session_id = ""
+    result: dict | None = None
+    failure: RuntimeError | None = None
     try:
         with _resource_lock(resources):
             environment_id = _ensure_environment(request, resources)
@@ -372,7 +523,7 @@ def run_heavy_job(
                     "type": "agent_with_overrides",
                     "id": agent_id,
                     "model": {"id": MODEL_ID},
-                    "system": session_system(system),
+                    "system": prompt,
                 },
                 "environment_id": environment_id,
                 "initial_events": [
@@ -386,6 +537,7 @@ def run_heavy_job(
         session_id = str(created.get("id") or "")
         if not session_id:
             raise RuntimeError("The hosted run did not start.")
+        register_active_session(session_id, request)
         text, stop = _wait_for_reply(
             request,
             session_id,
@@ -393,7 +545,7 @@ def run_heavy_job(
             max_polls=max_polls,
             poll_seconds=poll_seconds,
         )
-        return {
+        result = {
             "text": text,
             "model": MODEL_ID,
             "runtime": RUNTIME,
@@ -401,7 +553,33 @@ def run_heavy_job(
         }
     except Exception as exc:
         message = scrub_text(str(exc) or type(exc).__name__)
-        raise RuntimeError(message or "The hosted run failed.") from None
-    finally:
-        if session_id:
-            _delete_session(request, session_id)
+        failure = RuntimeError(message or "The hosted run failed.")
+    delete_status = None
+    if session_id:
+        delete_status = delete_session(request, session_id)
+    if failure is not None:
+        if delete_status and not delete_status.get("ok", True):
+            extra = delete_status.get("error") or "delete failed"
+            raise RuntimeError(
+                f"{failure} The hosted session was not deleted: {extra}"
+            ) from None
+        raise failure from None
+    if result is None:
+        raise RuntimeError("The hosted run failed.")
+    if delete_status is not None:
+        result["session_delete"] = {
+            "ok": bool(delete_status.get("ok")),
+            "session_id": str(delete_status.get("session_id") or ""),
+            "error": str(delete_status.get("error") or ""),
+        }
+    return result
+
+
+def _install_session_cleanup() -> None:
+    atexit.register(delete_active_sessions)
+    from fpfa.jobs import register_inbox_close_hook
+
+    register_inbox_close_hook(delete_active_sessions)
+
+
+_install_session_cleanup()

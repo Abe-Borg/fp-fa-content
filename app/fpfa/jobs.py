@@ -15,15 +15,41 @@ when a later job finishes first.
 
 from __future__ import annotations
 
+import logging
 import queue
 import re
 import threading
 import uuid
 from dataclasses import dataclass
+from typing import Callable
 
 KINDS = ("zone", "chat", "bess", "heavy", "claim")
 STATUSES = ("queued", "running", "done", "error")
 _KEY_RE = re.compile(r"sk-ant-[A-Za-z0-9_\-]+")
+_log = logging.getLogger("fpfa.jobs")
+_hooks_lock = threading.Lock()
+_close_hooks: list[Callable[[], None]] = []
+
+
+def register_inbox_close_hook(hook: Callable[[], None]) -> None:
+    """Run hook from JobInbox.close before the worker join.
+
+    The hosted client registers a hook that deletes in-flight heavy sessions.
+    A hook that raises is logged. It does not stop the other hooks or the join.
+    """
+    with _hooks_lock:
+        if hook not in _close_hooks:
+            _close_hooks.append(hook)
+
+
+def _run_close_hooks() -> None:
+    with _hooks_lock:
+        hooks = list(_close_hooks)
+    for hook in hooks:
+        try:
+            hook()
+        except Exception:
+            _log.exception("inbox close hook failed")
 
 
 def _scrub(text: str) -> str:
@@ -169,12 +195,20 @@ class JobInbox:
             return [self._copy(self._jobs[job_id]) for job_id in self._order]
 
     def close(self) -> None:
+        """Stop taking work, run close hooks, then join workers for about a second.
+
+        Workers are daemons. The join does not cancel a job that is already
+        running. Close hooks run first so a hosted session still in its poll
+        is deleted before this returns. Process exit repeats that delete for
+        any session the hook did not finish.
+        """
         with self._lock:
             if self._closed:
                 return
             self._closed = True
             for _ in self._threads:
                 self._queue.put(None)
+        _run_close_hooks()
         for thread in self._threads:
             thread.join(timeout=1.0)
 
