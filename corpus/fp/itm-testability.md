@@ -13,6 +13,6 @@ Provide a test header, a drain of at least 4 in. where the main size requires it
 
 Combined test-and-drain hardware is a product family. Cite the family from the brochure in hand. Do not invent model numbers. A pressure-reducing valve with a hydro-lockout trim is only in scope when the wet basis of design and the opened sheet support it. Reconcile the PRV section to the enforced NFPA 13 (pack cite: NFPA 13-2022 and 2025 §16.9.7).
 
-NFPA 4 integrated-system testing and the commissioning packet are the acceptance program (`commissioning-ist-acceptance-packet`). They are not the 25-year calendar. Do not emit an operations manual from this note.
+NFPA 4 integrated-system testing and the commissioning packet are the acceptance program (`commissioning-ist-acceptance-packet`). They are not the 25-year calendar. Fire-alarm Chapter 14 frequencies are `../fa/acceptance-testing.md`. Pump-power infrared and transfer-switch intervals are `pump-power-testing.md`. Do not emit an operations manual from this note.
 
 If a product line cannot be confirmed from a note that is actually in hand, mark that line `handoff` and finish the rest of the checklist.

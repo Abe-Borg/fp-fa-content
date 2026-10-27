@@ -1,0 +1,37 @@
+# Audible, visible, and voice notification
+
+Public mode, NFPA 72-2022 and 2025 §18.4.4.1: at least 15 dB above average ambient, or 5 dB above a maximum that lasts 60 seconds or more, whichever is greater. Measure at 5 ft above the floor. The total, ambient plus appliances, does not exceed 110 dBA at the minimum hearing distance (§18.4.1.2). Those two sections match in 2019.
+
+Ambient above 105 dBA requires visible appliances (§18.4.1.1 in 2022 and 2025). It does not waive the audible appliances. A visual-only design at 105 dBA is not the rule.
+
+Reduced or eliminated audible signaling needs authority approval, and visible signaling per §18.5 still applies (§18.4.4.2, same in 2019, 2022, and 2025).
+
+## Visible
+
+Room spacing uses the wall table and the ceiling table. 2022 and 2025: Tables 18.5.5.7.1(a) and (b). 2019: Tables 18.5.5.5.1(a) and (b). This note does not reprint the candela grids. Use the enforced table.
+
+Synchronization in a room, 2022 and 2025 §18.5.5.7.2 (2019 §18.5.5.5.2): one appliance; or two groups in the same room or in adjacent fields of view that flash together; or more than two appliances or groups that flash in sync.
+
+Corridors, §18.5.5.8 in 2022 and 2025: at least 15 cd, within 15 ft of each end, 100 ft maximum spacing, and synchronization when more than two appliances are in view. A corridor wider than 20 ft uses the room tables. There is no separate corridor candela table. 2019 cites are §18.5.5.6.3, §18.5.5.6.5, and §18.5.5.6.7.
+
+An illumination alternative of 0.0375 lm/ft² at every point may replace table spacing (NFPA 72-2022 and 2025 §18.5.5.9).
+
+Use the manufacturer's current at the candela and at the listed minimum voltage. Count synchronization-module loss in the voltage drop (`nac-and-wire.md`).
+
+## Restricted audible mode
+
+NFPA 72-2025 §18.4.8 is restricted audible mode operation, where a risk analysis, the authority, or another code requires it. Mark the areas. Use it only where trained, awake, mobile staff are present. Audible appliances in the zone follow the synchronization rule, and every visible appliance in the zone synchronizes per §18.5.5.7.2. Sections 18.4.6.3 and 18.4.5 also apply.
+
+2019 and 2022 have no restricted-audible section in Chapters 3, 18, or 24. On those editions the mode is an owner or authority election, not a code chapter.
+
+## Voice and intelligibility
+
+The designer names each acoustically distinguishable space and marks whether intelligibility is required (NFPA 72-2025 §18.4.12 and the definition at §3.3.6; 2019 and 2022 §18.4.11). Intelligibility is not required in every space unless another law says so. A data hall is often marked as not requiring intelligibility, with tone plus visible appliances. Marking a space that way does not remove audibility or visible appliances.
+
+A 2010-cycle reading of Annex D uses 0.45 STI at 90 percent of the measurement points and an average of 0.50 STI. Confirm Annex D in the enforced edition before those numbers are a pass criterion. Quantitative STI has been permitted since the 2013 cycle. It is not mandated. Private-mode audibility is a lower margin than public mode. Confirm the section before using 10 dB. Do not elect private mode in a hall.
+
+Speaker circuits: 25 V or 70.7 V. The 1.0 dB electrical-loss limit is NFPA 72-2025 §18.3.7.2.1. On 2019 and 2022 that limit is design practice (`nac-and-wire.md`). A tighter loss target is a choice, not a second code value. Amplifier failure is a trouble signal (§10.19.1, same duty in 2019 and 2022).
+
+Voice is not required in a typical single-story hall by the occupancy list that drives emergency voice. If the owner adds voice, Chapter 18 still applies. Survivability of that voice path is `pathway-survivability.md`.
+
+FM does not set appliance spacing. It does require the alarm, including pre-alarm where the sheet says so, at a constantly attended location.
