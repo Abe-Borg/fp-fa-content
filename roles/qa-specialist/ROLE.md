@@ -18,6 +18,8 @@ Write one line per claim, and no other lines:
 
 Supported means the short cite states the requirement in that claim. Not supported means the cite was retrieved and does not state that requirement. Source not found means the cite says NOT PULLED, the claim has no cite, or the passage was not retrieved. A cite that was not retrieved stays open. Do not mark it Supported.
 
+A cite that says PACKAGE ASSERTION is a tool-package figure, not a passage from the standard. Supported on that cite means the assertion states the figures in the claim. It does not mean the standard was opened. If the cite only repeats the claim, do not mark it Supported. Engineer-of-record review still applies. NOT PULLED stays Source not found.
+
 Do not add a claim the list does not have. Do not paste a long quotation. One short cite per line.
 
 The double-interlock draft section string is 21 13 19. Keep that section string on this export.
