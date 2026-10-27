@@ -12,7 +12,7 @@ Report the delta against the code floor when the insurer or the owner governs. D
 
 ## Company systems
 
-The basis of design is wet pipe, dry pipe, or double-interlock preaction, plus the pumps, the nitrogen or air supply, and the fire-alarm work those systems need. Foam, clean agent, water mist, deluge, and water spray are out of scope. Single-interlock and non-interlock preaction are comparison-only. The fence is `scope-lock.md`. The election is `fp/system-election.md`.
+The basis of design is wet pipe, dry pipe, or double-interlock preaction, plus the pumps, the nitrogen or air supply, and the fire-alarm work those systems need. Foam, clean agent, water mist, and a building deluge system are out of scope. Outdoor oil-filled transformer apparatus water spray is the exception in `scope-lock.md`. It does not elect the building sprinkler family. Single-interlock and non-interlock preaction are comparison-only. The fence is `scope-lock.md`. The election is `fp/system-election.md`.
 
 On an FM hall, company practice keeps double-interlock and flags the sheet that ranks it last. The detection leg is one alarm-level pre-alarm, not a cross-zone, and not an early-warning alert. Those two flags are `fa/di-releasing.md`.
 

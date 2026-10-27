@@ -6,7 +6,13 @@ Heat detectors used to release water have a temperature rating below the sprinkl
 
 Provide an extra detector for test on each circuit at an accessible location (NFPA 13-2022 §8.3.1.7.1). NFPA 13-2025 §8.10.6.1 says each detection zone. One accessible test detector per zone meets both readings.
 
-The preaction valve has a hydraulic, pneumatic, or mechanical manual release that does not depend on the detectors or on the sprinklers (NFPA 13-2025 §8.3.1.4; NFPA 13-2022 §8.3.1.2, same duty). Manual release bypasses the detection leg. It does not bypass low air on double-interlock. The valve listing sets that behavior.
+NFPA 13 requires a hydraulic, pneumatic, or mechanical manual means that operates the preaction valve independent of the detectors and independent of the sprinklers (NFPA 13-2025 §8.3.1.4; NFPA 13-2022 §8.3.1.2). That is the emergency release on the valve trim. It is not the same device as a manual-release input on the releasing panel.
+
+The emergency handle, or the equivalent hydraulic or mechanical release at the valve, vents the priming chamber and opens the valve without waiting for the panel low-air interlock. Water then enters the sprinkler piping and stays there until a sprinkler opens. A test that pulls that handle will open the valve while supervisory pressure is still up. Do not expect the air in the pipe to hold the valve shut.
+
+A manual-release input on the releasing panel is a substitute for the detection leg. On double-interlock that input still needs loss of supervisory pressure before the solenoid releases water. It does not replace the emergency handle, and the emergency handle does not follow the panel's two-leg program.
+
+Read the opened trim sheet for which device is which. Do not treat them as one switch.
 
 Automatic supervision of the piping and the detectors is required when more than 20 sprinklers are on the system (NFPA 13-2025 §8.3.2.4).
 

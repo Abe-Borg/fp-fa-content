@@ -1,6 +1,6 @@
 # Wet, dry, and double-interlock election
 
-The company basis is wet pipe, dry pipe, or double-interlock preaction. Foam, clean agent, water mist, deluge, and water spray are out of scope. Record the request and stop. Single-interlock and non-interlock are comparison-only. If either is offered as the basis of design, record it and return the question. Do not substitute double-interlock in silence, and do not substitute the other way.
+The company basis for the building is wet pipe, dry pipe, or double-interlock preaction. Foam, clean agent, water mist, and a building deluge system are out of scope. Record the request and stop. Outdoor oil-filled transformer apparatus water spray is the exception in `../scope-lock.md`. Size it in `power-block-transformer-water-spray`. It does not elect the building sprinkler family. Single-interlock and non-interlock are comparison-only. If either is offered as the basis of design, record it and return the question. Do not substitute double-interlock in silence, and do not substitute the other way.
 
 FM DS 5-32 (January 2026) §2.4.1.1 ranks water-based protection in this order: wet, then non-interlock, then single-interlock, then double-interlock last. Double-interlock remains an allowed dry design on that sheet. Company practice keeps double-interlock on an FM hall and flags the rank to the owner and the insurer on every such job.
 

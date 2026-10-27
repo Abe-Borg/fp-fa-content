@@ -1,6 +1,6 @@
 # Ignitable-liquid areas: water sprinklers, drainage, containment
 
-Foam, clean agent, and water spray are out of scope. This note is plain-water ceiling sprinklers, drainage, and containment. If the request is an agent system, record it and stop.
+Foam, clean agent, and building water spray are out of scope. This note is plain-water ceiling sprinklers, drainage, and containment. If the request is an agent system, record it and stop. Outdoor transformer apparatus water spray is a different system (`../scope-lock.md`). Do not size it from this note.
 
 Classify by closed-cup flash point before picking a density. Diesel is FM Group A, flash point under 200 °F, and is not very-high flash point (FM DS 7-32A, April 2026, §1.1 and §2.1.2.1). Very-high flash point, unheated, is a closed-cup flash point of at least 414 °F (212 °C). Above 5,000 ft, correct the flash point before grouping.
 
