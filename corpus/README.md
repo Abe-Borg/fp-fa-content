@@ -2,7 +2,7 @@
 
 Paraphrased decision logs and edition pins for a later search pass. One topic per file. The desktop app does not read this folder yet.
 
-This folder holds 72 notes: `scope-lock.md`, `design-conventions.md`, 44 files in `fp/`, and 26 files in `fa/`. The first 19 were the seed (the scope lock, 13 fire-protection notes, and 5 fire-alarm notes). The rest are paraphrased from topic notes and stripped of job names, personal names, and source-archive paths.
+This folder holds 89 notes: `scope-lock.md`, `design-conventions.md`, 61 files in `fp/`, and 26 files in `fa/`. The first 19 were the seed (the scope lock, 13 fire-protection notes, and 5 fire-alarm notes). The rest are paraphrased from topic notes and stripped of job names, personal names, and source-archive paths. Seventeen of the fire-protection notes are short digests of water-supply and fire-pump material. Large sources are summarized with section cites. City checklists, vendor catalogs, and a supply-analysis router that only restated notes already here were not copied.
 
 They are not a reprint of a standard. A numeric screen sits next to its edition and section. Where a licensed primary is not held, the note says `[V]` and does not invent a section.
 
@@ -18,10 +18,10 @@ Spec language is not here. When specs are ingested, double-interlock draft langu
 | --- | --- | --- |
 | scope-lock | 1 | Wet, dry, and double-interlock fence, plus outdoor transformer water spray |
 | design-conventions | 1 | How a number is chosen, cited, and not copied from another hall |
-| fp/ | 44 | Water-based suppression, detection that serves it, insurer sheets, and design practice |
+| fp/ | 61 | Water-based suppression, detection that serves it, insurer sheets, and design practice |
 | fa/ | 26 | Fire alarm, releasing, power, pathways, notification, and space detection |
 
-`fp/` groups as: edition and election (`edition-pins.md`, `system-election.md`, `sheet-precedence.md`, `ufc-outside-pin.md`); hall and pipe (`hall-geometry.md`, `density-area.md`, `pipe-layout.md`, `pipe-volume.md`, `sprinkler-temperature-and-k.md`, `concealed-spaces.md`); dry and preaction (`water-delivery-screen.md`, `preaction-trim-and-sequence.md`, `air-maintenance.md`, `nitrogen-compressor-and-c-factor.md`, `nitrogen-sampling.md`); storage and liquids (`storage-design.md`, `storage-families.md`, `ignitable-liquid-sprinklers.md`); water supply hardware (`pump-and-supply.md`, `fire-pump-controller.md`, `pump-power-testing.md`, `control-valves.md`, `standpipe-class-i.md`, `campus-loop-and-fire-flow.md`, `hydraulic-method.md`); detection and alarm (`duct-smoke.md`, `waterflow-supervision.md`, `fm-detection-install.md`, `fm-alarm-sheet.md`, `vewfd-acceptance.md`, `asd-commissioning.md`, `stratification.md`, `gas-detection.md`, `errcs.md`, `alarm-service-class.md`); installation and upkeep (`seismic-bracing.md`, `fuel-seismic-shutoff.md`, `freeze-heat-trace.md`, `itm-testability.md`, `acceptance-tests.md`, `impairment-and-hot-work.md`, `construction-safeguards.md`, `preincident-environment.md`, `controls-separation.md`).
+`fp/` groups as: edition and election (`edition-pins.md`, `system-election.md`, `sheet-precedence.md`, `ufc-outside-pin.md`); hall and pipe (`hall-geometry.md`, `density-area.md`, `pipe-layout.md`, `pipe-volume.md`, `sprinkler-temperature-and-k.md`, `concealed-spaces.md`); dry and preaction (`water-delivery-screen.md`, `preaction-trim-and-sequence.md`, `air-maintenance.md`, `nitrogen-compressor-and-c-factor.md`, `nitrogen-sampling.md`); storage and liquids (`storage-design.md`, `storage-families.md`, `ignitable-liquid-sprinklers.md`); water supply hardware (`pump-and-supply.md`, `supply-test.md`, `water-supply-reliability.md`, `water-tanks.md`, `fire-pump-installation.md`, `fire-pump-controller.md`, `fire-pump-alarm-interface.md`, `fire-pump-power-circuit.md`, `jockey-pump.md`, `variable-speed-pump.md`, `pump-power-testing.md`, `control-valves.md`, `pressure-regulating-devices.md`, `backflow-preventer.md`, `standpipe-class-i.md`, `standpipe-system.md`, `campus-loop-and-fire-flow.md`, `private-fire-mains.md`, `thrust-restraint.md`, `needed-fire-flow.md`, `hydraulic-method.md`); detection and alarm (`duct-smoke.md`, `waterflow-supervision.md`, `fm-detection-install.md`, `fm-alarm-sheet.md`, `vewfd-acceptance.md`, `asd-commissioning.md`, `stratification.md`, `gas-detection.md`, `errcs.md`, `alarm-service-class.md`); installation and upkeep (`seismic-bracing.md`, `post-earthquake-supply.md`, `fuel-seismic-shutoff.md`, `freeze-heat-trace.md`, `cold-climate-freeze.md`, `heat-trace-supervision.md`, `itm-testability.md`, `acceptance-tests.md`, `impairment-and-hot-work.md`, `construction-safeguards.md`, `preincident-environment.md`, `controls-separation.md`).
 
 `fa/` groups as: basis and documents (`edition-deltas.md`, `three-layer-basis.md`, `when-a-system-is-required.md`, `documentation-package.md`, `cybersecurity.md`); detection (`detection-layout.md`, `asd-performance.md`, `heat-detector-spacing.md`, `space-detection-matrix.md`, `ess-room-detection.md`, `bess-separation.md`, `generator-room.md`); circuits and notification (`pathway-class.md`, `pathway-survivability.md`, `nac-and-wire.md`, `notification-appliances.md`, `supervising-station.md`); releasing and power (`di-releasing.md`, `releasing-panel.md`, `preaction-supervision.md`, `supervisory-points.md`, `secondary-power.md`, `epo-and-disconnect.md`, `interfaces.md`, `smoke-control-interface.md`, `acceptance-testing.md`).
 
@@ -48,11 +48,25 @@ Spec language is not here. When specs are ingested, double-interlock draft langu
 | `fp/storage-families.md` | ESFR wet-only, CMSA, CMDA 30 percent | `occupancy-hazard-fork` |
 | `fp/ignitable-liquid-sprinklers.md` | Water density, drainage, containment | `occupancy-hazard-fork` |
 | `fp/pump-and-supply.md` | Supply curve and pump envelope | `hydrant-supply-curve`, `pump-envelope` |
+| `fp/supply-test.md` | Pitot test, deductions, two suction numbers | `hydrant-supply-curve` |
+| `fp/water-supply-reliability.md` | Adequate versus reliable, enhanced ladder | `hydrant-supply-curve` |
+| `fp/water-tanks.md` | Suction tank, break tank, 4020 listing | `hydrant-supply-curve` |
+| `fp/fire-pump-installation.md` | Pump count, usable curve, suction, diesel tank | `pump-envelope` |
 | `fp/fire-pump-controller.md` | Controller signals and refuse list | `fire-pump-controller-configuration-and-supervision` |
+| `fp/fire-pump-alarm-interface.md` | Terminals versus the insurer list, transfer outage | `fire-pump-controller-configuration-and-supervision` |
+| `fp/fire-pump-power-circuit.md` | No ground-fault protection, campus-feeder coordination | `fire-pump-controller-configuration-and-supervision` |
+| `fp/jockey-pump.md` | Leakage pump setpoints and sensing line | `fire-pump-controller-configuration-and-supervision` |
+| `fp/variable-speed-pump.md` | Churn ceiling and speed limiting | `pump-envelope` |
 | `fp/pump-power-testing.md` | Infrared, transfer switch, fuel, flush flows | `fire-pump-controller-configuration-and-supervision` |
 | `fp/control-valves.md` | Suction gate, butterfly friction, 175 psi plateau | `fire-pump-controller-configuration-and-supervision` |
+| `fp/pressure-regulating-devices.md` | Avoid a sprinkler reducing valve, dry-side ban | `pump-envelope` |
+| `fp/backflow-preventer.md` | Tier, certified loss, full-flow test path | `hydrant-supply-curve` |
 | `fp/standpipe-class-i.md` | Class I residual and supervisory air | `standpipe-class-i-election-and-demand` |
+| `fp/standpipe-system.md` | Gallon demand, who supplies it, test drain | `standpipe-class-i-election-and-demand` |
 | `fp/campus-loop-and-fire-flow.md` | Loop and needed-fire-flow method | `campus-looped-main-sizing`, `needed-fire-flow-method-election` |
+| `fp/private-fire-mains.md` | Pipe, hydrants, one-leg-out delta, flush | `campus-looped-main-sizing` |
+| `fp/thrust-restraint.md` | Test pressure, restrained length, encasement | `campus-looped-main-sizing` |
+| `fp/needed-fire-flow.md` | ISO cap, rejected formulas, hydrant credit | `needed-fire-flow-method-election` |
 | `fp/hydraulic-method.md` | Diameter, remote-area length, C reporting | `pump-envelope` |
 | `fp/duct-smoke.md` | 2,000 cfm and 15,000 cfm triggers by code | `fa-hvac-door-and-lock-interfaces` |
 | `fp/waterflow-supervision.md` | 90 s device limit, 60 s receipt, two-turn valve | `fa-fire-pump-and-preaction-supervisory-points` |
@@ -65,8 +79,11 @@ Spec language is not here. When specs are ingested, double-interlock draft langu
 | `fp/errcs.md` | Public-safety radio coverage to confirm in the adopted fire code | `fa-pathway-survivability-election` |
 | `fp/alarm-service-class.md` | FM Class V and Class VIA, not pathway class | `fa-integrated-systems-test-matrix` |
 | `fp/seismic-bracing.md` | Brace spacing ceiling and FM Cp when S_DS is unknown | `fp-seismic-bracing-and-restraint` |
+| `fp/post-earthquake-supply.md` | Public-main outage as a second-source driver | `fp-seismic-bracing-and-restraint` |
 | `fp/fuel-seismic-shutoff.md` | Fuel-gas brace spacing and shutoff time | `fp-seismic-bracing-and-restraint` |
 | `fp/freeze-heat-trace.md` | Freeze screen, listing fence | `freeze-heat-trace-fp-piping` |
+| `fp/cold-climate-freeze.md` | 100-year map, 40 °F spaces, diesel room | `freeze-heat-trace-fp-piping` |
+| `fp/heat-trace-supervision.md` | Branch-line listing and energized-circuit supervision | `freeze-heat-trace-fp-piping` |
 | `fp/itm-testability.md` | CD testability levers | `itm-design-for-testability` |
 | `fp/acceptance-tests.md` | Hydrostatic, leak, witnessed 30 s delivery | `commissioning-ist-acceptance-packet` |
 | `fp/impairment-and-hot-work.md` | Impairment closeout and hot-work distances | `itm-design-for-testability` |
