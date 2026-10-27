@@ -18,14 +18,18 @@ environment id are reused for later heavy jobs in this process. They are
 not sessions, and session cleanup does not delete them.
 
 A session id is registered while the poll runs. The job deletes it before
-returning. A failed delete is logged and returned on the result, and the id
-stays registered. Inbox close and process exit delete whatever is still
-registered, including a poll that the worker has not finished.
+returning. A delete that is still on the network stays tracked until that
+attempt finishes; an empty registry is not treated as a successful delete.
+A failed delete is logged and returned on the result, and the id stays
+registered. Inbox close and process exit delete whatever is still registered
+or still in flight. Those shutdown sweeps wait a short time so a slow
+network does not hold the window open.
 """
 
 from __future__ import annotations
 
 import atexit
+import contextvars
 import json
 import logging
 import re
@@ -104,6 +108,16 @@ Request = Callable[[str, str, dict | None], Any]
 _log = logging.getLogger("fpfa.managed")
 _active_lock = threading.Lock()
 _active_sessions: dict[str, Request] = {}
+# DELETE has been sent and has not finished. Distinct from _active_sessions so
+# a pop at the start of DELETE is not mistaken for "already deleted".
+_inflight_deletes: dict[str, "_DeleteAttempt"] = {}
+# Normal heavy-job HTTP budget. Shutdown sets a much shorter value.
+_HTTP_TIMEOUT: contextvars.ContextVar[float] = contextvars.ContextVar(
+    "fpfa_http_timeout",
+    default=120.0,
+)
+# Total time a close or process-exit sweep will wait for session deletes.
+SHUTDOWN_DELETE_DEADLINE = 1.0
 
 
 def scrub_text(text: str) -> str:
@@ -135,9 +149,46 @@ def reply_with_delete_status(result: dict) -> str:
     return reply + "\n\n" + note
 
 
+class _DeleteAttempt:
+    """One DELETE that has started and has not yet been confirmed."""
+
+    def __init__(self, request: Request):
+        self.request = request
+        self.done = threading.Event()
+        self.ok = False
+        self.error = ""
+        self.finished = False
+
+    def status(self, session_id: str) -> dict:
+        if not self.finished:
+            return _pending_delete_status(session_id)
+        return {"ok": self.ok, "session_id": session_id, "error": self.error}
+
+
+def _pending_delete_status(session_id: str) -> dict:
+    return {
+        "ok": False,
+        "session_id": session_id,
+        "error": "shutdown deadline",
+        "pending": True,
+    }
+
+
+def _log_unconfirmed_delete(session_id: str) -> None:
+    _log.error(
+        "hosted session delete still in progress at shutdown session_id=%s",
+        session_id,
+    )
+
+
 def active_session_ids() -> list[str]:
+    """Sessions not confirmed deleted, including a DELETE still on the network."""
     with _active_lock:
-        return list(_active_sessions)
+        ids = list(_active_sessions)
+        for session_id in _inflight_deletes:
+            if session_id not in ids:
+                ids.append(session_id)
+        return ids
 
 
 def register_active_session(session_id: str, request: Request) -> None:
@@ -154,7 +205,14 @@ def release_active_sessions() -> None:
     Closing the app and process exit call delete_active_sessions instead.
     """
     with _active_lock:
+        attempts = list(_inflight_deletes.values())
+        _inflight_deletes.clear()
         _active_sessions.clear()
+    for attempt in attempts:
+        attempt.ok = False
+        attempt.error = "released"
+        attempt.finished = True
+        attempt.done.set()
 
 
 def _reject_forbidden(value: Any) -> None:
@@ -195,7 +253,7 @@ def anthropic_request(api_key: str, *, opener=None) -> Request:
             headers["content-type"] = "application/json"
         req = urllib.request.Request(API_ROOT + path, data=data, headers=headers, method=method)
         try:
-            with open_url(req, timeout=120) as resp:
+            with open_url(req, timeout=_HTTP_TIMEOUT.get()) as resp:
                 raw = resp.read().decode("utf-8")
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")[:500]
@@ -374,55 +432,151 @@ def _error_message(events: list[dict]) -> str:
     return "The hosted run ended before a reply."
 
 
+def _finish_attempt(
+    session_id: str,
+    attempt: _DeleteAttempt,
+    *,
+    ok: bool,
+    error: str,
+) -> None:
+    """Record the outcome. A failure puts the id back for a later sweep."""
+    with _active_lock:
+        current = _inflight_deletes.get(session_id)
+        if current is attempt:
+            _inflight_deletes.pop(session_id, None)
+            if not ok:
+                _active_sessions.setdefault(session_id, attempt.request)
+        attempt.ok = ok
+        attempt.error = error
+        attempt.finished = True
+        attempt.done.set()
+
+
 def delete_session(request: Request, session_id: str) -> dict:
     """DELETE one hosted session and record the outcome.
 
-    A failure is logged and the id is put back so a later close or process
-    exit can retry. A session another caller already removed is skipped.
-    The error text is scrubbed before it is logged or returned.
+    The id stays in the in-flight map until this attempt finishes. Callers
+    that look during the network call still see it. A failure is logged and
+    the id is put back so a later close or process exit can retry. An id that
+    is not registered and not in flight was already confirmed gone.
 
-    request is the caller's handle. After the id is taken off the registry,
-    the stored callable performs the DELETE so a second caller does not
-    send another one. request is kept so a caller can show which handle it
-    intended, and so the two stay the same object for a registered session.
+    A second caller for the same id waits for the attempt already running
+    instead of treating the missing active entry as a successful delete.
     """
     if request is None:
         raise ValueError("A session delete needs the request that opened it.")
     with _active_lock:
-        stored = _active_sessions.pop(session_id, None)
-    if stored is None:
-        return {"ok": True, "session_id": session_id, "error": "", "skipped": True}
+        attempt = _inflight_deletes.get(session_id)
+        owner = attempt is None
+        if owner:
+            stored = _active_sessions.pop(session_id, None)
+            if stored is None:
+                return {"ok": True, "session_id": session_id, "error": "", "skipped": True}
+            attempt = _DeleteAttempt(stored)
+            _inflight_deletes[session_id] = attempt
+    if not owner:
+        assert attempt is not None
+        attempt.done.wait()
+        return attempt.status(session_id)
+    assert attempt is not None
     failed: BaseException | None = None
     try:
-        stored("DELETE", f"/v1/sessions/{session_id}", None)
+        attempt.request("DELETE", f"/v1/sessions/{session_id}", None)
     except Exception as exc:
         failed = exc
     except BaseException:
-        with _active_lock:
-            _active_sessions.setdefault(session_id, stored)
+        _finish_attempt(session_id, attempt, ok=False, error="interrupted")
         raise
     if failed is not None:
-        error = scrub_text(str(failed) or type(failed).__name__)
-        with _active_lock:
-            _active_sessions.setdefault(session_id, stored)
+        error = scrub_text(str(failed) or type(failed).__name__) or "delete failed"
         _log.error(
             "hosted session delete failed session_id=%s error=%s",
             session_id,
-            error or "delete failed",
+            error,
         )
-        return {"ok": False, "session_id": session_id, "error": error or "delete failed"}
-    return {"ok": True, "session_id": session_id, "error": ""}
+        _finish_attempt(session_id, attempt, ok=False, error=error)
+        return attempt.status(session_id)
+    _finish_attempt(session_id, attempt, ok=True, error="")
+    return attempt.status(session_id)
 
 
-def delete_active_sessions() -> list[dict]:
-    """DELETE every hosted session still registered.
+def _delete_within(request: Request, session_id: str, timeout: float) -> dict:
+    """Run delete_session on a daemon thread and wait at most timeout seconds."""
+    box: dict[str, dict] = {}
 
-    Inbox close and process exit call this. The job's own delete removes
-    the id first, so a finished job is not deleted twice.
+    def target() -> None:
+        token = _HTTP_TIMEOUT.set(max(0.05, timeout))
+        try:
+            box["status"] = delete_session(request, session_id)
+        finally:
+            _HTTP_TIMEOUT.reset(token)
+
+    thread = threading.Thread(target=target, name="fpfa-session-delete", daemon=True)
+    thread.start()
+    thread.join(timeout)
+    status = box.get("status")
+    if status is None:
+        _log_unconfirmed_delete(session_id)
+        return _pending_delete_status(session_id)
+    return status
+
+
+def delete_active_sessions(deadline: float | None = None) -> list[dict]:
+    """DELETE every hosted session that is not confirmed gone.
+
+    deadline is the total seconds to wait. None waits until each attempt
+    this call starts has finished. Shutdown passes SHUTDOWN_DELETE_DEADLINE.
+
+    An attempt already on the network is waited on, not treated as deleted.
+    If it is still running when the deadline hits, the id stays tracked and
+    the status is not ok. A confirmed success is not deleted again.
     """
+    started = time.monotonic()
+
+    def remaining() -> float | None:
+        if deadline is None:
+            return None
+        return max(0.0, deadline - (time.monotonic() - started))
+
     with _active_lock:
-        pending = list(_active_sessions.items())
-    return [delete_session(request, session_id) for session_id, request in pending]
+        active = [
+            (session_id, request)
+            for session_id, request in _active_sessions.items()
+            if session_id not in _inflight_deletes
+        ]
+        inflight = list(_inflight_deletes.items())
+
+    results: list[dict] = []
+    for session_id, attempt in inflight:
+        left = remaining()
+        if left is None:
+            attempt.done.wait()
+        elif left <= 0 or not attempt.done.wait(left):
+            _log_unconfirmed_delete(session_id)
+            results.append(_pending_delete_status(session_id))
+            continue
+        results.append(attempt.status(session_id))
+
+    for session_id, request in active:
+        left = remaining()
+        if deadline is not None and (left is None or left <= 0):
+            _log_unconfirmed_delete(session_id)
+            results.append(_pending_delete_status(session_id))
+            continue
+        if deadline is None:
+            results.append(delete_session(request, session_id))
+            continue
+        results.append(_delete_within(request, session_id, left))
+    return results
+
+
+def shutdown_delete_sessions() -> None:
+    """Bounded sweep used by inbox close and process exit."""
+    token = _HTTP_TIMEOUT.set(SHUTDOWN_DELETE_DEADLINE)
+    try:
+        delete_active_sessions(deadline=SHUTDOWN_DELETE_DEADLINE)
+    finally:
+        _HTTP_TIMEOUT.reset(token)
 
 
 def _wait_for_reply(
@@ -576,10 +730,10 @@ def run_heavy_job(
 
 
 def _install_session_cleanup() -> None:
-    atexit.register(delete_active_sessions)
+    atexit.register(shutdown_delete_sessions)
     from fpfa.jobs import register_inbox_close_hook
 
-    register_inbox_close_hook(delete_active_sessions)
+    register_inbox_close_hook(shutdown_delete_sessions)
 
 
 _install_session_cleanup()

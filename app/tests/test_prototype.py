@@ -3255,6 +3255,7 @@ class ManagedAgentTests(unittest.TestCase):
             seen["beta"] = req.get_header("Anthropic-beta")
             seen["version"] = req.get_header("Anthropic-version")
             seen["key"] = req.get_header("X-api-key")
+            seen["timeout"] = timeout
             raise urllib.error.HTTPError(
                 req.full_url,
                 400,
@@ -3269,6 +3270,7 @@ class ManagedAgentTests(unittest.TestCase):
         self.assertEqual(seen["beta"], "managed-agents-2026-04-01")
         self.assertEqual(seen["version"], "2023-06-01")
         self.assertEqual(seen["key"], "sk-ant-local-test")
+        self.assertEqual(seen["timeout"], 120)
         self.assertNotIn(secret, str(http_caught.exception))
         self.assertIn("[key]", str(http_caught.exception))
 
@@ -3447,6 +3449,125 @@ class ManagedAgentTests(unittest.TestCase):
             for thread in inbox._threads:
                 thread.join(timeout=2)
             self.assertFalse(any(thread.is_alive() for thread in inbox._threads))
+
+    def test_delete_in_progress_stays_visible_to_shutdown(self):
+        import threading
+        import time
+
+        from fpfa.managed import (
+            active_session_ids,
+            delete_active_sessions,
+            delete_session,
+            register_active_session,
+        )
+
+        started = threading.Event()
+        release = threading.Event()
+
+        def request(method, path, body):
+            if method == "DELETE":
+                started.set()
+                release.wait(5)
+                raise RuntimeError("network down")
+            raise AssertionError((method, path))
+
+        register_active_session("sess_busy", request)
+        holder: dict = {}
+
+        def run() -> None:
+            holder["status"] = delete_session(request, "sess_busy")
+
+        worker = threading.Thread(target=run, daemon=True)
+        worker.start()
+        try:
+            self.assertTrue(started.wait(2))
+            self.assertIn("sess_busy", active_session_ids())
+            began = time.monotonic()
+            with self.assertLogs("fpfa.managed", level="ERROR") as captured:
+                statuses = delete_active_sessions(deadline=0.3)
+                self.assertLess(time.monotonic() - began, 1.0)
+                release.set()
+                worker.join(2)
+            self.assertIn("sess_busy", active_session_ids())
+            self.assertTrue(statuses)
+            self.assertTrue(all(not item.get("ok") for item in statuses))
+            self.assertFalse(any(item.get("skipped") for item in statuses))
+            self.assertTrue(any(item.get("pending") for item in statuses))
+            logged = "\n".join(captured.output)
+            self.assertIn("still in progress", logged)
+            self.assertIn("sess_busy", logged)
+            self.assertIn("network down", logged)
+        finally:
+            release.set()
+            worker.join(2)
+        self.assertFalse(holder["status"]["ok"])
+        self.assertIn("network down", holder["status"]["error"])
+        self.assertIn("sess_busy", active_session_ids())
+
+    def test_shutdown_observes_an_inflight_delete_that_succeeds(self):
+        import threading
+        import time
+
+        from fpfa.managed import active_session_ids, delete_active_sessions, delete_session, register_active_session
+
+        started = threading.Event()
+        release = threading.Event()
+        calls = []
+
+        def request(method, path, body):
+            if method == "DELETE":
+                calls.append(path)
+                started.set()
+                release.wait(5)
+                return {}
+            raise AssertionError((method, path))
+
+        register_active_session("sess_done", request)
+        worker = threading.Thread(target=lambda: delete_session(request, "sess_done"), daemon=True)
+        worker.start()
+        self.assertTrue(started.wait(2))
+        threading.Thread(target=lambda: (time.sleep(0.1), release.set()), daemon=True).start()
+        statuses = delete_active_sessions(deadline=2.0)
+        worker.join(2)
+        self.assertEqual(calls, ["/v1/sessions/sess_done"])
+        self.assertTrue(any(item.get("ok") for item in statuses))
+        self.assertFalse(any(item.get("skipped") for item in statuses))
+        self.assertNotIn("sess_done", active_session_ids())
+
+    def test_close_bounds_a_slow_session_delete(self):
+        import threading
+        import time
+
+        from fpfa.jobs import JobInbox
+        from fpfa.managed import active_session_ids, register_active_session
+
+        started = threading.Event()
+        release = threading.Event()
+
+        def request(method, path, body):
+            if method == "DELETE":
+                started.set()
+                release.wait(30)
+                return {}
+            raise AssertionError((method, path))
+
+        register_active_session("sess_slow", request)
+        inbox = JobInbox(worker_count=1)
+        try:
+            began = time.monotonic()
+            with self.assertLogs("fpfa.managed", level="ERROR") as captured:
+                inbox.close()
+            elapsed = time.monotonic() - began
+            self.assertLess(elapsed, 2.5)
+            self.assertGreater(elapsed, 0.4)
+            self.assertTrue(started.wait(1))
+            self.assertIn("sess_slow", active_session_ids())
+            self.assertTrue(any("still in progress" in line and "sess_slow" in line for line in captured.output))
+        finally:
+            release.set()
+            deadline = time.time() + 2
+            while time.time() < deadline and "sess_slow" in active_session_ids():
+                time.sleep(0.01)
 
     def test_process_exit_deletes_an_in_flight_hosted_session(self):
         import subprocess

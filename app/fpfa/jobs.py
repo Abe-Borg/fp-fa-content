@@ -29,6 +29,9 @@ _KEY_RE = re.compile(r"sk-ant-[A-Za-z0-9_\-]+")
 _log = logging.getLogger("fpfa.jobs")
 _hooks_lock = threading.Lock()
 _close_hooks: list[Callable[[], None]] = []
+# Backstop so a hook cannot hold the window thread on a hosted HTTP call.
+# The hosted sweep uses a shorter budget and should finish inside this join.
+CLOSE_HOOK_DEADLINE = 1.25
 
 
 def register_inbox_close_hook(hook: Callable[[], None]) -> None:
@@ -43,13 +46,33 @@ def register_inbox_close_hook(hook: Callable[[], None]) -> None:
 
 
 def _run_close_hooks() -> None:
+    """Run close hooks off the caller thread and wait at most CLOSE_HOOK_DEADLINE.
+
+    The window calls close() on the Tk thread. A hosted DELETE uses a long
+    HTTP timeout, so the hook runs on a daemon thread. The join is the bound.
+    A hook still running when the join ends stays tracked by the hosted
+    client for process exit; it is not treated as finished.
+    """
     with _hooks_lock:
         hooks = list(_close_hooks)
-    for hook in hooks:
-        try:
-            hook()
-        except Exception:
-            _log.exception("inbox close hook failed")
+    if not hooks:
+        return
+
+    def run() -> None:
+        for hook in hooks:
+            try:
+                hook()
+            except Exception:
+                _log.exception("inbox close hook failed")
+
+    thread = threading.Thread(target=run, name="fpfa-close-hooks", daemon=True)
+    thread.start()
+    thread.join(CLOSE_HOOK_DEADLINE)
+    if thread.is_alive():
+        _log.error(
+            "inbox close hooks still running after %.2fs",
+            CLOSE_HOOK_DEADLINE,
+        )
 
 
 def _scrub(text: str) -> str:
@@ -198,9 +221,11 @@ class JobInbox:
         """Stop taking work, run close hooks, then join workers for about a second.
 
         Workers are daemons. The join does not cancel a job that is already
-        running. Close hooks run first so a hosted session still in its poll
-        is deleted before this returns. Process exit repeats that delete for
-        any session the hook did not finish.
+        running. Close hooks run on a side thread and are joined for
+        CLOSE_HOOK_DEADLINE, so a slow hosted DELETE cannot hold this caller
+        for the HTTP timeout. Process exit repeats that delete for any
+        session the hook did not finish, including one whose DELETE is still
+        on the network.
         """
         with self._lock:
             if self._closed:

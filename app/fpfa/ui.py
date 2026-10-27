@@ -321,6 +321,7 @@ class App:
         jobs = getattr(self, "jobs", None)
         if jobs is not None:
             # close() deletes a hosted session that is still polling.
+            # The delete runs off this thread and is joined for a short bound.
             jobs.close()
 
     def _on_save_key(self, event=None):
