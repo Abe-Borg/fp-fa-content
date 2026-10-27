@@ -9,7 +9,7 @@ Choose the assembly by purpose. A fire wall (§706) is only for the separate-bui
 Opening correspondence, once the wall rating is chosen:
 
 - A 2-hour fire barrier takes a 1½-hour door. A blanket ¾-hour door does not meet IBC §716 for that wall. The code exceeds a carrier habit of ¾-hour doors on this parameter.
-- A 1-hour fire barrier takes a ¾-hour door.
+- Other 1-hour fire barriers take a ¾-hour door. A 1-hour shaft or exit enclosure takes a 1-hour (60-minute) door (IBC Table 716.1(2)).
 - A corridor or smoke-barrier door is a 20-minute smoke-and-draft door, a separate case.
 - A duct in a fire barrier takes a listed fire damper: 1½ hour when the assembly is under 3 hours, and 3 hours when the assembly is 3 hours or more. Damper type and the static rating fence are `dampers.md`.
 - Through-penetrations are a listed system to ASTM E814 or UL 1479 (`firestops.md`). Joints are ASTM E1966 or UL 2079.
