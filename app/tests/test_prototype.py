@@ -899,7 +899,7 @@ class KeyAndSkillTests(unittest.TestCase):
             if path.name.lower() != "readme.md"
         )
         self.assertEqual(sorted(corpus_indexed), corpus_disk)
-        self.assertEqual(len(corpus_disk), 19)
+        self.assertEqual(len(corpus_disk), 72)
         self.assertIn("scope-lock.md", corpus_disk)
 
         spec_indexed = re.findall(
