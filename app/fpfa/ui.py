@@ -1,8 +1,8 @@
 """Desktop shell. The chat thread is the main pane. The zone form is optional.
 
-Long zone runs and chat turns are jobs on the inbox. Workers run them so the
-composer stays usable. A result is labeled with its job and stored on the
-project that started it.
+Long zone runs, chat turns, and heavy jobs are on the inbox. Workers run them
+so the composer stays usable. A result is labeled with its job and stored on
+the project that started it. Only /heavy uses the hosted runtime.
 
 Run from the app directory: python -m fpfa
 """
@@ -24,8 +24,9 @@ from fpfa import sample_data
 from fpfa.bess import bess_chat_summary, bess_govern_note, run_bess_plan
 from fpfa.calc_tools import ToolSession
 from fpfa.claude_client import MODEL_ID, AnthropicMessages, run_tool_loop, safe_error
-from fpfa.everyday import run_everyday
+from fpfa.everyday import assemble_system, run_everyday
 from fpfa.jobs import JobInbox, label_result
+from fpfa.managed import anthropic_request, run_heavy_job
 from fpfa.keystore import clear_api_key, key_status, key_storage_help, load_api_key, save_api_key
 from fpfa.modes_loader import DEFAULT_MODE, MODE_SLUGS, list_modes, normalize_mode
 from fpfa.paths import content_root, read_config, write_config
@@ -106,9 +107,11 @@ THREAD_HINT = (
     "The Mode menu points at modes/<slug>/MODE.md "
     "(brainstorm, calculator, synthesis, mixed). "
     "Calculated, ASSUMED, and use best judgment stay three different labels.\n"
-    "The inbox beside Projects lists zone runs and chat turns. "
+    "The inbox beside Projects lists zone runs, chat turns, and heavy jobs. "
     "A long job runs on a worker, so this composer stays usable. "
-    "A result is labeled with the job it belongs to and is saved on that project."
+    "A result is labeled with the job it belongs to and is saved on that project.\n"
+    "/heavy is the only path that uses the hosted runtime. "
+    "Its reply is written back into this thread."
 )
 
 
@@ -135,6 +138,7 @@ def slash_help_text() -> str:
         "/sample-di — load the sample data-hall double-interlock zone and run the tool plan\n"
         "/sample-bess — load the sample Li-ion BESS room and run the explosion-control starter\n"
         "/run — run the DI zone from the optional form\n"
+        "/heavy task — hosted runtime for that heavy job; the reply comes back into this thread\n"
         "/new Job name — open a job\n"
         "/help — show these commands\n"
         "Ctrl+S saves the open job. Closing the window saves it too.\n"
@@ -148,9 +152,11 @@ def slash_help_text() -> str:
         "That label is not ASSUMED and it is not a calculated figure.\n"
         "A typed question uses the everyday path. Specialist roles, modes, and skills are files "
         "in the content pack, and numbers come from the calc tools.\n"
-        "The inbox beside Projects lists zone runs and chat turns. "
+        "The inbox beside Projects lists zone runs, chat turns, and heavy jobs. "
         "A long job runs on a worker. The composer stays usable. "
-        "A finished result is labeled with the job it belongs to and is saved on that project."
+        "A finished result is labeled with the job it belongs to and is saved on that project.\n"
+        "/heavy is the only hosted path. A typed question, /sample-di, /sample-bess, "
+        "and /run do not use it."
     )
 
 
@@ -237,6 +243,8 @@ class App:
         self.jobs: JobInbox | None = None
         self._build()
         self.jobs = JobInbox(worker_count=2, on_change=self._on_jobs_changed)
+        # Agent and cloud environment ids for later /heavy calls. Not a session.
+        self._managed_resources: dict = {}
         try:
             self._pristine_basis = self.collect_basis()
             self._pristine_di = self.collect_di()
@@ -359,7 +367,7 @@ class App:
         self.inbox_list.pack(fill="x", pady=(4, 0))
         ttk.Label(
             left,
-            text="Workers run long jobs. A result stays on the job that started it.",
+            text="Workers run long jobs. /heavy is the hosted hatch. A result stays on the job that started it.",
             wraplength=210,
         ).pack(anchor="w", pady=(4, 0))
 
@@ -607,7 +615,7 @@ class App:
         )
         self.mode_box.pack(side="left")
         self._apply_mode(DEFAULT_MODE)
-        ttk.Label(chips, text="/sample-di    /sample-bess    /run    /mode    /help").pack(side="left", padx=8)
+        ttk.Label(chips, text="/sample-di    /sample-bess    /run    /heavy    /mode    /help").pack(side="left", padx=8)
         self.ask_claude = tk.BooleanVar(value=False)
         ttk.Checkbutton(
             chips,
@@ -1019,6 +1027,88 @@ class App:
         self._append_chat("user", raw)
         self.run_zone(announce=True)
 
+    def start_heavy(self, raw: str, task: str) -> None:
+        """Queue one hosted job. The reply is written into this project's thread."""
+        task = (task or "").strip()
+        self._keep_composer_open()
+        if not task:
+            self._local_exchange(raw, "Usage: /heavy describe the heavy job")
+            return
+        self._ensure_project()
+        origin_id = self.project["id"]
+        project_name = self.project.get("name") or "Untitled job"
+        self._append_chat("user", raw)
+        try:
+            self.root.update_idletasks()
+        except tk.TclError:
+            pass
+        key = load_api_key()
+        if not key:
+            self._append_chat(
+                "assistant",
+                "Save an Anthropic API key in Settings before /heavy. "
+                "/sample-di and /sample-bess still run on this machine without a key.",
+            )
+            self._save_form_or_chat(self.project)
+            save_project(self.project)
+            self.status.set(key_status())
+            return
+        try:
+            basis = self.collect_basis()
+            di = self.collect_di()
+            form_note = ""
+        except ValueError as exc:
+            basis = dict(self.project.get("basis") or {})
+            di = copy.deepcopy(self.project.get("di") or {})
+            form_note = (
+                "The optional zone form was not read because a value is not a number. "
+                "This message uses the last saved zone. " + str(exc)
+            )
+        prior = [dict(turn) for turn in self.chat_log[:-1]]
+        mode = self.mode_slug.get()
+        request_text = chat_request_text(
+            prior,
+            basis,
+            di,
+            task,
+            self.project.get("last_run"),
+            mode,
+            self.project.get("bess_run"),
+        )
+        if form_note:
+            request_text = form_note + "\n\n" + request_text
+        resources = self._managed_resources
+
+        def work(job_id: str) -> None:
+            try:
+                pack = content_root()
+                system = assemble_system(pack, mode)
+                out = run_heavy_job(
+                    anthropic_request(key),
+                    system=system,
+                    user_text=request_text,
+                    resources=resources,
+                )
+                reply = (out.get("text") or "").strip() or "(The hosted run returned no text.)"
+            except Exception as exc:
+                reply = safe_error(exc)
+                self.jobs.mark(job_id, "error", reply)
+            self.queue.put(
+                lambda oid=origin_id, answer=reply, jid=job_id: self._finish_heavy(
+                    oid, answer, job_id=jid
+                )
+            )
+
+        job = self.jobs.submit(
+            project_id=origin_id,
+            project_name=project_name,
+            kind="heavy",
+            title=task,
+            work=work,
+        )
+        self._keep_composer_open()
+        self.status.set(f"Heavy job on {MODEL_ID}… {job.heading()}")
+
     def _slash_new(self, raw: str, name: str) -> None:
         name = name.strip()
         if not name:
@@ -1049,6 +1139,8 @@ class App:
             self.start_sample_bess(raw)
         elif command == "run":
             self.start_zone_run(raw)
+        elif command == "heavy":
+            self.start_heavy(raw, argument)
         elif command == "new":
             self._slash_new(raw, argument)
         elif command == "help":
@@ -1785,6 +1877,39 @@ class App:
         job = self._job_record(job_id)
         heading = job.heading() if job is not None else ""
         note = "Chat reply saved on another project."
+        self.status.set(f"{heading}. {note}" if heading else note)
+
+    def _finish_heavy(self, origin_id: str, reply: str, job_id: str | None = None) -> None:
+        """Post a heavy-job reply into the thread on the project that started it."""
+        self._keep_composer_open()
+        origin_id = self._destination_id(origin_id, job_id)
+        reply = self._with_job_label(job_id, reply)
+        if self.project is not None and self.project.get("id") == origin_id:
+            self.chat_log.append(self._assistant_turn(reply, job_id))
+            self._render_chat()
+            form_error = self._save_form_or_chat(self.project)
+            save_project(self.project)
+            if self.project.get("last_run"):
+                note = (
+                    f"Heavy job is back in this thread. "
+                    f"Tables and Section {DRAFT_SECTION} stay on the tool plan."
+                )
+            else:
+                note = "Heavy job is back in this thread."
+            self.status.set(form_error or self._with_job_label(job_id, note))
+            return
+        try:
+            project = load_project(origin_id)
+        except (OSError, json.JSONDecodeError):
+            self.status.set("The heavy-job reply could not be saved.")
+            return
+        chat = list(project.get("chat") or [])
+        chat.append(self._assistant_turn(reply, job_id))
+        project["chat"] = chat
+        save_project(project)
+        job = self._job_record(job_id)
+        heading = job.heading() if job is not None else ""
+        note = "Heavy job saved on the project that started it."
         self.status.set(f"{heading}. {note}" if heading else note)
 
     def open_settings(self) -> None:
