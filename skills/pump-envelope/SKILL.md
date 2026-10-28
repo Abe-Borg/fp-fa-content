@@ -664,6 +664,7 @@ Shop codebook **by title** (not a required filesystem path). Prefer these sectio
 5. **Honesty on the nameplate.** The envelope **screens** a candidate (`qr`, `pr` as **inputs**). It does not mint `FP-1 = Q @ P`. Density `qd` is a **minimum**. Open gating RFIs → `provisional [RFI-…]`. A prior synthetic 100 psi freeze and a prior 750 gpm at 40 psi freeze are the anti-patterns.
 6. **Company fence + upstream order.** Wet/dry/DI only. Density → hydrant → pump. Consume; do not rebuild.
 7. **Driver block = pins, most-stringent per row.** Fuel tank: larger of enforced NFPA 20 edition (12 h + TIA / 1 gal/hp) and FM 8 h. OCPD sum by the AHJ NEC year. Jockey window inside the component rating. Packing by default. VT on static lift. No invented kernel op; no frozen SKU.
+8. **Duty, not a catalog number (§19).** The teaching rated duty to keep is **1000@40** (1,000 gpm at 40 psi). Screen it. Do not freeze a maker or a model.
 
 ---
 
@@ -692,3 +693,13 @@ Shop codebook **by title** (not a required filesystem path). Prefer these sectio
 - **AXA XL PRC.14.2.1.1** *Centrifugal Fire Pump Acceptance Tests* **2020-01-31**, 9 pp: acceptance (200%/20 psi sibling). This Skill still **does not freeze a nameplate**. Consume the PRC for the acceptance-test overlay when AXA controls; do not treat it as a shop curve.
 - **DS 5-20** *Electrical Testing* IR Oct 2025 is the 2-81 **ATS test** target — ITM Skill, not envelope sizing.
 - **DS 5-23** is facility gensets, not the listed fire-pump envelope.
+
+---
+
+## 19. Rated duty, not a catalog number — 1000@40
+
+Write the rated duty and the NFPA 20-2025 envelope (§4.8.1; churn §4.7.7.1). The contractor selects the listed unit. This skill does not freeze a maker or a model, and it does not write `FP-1 = Q @ P` while a gating input is still open.
+
+Teaching duty to **keep**: **1000@40**, meaning **1,000 gpm @ 40 psi**. On the capped design curve from `hydrant-supply-curve`, municipal supply plus that duty is 96.67 psi against 47.92 psi, margin +48.75 psi. Motor horsepower at or above the 40 hp class stays ASSUMED until the listed curve is in hand.
+
+An alternate duty of 1,250 gpm at 40 psi (municipal supply plus pump 100.72 psi, still a pass) is an alternate criteria note only. Do not restamp the basis to it automatically. If the owner elects it, re-check the NFPA 20 feeder rules, NEC 695, and the test header. A third option whose churn margin to 175 psi is only 8.6 psi is the least preferred. Verify with the engineer of record before any of the three leaves the screen.

@@ -73,6 +73,11 @@ note: Sprinkler basis of design stays wet pipe, dry pipe, or double-interlock pr
 12. Sprinklers. Hand density, hose, and water duration to `density-area-dry-increase`. Installed Li-ion ESS is not the ordinary-hazard white-space table. Do not recompute zone gallons or t_total. If the request names a zone total and a t_total, quote them. Those gallons and seconds govern when the narrative disagrees. The double-interlock draft section stays 21 13 19.
 13. A sentence that is designer judgment, and that no tool returned, is use best judgment. Keep that label off calculated figures and off ASSUMED figures.
 14. The narrative is a draft for the engineer of record. Do not claim a stamp.
+15. **70/20 kWh entry gate.** Before treating the room as an ESS under IFC §1207, confirm stored energy per fire area. IFC 2024 TABLE 1207.1.3 and NFPA 855-2026 Table 1.3: lead-acid, including VRLA, **70 kWh**; Li-ion **20 kWh**. Above the threshold, §1207 applies. Show-and-verify `[SYN]`: 1 MW held for 5 minutes is 83 kWh, which trips §1207 even on VRLA. Kilowatt-hours per fire area stay ASSUMED until the electrical schedule is in hand. Amendments beyond those two thresholds: Verify with the engineer of record. Group and sprinkler-trigger classification stay on `occupancy-hazard-fork`. Do not copy another room's stored energy.
+
+## kWh entry gate
+
+Peer of `occupancy-hazard-fork` §10.5. The **70/20 kWh** fork is lead-acid/VRLA **70 kWh** and Li-ion **20 kWh** per fire area (IFC 2024 TABLE 1207.1.3 and NFPA 855-2026 Table 1.3). A result under the threshold does not by itself elect a sprinkler system. Wet pipe, dry pipe, or double-interlock preaction remains the only sprinkler basis this starter will name. The in-rack FM line at 20 kWh per rack is `power-isolation-disconnect-control`, not this table.
 
 ## Out of scope
 

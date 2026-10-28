@@ -233,6 +233,18 @@ ELSE test six 645.4 conditions (2017 numbering; [CODE NEC 2020/2023 §645.4, pul
 
 **Trap:** sources that state **645.27** selective coordination **unconditionally** are wrong — 645 is elective **and** critical operations data system is a defined subset. First question when someone cites 645.27: **are we electing Article 645 at all?**
 
+**NFPA 70-2026 gate and owner election.** The Article 645 gate in NFPA 70-2026 is **§645.5** (it was §645.4 in 2023). Fix an older cite before it is copied onto a 2026 job. The six conditions in the fork above are the same conditions; only the section number moved.
+
+Owner election stays ASSUMED until the owner signs it. Verify with the engineer of record.
+
+- **A.** Do not apply Article 645. General NEC applies. No ITE remote disconnect.
+- **B.** Apply Article 645 with §645.10(A): a remote disconnect at the principal exits.
+- **C.** Apply Article 645 under §645.10(B) for a critical operations data system (staff qualified and available at all times, smoke detection, and an approved suppression system). **Recommend C** for a double-interlock hall that already has very early warning fire detection.
+
+Under A, B, or C: do not tie automatic double-interlock release to an EPO or a shunt trip.
+
+The per-fire-area chemistry gate (**70/20 kWh**: lead-acid 70 kWh, Li-ion 20 kWh) is owned by `occupancy-hazard-fork` and `ess-isolation-venting-and-duration`. The ≤20 kWh/rack line in this skill remains the FM DS 5-32 distributed-BBU handoff.
+
 **Electrical / UPS / switchgear rooms:** not ITE rooms by adjacency. Their disconnect rules come from the articles/sheets governing that equipment (e.g. DS 5-19 for MV switchgear). Status the 645 election row (`grounded` / `provisional` / `unresolved` / `[V]` ask).
 
 ### 3.3 NFPA 75 floor (often regardless of 645 election)
@@ -408,6 +420,7 @@ Do **not** emit: full water-path C&E rewrite, ASD port math, density×area, ESS 
 8. Show-and-verify kWh gate and timing inequalities; no fake code ≤30 s fill; ≤10 min ≠ wet clock.
 9. Honesty. Initiation level unpinned — **ask**. >20 kWh → ESS hand-off, don't bluff. Reciprocal: means here / witness at commissioning IST.
 10. **NO PLACEHOLDER.** Caller-path-only. Do not invent hall numbers, EPO counts, AFF heights, or Ah/V. Generic — specify by **function + listing**, never by a default panel SKU.
+11. On a NFPA 70-2026 job, cite the Article 645 gate at **§645.5**, not §645.4. Record owner option A, B, or C. **Recommend C** for double-interlock plus very early warning. Do not tie automatic double-interlock release to an EPO or a shunt trip.
 
 ---
 
