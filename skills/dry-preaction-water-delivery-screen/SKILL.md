@@ -362,7 +362,7 @@ Do **not** emit occupancy schedule, density×area `calcs`, pump nameplate, El/El
 
 Missing inputs stay ASSUMED and flagged. The scope lock above still stops.
 
-1. Assignment packet missing → not a Stop (packet optional); proceed and flag `ASSUMED`. 2. STS election missing / `unresolved`, or system type missing / still **wet** with no dry clock (N/A vs Stop as applicable). 3. SI/NI (or other prohibited preaction) presented as **BOD** → `RFI-variance`. 4. Foam BOD. 5. Mist design request (`PRACTICE REFUSED` / `RFI-variance`). 6. Dual-carrier controlling delivery-time / DI-penalty matrix rows missing when required → `unresolved`. 7. Largest volume (gal) unpinned. 8. Unpinned carrier. 9. Unpinned AHJ NFPA 13 edition. 10. Caller asks to **invent a 30 s (or 60 s calculated) proof** without **naming** listed calc software (or a measured water test) — or to mark such a claim `grounded_pruner` / / / ARCHIVE / root PDF queue.
+1. Assignment packet missing → not a Stop (packet optional); proceed and flag `ASSUMED`. 2. STS election missing / `unresolved`, or system type missing / still **wet** with no dry clock (N/A vs Stop as applicable). 3. SI/NI (or other prohibited preaction) presented as **BOD** → `RFI-variance`. 4. Foam BOD. 5. Mist design request (`PRACTICE REFUSED` / `RFI-variance`). 6. Dual-carrier controlling delivery-time / DI-penalty matrix rows missing when required → `unresolved`. 7. Largest volume (gal) unpinned. 8. Unpinned carrier. 9. Unpinned AHJ NFPA 13 edition. 10. Caller asks to **invent a 30 s (or 60 s calculated) proof** without **naming** listed calc software (or a measured water test), or to mark that unproved claim grounded.
 
 QOD = `none` is **not** a Stop — it is a lever **not taken**; volume-cut / extra risers / listed-program proof remain.
 
@@ -430,4 +430,22 @@ QOD = `none` is **not** a Stop — it is a lever **not taken**; volume-cut / ext
 
 ## Check before you finish
 
-1. Hard-scope gate: wet|dry|DI only; SI/NI-as-BOD → Stop `RFI-variance`; foam/mist Stop; wet/no dry clock → N/A. Emit status on gate. 2. Check packet (optional) + STS + matrix delivery/DI-penalty rows; missing → `ASSUMED` (flagged), not a Stop. 3. Confirm other inputs; Stop tests. 4. Pin editions; name the 13-2025 / ANRACI / NFPA 25 holes. 5. Union five parameters separately; status on each. 6. Print 60 s vs 30 s fork with **section AND edition** + **design-pressure endpoint**; do not flatten NFPA to 60 s; SI clock facts = `comparison-only`. 7. Volume gates vs FM overlay (500/750 and the local inspection checklist >750 inspection do not waive 30 s). 8. Elect QOD vs volume-cut vs extra risers; 2/3 sanity; SprinkFDT Pass ≠ FM 30 s. 9. QOD × air/N₂ from **opened** sheets + thin corpus pointers; catalog not exhaustive. 10. Proof method: **named listed software or unproved** — never invent / never grounded 30 s without it; status on proof claim. 11. Reciprocal hand-offs: C&E (names) / ITM (criterion) / IST (witness) / N₂ (fill) / El-El (trim). 12. Δ vs 13-2025. 13. Honesty: trip ≠ delivery; no PLACEHOLDER; cite the worked packages (§3.1) as method only — do not copy their gallons and do not invent a listed-program closeout. 14. Write **only** to the caller-named path.
+1. Hard-scope gate: wet|dry|DI only; SI/NI-as-BOD → Stop `RFI-variance`; foam/mist Stop; wet/no dry clock → N/A. Emit status on gate. 2. Check packet (optional) + STS + matrix delivery/DI-penalty rows; missing → `ASSUMED` (flagged), not a Stop. 3. Confirm other inputs; Stop tests. 4. Pin editions; name the 13-2025 / ANRACI / NFPA 25 holes. 5. Union five parameters separately; status on each. 6. Print 60 s vs 30 s fork with **section AND edition** + **design-pressure endpoint**; do not flatten NFPA to 60 s; SI clock facts = `comparison-only`. 7. Volume gates vs FM overlay (500/750 and the local inspection checklist >750 inspection do not waive 30 s). 8. Elect QOD vs volume-cut vs extra risers; 2/3 sanity; SprinkFDT Pass ≠ FM 30 s. 9. QOD × air/N₂ from **opened** sheets + thin corpus pointers; catalog not exhaustive. 10. Proof method: **named listed software or unproved** — never invent / never grounded 30 s without it; status on proof claim. 11. Reciprocal hand-offs: C&E (names) / ITM (criterion) / IST (witness) / N₂ (fill) / El-El (trim). 12. Δ vs 13-2025. 13. Honesty: trip ≠ delivery; no PLACEHOLDER; cite the worked packages (§3.1) as method only — do not copy their gallons and do not invent a listed-program closeout. 14. Count the valve stub in system volume (§9). An FM margin **<5 s** is a hold-point, not a pass. 15. Write **only** to the caller-named path.
+
+---
+
+## 9. Valve stub and the FM margin hold-point
+
+Count the riser and valve stub downstream of the double-interlock valve in system volume V. A zone total that stops at the branch main and omits that stub is short.
+
+Worked `[SYN]`: zone 219.12 gal and 28.53 s, plus an 11 ft 6 in. Schedule 10 valve stub at 18.14 gal, gives **237.25 gal / 29.98 s** against the FM DS 5-32 30 s gate (margin +0.02 s). The same volume at a fill flow of 650 gpm is 32.90 s and fails.
+
+NFPA 13-2025 §8.3.2.3.1.1 (double-interlock at or under 500 gal may be exempt from the code delivery clock) does not waive the FM 30 s gate.
+
+**Rule.** FM margin **<5 s**, or volume above 0.9 times the maximum volume that still meets 30 s, is a mandatory **hold-point** before issue:
+
+1. A listed delivery program run on the design curve, including the pump where one is in the supply, or
+2. A witnessed trip test at or under 30 s.
+3. A manifold test under NFPA 13-2025 §8.2.4.4.1 through §8.2.4.4.3 is an acceptable proof path.
+
+If the screen fails, the levers are: move the valve closer to the remote heads, shorten the branch run, split the zone, or add an accelerator. Verify with the engineer of record until that evidence is in hand. This screen still does not issue a pass by itself.

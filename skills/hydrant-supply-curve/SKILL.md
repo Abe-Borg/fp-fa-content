@@ -610,6 +610,7 @@ Shop codebook **by title**.
 6. **Company fence.** Wet / dry / DI only for controlling demand. SI/NI = `comparison-only`. Foam prohibited. Mist `PRACTICE REFUSED`. Handshake — do not elect families here.
 7. **Consume upstream; don’t rebuild.** Density-area + matrix pins are inputs. Status register complete every run.
 8. **Order:** density → hydrant → pump. Never skip the hydrant verdict to freeze a nameplate.
+9. **Cap-and-slope versus actual suction (§18).** When an adopted IFC-style §903.3.5.5 caps static above 90 psi, the sprinkler design curve is **80/45** at the test flow. Pump need, pressure-reducing valves, hangers, and suction stay on the actual test. Do not restate suction against the 45 psi design residual.
 
 ---
 
@@ -631,3 +632,14 @@ Shop codebook **by title**.
 | Foam / mist design | prohibited / `PRACTICE REFUSED` |
 
 ---
+
+## 18. Local cap-and-slope (IFC-style §903.3.5.5) — 80/45 versus actual suction
+
+Teach both sentences. They feed different checks. This is a local-amendment pattern on the IFC sprinkler-supply section. Do not attach it to a city or a project name. Where the adopted instrument does not use this pattern, do not apply it.
+
+1. **Sprinkler design curve.** Actual static above 90 psi: set design static to 80 psi and keep the original test slope. `residual_design = 80 − (Ps_actual − Pr_actual)` at the test flow. Worked `[SYN]`: test 95/60 at 1,500 gpm becomes **80/45** at 1,500 gpm. Shifting static to 80 psi and keeping the 60 psi residual (80/60) drops the design point by about 8.64 psi and is unconservative. Actual static below 90 psi: use the actual curve, with demand including hose, plus a 10 psi safety factor. Static of exactly 90.0 psi is not addressed by the two sentences: use the safety-factor branch and flag the AHJ. Verify with the engineer of record.
+2. **Actual residual, including actual suction.** Actual flow-test pressures determine whether a fire pump, a pressure-reducing valve, or added hangers are required. Pump-need, pressure-reducing-valve, hanger, and suction rows use the **actual** curve. Do not restate suction against the 45 psi design residual of the **80/45** curve.
+   - Show-and-verify `[SYN]`: suction at 1,500 gpm = 60 − 2.19 = **57.81 psi**. Suction at 1,113.28 gpm = actual 74.84 psi (hydrant exponent 1.85) minus 1.26 psi Hazen-Williams (8 in. Schedule 40, 80 ft, C = 100) = **73.58 psi**, which is at least 20 psi, so the suction check is ACCEPT.
+3. Churn, overpressure, and component ratings use actual static, and maximum seasonal static, never the 80 psi cap (NFPA 20-2025 §4.7.7.1).
+4. Worked demand check `[SYN]`: design curve at 1,113.28 gpm = 59.84 psi. Municipal supply plus a **1000@40** pump envelope (36.83 psi net) = 96.67 psi against a 47.92 psi demand, margin +48.75 psi, PASS. The rated duty itself is owned by `pump-envelope`. This skill does not freeze a maker or a model.
+5. Demand times duration (1,113.28 gpm × 60 min = 66,797 gal, FM DS 5-32 §2.4.1.6) is a duration statement, not a local on-site storage clause. Verify with the engineer of record. List numbering under §903.3.5.5 is `[V]` until a plain-text reading of the adopted instrument confirms it.

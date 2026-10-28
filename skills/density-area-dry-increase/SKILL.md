@@ -604,3 +604,16 @@ Shop codebook **by title** (not a required filesystem path). Prefer these sectio
 - Delta printed: FM 2,500→3,500 **≈+40%** vs NFPA **+30%** cited by edition (2025 §19.2.3.2.6 / 2022 §19.2.3.2.5 / 2019 §19.3.3.2.5). Wet: both bumps **avoided**.
 - Result labeled **density-method minimum**; handoff **`hydrant-supply-curve` then `pump-envelope`**.
 - Status register complete: grounded / provisional / unresolved / comparison-only / handoff / RFI-variance + `[SYN]` / `[V]`.
+- Support ordinary-hazard wet duration recorded per §17. Supervised and monitored: **60 min**. FM DS 3-26 §2.3.1.13 is **60 min for all HC**. **E3=E1**. The 90 min branch only when the AHJ or the owner requires the unsupervised case.
+
+---
+
+## 17. Support-space duration — E3=E1, 60 min for all HC
+
+Support ordinary-hazard group 2, wet:
+
+- **E1.** **60 min** under NFPA 13-2025 §19.2.3.1.3 when the waterflow and supervisory devices are supervised and monitored at a constantly attended location. Show-and-verify `[SYN]`: 550 gpm × 60 min = **33,000 gal**.
+- **E3.** Closed. **E3=E1**. FM DS 3-26 (April 2019, interim revision April 2025) §2.3.1.13 is **60 min for all HC**. Hose is **250 gpm** for HC-1 and HC-2 (§2.3.1.12). Delta versus NFPA 13-2025 on this duration: none.
+- **E2.** 90 min and 49,500 gal only when the AHJ or the owner requires the unsupervised branch of §19.2.3.1.3.
+
+A hall demand times its own duration (teaching figure 66,797 gal) still governs supply and storage when it is larger. Do not shorten the hall to the support-space volume. Density, area, and the dry-area increase in the sections above are unchanged. This section does not elect foam, a clean agent, or single-interlock.

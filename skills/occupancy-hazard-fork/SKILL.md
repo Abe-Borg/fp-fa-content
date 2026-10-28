@@ -255,7 +255,7 @@ Use IBC-2024 §302.1:
 Defensible data-center candidates may include:
 
 - B — Business
-- F-1 — /Industrial, moderate hazard
+- F-1 — moderate-hazard industrial occupancy
 - S-1 — Storage, moderate hazard
 - H — High Hazard, only where a supported MAQ/control-area analysis requires it
 
@@ -278,13 +278,15 @@ Use this directional screen:
 | Fact pattern | Candidate effect |
 |---|---|
 | Human-centered office use, staff density, white space ancillary | Supports B |
-| Electronic data processing or unmanned server-hall resemblance | B remains credible |
+| IBC 2024 §304.1 lists **Electronic data entry** (verbatim). "Data processing" and "data center" are paraphrases, not that list item. Unmanned server hall, no bulk storage | Teaching default **B** |
 | Continuously operating process hall, integrated operational power/ESS | Elevates F-1 consideration |
 | Dedicated-use ESS building | F-1 under IFC-2024 §1207.7.1 |
 | Static, rack-dense, very-low-staff, shell/dark-hall use | Supports S-1 |
 | MAQ or hazardous-material exceedance | May require Group H/control-area analysis |
 
 Do not make B, F-1, or S-1 a universal data-center default.
+
+**Electronic data entry.** IBC 2024 §304.1 Group B includes the verbatim list item **Electronic data entry**. Do not cite "data processing" or "data center" as if those words were the code text. IT-only halls, with ESS and UPS in separate rated rooms and with no bulk storage, take **B** as the teaching default. Bulk staging leans **S-1**. Integral in-row Li-ion or ESS leans **F-1**, because §306.2 lists ESS and lithium-ion batteries. The lean is not an AHJ letter. Verify with the engineer of record.
 
 Integrated ESS in a larger building may affect the §302.1 rationale and impose an IFC Ch. 12 overlay, but it is not automatically a Group F-1 assignment.
 
@@ -311,9 +313,9 @@ For an IBC-2024/IFC-2024 basis, the principal triggers are:
 
 | Candidate or condition | Trigger |
 |---|---|
-| F-1 | `IBC/IFC-2024 §903.2.4`: single fire area, story count, or aggregate area thresholds; special manufacturing triggers where applicable |
-| S-1 | `IBC/IFC-2024 §903.2.9`: single fire area, story count, or aggregate area thresholds; special storage triggers where applicable |
-| B | No general business-area trigger; `§903.2.2` concerns ambulatory care, not a general data-center threshold |
+| F-1 | `IBC/IFC-2024 §903.2.4`: fire area above 12,000 ft², plus the story-count, aggregate, and special manufacturing triggers in the adopted text |
+| S-1 | `IBC/IFC-2024 §903.2.9`: fire area above 12,000 ft², plus the story-count, aggregate, and special storage triggers in the adopted text |
+| B | National IFC 2024 §903.2.2: Group B has no area trigger. `§903.2.2` concerns ambulatory care, not a general data-hall threshold |
 | Windowless story | `IBC/IFC-2024 §903.2.11.1` |
 | High-rise | `IBC/IFC-2024 §403.3` |
 | Underground | `IBC/IFC-2024 §405.3` |
@@ -321,6 +323,8 @@ For an IBC-2024/IFC-2024 basis, the principal triggers are:
 | Battery R&D/testing | `IBC/IFC-2024 §903.2.2.2` where applicable |
 
 Do not use the erroneous Group B 5,000 ft² or occupant-load-500 shortcuts.
+
+**All-buildings §903.2 amendment.** Where the adopted IBC/IFC amends §903.2 so that new buildings are sprinklered throughout, B versus S-1 or F-1 does **not** change the hall sprinkler trigger. The group still drives construction type and allowable area, separations (IBC Table 508.4), egress travel (IBC Table 1017.2: Group B 300 ft versus 200 ft), and water duration only when S-1 storage criteria apply. Cite the adopted instrument by section. Do not name a city or a project. Live classification stays ASSUMED until an AHJ letter is in hand. Verify with the engineer of record.
 
 **State substitutions to check before applying the §903.2 table** (KB ; cite the state instrument):
 - **Georgia** (Rule 120-3-3 redline, Nov 2025, effective date not printed): IFC 903.2 is substituted — the new-building sprinkler requirement comes from **NFPA 101 (2024)** occupancy chapters; the IBC still governs sprinklers tied to construction type / area-height increases. Georgia keeps a 903.2.1 **telecommunications-building** omission (supervised fire alarm + 2-h barriers) — it does not say data center; **do not take it as a DC omission** (shop: halls sprinklered wet/dry/DI; FM DS 5-32 would not follow it).
@@ -617,6 +621,14 @@ NFPA 75-2024 does not supply the Li-ion protection basis. Apply:
 Do not perform ESS sprinkler, explosion-control, ventilation, duration, or thermal-runaway design here.
 
 Use `ess-isolation-venting-and-duration` and the applicable ESS Skills.
+
+### 10.5 UPS / ESS kWh fork — 70/20 kWh
+
+Confirm whether IFC §1207 applies before the ESS handoff. IFC 2024 TABLE 1207.1.3 and NFPA 855-2026 Table 1.3: lead-acid, including VRLA, **70 kWh**; Li-ion **20 kWh**; both **per fire area**. Above the threshold, §1207 applies. The two numbers together are the **70/20 kWh** fork.
+
+Show-and-verify `[SYN]`: 1 MW × 5 min = 83 kWh, which is above 70 kWh, so §1207 trips even on VRLA. "At or under 70 kWh VRLA" is a synthetic default only. Actual UPS kWh per fire area stays ASSUMED until the electrical schedule is in hand. Schedule it before the hazard criteria are closed. Amendments beyond those two thresholds (an added Group R-3 or R-4 3 kWh row, or an exhaust-standby change) have no settled practice here. Verify with the engineer of record. Hand the ESS space to `ess-isolation-venting-and-duration`.
+
+The ≤20 kWh per rack line in `power-isolation-disconnect-control` is the FM DS 5-32 distributed-BBU handoff. It is not a substitute for this per-fire-area table.
 
 ---
 
@@ -1002,7 +1014,7 @@ Do not state a numerical OH1 density, area, or high-ceiling increase as grounded
 - `IBC-2024 §202` — data-center definition and no dedicated Chapter 3 group.
 - `IBC-2024 §302.1` — most-nearly-resembles classification.
 - `IBC-2024 §304` — Business.
-- `IBC-2024 §306` — /Industrial.
+- `IBC-2024 §306` — moderate-hazard industrial occupancy.
 - `IBC-2024 §307` — High Hazard.
 - `IBC-2024 §311` — Storage.
 - `IBC/IFC-2024 §903.2.4` — F-1 sprinkler triggers.
@@ -1081,14 +1093,14 @@ Look up by title:
 2. Confirm inherited edition and jurisdiction status.
 3. Confirm the space list and boundary register.
 4. Apply the IBC §202/§302.1 group fork.
-5. Evaluate every credible §903.2 trigger.
+5. Evaluate every credible §903.2 trigger, including the national Group B (no area trigger) versus S-1/F-1 above 12,000 ft² fork, and any adopted all-buildings amendment of §903.2. Cite **Electronic data entry** from IBC 2024 §304.1 when Group B is the teaching default.
 6. Record NFPA 75 as a parallel floor where adopted/referenced.
 7. Separate occupied, storage, ESS, telecom, switchgear, generator, and transformer routes.
 8. Apply FM Table C-1 and DS 3-26 §2.2.5 where FM governs.
 9. Apply AXA OH or dual-carrier rows without importing FM values.
 10. Run the MMR function/power/SPE gate.
 11. Run the switchgear voltage/oil/cable gate.
-12. Run the ESS state/topology gate and preserve the >20 kWh/rack loop.
+12. Run the ESS state/topology gate, the **70/20 kWh** per-fire-area fork (TABLE 1207.1.3), and the >20 kWh/rack loop.
 13. Hand storage to `storage-staging-sprinkler-design`.
 14. Resolve verified-rated, unrated-open, and unresolved boundaries.
 15. Apply greatest-hazard consequences without calculating density or flow.

@@ -51,6 +51,7 @@ The packet is optional. Fill any gap with a stated `ASSUMED` value (the value us
   - Worked case: SDC D, Cp 0.5655, 6 in. main @ 40 ft Fpw 1,139.37 lb > brace cap 1,060.82 lb FAIL; @ 35 ft OK; 4 in. @ 40 ft 743.97 lb OK. 35 ft is that case's calculated result / Design practice, **not** a code spacing; code max stays 40 ft [CODE NFPA 13-2025 §18.5.5.2.2]. Rerun with the job's Cp, pipe and listed brace capacity.
    - S_DS: ASCE 7-22 is not held. FEMA P-2082-1 is a labeled proxy (Verify with the engineer of record).
    - Refuse "SDS = 2.5" folklore values.
+   - Risk Category can change the seismic design category at the same S_DS. See §5. The teaching pair is **RC II / SDC B**.
 2. **Wp = water-filled** for every system type, including dry and DI. The design case is the tripped system [FM DS 2-8 §2.2.1.2.1, §3.1.7, Table 3.1.5]. Refuse dry-weight value engineering on dry or DI systems.
 3. **Fix the standard detail before sizing members:**
    - θ 60–90° from vertical; the sheet minimum is 30°.
@@ -88,3 +89,10 @@ The packet is optional. Fill any gap with a stated `ASSUMED` value (the value us
 - The post-earthquake water supply goes to `campus-looped-main-sizing` and `hydrant-supply-curve`.
 
 Method sources (synthetic, method only): worked package *seismic FP bracing / fire-following — DS 2-8 hall brace schedule*; outline *wet hall, high seismic, DS 2-8*; KB `90_/seismic-bracing-and-restraint-of-sprinkler-piping`; pull 13-12.
+
+## 5. Risk Category can flip the seismic design category
+
+1. Take S_DS, S_D1, and the seismic design category from the USGS ASCE 7-22 design-maps service for the site latitude and longitude, the geotechnical site class (otherwise site class D, labeled ASSUMED), and the **Risk Category**. Do not invent a city to stand in for the coordinates.
+2. Risk Category can change the seismic design category at the same S_DS. Worked `[SYN]`: S_DS 0.19 and site class D give **RC II / SDC B**, and RC IV gives SDC C.
+3. Seismic design category C or higher, or an AHJ or FM requirement that bracing apply anyway, means the full NFPA 13-2025 Chapter 18: couplings §18.2, separation §18.3, clearance §18.4, sway bracing §18.5 (lateral 40 ft, longitudinal 80 ft, end at or under 40 ft), and restraint §18.6. Cp = 0.754 × S_DS (§18.5.9.3), so 0.754 × 0.19 = **0.143**. If S_DS is missing, Cp = 0.5 (§18.5.9.5).
+4. Teaching pin: **RC II / SDC B** means Chapter 18 is not bound on that worked case. The ASCE 7 nonstructural exemption text is not held in this pack, so that exemption stays `[V]`. Verify with the engineer of record. If the owner elects RC III or RC IV, the same S_DS becomes SDC C, Chapter 18 binds, and Cp is 0.143. FM DS 2-8 still follows the DS 1-2 zone from the FM map. That map reading stays `[V]` until the zone is pinned. Wet, dry, and double-interlock only. Foam, clean agent, and single-interlock stay out of scope.

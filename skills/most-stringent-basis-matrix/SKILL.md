@@ -1321,3 +1321,16 @@ Use the shop codebook by title. Every requirement citation must include section 
 22. Preserve `[SYN]`, `[V]`, `[U]`, and conflict notes beside Status-register tokens.
 23. Add the dual-carrier collapse note where applicable.
 24. Write only to the caller-named path, or return the matrix and stop if no path was named.
+25. On the hose-and-duration row for a support ordinary-hazard wet space, record **E3=E1**: **60 min for all HC** (FM DS 3-26 §2.3.1.13) and NFPA 13-2025 §19.2.3.1.3 when supervised and monitored. The 90 min branch is only the unsupervised case.
+
+---
+
+## Support-space duration — E3=E1, 60 min for all HC
+
+Put this on the hose-and-duration row. Do not run the gallons here. Hand the arithmetic to `density-area-dry-increase`.
+
+- **E1.** Support ordinary-hazard group 2, wet: **60 min** under NFPA 13-2025 §19.2.3.1.3 when waterflow and supervisory devices are supervised and monitored at a constantly attended location. Show-and-verify `[SYN]`: 550 gpm × 60 min = **33,000 gal**.
+- **E3.** Closed. **E3=E1**. FM DS 3-26 (April 2019, interim revision April 2025) §2.3.1.13 is **60 min for all HC**. Hose is **250 gpm** for HC-1 and HC-2 (§2.3.1.12). Delta versus NFPA 13-2025 on duration: none.
+- **E2.** 90 min and 49,500 gal only when the AHJ or the owner requires the unsupervised branch.
+
+A larger hall demand times duration (teaching figure 66,797 gal) still governs supply and storage. Code is the floor. The insurer sheet agrees on 60 min, so the union does not raise duration. An owner may still raise it. Foam, clean agent, and single-interlock stay out of scope on this row.
