@@ -51,7 +51,7 @@ description: >-
 8. Thresholds: if 76 elected, alert 0.2 %/ft and alarm 1.0 %/ft; else [OWNER]. Design practice (design practice item 7, 2026-10-15): on FM jobs the owner VEWFD **Action or Fire 1** level counts as FM pre-alarm. It is an alarm-level signal and is the DI detection leg (leg 1). It opens the preaction valve only together with low air. Confirm on the owner sequence which of Action or Fire 1 is used; full level map in `fa-two-level-detection-stagger-and-fm-mapping`. NFPA 76 **Alert** stays supervisory [CODE NFPA 76-2024 §8.4.2.2.4(1)]: no building NAC [§8.4.2.2.9], never leg 1, never arms a release. Fire 2 is not OK as the leg on FM jobs.
 9. Ventilation at or above 5 ft/s or 60 ACH [60 ACH not in NFPA 75-2024 Ch. 4 to 13; owner/insurer FM DS 5-32 only]: add FM slow-down interlock on FM pre-alarm (Action or Fire 1 per item 7) and its acceptance test.
 10. Run listed design software (e.g., ASPIRE): worst-port transport, balance, share. Never certify transport from a hand count.
-11. FM flags on every FM job: "[OWNER]/insurer conflict: FM DS 5-32 (Jan 2026) s2.4.1.1 ranks DI preaction last. Company decision (design practice): keep DI. Flag to owner and FM on this job." Also flag s2.4.3.2.1.3 (no cross-zone to actuate) vs company cross-zoned first-knock default.
+11. FM flags on every FM job: "[OWNER]/insurer conflict: FM DS 5-32 (Jan 2026) s2.4.1.1 ranks DI preaction last. Company decision (design practice): keep DI. Flag to owner and FM on this job." Also flag s2.4.3.2.1.3 no cross-zone: company FM default is single leg (Fire 1 or Action) AND low air, which complies; flag only if the owner forces two-leg cross-zone [OWNER].
 
 ## Fan-wall return plane
 

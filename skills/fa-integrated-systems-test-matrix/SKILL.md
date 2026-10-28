@@ -21,7 +21,7 @@ description: >-
 - [CODE Table 14.4.3.2 18(8)]: counting-zone test at least four locations, all editions (72-28, 72-38).
 - [CODE Table 14.4.3.2 17(7)(d)]: ASD end-port test. 2019: required even with listed airflow supervision. 2022/2025: only where listed airflow supervision is absent (72-29).
 - [CODE Table 14.4.3.2 item 8]: secondary power test against the battery calc demand record.
-- Release only from both DI legs [CODE NFPA 72 23.8.5.4.3; 2019 items (1) to (3), 2022/2025 adds (4)].
+- FM DI release (company default): (Fire 1 or Action OR manual) AND low air AND NOT isolated. Basis: FM DS 5-32 §2.4.3.2.1.3 (Jan 2026) [OWNER/insurer] plus low air supervisory NFPA 72-2025 §17.19.2.2.2 (2019 / 2022 §17.17.2.2.2) [CODE]. Do not cite §23.8.5.4.3 for this row; low air is not a detector. Two-leg cross-zone rows and Table 14.4.3.2 item 18(4) apply only on non-FM jobs or where the owner requires cross-zone.
 
 ## Relation to other skills
 - The FP workflow `commissioning-ist-acceptance-packet` owns the acceptance and IST program stack. This skill only builds the FA scenario rows and FA ITM rows that feed it. Do not duplicate the program.
@@ -30,9 +30,24 @@ description: >-
 ## Steps
 1. Pull every C&E row from the releasing, HVAC/door, elevator, fire pump, gas relay and station skills.
 2. One IST scenario per row: initiating event, expected outputs per system, station class, pass criteria, who witnesses.
-3. Script checks: VEWFD Alert sounds nothing and is never a release leg [OWNER]; release only on leg 1 AND leg 2; hall inputs do not recall elevators; every row has a basis.
+3. Script checks: VEWFD Alert sounds nothing and is never a release leg [OWNER]; release only on (leg 1 OR manual) AND low air AND NOT isolated (count release states in the truth table and hand check); hall inputs do not recall elevators; every row has a basis.
 4. EPO: FA monitors only by default [PRACTICE]. FA-to-EPO trip is Verify with the engineer of record (owner and insurer decide; see `power-isolation-disconnect-control`).
 5. Add edition-keyed ITM rows (secure and restore, counting zone, ASD end-port, item 8 battery).
+5a. DI plus EVACS seed rows (one hall, synthetic example; method from NFPA 72-2025 Table 14.4.3.2 [CODE]; signal class tags [PRACTICE] unless noted):
+   - Visual inspection, item 1 (see Table 14.3.1).
+   - ASD end-port smoke test to Fire 1, item 17(7)(d).
+   - Low air trip: supervisory only, no release, item 17(10)(b).
+   - Riser valve tamper, item 17(10)(a).
+   - Fire 1 AND low air: solenoid energizes, EVACS pre-discharge, release NAC, supervising-station alarm, item 18(6).
+   - Open each releasing circuit: trouble, item 18(9).
+   - Fire 1 alone: EVACS alert and supervising-station alarm, no release, item 2(1).
+   - EVACS amplifier failure: backup amplifier takes over, item 5(1).
+   - Voice intelligibility at acceptance, item 22(2).
+   - Supervising-station alarm receipt within 90 s, item 4(1); supervisory and trouble receipt, item 3(4).
+   - Releasing FACU and EVACS on battery: loss of primary is trouble, item 8, checked against the battery demand record.
+   - ECF interface: EVACS pre-discharge relay from the releasing FACU, item 24.
+   - Leave item 18(4) cross-zone out on FM single-leg jobs.
+   - ASD Alert to the supervising station as supervisory: synthetic owner default [OWNER]. Confirm against the owner program on the job.
 6. Who secures the preaction valve (FP or FA) is an open coordination item [PRACTICE].
 7. Export the matrix as CSV for the test log.
 

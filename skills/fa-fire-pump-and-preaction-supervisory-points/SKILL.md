@@ -57,7 +57,7 @@ FP-side source of the controller contact list (point rows 1 to 12, 12a to 12g, 2
 7. Compressor and N2 generator rows: common trouble per unit, SUPV, label [PRACTICE]/ASSUMED. Never cite NFPA 72 for them.
 8. Validate in a script: unique labels within the limit; only ALARM or SUPV classes; no NFPA 20 "trouble" mapped to FA trouble; §10.4.8 and §12.4.3 minimum contacts present; high and low air on every DI valve; compressor / N2 rows labeled PRACTICE. Include negative tests.
 9. Count monitor modules per panel for both pump-running elections. Report alarm and supervisory counts.
-10. FM flags on every FM job: "[OWNER]/insurer conflict: FM DS 5-32 (Jan 2026) s2.4.1.1 ranks DI preaction last. Company decision (design practice): keep DI. Flag to owner and FM on this job." Also s2.4.3.2.1.3 no cross-zone vs the company cross-zoned first-knock default. VEWFD map (Design practice item 7): Action or Fire 1 = FM pre-alarm = leg 1; NFPA 76 Alert stays supervisory, no NAC, never a leg. Fire 2 is never the leg on FM jobs. None of these points is leg 1.
+10. FM flags on every FM job: "[OWNER]/insurer conflict: FM DS 5-32 (Jan 2026) s2.4.1.1 ranks DI preaction last. Company decision (design practice): keep DI. Flag to owner and FM on this job." Also s2.4.3.2.1.3 no cross-zone: company FM default is single leg (Fire 1 or Action) AND low air, which complies. Flag only if the owner standard forces two-leg cross-zone [OWNER]. VEWFD map (Design practice item 7): Action or Fire 1 = FM pre-alarm = leg 1; NFPA 76 Alert stays supervisory, no NAC, never a leg. Fire 2 is never the leg on FM jobs. None of these points is leg 1.
 11. Hand off to FP: contact list check items, setpoints, which valves are supervised, room temperature need.
 
 ## Output
