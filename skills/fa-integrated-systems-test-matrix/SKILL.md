@@ -21,7 +21,7 @@ description: >-
 - [CODE Table 14.4.3.2 18(8)]: counting-zone test at least four locations, all editions (72-28, 72-38).
 - [CODE Table 14.4.3.2 17(7)(d)]: ASD end-port test. 2019: required even with listed airflow supervision. 2022/2025: only where listed airflow supervision is absent (72-29).
 - [CODE Table 14.4.3.2 item 8]: secondary power test against the battery calc demand record.
-- FM DI release (company default): (Fire 1 or Action OR manual) AND low air AND NOT isolated. Basis: FM DS 5-32 §2.4.3.2.1.3 (Jan 2026) [OWNER/insurer] plus low air supervisory NFPA 72-2025 §17.19.2.2.2 (2019 / 2022 §17.17.2.2.2) [CODE]. Do not cite §23.8.5.4.3 for this row; low air is not a detector. Two-leg cross-zone rows and Table 14.4.3.2 item 18(4) apply only on non-FM jobs or where the owner requires cross-zone.
+- FM DI release (company default): (Fire 1 or Action OR manual) AND low air AND NOT isolated. Basis: FM DS 5-32 §2.4.3.2.1.3 (Jan 2026) [OWNER/insurer] plus low-air supervisory 2022 §17.17.2.2.2 and 2025 §17.19.2.2.2 [CODE]; 2019 preaction low-air [PRACTICE]. Do not cite §23.8.5.4.3 for this row; low air is not a detector. Two-leg cross-zone rows and Table 14.4.3.2 item 18(4) apply only on non-FM jobs or where the owner requires cross-zone.
 
 ## Relation to other skills
 - The FP workflow `commissioning-ist-acceptance-packet` owns the acceptance and IST program stack. This skill only builds the FA scenario rows and FA ITM rows that feed it. Do not duplicate the program.

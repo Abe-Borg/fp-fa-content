@@ -39,7 +39,7 @@ description: >-
 | Preaction supervisory (low air, valve, N2) | Supervisory | CODE |
 | ASD / VEWFD Alert (DI hall) | Supervisory | [OWNER, synthetic] default. Confirm against the owner program on the job |
 | Fire 1 or Action (FM DI leg 1), alone | Alarm (also EVACS alert) | [OWNER] FM map; class as fire alarm to the station |
-| DI release (leg 1 AND low air): solenoid, EVACS pre-discharge, release NAC | Alarm | [PRACTICE] row; basis FM DS 5-32 §2.4.3.2.1.3 [OWNER] plus NFPA 72-2025 §17.19.2.2.2 [CODE] for low air. Not §23.8.5.4.3 |
+| DI release (Fire 1 or Action AND low air): solenoid, EVACS pre-discharge, release NAC | Alarm | [PRACTICE] row; basis FM DS 5-32 §2.4.3.2.1.3 [OWNER] plus low air 2022/2025 [CODE]; 2019 preaction [PRACTICE]. Not §23.8.5.4.3 |
 | Releasing circuit open, EVACS amplifier failure, loss of primary | Trouble | [CODE] releasing circuit open is Table 14.4.3.2 item 18(9); amplifier failure and loss of primary are NFPA 72-2025 §10.19.1.1 to .1.3 where that path applies |
 
 Alarm receipt within 90 s, and supervisory and trouble receipt, follow NFPA 72-2025 Table 14.4.3.2 items 4(1) and 3(4) [CODE]. Feed these rows to `fa-integrated-systems-test-matrix`.
