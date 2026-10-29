@@ -29,6 +29,7 @@ description: >-
 - FA-DI-CE = (Fire 1 OR the FACU manual station) AND same-zone low air. No cross-zone. Never cite §23.8.5.4.3 for that AND.
 - Dry and double-interlock low air: supervisory only [CODE NFPA 72 §17.19.2.2.2(A)]. Low air alone never unlocks a door and never releases a hold.
 - A duct detector is supervisory [CODE NFPA 72-2025 §21.7.4, same in 2019 and 2022]. It stops its own fan only. It never unlocks a door and never releases a hold.
+- Pump house: the duct detector stops its own fan only when that fan is not diesel combustion air or engine cooling air. Do not stop combustion air or cooling air on a fire-alarm signal. That stop is pending engineer-of-record confirmation. Non-engine HVAC fan stop on alarm stays [OWNER]/[PRACTICE] until that confirmation.
 - Doors unlock and holds release on wet waterflow, double-interlock Fire 1, or the FACU manual station. Not on low air, valve tamper, or a duct detector.
 - Hold-open release and egress unlock are two outputs. They may share a trigger. They do not share a code basis.
 - Do not delay door unlock or hold release to the double-interlock solenoid. Doors follow the first alarm (Fire 1). Release still needs low air, and that may never come.
@@ -72,6 +73,7 @@ The script rejects each of these.
 7. BESS rooms: hold-opens release on FA; release on gas alarm is Verify with the engineer of record, conservative yes. 2 h vs 3 h barrier election from the fire-protection designer sets door and damper ratings.
 8. Build two door output groups: hold release and egress unlock. Map each to wet waterflow, double-interlock Fire 1, and the FACU manual station. Map neither to low air, tamper, or duct smoke. Run the cause-and-effect table, including the four negatives. Each row must pass.
 9. Dry waterflow door action is not code. Assume it unlocks and releases holds, and verify with the engineer of record.
+10. Diesel pump house: the duct detector stops its own non-engine fan only. Leave engine combustion air and cooling air running. Stopping them on alarm is pending engineer-of-record confirmation.
 
 ## Output
 Duct detector schedule with basis per detector, fan stop matrix, relay distance check, door and lock table with pass or fail, C&E rows, open items, delta vs edition.
