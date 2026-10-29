@@ -617,3 +617,20 @@ Support ordinary-hazard group 2, wet:
 - **E2.** 90 min and 49,500 gal only when the AHJ or the owner requires the unsupervised branch of §19.2.3.1.3.
 
 A hall demand times its own duration (teaching figure 66,797 gal) still governs supply and storage when it is larger. Do not shorten the hall to the support-space volume. Density, area, and the dry-area increase in the sections above are unchanged. This section does not elect foam, a clean agent, or single-interlock.
+
+## 18. Wet campus rollup (one remote area plus its hose)
+
+Synthetic teaching only. Do not attach it to a city or a job. Wet only. The dry and double-interlock +30 percent area increase (NFPA 13-2025 §19.2.3.2.6) does not apply to this rollup.
+
+| Area type | Basis | Sprinkler + hose | Qd | Duration | Volume |
+|---|---|---|---|---|---|
+| Hall, FM controls | FM DS 5-32 wet 0.20 / 2,500 | 500 + 250 | **750 gpm** | 60 min | 45,000 gal |
+| Hall, NFPA floor | NFPA 13-2025 OH2 Table 19.2.3.1.1, 0.2 / 1,500 | 300 + 250 | 550 gpm | 90 min unsupervised / 60 min supervised | 49,500 / 33,000 gal |
+| Electrical or UPS | OH1 0.15 / 1,500 | 225 + 250 | 475 gpm | 90 / 60 min | 42,750 / 28,500 gal |
+| Office or admin | Light hazard 0.1 / 1,500 | 150 + 100 | 250 gpm | 30 min | 7,500 gal |
+
+Hose and duration: NFPA 13-2025 Table 19.2.3.1.2 and §19.2.3.1.3. The lower duration applies only where waterflow and supervisory devices are electrically supervised to a constantly attended location.
+
+Rule: the campus is the single most-demanding remote area plus its hose. Governing flow is 750 gpm (FM). Governing volume is 45,000 gal if the supervised election is taken. Otherwise the NFPA ordinary-hazard group 2 unsupervised case, 49,500 gal, governs. State the election. Verify it with the engineer of record.
+
+Do not sum the halls. That sum is 1,500 gpm and 90,000 gal, and it is wrong: the halls are separate fire areas. Using the NFPA 1,500 ft² area when FM controls yields 550 gpm and is unconservative. FM DS 3-26 duration (section 17) is not the hall basis here. §19.2.3.1.5 (the 3,000 ft² trigger) stays `[V]` until pulled. Hand the governing flow to `hydrant-supply-curve`. Do not copy these gallons onto another site.

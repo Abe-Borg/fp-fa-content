@@ -14,6 +14,7 @@ description: >-
 ## Intake and scope (all FA skills)
 - The input packet is optional. Any missing input gets a stated value, labeled **ASSUMED** (value used + why). ASSUMED is never shown as a code value. Keep going.
 - Scope locks are hard Stops: wet, dry, or double-interlock (DI) preaction only. No clean agent. No foam. Single- or non-interlock as basis of design: record, Stop, RFI-variance.
+- US jobs only. A Canadian code basis stops. Do not port these pins.
 
 - On FM DI jobs carry the standing flag: "[OWNER]/insurer conflict: FM DS 5-32 (Jan 2026) s2.4.1.1 ranks DI preaction last. Company decision (design practice): keep DI. Flag to owner and FM on this job."
 - Label every claim [CODE] [HB] [PARA] [PRACTICE] [OWNER] (or [OWNER]/insurer). Cite section AND edition. Mark approximations with ~. Never invent code text; gaps get "section not pinned; verify before use.
@@ -28,6 +29,8 @@ description: >-
   - Margin screen: design-practice floor is 20% over required Ah. Verify with the engineer of record. Under 20% is THIN: step up to the next listed stock size, or mark THIN with a written waiver from the engineer of record. Example: a voice panel pick that fails the 20% screen steps up (55 Ah to 65 Ah).
   - Charger and stock size: verify before use that the panel's own listed charger range covers the elected Ah, and that the Ah is a listed compatible size (next listed size up is acceptable) [PRACTICE]. Any maker range used in an example is an example only. Keep the unit maker-neutral.
   - FM on EVACS amplifiers (DS 5-40 §2.3.4, September 2007): other FA signaling is 24 h + 5 min [OWNER]. Held text has no separate EVACS or voice line and no FM 90 h voice figure. Elect NFPA 72 §10.6.7.2.3 to .2.4 at 24 h + 15 min [CODE] (most stringent). The 90 h + 10 min figure is for preaction releasing panels only (the sheet also names deluge panels; deluge is out of scope). Do not carry 90 h onto EVACS amplifiers. DS 5-23 is not an FA duration source.
+- Duration pins (identical in `fa-secondary-power-battery-calc` and `fa-releasing-panel-standby-and-power-split`): building FACU 24 h + 5 min [CODE NFPA 72-2025 §10.6.7.2.1 to .2.2]; EVACS 24 h + 15 min at maximum connected load [CODE §10.6.7.2.3 to .2.4], and NFPA governs over FM DS 5-40 24 h + 5 min [OWNER]; releasing (DI preaction) panel on FM jobs 90 h + 10 min [OWNER FM DS 5-40 s2.3.4]. Never apply 90 h to EVACS or the building FACU. Non-FM releasing: 24 h + 5 min [PARA].
+- Speaker circuit: a battery pass does not clear the speaker circuit. Check speaker line loss at 1.0 dB as well. Run `fa-speaker-circuit-loss-check`.
 - [CODE] §10.6.7.2.13: include all loads not automatically disconnected on transfer.
 - **Edition-keyed battery factor (never hardcode):**
  - NFPA 72-2019 §10.6.7.2.1.1*: "Battery calculations shall include a minimum 20 percent safety margin above the calculated amp-hour capacity required." Use F = 1.20 [CODE 2019].
@@ -61,7 +64,7 @@ description: >-
 
 ## Steps
 1. Build the load table in a script. Sum Is and Ia.
-2. Durations: standby 24 h (or 4 h quiescent plus alarm period with generator credit, [PARA], AHJ to confirm); alarm 5 min, or 15 min at max load for voice. For releasing, show 5 min [PARA] and any insurer case side by side.
+2. Durations: use the duration pins above. Standby 24 h (or 4 h quiescent plus alarm period with generator credit, [PARA], AHJ to confirm); alarm 5 min, or 15 min at max load for voice. For releasing, show 5 min [PARA] and the FM 90 h + 10 min case side by side when FM insures. Keep the building FACU, EVACS, and the releasing FACU as separate batteries. If the supply feeds speakers, a passing battery calc still leaves the 1.0 dB speaker-loss check open.
 3. Required Ah = (Is x standby h + Ia x alarm h) x F, with F from the edition-keyed factor above. Print the edition and F in the script output. Pick the next standard size up. Report safety margin = picked Ah minus required Ah (and as a percent).
 3a. Thin screen: margin under 20% of required Ah is THIN [PRACTICE, ASSUMED screen, QA F11 2026-10-21c]. Verify with the engineer of record. Conservative: step up one standard size. Flag, do not change elected values silently.
 4. Check against panel charger limit; if over, call for separate charger or battery cabinet.

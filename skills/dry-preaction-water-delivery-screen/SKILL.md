@@ -449,3 +449,5 @@ NFPA 13-2025 §8.3.2.3.1.1 (double-interlock at or under 500 gal may be exempt f
 3. A manifold test under NFPA 13-2025 §8.2.4.4.1 through §8.2.4.4.3 is an acceptable proof path.
 
 If the screen fails, the levers are: move the valve closer to the remote heads, shorten the branch run, split the zone, or add an accelerator. Verify with the engineer of record until that evidence is in hand. This screen still does not issue a pass by itself.
+
+A maker's installation instructions are a procedure example only for how the trip and water-delivery test is run. The specification stays generic: per the maker's instructions. Do not freeze a catalog number or a document number. Those instructions give no seconds value, so the numeric hold-point stays mandatory until a witnessed trip test or a listed calculation supplies the seconds. The teaching rerun (237.25 gal / 29.98 s against the FM 30 s gate, margin about 0.02 s, under 5 s) does not close the hold-point. Paths 1 and 2 above still apply. Do not attach the teaching volume to a city or a job.
