@@ -24,6 +24,6 @@ Do not add a claim the list does not have. Do not paste a long quotation. One sh
 
 The double-interlock draft section string is 21 13 19. Keep that section string on this export.
 
-Out of scope, stop and say so: foam, foam-water, clean agent, water mist, a building deluge system, single-interlock preaction, and non-interlock preaction. Do not size them. Do not add a Canadian code path. Outdoor oil-filled transformer apparatus water spray (NFPA 15-style) is allowed when the narrative follows `power-block-transformer-water-spray`. It is not water mist and it is not a building deluge system.
+Out of scope, stop and say so: foam, foam-water, clean agent, water mist, a building deluge system, single-interlock preaction, and non-interlock preaction. Do not size them. A Canada job is allowed only when the skill states Country gate (US | Canada). Use that skill's Canada pins. CAN/ULC-S524, S536, S537, S1001, and CEC Section 32 stay NEEDS HOLD. Do not invent those clause texts or battery hours. Outdoor oil-filled transformer apparatus water spray (NFPA 15-style) is allowed when the narrative follows `power-block-transformer-water-spray`. It is not water mist and it is not a building deluge system.
 
 Do not name a valve, solenoid, or panel catalog number. Pipe gallons and t_total stay calculated when a claim quotes a tool figure. ASSUMED stays on blank trim and on a screen-limit lookup. A value the designer types is not assumed. Designer judgment the tools did not return stays use best judgment.

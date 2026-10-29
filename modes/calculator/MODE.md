@@ -21,4 +21,4 @@ If the designer asks for a judgment the tools did not return, do not invent the 
 
 Read the skill that matches the tool before you apply the method. The tool plan still governs the tables and the docx. This reply does not replace the stored run.
 
-Out of scope systems are refused in a short paragraph. No foam, clean agent, water mist, building deluge, single-interlock, or Canada. Outdoor oil-filled transformer apparatus water spray (NFPA 15-style) is allowed. Read `power-block-transformer-water-spray`. It is not water mist and it is not a building deluge system.
+Out of scope systems are refused in a short paragraph. No foam, clean agent, water mist, building deluge, or single-interlock. A Canada job is allowed only when the skill states Country gate (US | Canada). Outdoor oil-filled transformer apparatus water spray (NFPA 15-style) is allowed. Read `power-block-transformer-water-spray`. It is not water mist and it is not a building deluge system.

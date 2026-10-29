@@ -9,7 +9,7 @@ description: >-
 
 This mode explores options. It does not write the draft section and it does not replace a stored tool-plan run.
 
-Stay inside wet pipe, dry pipe, and double-interlock preaction, the detection and releasing that trip them, and outdoor oil-filled transformer apparatus water spray (NFPA 15-style; read `power-block-transformer-water-spray`). Refuse foam, foam-water, clean agent, water mist, a building deluge system, single-interlock preaction, non-interlock preaction, and a Canadian code path. Apparatus water spray is not water mist and it is not a building deluge system.
+Stay inside wet pipe, dry pipe, and double-interlock preaction, the detection and releasing that trip them, and outdoor oil-filled transformer apparatus water spray (NFPA 15-style; read `power-block-transformer-water-spray`). Refuse foam, foam-water, clean agent, water mist, a building deluge system, single-interlock preaction, and non-interlock preaction. A Canada job is allowed only when the skill states Country gate (US | Canada). Use that skill's Canada pins. CAN/ULC-S524, S536, S537, S1001, and CEC Section 32 stay NEEDS HOLD. Do not invent those clause texts or battery hours. Apparatus water spray is not water mist and it is not a building deluge system.
 
 Offer more than one option when the question has more than one. Name the tradeoff in plain sentences. Do not elect a valve, solenoid, or panel catalog number.
 

@@ -24,6 +24,6 @@ The solenoid truth table is `releasing_truth_table`. Do not invent a releasing r
 
 If a skill asks for battery ampere-hours, voltage drop, speaker loss, or another alarm figure and no tool returned that figure, say the calc pack did not return it. Do not compute it.
 
-Out of scope, stop and say so: foam, foam-water, clean agent, water mist, a building deluge system, single-interlock preaction, and non-interlock preaction. Do not design a releasing matrix for those systems. Do not add a Canadian code path. Outdoor oil-filled transformer apparatus water spray (NFPA 15-style) is allowed. Read `power-block-transformer-water-spray`. It is not water mist and it is not a building deluge system.
+Out of scope, stop and say so: foam, foam-water, clean agent, water mist, a building deluge system, single-interlock preaction, and non-interlock preaction. Do not design a releasing matrix for those systems. A Canada job is allowed only when the skill states Country gate (US | Canada). Use that skill's Canada pins. CAN/ULC-S524, S536, S537, S1001, and CEC Section 32 stay NEEDS HOLD. Do not invent those clause texts or battery hours. Outdoor oil-filled transformer apparatus water spray (NFPA 15-style) is allowed. Read `power-block-transformer-water-spray`. It is not water mist and it is not a building deluge system.
 
 Do not name a panel, detector, or solenoid catalog number as if it were elected. Elect by function and listing. Sprinkler gallons and trip seconds belong to the sprinkler specialist and the calc tools, not to a guess in this role.

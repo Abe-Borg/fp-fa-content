@@ -1007,7 +1007,7 @@ class KeyAndSkillTests(unittest.TestCase):
 
         roster = re.compile(
             r"\bAbe\b|DC FP Lead|stay dark|Hyperion|Abraham|\bNovva\b|NEEDS PE REVIEW|/workspace/"
-            r"|Canada|Canadian|\bCSA\b|NFPA 2001"
+            r"|NFPA 2001"
         )
         authored = re.compile(r"(?i)provide (a |an )?(foam|clean agent|water mist|deluge)")
         scan_path = REPO / "calcs" / "fp" / "place_name_scan.py"
@@ -1025,6 +1025,12 @@ class KeyAndSkillTests(unittest.TestCase):
             self.assertNotIn("foam", lowered)
             self.assertNotIn("clean", lowered)
             self.assertNotIn("canada", lowered)
+        fa_spec = (folder / "28-31-00-fire-detection-and-alarm.md").read_text(encoding="utf-8")
+        self.assertIn("Country gate (US | Canada)", fa_spec)
+        self.assertIn("3.2.4.9.(5)", fa_spec)
+        self.assertIn("3.2.4.9.(6)", fa_spec)
+        self.assertIn("NEEDS HOLD", fa_spec)
+        self.assertIn("CAN/ULC-S524", fa_spec)
         self.assertEqual(hits, [])
 
 

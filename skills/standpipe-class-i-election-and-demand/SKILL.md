@@ -13,7 +13,7 @@ description: >-
 
 **Intake.** The input packet is optional. A missing input is not a stop: state the value used and why, and label it ASSUMED. Do not present an ASSUMED value as a cited code or table value, and do not freeze a vendor SKU. **Scope lock.** Wet pipe, dry pipe, and double-interlock preaction only. Foam, clean agent, water mist, and single-interlock or non-interlock preaction are out of scope. If one of those is requested as the basis of design, record it and stop. Do not substitute another system and do not size it here. Cite the section and the edition. Decide each parameter by the most stringent of the code floor, the insurer sheet, and the owner standard. Verify judgment calls with the engineer of record.
 
-Reusable US data-center fire-protection recipe. **This Skill decides WHETHER a standpipe is required, elects Class I type (manual wet / manual dry / automatic wet / automatic dry), pins residual pressure at the remotest outlet, structures the demand register, and resolves pump-vs-FDC additivity** — after the assignment packet exists and STS has elected company `wet` | `dry` | `DI`.
+Reusable data-center fire-protection recipe. **Country gate (US | Canada).** US pins below stay on a US job. On a Canada job use the Canada section and `most-stringent-basis-matrix` §4.2b. Do not port a US pin into a Canada row or a Canada pin into a US row.  **This Skill decides WHETHER a standpipe is required, elects Class I type (manual wet / manual dry / automatic wet / automatic dry), pins residual pressure at the remotest outlet, structures the demand register, and resolves pump-vs-FDC additivity** — after the assignment packet exists and STS has elected company `wet` | `dry` | `DI`.
 
 It does **not** elect the hall sprinkler/preaction family (consume STS). It does **not** invent NFPA 14 gpm tables. It does **not** rebuild the hydrant P(Q) curve, listed pump envelope, campus loop diameter, or ITM product matrix. It does **not** CAD hose-valve coordinates. It does **not** design foam, mist, CAF, or clean agent.
 
@@ -482,3 +482,25 @@ Wrong sums. Adding 1,000 + 390 + 250 = 1,640 gpm ignores the greater-of rule. Ta
 A local fire-pump rule that asks for 20 psi residual at 150 percent of rated capacity is a separate check. On this screen that residual is 51.02 psi and passes. A local rule that three or more standpipes need at least two two-way inlets on the fire-department connection is local only. A pressure-reducing device at maximum churn near 172.8 psi is borderline against 175 psi `[SYN]`. Do not freeze a shop curve. Verify with the engineer of record.
 
 Agency or owner text that calls for a pressure-reducing valve where a Class I outlet could exceed 125 psi, set to 100 psi, is not the code trigger. The code trigger remains the 175 psi static limit and the 100 psi limit on a 1½ in. outlet in section D2.
+
+
+## Canada Class I standpipe
+
+Country gate (US | Canada). On a Canada job the whether-trigger is NBC, BCBC, NBC 2023 AE, or OBC 3.2.5.8, not IFC or IBC §905. Pin NFPA 14 at 2013 and NFPA 24 at 2013 where `most-stringent-basis-matrix` §4.2b says so. The BC fire-code NFPA 24 pin is a gap. Saskatchewan stays unresolved.
+
+3.2.5.8.(1), short paraphrase: a standpipe is required above three storeys, or where the top-storey ceiling is over 14 m, or at 14 m or less when the storey area exceeds the table unless the building is sprinklered throughout. A one-storey building at or under 14 m and sprinklered throughout has no code standpipe. Any unsprinklered space can drop that waiver. Re-check the table area.
+
+If the owner or the fire department still elects a standpipe, design it to NFPA 14-2013. 3.2.5.9.(2) bars only a dry standpipe that is not connected to a supply. Automatic dry or wet can still comply. 3.2.5.9.(3) caps the code-minimum supply at 30 L/s (about 476 gpm). A higher NFPA 14-2013 flow is an owner choice. The 2013 section for that flow is [verify]. Do not invent it. Hose connections are in exits (3.2.5.10). Outlets are 64 mm. A sprinklered building does not add 38 mm outlets (3.2.5.11). OBC 3.2.5.9.(4) residual is 690 kPa unless the building is sprinklered with no pump and the fire-department connection can supply the full demand.
+
+Fire-department connection, 3.2.5.15: within 45 m, unobstructed, of a hydrant. NBC 2023 AE 3.2.5.15.(3) also places it at least 3 m and at most 15 m from the principal entrance. That band is absent from NBC 2025 and from BCBC 2024. Do not transplant it. OBC existence of the same band stays [verify].
+
+Private main: install and test to the NFPA 24-2013 pin. The 2013 text is not held. Use 24-2022 or 24-2025 wording labelled [nearest]. A municipal servicing standard may add a minimum diameter and a hydrant spacing. Do not copy one city's standard onto another site. Where the building is sprinklered to NFPA 13, AE 3.2.5.7.(4) sets the supply at the NFPA 13-2019 demand plus hose. Prove the residual on `hydrant-supply-curve`.
+
+Wrong moves: a US 100 ft fire-department-connection limit on a Canada job, which also drops the AE entrance band; an NFPA 14-2024 dry-standpipe air band cited on a 2013 pin. NFPA 14-2013 has supervisory air at §6.1.1 and 20 psi over trip at §5.2.1.4.10. It does not state the later numeric air band. Latest is not enforced.
+
+
+## Hose-valve loss sensitivity
+
+Same synthetic five-storey stack as §9. Do not attach it to a city or a job. The fixed part of the required pressure, without the hose valve, is 100 + 28.17 + 0.96 + 3.88 = 133.01 psi. Supply at 1,000 gpm is 137.34 psi. Margin is 4.33 psi minus the hose-valve loss. Every psi of valve loss is a psi of margin.
+
+The 3.0 psi ASSUMED teaching loss leaves 1.33 psi. That pass is thin. Verify the valve loss with the engineer of record. Break-even is 4.33 psi. A 5.0 psi loss leaves −0.67 psi and fails. Fix it with listed valve data [NFPA 14-2024 §10.2.6.1.1], a larger pump, or a larger main. A 4 in angle-valve equivalent length applied to a 2½ in outlet is the wrong row. That mis-apply is about 7.55 psi and fails. Equivalent-length rows are size-specific, and FM DS 3-0 is not the NFPA 14 basis for this loss. No maker loss sheet for a 2½ in hose valve is held. Do not invent one.

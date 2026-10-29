@@ -1,7 +1,7 @@
 ---
 name: Most stringent basis matrix
 description: >-
- use this when setting or restamping a US data-center fire-protection
+ use this when setting or restamping a data-center fire-protection
  basis-of-design as a per-parameter three-layer most-stringent matrix across
  adopted code, applicable insurer(s), and owner, including
  wet/dry/double-interlock system-family gating and dual-carrier reconciliation,
@@ -13,7 +13,7 @@ description: >-
 
 **Intake.** The input packet is optional. A missing input is not a stop: state the value used and why, and label it ASSUMED. Do not present an ASSUMED value as a cited code or table value, and do not freeze a vendor SKU. **Scope lock.** Wet pipe, dry pipe, and double-interlock preaction only. Foam, clean agent, water mist, and single-interlock or non-interlock preaction are out of scope. If one of those is requested as the basis of design, record it and stop. Do not substitute another system and do not size it here. Cite the section and the edition. Decide each parameter by the most stringent of the code floor, the insurer sheet, and the owner standard. Verify judgment calls with the engineer of record.
 
-Reusable US data-center fire-protection recipe. This Skill sets or restamps a prototype fire-protection basis-of-design as a **per-parameter reconciliation matrix**:
+Reusable data-center fire-protection recipe. **Country gate (US | Canada).** US pins below stay on a US job. On a Canada job use the Canada section and `most-stringent-basis-matrix` §4.2b. Do not port a US pin into a Canada row or a Canada pin into a US row.  This Skill sets or restamps a prototype fire-protection basis-of-design as a **per-parameter reconciliation matrix**:
 
 > adopted code floor × insurer A × insurer B or `n/a` × owner → most-stringent applicable result per parameter
 
@@ -413,9 +413,33 @@ The code-floor citation must use the enforced edition and enforcing instrument, 
 
 Use the exact local instrument where local amendments change the result.
 
-### Outside the stated code basis
+### 4.2b Country gate (US | Canada)
 
-A jurisdiction outside the stated NFPA, IBC, and IFC basis is out of scope. Do not port those code-floor pins into that row. Mark every code-floor cell unresolved and ask which codes are adopted. Insurer and owner layers still apply as written. Listing-agency questions stay open until the listing is checked.
+A jurisdiction outside the stated NFPA, IBC, and IFC basis, and outside a country-gated Canada job, stays unresolved. Ask which codes are adopted. Do not port US pins into a Canada row or Canada pins into a US row. Insurer and owner layers still apply. Listing questions stay open until the listing is checked.
+
+On a Canada job fill the code floor from the pins below. A cell stays unresolved only where the pin is not held. Wet, dry, and double-interlock only. Foam and clean agent stay locked. Do not invent ULC hours or CEC Section 32 clause text. Saskatchewan stays unresolved.
+
+Referenced-standard pins from each code's Table 1.3.1.2. Enforced is not latest. Report the US column only as a delta. NFPA 24-2013 text is not held. Use 24-2022 or 24-2025 wording labelled [nearest].
+
+| Standard | NBC/NFC 2025 model | BCBC 2024 | NBC 2023 AE | OBC 2024 / OFC | US delta |
+| --- | --- | --- | --- | --- | --- |
+| NFPA 13 | 2019 | 2019 | 2019 | 2019 | 2025 |
+| NFPA 14 | 2013 | 2013 | 2013 | 2013 | 2024 |
+| NFPA 20 | 2019 | 2016 | 2016 | 2016 | 2025 |
+| NFPA 24 | none in the table | none in the BCBC table (fire-code gap) | 2013 | 2013 | 2025 |
+| NFPA 25 | 2020 (NFC) | per the fire code (2020) | 2020 | 2017 (deemed-to-comply) | 2026 |
+
+Part 3 overlays, short paraphrase:
+
+- 3.2.5.9.(2) (NBC 2025, BCBC 2024, NBC 2023 AE): a dry standpipe that is not connected to a water supply does not count. That is not a ban on an NFPA 14 automatic-dry standpipe.
+- 3.2.5.9.(3): total standpipe supply need not exceed 30 L/s. That is the code minimum. The owner may raise it.
+- 3.2.5.15.(1) and (2): standpipe and sprinkler fire-department connections are within 45 m, unobstructed, of a hydrant.
+- NBC 2023 AE 3.2.5.15.(3) only: the connection is also at least 3 m and at most 15 m from the principal entrance. That band is absent from NBC 2025 and from BCBC 2024. Do not transplant it. Whether OBC has the same band stays [verify].
+- 3.2.5.17.(1): freeze protection is performance only. Take the method from the pinned NFPA 13 edition. See `freeze-heat-trace-fp-piping`.
+- 3.2.5.18.(1): the fire pump follows NFPA 20 at that code's Table 1.3.1.2 edition.
+- NFC 2023 AE 4.3.13.3: fuel-tank static head at or below 70 kPa.
+
+Still unresolved: the fire-code NFPA 24 pin, NFPA 24-2013 text, a city building bylaw versus BCBC, the OBC entrance-band sentence, the adopted electrical-code edition, and ULC assembly hours. Do not invent those texts.
 
 ### 4.3 NFPA 13-2025 delta discipline
 
