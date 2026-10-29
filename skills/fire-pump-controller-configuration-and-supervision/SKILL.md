@@ -164,7 +164,7 @@ Each item is a spec clause **and** a witnessed line on the acceptance record.
 | C1 | Lockout / inhibit input | **Not assigned, not wired.** Shutdown-on-Lockout disabled. A BMS/EPMS request for a pump-inhibit contact is a finding: escalate, do not wire | FM DS 3-7 §2.2.1.3 |
 | C2 | Lockout vs emergency handle | Assume worst case (lockout may defeat the electronic assist on emergency start) until the OEM confirms in writing that the mechanical path survives | OEM IOM ambiguity `[V]` |
 | C3 | Load shedding / motor-run delay on alternate source | **Not supplied**; if present, disabled and verified. If the generator cannot carry the pump start, fix the generator | NEC Art. 695 ~; UFC 3-540-01 |
-| C4 | Automatic stop | **Manual stop only**; acceptance form run-period line reads No. If ever enabled, run-period ≥ ~10 min after cut-out | FM DS 2-81 Table 7 item 5 |
+| C4 | Automatic stop | **Manual stop only**; acceptance form run-period line reads No. If a run-period is ever enabled, the insurer note is about 10 min after cut-out. That note is not the code minimum-run, and it is not overspeed lockout. See §19 | FM DS 2-81 Table 7 item 5; NFPA 20 §12.7 |
 | C5 | Series / higher-zone / lower-zone functions | Disabled on FM jobs (FM permits no series pumps); submittal states so | FM DS 3-7 ~; corpus finding |
 | C6 | Running overload trip | None configurable; overload is annunciation only (local visual + silenceable audible > 120 % FLA for 12 s [CODE 2025 §10.4.6.4; 20-01]; also a row 6 member in 2025). Confirm no trip on the submittal | NFPA 20-2025 §10.4.6.4 (20-01); no-trip rule NEC 695 ~ `[V]` |
 | C7 | Remote start / BMS write access | Read-only monitoring; any remote interface can start, never stop or inhibit. NFPA 20-2025 adds cybersecurity reference to NEC 110.3(A)(8) ~ `[V]` | FM DS 3-7 §2.2.1.3; NFPA 20-2025 SR-21 |
@@ -296,3 +296,21 @@ Wrong pattern: fire-pump start about 5 psi above jockey stop (170 + 5 = 175 psi 
 Annex A.14.2.6(4) is advisory. In NFPA 20-2019, NFPA 20-2022, and NFPA 20-2025, jockey stop is churn plus the minimum static supply, and jockey start is at least 10 psi below that stop. Fire-pump start is 5 psi below jockey start in NFPA 20-2019 and NFPA 20-2022, and 10 psi below jockey start in NFPA 20-2025. Each extra pump steps another 10 psi lower. When the pressure-switch differential will not meet that example, set the absolute points from the test gauges and verify them with the engineer of record. Figure A.4.27.6.5 stays optional PARK and is not asserted.
 
 Where an insurer sheet and NFPA both apply, take the controlling carrier and state which edition of A.14.2.6(4) was used for the NFPA layer.
+
+## 19. Diesel stop, overspeed, and minimum run
+
+The substance of NFPA 20 §12.7.5 and §12.7.6 is the same in the 2019, 2022, and 2025 editions.
+
+- Stop the engine by hand from inside the controller. An outside stop is permitted only after every starting cause has returned to normal and the controller is back in automatic.
+- Do not shut the engine down automatically while a starting or running cause is still present. Automatic shutdown is limited to automatic testing, overspeed lockout, and a case the authority having jurisdiction has approved.
+- Overspeed lockout is one of those permitted automatic shutdowns. It stops the engine and holds it out. It is not the minimum-run timer, and it is not permission to omit that timer when some other automatic stop is proposed.
+- Where automatic shutdown after an automatic start is allowed, the minimum-run timer is at least 30 minutes. That timer is the code floor for the approved case. It is not the insurer run-period in C4.
+- C4 stays the insurer layer: manual stop, and about 10 minutes after cut-out if a run-period is ever turned on. Where automatic shutdown has been approved, 30 minutes is more stringent than that 10-minute note. Where the insurer or the authority having jurisdiction forbids automatic stop, manual stop wins. Name the rule you took.
+- §12.7.6: the emergency control bypasses the automatic circuits so the engine can be started and kept running by hand.
+- The annex prefers manual shutdown. That sentence is advisory. Design practice is manual stop. Do not enable automatic shutdown after an automatic start without approval and the 30-minute timer.
+
+An alarm silence on the diesel controller re-sounds within 4 hours. A trouble silence re-sounds within 24 hours [CODE NFPA 20-2025 §12.4.1.5, §12.4.1.6]. Remote diesel signals are not powered from the engine starting batteries (§12.4.2.1, already in A2).
+
+Do not paste the electric signal list onto a diesel controller. Loss of power, phase reversal, loss of phase, alternate source, and the transfer-switch isolating switch live in §10.4.7. They are not diesel points. A diesel still needs the separate main-switch-off-or-manual point (row 11), low fuel at two-thirds tank (row 12e), and each battery failure (row 12d). Copying the electric list leaves dead power and phase points and drops those diesel points.
+
+Phase loss on an electric controller is often a screen alarm only. Land a discrete contact or a documented composite, and verify that landing with the engineer of record. A local fire code may also require pump-room valve tampers as supervisory points in addition to NFPA 72 §23.8.5.9. Apply that addition only where the amendment is adopted. Optional annex notes under A.12.4.1 are not asserted. Delta versus NFPA 13: none. NFPA 20 controls this section.
