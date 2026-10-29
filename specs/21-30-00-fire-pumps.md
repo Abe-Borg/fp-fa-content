@@ -24,9 +24,9 @@ Reduced-voltage starting is the draft practice at 100 hp or larger, or on a gene
 
 ### 2.1 Controller, setpoints, and diesel points
 
-Specify the controller by function and listing. No catalog number. Lockout and load shed stay off. They defeat a fire pump.
+Specify the controller by function and listing. No catalog number. Lockout and load shed stay off.
 
-Diesel stop [CODE NFPA 20 §12.7.3 to §12.7.6], same body in 2019, 2022, and 2025. Teaching default is manual stop. Automatic shutdown after an automatic start is only for an automatic test, overspeed, or AHJ approval, and then the minimum run is at least 30 minutes.
+Diesel stop [CODE NFPA 20 §12.7.3 to §12.7.6], same body in 2019, 2022, and 2025. Default is manual stop. Overspeed stops at once and locks out until manual reset. It does not use the run timer. Timed stop after automatic start is only for a test or AHJ approval, then at least 30 minutes.
 
 Leave absolute psi blank until the shop curve and controller submittal. Order: jockey stop, jockey start, then fire-pump start below jockey start [PRACTICE]. Annex A.14.2.6(4) is advisory: jockey stop is churn plus minimum static; jockey start is at least 10 psi below that stop; fire-pump start is 5 psi below jockey start in 2019 and 2022, and 10 psi below in 2025. About 5 psi above jockey stop is the wrong pattern. On FM work, check DS 3-7 before freezing absolutes. Disable series, higher-zone, and lower-zone functions, and confirm the revision.
 
