@@ -121,7 +121,7 @@ def read_skill(content_root: Path, slug: str) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def spec_notes(content_root: Path, limit: int = 12, chars: int = 4000) -> list[dict]:
+def spec_notes(content_root: Path, limit: int = 12, chars: int = 5000) -> list[dict]:
     """Master language from specs/*.md. README is the folder guide, not a spec.
 
     The cap covers the in-scope section set. A cap of three dropped

@@ -37,3 +37,6 @@ Spaces with average and 60 s max ambient (measure on real jobs), speaker data sh
 
 ## Output
 ADS table with intelligibility call and reason, level table, tap and spacing solve, AHJ path items, open items, delta vs the enforced edition.
+
+## Campus ADS pointer (EX-156)
+A loud room, 85 dBA ambient or more, is its own acoustically distinguishable space: tone plus visual, not voice [HB]. Do not skip that space. An audibility pass is not an intelligibility pass. Where the speech-transmission screen fails, redesign with more speakers at lower taps and retest. Do not log that failure as a pass. Corridor visual appliances are rated not less than 15 cd [CODE NFPA 72-2025 §18.5.5.8.2]. Speech-transmission targets are handbook or paraphrase, not [CODE]. Training fixture only. Do not copy the fixture numbers as a live design. Verify with the engineer of record.

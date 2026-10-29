@@ -981,7 +981,7 @@ class KeyAndSkillTests(unittest.TestCase):
         notes = spec_notes(REPO)
         self.assertEqual([note["name"] for note in notes], names)
         for note in notes:
-            self.assertLessEqual(len(note["text"]), 4000)
+            self.assertLessEqual(len(note["text"]), 5000)
             self.assertEqual(
                 len(note["text"]),
                 len((folder / note["name"]).read_text(encoding="utf-8")),
