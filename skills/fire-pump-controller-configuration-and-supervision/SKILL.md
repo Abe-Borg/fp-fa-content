@@ -282,3 +282,15 @@ Pump sizing or curve; driver OCPD or feeder sizing; FA panel design, signal clas
 
 1. Basis line (editions, insurer, owner, local amendment, OEM + IOM rev).
 2. Step A matrix. 3. Step B terminal map. 4. Step C spec clauses (copy-ready) + commissioning lines. 5. Step D room schedule. 6. Step E valve schedule. 7. Step F outage budget with inputs. 8. Step G acceptance union. 9. Step H FA hand-off. 10. Status register (ASSUMED, `[V]`, `submittal confirm`). 11. Delta vs NFPA 20-2025.
+
+## 18. Jockey and fire-pump start ladder (partial)
+
+Order, top to bottom: jockey stop, then jockey start, then fire-pump start **below** jockey start, then each extra pump about 10 psi lower. The fire pump is not the jockey [CODE NFPA 20-2025 §4.27.7].
+
+Insurer sheet, where that sheet controls [OWNER/insurer]: FM DS 3-7 §2.4.11.6 sets jockey start at churn plus maximum static plus 5 psi, jockey stop at start plus 10 psi, and fire-pump start at 5 to 10 psi below jockey start. §2.4.11.5 keeps fire-pump start as close to churn as practical. Where AXA XL PRC.14.2.1 controls, the jockey differential is at least 15 psi and fire-pump start is about 10 psi below jockey start. The controlling carrier governs. Do not blend the two sheets.
+
+Worked insurer arithmetic only (1,000 gpm, 80 psi rated, 95 psi churn, 60 psi static): jockey start 95 + 60 + 5 = 160 psi; jockey stop 170 psi; fire-pump start 150 to 155 psi; a second pump 140 to 145 psi. Absolute setpoints stay with the engineer of record. Do not copy this arithmetic onto another pump.
+
+Wrong pattern: fire-pump start about 5 psi above jockey stop (170 + 5 = 175 psi on the worked case). The fire pump then starts before the jockey on every leak. That violates NFPA 20-2025 §4.27.7 and the annex intent that the fire pump is not the pressure-maintenance pump. Do not use it.
+
+**NFPA 20 psi offsets in annex A.4.27, 2019 versus 2025, stay PENDING.** They are ASSUMED and are not asserted here. Do not invent a 5 psi or 10 psi code offset to fill that gap. The insurer figures above are sheet values, not a substitute for the unpinned annex.

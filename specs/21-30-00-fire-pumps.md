@@ -12,9 +12,11 @@ Screen the pump at rated flow, at churn, and at 150 percent of rated flow agains
 
 ### 1.2 Driver and relief
 
-Diesel driver derate is a site calculation: altitude and temperature are inputs. Do not reuse a prior site's result. Cite the enforced NFPA 20 edition. The pack holds NFPA 20-2025 §11.2.2.4 and §11.2.2.5 as the delta (3 percent per 1,000 ft above 300 ft, plus 1 percent per 10 °F above 77 °F). An unamended 2024 I-Code floor references NFPA 20-2022 until the adoption is verified.
+Diesel derate is per site. Do not reuse a prior site. NFPA 20-2022/2025 §11.2.2.4 is 3 percent per 1,000 ft above 300 ft. §11.2.2.5 is 1 percent per 10 °F above 77 °F. Include room-temperature rise (A.11.2.2.5). Prefer a continuous deduction. Adding the two deductions is shop practice. Verify the sum with the engineer of record. §11.2.2.7 then requires the 4-hour rating to meet brake horsepower. Schedule at least that computed horsepower, 4-hour, after the derate. Do not name a manufacturer or a model. Do not stack the §11.2.2.2 ten percent listing margin. An unamended 2024 I-Code floor references NFPA 20-2022 until adoption is verified.
 
-Relief follows NFPA 20 §4.20. Compare net shutoff plus maximum static suction with the rating. Do not omit the check because a prior schedule had no relief valve.
+High-desert synthetic only: 4,500 ft, 104 °F, 140 bhp. 12.6 percent + 2.7 percent = 15.3 percent (factor 0.847). Floor = 140 / 0.847 = 165.3 hp. 150 hp derates to 127.05 hp and fails. 175 hp derates to 148.2 hp and passes. Whole-step rounding is about 162.8 hp. Do not copy the number.
+
+Diesel relief is NFPA 20-2025 §4.20.1.2, not electric §4.7.7.1. Require a main relief valve only where 121 percent of net shutoff plus maximum static suction, adjusted for elevation, exceeds the rating. Overspeed makes pressure scale about with speed squared (about 1.21 at 110 percent). Option A: 1.21 × 125 + 40 = 191.25 psi, above 175, so the valve is required (§4.20.2.1). Option B: 1.21 × 110 + 40 = 173.1, within 175 only if maximum static is at or under 41.9 psi. Do not skip the check because a prior schedule had no valve.
 
 Reduced-voltage starting is the draft practice where the motor is 100 hp or larger, or where the pump is on a generator. Across-the-line is not the default in those two cases. Label the choice.
 

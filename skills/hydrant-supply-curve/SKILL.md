@@ -642,4 +642,12 @@ Teach both sentences. They feed different checks. This is a local-amendment patt
    - Show-and-verify `[SYN]`: suction at 1,500 gpm = 60 − 2.19 = **57.81 psi**. Suction at 1,113.28 gpm = actual 74.84 psi (hydrant exponent 1.85) minus 1.26 psi Hazen-Williams (8 in. Schedule 40, 80 ft, C = 100) = **73.58 psi**, which is at least 20 psi, so the suction check is ACCEPT.
 3. Churn, overpressure, and component ratings use actual static, and maximum seasonal static, never the 80 psi cap (NFPA 20-2025 §4.7.7.1).
 4. Worked demand check `[SYN]`: design curve at 1,113.28 gpm = 59.84 psi. Municipal supply plus a **1000@40** pump envelope (36.83 psi net) = 96.67 psi against a 47.92 psi demand, margin +48.75 psi, PASS. The rated duty itself is owned by `pump-envelope`. This skill does not freeze a maker or a model.
-5. Demand times duration (1,113.28 gpm × 60 min = 66,797 gal, FM DS 5-32 §2.4.1.6) is a duration statement, not a local on-site storage clause. Verify with the engineer of record. List numbering under §903.3.5.5 is `[V]` until a plain-text reading of the adopted instrument confirms it.
+5. Demand times duration (1,113.28 gpm × 60 min = 66,797 gal, FM DS 5-32 §2.4.1.6) is a duration statement, not a tank size and not a local on-site storage clause. Show the product (1,113.28 × 60 = 66,796.8, reported as 66,797). Tank or storage sizing is a separate step, with its own basis. Verify with the engineer of record. List numbering under §903.3.5.5 is `[V]` until a plain-text reading of the adopted instrument confirms it.
+
+## 19. Wet campus rollup (one fire, not a sum)
+
+Synthetic teaching only. Do not attach it to a city or a job. Wet only. The dry and double-interlock area increase does not apply here.
+
+Campus demand is one most-demanding remote area plus its hose (one fire), not a sum of halls. Governing flow is 750 gpm: FM DS 5-32 wet 0.20 gpm/ft² × 2,500 ft² = 500 gpm, plus 250 gpm hose. Governing volume depends on the duration election: 45,000 gal (FM, 60 min, supervised) or 49,500 gal (NFPA 13-2025 ordinary-hazard group 2, 550 gpm × 90 min unsupervised, §19.2.3.1.3). State the election on the basis of design. The supply must deliver at least 750 gpm at the required pressure and at least the elected volume. Verify the supervised election with the engineer of record.
+
+Do not sum two halls. 0.20 × 5,000 ft² + 500 gpm hose = 1,500 gpm and 90,000 gal doubles the demand. The halls are separate fire areas. Using the NFPA 1,500 ft² area when FM controls (550 gpm, below 750 gpm) is unconservative. NFPA 13-2025 §19.2.3.1.5 (the 3,000 ft² trigger) is `[V]` until a plain-text pull is in hand. Hand the governing flow and volume to `density-area-dry-increase` and then to this curve. Do not copy the teaching gallons onto another site.
