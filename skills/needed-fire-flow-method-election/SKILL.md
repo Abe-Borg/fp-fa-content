@@ -2,7 +2,8 @@
 name: Needed fire flow method election
 description: >-
   use this when the AHJ, purveyor, or owner asks how much fire flow the campus
-  needs and which method binds (ISO Note-1 sprinklered path vs IFC Appendix B
+  needs and which method binds (country gate US or Canada; Canada uses
+  NBC 2023 Alberta Edition, BCBC 2024, or OBC 2024 at 3.2.5.7) (ISO Note-1 sprinklered path vs IFC Appendix B
   where adopted vs UFC §9-2 / App. C vs purveyor max-available / other named
   method) — packet optional; STS wet|dry|DI consumed or ASSUMED; produce a parameterized
   NFF / hydrant-credit geometry memo that can govern loop, tank, and pump
@@ -15,7 +16,7 @@ description: >-
 
 **Intake.** The input packet is optional. A missing input is not a stop: state the value used and why, and label it ASSUMED. Do not present an ASSUMED value as a cited code or table value, and do not freeze a vendor SKU. **Scope lock.** Wet pipe, dry pipe, and double-interlock preaction only. Foam, clean agent, water mist, and single-interlock or non-interlock preaction are out of scope. If one of those is requested as the basis of design, record it and stop. Do not substitute another system and do not size it here. Cite the section and the edition. Decide each parameter by the most stringent of the code floor, the insurer sheet, and the owner standard. Verify judgment calls with the engineer of record.
 
-Reusable US data-center fire-protection recipe. **This Skill decides WHICH fire-flow method binds for this AHJ / purveyor / owner, structures the NFF / required-fire-flow register, distinguishes AHJ fire-flow from sprinkler `qd` at the BOR, and emits hydrant-credit / overlapping-coverage geometry flags at handshake level** — after the assignment packet exists and STS has elected company `wet` | `dry` | `DI`.
+Reusable data-center fire-protection recipe. **Country gate (US | Canada).** US pins below stay on a US job. On a Canada job read section 1.0. Do not port a US pin into a Canada row or a Canada pin into a US row. **This Skill decides WHICH fire-flow method binds for this AHJ / purveyor / owner, structures the NFF / required-fire-flow register, distinguishes AHJ fire-flow from sprinkler `qd` at the BOR, and emits hydrant-credit / overlapping-coverage geometry flags at handshake level** — after the assignment packet exists and STS has elected company `wet` | `dry` | `DI`.
 
 It does **not** elect the hall sprinkler/preaction family (consume STS). It does **not** rebuild the hydrant 2-point `P(Q)` curve (`hydrant-supply-curve` owns that — and that Skill **explicitly fences out NFF / App B**). It does **not** invent IFC Appendix B table values, ISO FSRS hydrant-credit gallons, or commercial NFF duration gallons when the primary is unheld. It does **not** CAD hydrant coordinates. It does **not** design foam, mist, CAF, or clean agent.
 
@@ -32,6 +33,34 @@ Look up shop codebook notes **by title**: *Needed / required fire flow determina
 ---
 
 ## 1. Hard scope gate
+
+### 1.0 Country gate (US | Canada)
+
+Required at intake: country is US or Canada. On a Canada job, name the adopted code: NBC 2023 Alberta Edition, BCBC 2024, or OBC 2024. Another province is ASSUMED until the adopted code is named. An unresolved country is ASSUMED. It is not a blanket stop. Verify judgment calls with the engineer of record. On a US job, sections 3.1 through 3.12 are unchanged.
+
+| Adopted edition | Rule (paraphrase) | Sprinklered data-center outcome | Hold |
+|---|---|---|---|
+| NBC 2023 Alberta Edition, Div. B 3.2.5.7.(1) | (a) a piped municipal supply of at least 3,800 L/min at a residual of at least 140 kPa, or (b) a private supply of at least formula-Q from Table 3.2.5.7 | Applies only when sentences (3) and (4) do not exempt the building | Sentence (1) is held. The formula-Q figure is not quote-held. Do not compute it. Label it ASSUMED and verify |
+| NBC 2023 Alberta Edition 3.2.5.7.(2) | A private supply of 2,700 L/min below 75,000 L, or 3,800 L/min at 75,000 L or more, with a dry hydrant (NFPA 1142 Chapter 8) or a pressurized hydrant (NFPA 24) | Private hydrants follow the NFPA 24 pin named by the Alberta Edition. That pin is the 2013 edition, which is not held. Cite NFPA 24-2022 or NFPA 24-2025 and label it the nearest edition | Sentence (2) is held. NFPA 24-2013 and NFPA 1142 are NEEDS HOLD |
+| NBC 2023 Alberta Edition 3.2.5.7.(3) and (4) | The capacity requirements of sentence (1) do not apply to a building with an NFPA 14 standpipe (3) or with NFPA 13 sprinklers (4) | The capacity floor is exempt. Still show the sentence (1)(a) cross-check: 3,800 L/min is about 1,004 gpm at 140 kPa (about 20.3 psi). Sentence (4) is not a waiver of hydrant rules. NFPA 24 still binds. A municipal servicing standard binds only when the project confirms that standard. Hand that check to `hydrant-supply-curve` | held |
+| BCBC 2024 Div. B 3.2.5.7.(1) and (2) | (1) an adequate firefighting water supply; (2) a building sprinklered throughout, or provided with a standpipe, is deemed to comply, except the case the code names | Deemed to comply. Supply is the NFPA 13 demand, plus hose, plus the insurer duration. Do not carry the Alberta Edition numbers onto a BCBC job | held |
+| OBC 2024 3.2.5.7 | Performance language only. The body is not held | Treat the supply as a performance requirement and verify it before use | NEEDS HOLD. Do not quote the body |
+| NBC 2025 3.2.5.7 | Performance. Deeming to NFPA 13 or NFPA 14 appears in a note only | Practice is similar to BCBC, but the deeming sentence is not code text | note only |
+
+A note to 3.2.5.7 says FUS and NFPA 1142 should be consulted. That note is advisory.
+
+Duration on a Canada job: Alberta Edition 3.2.5.7 capacity does not govern a sprinklered building, so duration is NFPA 13 plus the insurer sheet (FM DS 3-26 or FM DS 5-32). Do not invent CAN/ULC-S524, CAN/ULC-S561, or other ULC hours.
+
+On a Canada job, do not:
+
+- Use IFC Appendix B or an ISO needed-fire-flow number as the Alberta Edition code floor. Sentence 3.2.5.7 is its own rule.
+- Cite an NFPA 24-2025 clause as the Alberta Edition pin unless it is labeled the nearest edition.
+- Apply 3,800 L/min at 140 kPa, or formula-Q, to a BCBC job.
+- Read sentence (4) as "no hydrant rules."
+- Treat a 01-May-2018 municipal DSSP citation of "ABC 1997" as the enforced building-code edition, or apply that DSSP on a job that has not confirmed it. When the standard is confirmed, read the stale citation as NBC 2023 Alberta Edition 3.2.5.5 or 3.2.5.7 and confirm it with the authority having jurisdiction.
+- Quote OBC 3.2.5.7 body text.
+
+On the Canada path, the ISO, IFC, and UFC method election in sections 3.3 through 3.7 is replaced by this table. Section 3.8 (needed fire flow is not sprinkler demand at the base of the riser), section 3.9 (hydrant handshake), and section 3.10 (concurrent demands) still run.
 
 ### 1.1 Company system-family fence (consumes STS — does not elect)
 

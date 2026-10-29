@@ -2,7 +2,7 @@
 name: Dry/preaction water-delivery screen
 description: >-
  use this when dry or double-interlock volume must prove water-delivery time
- (NFPA 13 ≤60 s / FM often 30 s gate) after company-elected wet|dry|DI
+ (NFPA 13 ≤60 s / FM often 30 s gate; country gate US or Canada; Canada pins NFPA 13-2019 §8.2.3 and §8.3.2.3) after company-elected wet|dry|DI
  (STS + matrix consumed when present, else ASSUMED; packet optional), and you elect QOD/accelerator vs volume
  cut vs extra risers; SI/NI as BOD → Stop RFI-variance (comparison-only
  evidence only); foam prohibited; mist PRACTICE REFUSED; status register
@@ -14,7 +14,7 @@ description: >-
 
 **Intake.** The input packet is optional. A missing input is not a stop: state the value used and why, and label it ASSUMED. Do not present an ASSUMED value as a cited code or table value, and do not freeze a vendor SKU. **Scope lock.** Wet pipe, dry pipe, and double-interlock preaction only. Foam, clean agent, water mist, and single-interlock or non-interlock preaction are out of scope. If one of those is requested as the basis of design, record it and stop. Do not substitute another system and do not size it here. Cite the section and the edition. Decide each parameter by the most stringent of the code floor, the insurer sheet, and the owner standard. Verify judgment calls with the engineer of record.
 
-Reusable DC fire-protection recipe. **This Skill is the WATER-DELIVERY TIME SCREEN** that runs after **suppression-technology-selection has already pinned** company-elected `dry` / `double-interlock` (or wet with an explicit dry-clock companion that still owes a delivery proof). It elects **QOD / accelerator vs volume-cut vs extra risers**, pins the **60 s vs 30 s fork**, states whether the chosen QOD is **listed for air vs nitrogen**, and emits a **status register** on the gate, Parameters A–E, and the proof claim. It does **not** pick occupancy, density×area, pump envelope, El/El trim, C&E, C-factor, or a SprinkFDT tree.
+Reusable data-center fire-protection recipe. **Country gate (US | Canada).** US pins below stay on a US job. On a Canada job read section 1.0. Do not port a US pin into a Canada row or a Canada pin into a US row. **This Skill is the WATER-DELIVERY TIME SCREEN** that runs after **suppression-technology-selection has already pinned** company-elected `dry` / `double-interlock` (or wet with an explicit dry-clock companion that still owes a delivery proof). It elects **QOD / accelerator vs volume-cut vs extra risers**, pins the **60 s vs 30 s fork**, states whether the chosen QOD is **listed for air vs nitrogen**, and emits a **status register** on the gate, Parameters A–E, and the proof claim. It does **not** pick occupancy, density×area, pump envelope, El/El trim, C&E, C-factor, or a SprinkFDT tree.
 
 **Core thesis:** accelerator **trip time is not water-delivery time.** Every opened QOD sheet that speaks to delivery says so in words. A listed QOD can **waive or shorten the valve-open half** of the clock; it does **not** prove water at the remote head. **Do not invent a 30 s (or 60 s) proof** unless the **caller names the listed calculation software** (or a test-manifold / as-built ITC procedure that actually measures water). If software is unnamed → **Stop** on any claim that the hall “meets 30 s.” Unproved 30 s → status `unresolved` or `handoff` — **never** `grounded` “meets 30 s.”
 
@@ -25,6 +25,28 @@ Reusable DC fire-protection recipe. **This Skill is the WATER-DELIVERY TIME SCRE
 ---
 
 ## 1. Hard scope gate
+
+### 1.0 Country gate (US | Canada)
+
+Required at intake: country is US or Canada. On a Canada job, name the adopted code (NBC 2023 Alberta Edition, BCBC 2024, or OBC 2024). An unresolved country is ASSUMED. It is not a blanket stop. Verify judgment calls with the engineer of record. On a US job, section 3 is unchanged.
+
+On a Canada job, layer 1 is NFPA 13-2019 only.
+
+| Topic | Cite on a Canada job (NFPA 13-2019) | Not the Canada cite | Hold |
+|---|---|---|---|
+| Double-interlock options | §8.3.2.3.1.1: at or under 500 gal, no delivery-time requirement. §8.3.2.3.1.2: 60 s or less to the inspector's test connection when detection and that test run together. §8.3.2.3.1.3: a listed calculation per §8.2.3.6. §8.3.2.3.1.4: the times in Table 8.2.3.6.1 | 2025 section numbers differ. The gallon and second values match | held |
+| Quick-opening device on double-interlock | §8.3.2.3.2. It may be used to meet .1.2 through .1.4. It does not lift the 500 gal limit | | held |
+| Dry-pipe size and delivery | §8.2.3. Sentence 8.2.3.2 is 60 s. Sentence 8.2.3.3 is 500 gal. Sentence 8.2.3.4 is 750 gal with a quick-opening device, and that 750 gal cap is dry pipe only | §8.2.4 | held |
+| Calculated times | Table 8.2.3.6.1 (ordinary hazard, two heads, 50 s) | Table 8.2.4.3.2 | held |
+| System area | §4.5 (52,000 ft², ordinary hazard) | §4.4 | held |
+
+FM DS 5-32 at 30 s is the insurer layer only. It is not a Canadian code floor. On an FM-insured job, use a listed calculation or a witnessed test, or add zones. This screen has no fixed gallon cap at 30 s. The optimistic volume that still meets the limit is `(limit_s - t_detect - t_release - t_exhaust) * Q_fill / 60`. Compute it from that job's fill rate and allowances. A different fill rate changes the gallons. Do not split a zone to satisfy a gallon number this section does not state.
+
+The delivery screen may print NFPA 13-2025 section labels. For double-interlock the numbers coincide (500 gal, 60 s, ordinary hazard 50 s), but a 2025 label is the wrong edition on a Canada job. Cite the 2019 sections in the package.
+
+Synthetic teaching, not a job: one double-interlock zone at 689 gal fails §8.3.2.3.1.1 and fails the 60 s screen (109.9 s). Two zones at about 345 gal each pass the 500 gal exemption in §8.3.2.3.1.1. Both still fail the FM 30 s insurer gate.
+
+On a Canada job, do not cite NFPA 13-2025 §8.2.4 or Table 8.2.4.3.2 as the code floor. Do not trust a tool label that says 2025 when the pin is 2019. Do not apply the 750 gal quick-opening cap to double-interlock. Do not treat the FM 30 s gate as a Canadian code floor.
 
 ### 1.1 Company system-family fence (handshake — this Skill elects nothing)
 
