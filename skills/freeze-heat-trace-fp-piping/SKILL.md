@@ -15,7 +15,7 @@ description: >-
 
 **Intake.** The input packet is optional. A missing input is not a stop: state the value used and why, and label it ASSUMED. Do not present an ASSUMED value as a cited code or table value, and do not freeze a vendor SKU. **Scope lock.** Wet pipe, dry pipe, and double-interlock preaction only. Foam, clean agent, water mist, and single-interlock or non-interlock preaction are out of scope. If one of those is requested as the basis of design, record it and stop. Do not substitute another system and do not size it here. Cite the section and the edition. Decide each parameter by the most stringent of the code floor, the insurer sheet, and the owner standard. Verify judgment calls with the engineer of record.
 
-Reusable US data-center fire-protection recipe. **This Skill screens freeze exposure from the 100-year DMT / cold-climate map, elects the freeze strategy (heated envelope / heated valve enclosure vs heat-trace on wet-must-stay-wet vs dry/DI supervisory drain), structures the OEM FS vs non-FS heat-trace path + FACP low-temp / leak / circuit-supervision alarm schedule, and emits a generic MasterSpec §210533 / §210700 edit checklist** — after the assignment packet exists and STS has elected company `wet` | `dry` | `DI`.
+Reusable data-center fire-protection recipe. **Country gate (US | Canada).** US pins below stay on a US job. On a Canada job use the Canada section and `most-stringent-basis-matrix` §4.2b. Do not port a US pin into a Canada row or a Canada pin into a US row.  **This Skill screens freeze exposure from the 100-year DMT / cold-climate map, elects the freeze strategy (heated envelope / heated valve enclosure vs heat-trace on wet-must-stay-wet vs dry/DI supervisory drain), structures the OEM FS vs non-FS heat-trace path + FACP low-temp / leak / circuit-supervision alarm schedule, and emits a generic MasterSpec §210533 / §210700 edit checklist** — after the assignment packet exists and STS has elected company `wet` | `dry` | `DI`.
 
 It does **not** elect the hall sprinkler/preaction family (consume STS). It does **not** elect Class I standpipe type (consume `standpipe-class-i-election-and-demand`). It does **not** invent site DMT °F, OEM wattage tables, circuit amps, or controller setpoints as universal defaults. It does **not** size closed-top tank heaters (companion / handoff). It does **not** design foam, mist, CAF, or clean agent. It does **not** CAD cable routes.
 
@@ -506,3 +506,18 @@ If notes conflict, **most-stringent wins** and both sources stay visible.
 | CAD / KB / worked examples / ARCHIVE writes | forbidden |
 
 ---
+
+
+## Canada freeze and heat trace
+
+Country gate (US | Canada). On a Canada job the trigger is NBC 3.2.5.17.(1) (NBC 2025, BCBC 2024, and NBC 2023 AE): protect fire-protection equipment from freezing where freezing can affect it and the area is unheated. The sentence is performance only. It states no method and no temperature. Take the method from the NFPA 13 edition in `most-stringent-basis-matrix` §4.2b. FM DS 9-18 still applies when that insurer is on the job.
+
+NFPA 13-2019 §16.4.1.4.1 is listed heat tracing, and a branch line needs a branch-line listing. §16.4.1.4.2 is supervision that the circuit is energized. §8.1.4: heat tracing is not a substitute for a heated dry or double-interlock valve enclosure. The valve stays in a heated room.
+
+Listing is a cUL or CSA fire-protection heat-trace system (UL category VGNJ7 for Canada). A city electrical bulletin is a local reference only, not the code floor. Confirm acceptance on the job. The controller follows IEEE 515.1 for ambient sensing, low temperature, and continuity. Cable identity, watts per foot, and circuit length stay empty until the maker data is in hand. Do not invent them.
+
+CE Code Rule 62-116 clause text is not held. Shop rule from secondary notes only, labelled [PRACTICE], not [CODE]: ground-fault protection on fire-protection heat trace trips at 30 mA and sends a ground-fault or loss-of-power supervisory signal to the fire alarm panel. Alarm-only ground fault is rejected. Confirm the adopted electrical code before treating 30 mA as code.
+
+Supervision goes to the fire alarm lane and never releases: NBC 3.2.4.9.(5) heat-trace loss of power; 3.2.4.9.(3)(g) valve-room low temperature; (c) low air; (a) tamper; (f) pump power loss. CAN/ULC-S524 and S537 stay NEEDS HOLD. Do not invent hours.
+
+Wrong moves: a US electrical-article label on a Canada job; alarm-only ground fault on fire-protection heat trace; heat trace in place of a heated double-interlock valve room (§8.1.4 fails).

@@ -15,7 +15,7 @@ Foam, clean agent, water mist, and a building deluge system are out of scope. Re
 
 Single-interlock and non-interlock preaction are comparison-only. If either is offered as the basis of design, record it, stop, and return an RFI. Do not substitute double-interlock.
 
-A jurisdiction outside the stated NFPA, IBC, and IFC basis is out of scope. Canada stays out of scope. Do not port these code-floor pins into that row. Insurer and owner layers still apply as written.
+A jurisdiction outside the stated NFPA, IBC, and IFC basis, and outside a country-gated Canada job, is out of scope. On a Canada job the code floor comes from the adopted NBC family and the edition pins in `most-stringent-basis-matrix`. Do not port US pins into that row or Canada pins into a US row. CAN/ULC-S524, S536, S537, S1001, and CEC Section 32 stay NEEDS HOLD. Do not invent those clause texts or battery hours. Insurer and owner layers still apply as written.
 
 ## How a number is carried
 

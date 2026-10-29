@@ -8,7 +8,7 @@ Anything the model writes from these notes is still a draft. The engineer of rec
 
 Double-interlock preaction is CSI 21 13 19. Dry pipe is CSI 21 13 16. A double-interlock or preaction draft that carries the dry-pipe number is a mislabel. Retitle it 21 13 19. Do not move dry-pipe requirements onto 21 13 19 to correct the number.
 
-The authoring catalog these notes were distilled from allowed single-interlock inside the preaction section and carried a clean-agent section. Neither is ingested. Single-interlock and non-interlock are comparison-only. Foam, clean agent, water mist, and deluge are out of scope. Do not author those sections. A jurisdiction outside the stated NFPA, IBC, and IFC basis is out of scope.
+The authoring catalog these notes were distilled from allowed single-interlock inside the preaction section and carried a clean-agent section. Neither is ingested. Single-interlock and non-interlock are comparison-only. Foam, clean agent, water mist, and deluge are out of scope. Do not author those sections. A jurisdiction outside the stated NFPA, IBC, and IFC basis is out of scope, except a Canada job that stays inside the country gate in Section 28 31 00. CAN/ULC-S524, S536, S537, S1001, and CEC Section 32 stay NEEDS HOLD.
 
 Company systems here: wet pipe, dry pipe, and double-interlock preaction, plus pumps, private mains, Class I standpipes, common work, and the Division 28 fire alarm those systems need. Nitrogen and compressors are articles inside the dry and double-interlock sections.
 

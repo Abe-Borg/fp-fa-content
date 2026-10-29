@@ -13,7 +13,7 @@ description: >-
 ## Intake and scope (all FA skills)
 - The input packet is optional. Any missing input gets a stated value, labeled **ASSUMED** (value used + why). ASSUMED is never shown as a code value. Keep going.
 - Scope locks are hard Stops: wet, dry, or double-interlock (DI) preaction only. No clean agent. No foam. Single- or non-interlock as basis of design: record, Stop, RFI-variance.
-- US jobs only. A Canadian code basis stops. Do not port these pins.
+- Country gate (US | Canada). On a US job use the NFPA, IBC, and IFC pins in this skill. On a Canada job keep this skill. NBC 2025 Division B 3.2.4 is the held alarm overlay where this skill cites it. CAN/ULC-S524, S536, S537, S1001, and CEC Section 32 stay NEEDS HOLD. Do not invent those clause texts or battery hours. Do not port a US pin into a Canada row or a Canada pin into a US row. Foam and clean agent stay locked.
 
 - On FM DI jobs carry the standing flag: "[OWNER]/insurer conflict: FM DS 5-32 (Jan 2026) s2.4.1.1 ranks DI preaction last. Company decision (design practice): keep DI. Flag to owner and FM on this job."
 - Label every claim [CODE] [HB] [PARA] [PRACTICE] [OWNER] (or [OWNER]/insurer). Cite section AND edition. Mark approximations with ~. Never invent code text; gaps get "section not pinned; verify before use.
@@ -63,3 +63,14 @@ FP-side source of the controller contact list (point rows 1 to 12, 12a to 12g, 2
 
 ## Output
 Point schedule (point, source device, NFPA 20 / insurer cite, NFPA 72 class, NFPA 72 cite, basis label, FACP label, panel), module counts per panel for both elections, C&E rows (supervisory: notify attended location, no NAC, no release; waterflow: alarm), FM flag block, ASSUMED list, FP handoff rows, open ids (none for NFPA 20 signals or §4.18; optional NFPA 72 Ch. 26), delta vs NFPA 72-2025 (§23.8.5.9 SAME 2019 / 2022 / 2025) and NFPA 20 edition delta (§10.4.7.2.3, §10.4.7.2.6; §4.18 SAME, §4.27.6.7 wording only; §4.8.8 / §4.8.9.1 / §4.16.5.3.2 SAME, §4.8.9 SAME, ten conditions; ).
+
+
+## Canada NBC heat trace and fire-department transmit
+
+On a Canada job add these supervisory points. They never release.
+
+- [CODE] NBC 2025 Div. B 3.2.4.9.(5): loss of power to heat tracing on standpipe risers and sprinkler piping is supervised by the fire alarm system. The same duty is carried in NBC 2023 AE and in BCBC 2024. Do not cite a US electrical article for that duty.
+- [CODE] NBC 2025 Div. B 3.2.4.9.(6): supervisory signals required by 3.2.4.9.(3) and (5) transmit to the fire department, per 3.2.4.7.(4).
+- [CODE] NBC 2025 Div. B 3.2.4.9.(3)(g): a temperature approaching freezing in a dry-pipe valve enclosure or a firefighting water-storage container is supervisory.
+- Double-interlock valve-room low temperature is supervisory [PRACTICE]. It is not 3.2.4.9.(3)(g). That sentence does not name double-interlock. Dry-pipe air loss is 3.2.4.9.(3)(c). Double-interlock low air stays the owner AND input, not that dry-pipe sentence.
+- CAN/ULC-S524 and S537 stay NEEDS HOLD. Do not invent hours or clause text.

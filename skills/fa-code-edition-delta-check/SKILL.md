@@ -1,7 +1,7 @@
 ---
 name: fa-code-edition-delta-check
 description: >-
-  Use at the start of any US FA design or review to pin the enforced NFPA 72
+  Use at the start of any FA design or review to pin the enforced NFPA 72
   edition and relabel each claim for 2019 / 2022 / 2025 differences. Deltas held
   in 72-16 to 72-46 (plus 20-01 to 20-05); topics are in the Basis table. Packet
   optional; missing edition ASSUMED.
@@ -11,7 +11,7 @@ description: >-
 ## Intake and scope (all FA skills)
 - The input packet is optional. Any missing input gets a stated value, labeled **ASSUMED** (value used + why). ASSUMED is never shown as a code value. Keep going.
 - Scope locks are hard Stops: wet, dry, or double-interlock (DI) preaction only. No clean agent. No foam. Single- or non-interlock as basis of design: record, Stop, RFI-variance.
-- Canada is out of scope.
+- Country gate (US | Canada). On a US job use the NFPA, IBC, and IFC pins in this skill. On a Canada job keep this skill. NBC 2025 Division B 3.2.4 is the held alarm overlay where this skill cites it. CAN/ULC-S524, S536, S537, S1001, and CEC Section 32 stay NEEDS HOLD. Do not invent those clause texts or battery hours. Do not port a US pin into a Canada row or a Canada pin into a US row. Foam and clean agent stay locked.
 - On FM DI jobs carry the standing flag: [OWNER]/insurer conflict: FM DS 5-32 (Jan 2026) s2.4.1.1 ranks DI preaction last. Company decision: keep DI. Flag to owner and FM on this job.
 - Label every claim [CODE] [HB] [PARA] [PRACTICE] [OWNER] (or [OWNER]/insurer). Cite section AND edition. Mark approximations with ~. Never invent code text; gaps get edition text not confirmed.
 - This skill pins the edition. Every other FA skill runs it first.
@@ -54,7 +54,7 @@ description: >-
 All rows [CODE] per edition shown, from 72-12, 72-13, 72-16 to 72-39, except the [HB] annex note. The 72-12 and 72-13 `` pages are summaries; 2025 VRLA/releasing/SOO/notification cells come from their same duties raw pulls ( 72-13-...).
 
 ## Inputs (ASSUME and flag any missing)
-1. Jurisdiction (US only; Canada is out of scope), adopted IBC/IFC edition, enforced NFPA 72 edition and any local amendments.
+1. Jurisdiction (US or Canada, per the country gate). On a US job pin the adopted IBC/IFC edition and the enforced NFPA 72 edition. On a Canada job pin the NBC adoption. S524, S536, S537, S1001, and CEC Section 32 stay NEEDS HOLD. Local amendments still apply.
 2. Design-to edition if different (company practice: design to 72-2025 [PRACTICE]).
 3. The deliverable or skill outputs to relabel.
 

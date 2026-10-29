@@ -11,7 +11,7 @@ description: >-
 
 # BESS gas detection layout and setpoints
 
-**Intake.** A missing input is ASSUMED (the value and why). Do not present an ASSUMED value as a cited code value. **Scope lock.** The suppression interface is wet pipe, dry pipe, or double-interlock preaction only. Foam, clean agent, water mist, and single-interlock as the basis of design are out of scope. Record and stop. Do not size them. Cite the section and the edition. Do not paste the standard. Unconfirmed section numbers carry VERIFY. Verify judgment calls with the engineer of record. Do not claim a stamp. A jurisdiction outside the stated NFPA, IBC, and IFC basis is out of scope. Pin editions first (`fa-code-edition-delta-check`). Three-layer basis (code, insurer, owner). Most stringent wins. Run the mixture math in `calcs/fa/lib/lfl.py` (tool `lfl_setpoints`). Do not compute Le Chatelier in the reply. Copy the method, not a sample room's numbers.
+**Intake.** A missing input is ASSUMED (the value and why). Do not present an ASSUMED value as a cited code value. **Scope lock.** The suppression interface is wet pipe, dry pipe, or double-interlock preaction only. Foam, clean agent, water mist, and single-interlock as the basis of design are out of scope. Record and stop. Do not size them. Cite the section and the edition. Do not paste the standard. Unconfirmed section numbers carry VERIFY. Verify judgment calls with the engineer of record. Do not claim a stamp. Country gate (US | Canada). On a Canada job keep this skill. CAN/ULC-S524, S536, S537, S1001, and CEC Section 32 stay NEEDS HOLD. Do not invent those clause texts or battery hours. Pin editions first (`fa-code-edition-delta-check`). Three-layer basis (code, insurer, owner). Most stringent wins. Run the mixture math in `calcs/fa/lib/lfl.py` (tool `lfl_setpoints`). Do not compute Le Chatelier in the reply. Copy the method, not a sample room's numbers.
 
 ## Basis
 
@@ -62,4 +62,4 @@ Species table. Mixture LFL from the tool. Setpoint table (mixture percent LFL an
 
 ## Out of scope
 
-Foam, clean agent, water mist, and single-interlock as the sprinkler basis. Do not size a suppressant mass or a vent from this skill. Canada is out of scope.
+Foam, clean agent, water mist, and single-interlock as the sprinkler basis. Do not size a suppressant mass or a vent from this skill. See the country gate in this skill.

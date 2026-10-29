@@ -16,7 +16,7 @@ description: >-
 
 **Intake.** The input packet is optional. A missing input is not a stop: state the value used and why, and label it ASSUMED. Do not present an ASSUMED value as a cited code or table value, and do not freeze a vendor SKU. **Scope lock.** Wet pipe, dry pipe, and double-interlock preaction only. Foam, clean agent, water mist, and single-interlock or non-interlock preaction are out of scope. If one of those is requested as the basis of design, record it and stop. Do not substitute another system and do not size it here. Cite the section and the edition. Decide each parameter by the most stringent of the code floor, the insurer sheet, and the owner standard. Verify judgment calls with the engineer of record.
 
-Reusable US data-center fire-protection recipe.
+Reusable data-center fire-protection recipe. **Country gate (US | Canada).** US pins below stay on a US job. On a Canada job use the Canada section and `most-stringent-basis-matrix` §4.2b. Do not port a US pin into a Canada row or a Canada pin into a US row. 
 
 **This Skill owns** the **listed centrifugal envelope screen** (rated / churn / 150%) against a company-scoped demand, through the shop `calcs/fp` `pump_envelope` op. It screens a candidate (`qr_gpm`, `pr_psi` as **inputs**) and reports whether that candidate sits inside the controlling flow-cap / churn / 150% / ceiling envelope. It also emits the **driver block** (§7A): diesel fuel-tank sizing basis, electric OCPD / GFPE / acceptance-amp pins, jockey capacity + setpoint window, seal election, VS relief, and VT vs HSC — as **cited pins**, not kernel outputs and not a nameplate.
 
@@ -730,3 +730,16 @@ Diesel relief stays on §4.20.1.2, 121 percent of shutoff plus maximum static su
 Static suction is a purveyor letter. It stays ASSUMED until that letter is in hand.
 
 Wrong clear, same 40 psi static: the electric screen in §4.7.7.1 is 130 + 40 = 170 psi, which is at or under 175 psi and looks acceptable. It leaves out the 121 percent overspeed term. Do not clear a diesel on that arithmetic. The 1,000 gpm at 40 psi teaching duty and the 1,250 gpm at 40 psi alternate note in §19 are unchanged.
+
+
+## Canada diesel pump house
+
+Country gate (US | Canada). Pin NFPA 20 from `most-stringent-basis-matrix` §4.2b: 2016 on BCBC 2024, NBC 2023 AE, and OBC 2024; 2019 on the NBC 2025 model. Do not cite 2019 or 2025 section numbers as the code floor on a 2016 job. The screen below is synthetic. Do not attach it to a city or a job.
+
+Fuel, NFPA 20-2016 §11.4.1.3.1, one gallon per horsepower plus 5 percent plus 5 percent. At an ASSUMED 125 hp: 125 × 1.05 × 1.05 = 137.8 gal (about 522 L). The maker fuel curve governs. Do not freeze the horsepower.
+
+NFC 2023 AE room fork, short paraphrase. 4.3.13.1.(1)(b) allows indoor fire-pump fuel. 4.3.13.4.(1) routes that fuel to a 4.3.14 room except as 4.2.8 allows. An industrial occupancy may use 4.2.8.2.(1)(b): incidental storage at or below 5 000 L of Class IB to IIIA, per fire compartment, summing every tank in that compartment, including generator day tanks. A Group D occupancy does not use 4.2.8, so the tank needs the dedicated 4.3.14 room: at least a 2 h separation, containment of at least 100 percent of the largest tank, a liquid-tight joint, and no other use. Do not close the room until the occupancy is pinned. Static head is at or below 70 kPa [NFC 2023 AE 4.3.13.3]. Heat is at least 40 °F [NFPA 20-2016 §4.13.3.1; FM DS 3-7]. Winter-grade diesel, no biodiesel [FM DS 3-7 §2.4.21]. The ULC assembly number for the 2 h separation is not held. Do not invent it.
+
+Churn screen, ASSUMED suction 60 psi plus 120 psi net churn = 180 psi, which is over the 175 psi ceiling, so it fails. Fix by lowering rated pressure, a flatter curve, or the NFPA 20-2016 pressure-control path. That section number is [verify]. Do not freeze rated pressure or the relief setting. Replace the ASSUMED suction with the site flow test.
+
+Wrong moves: a Group D tank left in the pump room; an industrial compartment counted as the fire-pump tank only; summer-grade diesel or biodiesel.
