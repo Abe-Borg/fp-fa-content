@@ -283,7 +283,7 @@ Pump sizing or curve; driver OCPD or feeder sizing; FA panel design, signal clas
 1. Basis line (editions, insurer, owner, local amendment, OEM + IOM rev).
 2. Step A matrix. 3. Step B terminal map. 4. Step C spec clauses (copy-ready) + commissioning lines. 5. Step D room schedule. 6. Step E valve schedule. 7. Step F outage budget with inputs. 8. Step G acceptance union. 9. Step H FA hand-off. 10. Status register (ASSUMED, `[V]`, `submittal confirm`). 11. Delta vs NFPA 20-2025.
 
-## 18. Jockey and fire-pump start ladder (partial)
+## 18. Jockey and fire-pump start ladder
 
 Order, top to bottom: jockey stop, then jockey start, then fire-pump start **below** jockey start, then each extra pump about 10 psi lower. The fire pump is not the jockey [CODE NFPA 20-2025 §4.27.7].
 
@@ -293,4 +293,6 @@ Worked insurer arithmetic only (1,000 gpm, 80 psi rated, 95 psi churn, 60 psi st
 
 Wrong pattern: fire-pump start about 5 psi above jockey stop (170 + 5 = 175 psi on the worked case). The fire pump then starts before the jockey on every leak. That violates NFPA 20-2025 §4.27.7 and the annex intent that the fire pump is not the pressure-maintenance pump. Do not use it.
 
-**NFPA 20 psi offsets in annex A.4.27, 2019 versus 2025, stay PENDING.** They are ASSUMED and are not asserted here. Do not invent a 5 psi or 10 psi code offset to fill that gap. The insurer figures above are sheet values, not a substitute for the unpinned annex.
+Annex A.14.2.6(4) is advisory. In NFPA 20-2019, NFPA 20-2022, and NFPA 20-2025, jockey stop is churn plus the minimum static supply, and jockey start is at least 10 psi below that stop. Fire-pump start is 5 psi below jockey start in NFPA 20-2019 and NFPA 20-2022, and 10 psi below jockey start in NFPA 20-2025. Each extra pump steps another 10 psi lower. When the pressure-switch differential will not meet that example, set the absolute points from the test gauges and verify them with the engineer of record. Figure A.4.27.6.5 stays optional PARK and is not asserted.
+
+Where an insurer sheet and NFPA both apply, take the controlling carrier and state which edition of A.14.2.6(4) was used for the NFPA layer.
