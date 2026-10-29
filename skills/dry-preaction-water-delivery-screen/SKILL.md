@@ -40,7 +40,7 @@ On a Canada job, layer 1 is NFPA 13-2019 only.
 | Calculated times | Table 8.2.3.6.1 (ordinary hazard, two heads, 50 s) | Table 8.2.4.3.2 | held |
 | System area | §4.5 (52,000 ft², ordinary hazard) | §4.4 | held |
 
-FM DS 5-32 at 30 s is the insurer layer only. It is not a Canadian code floor. On an FM-insured job, use a listed calculation or a witnessed test, or add zones. On this optimistic screen, the volume that still meets 30 s is about 90 gal.
+FM DS 5-32 at 30 s is the insurer layer only. It is not a Canadian code floor. On an FM-insured job, use a listed calculation or a witnessed test, or add zones. This screen has no fixed gallon cap at 30 s. The optimistic volume that still meets the limit is `(limit_s - t_detect - t_release - t_exhaust) * Q_fill / 60`. Compute it from that job's fill rate and allowances. A different fill rate changes the gallons. Do not split a zone to satisfy a gallon number this section does not state.
 
 The delivery screen may print NFPA 13-2025 section labels. For double-interlock the numbers coincide (500 gal, 60 s, ordinary hazard 50 s), but a 2025 label is the wrong edition on a Canada job. Cite the 2019 sections in the package.
 

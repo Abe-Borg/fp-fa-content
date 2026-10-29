@@ -2,7 +2,7 @@
 name: Hydrant supply curve
 description: >-
   use this ideally after density-area-dry-increase has produced company-scoped
-  wet/dry/DI demand (if absent, assume and flag ASSUMED) (`q_spr` / `qd_gpm` + hose + duration gallons) and you must prove (country gate US or Canada; Canada adds SI units, the NBC 2023 Alberta Edition 3.2.5.7 cross-check, and municipal DSSP rows)
+  wet/dry/DI demand (if absent, assume and flag ASSUMED) (`q_spr` / `qd_gpm` + hose + duration gallons) and you must prove (country gate US or Canada; Canada adds SI units and the NBC 2023 Alberta Edition 3.2.5.7 cross-check; a municipal DSSP applies only when that standard is confirmed for the project)
   municipal/hydrant supply vs demand at the BOR from a 2-point flow test (Ps,
   Ph, Qf → N^1.85 curve, optional one-segment relocate, hose + duration) and
   return a pump need/no-need verdict — with matrix pins for
@@ -42,18 +42,20 @@ Write output only to the caller-named path.
 
 Required at intake: country is US or Canada. On a Canada job, name the province and the municipality, and name the adopted code (NBC 2023 Alberta Edition, BCBC 2024, or OBC 2024). An unresolved country is ASSUMED. It is not a blanket stop. Verify judgment calls with the engineer of record. On a US job the sections below are unchanged.
 
-Run the supply calc in gpm and psi, and also report L/min and kPa. 1 gpm = 3.785 L/min. 1 psi = 6.895 kPa. The Alberta Edition floor of 3,800 L/min is about 1,004 gpm. 140 kPa is about 20.3 psi. 550 kPa is about 79.8 psi. On a municipal DSSP job the flow test comes from the servicing-standard fire-flow letter (municipal DSSP §4.2). If that letter is missing, label the test ASSUMED.
+Run the supply calc in gpm and psi, and also report L/min and kPa. 1 gpm = 3.785 L/min. 1 psi = 6.895 kPa. The Alberta Edition floor of 3,800 L/min is about 1,004 gpm. 140 kPa is about 20.3 psi. 550 kPa is about 79.8 psi.
+
+The municipal DSSP rows are one servicing standard, dated 01-May-2018. They are not an NBC, BCBC, or OBC rule, and they are not a Canada-wide overlay. Name the municipality. Apply §4.2 and §5.9 through §5.11 only after the project confirms that this 01-May-2018 standard is the one adopted there. If it is not, omit the rows. Do not copy the diameters, loop lengths, or hydrant spacing onto another municipality. The §4.2 fire-flow letter is the test source only on a confirmed job. If that letter is missing, label the test ASSUMED.
 
 | Row | Rule (paraphrase) | Design response | Hold |
 |---|---|---|---|
 | NBC 2023 Alberta Edition Div. B 3.2.5.7.(1)(a) | 3,800 L/min at 140 kPa from the municipal supply | Read the supply curve at 1,004 gpm. Pass when residual is at least 20.3 psi. Where sentence (4) exempts an NFPA 13 building, still show the row | held |
 | BCBC 2024 3.2.5.7.(2) | A sprinklered building, or a building with a standpipe, is deemed to comply | Do not apply the Alberta Edition numbers. Use NFPA 13 demand plus the insurer demand | held |
 | OBC 2024 3.2.5.7 | Performance language only. The body is not held | Verify before use | NEEDS HOLD. Do not quote the body |
-| Municipal DSSP §5.9(a) | A private-hydrant service is at least 150 mm. A leg longer than 180 m to a hydrant is looped | Loop the main. Flag a dead leg longer than 180 m | held |
-| Municipal DSSP §5.9(d) | Static pressure above 550 kPa requires a pressure-reducing valve on the service | If static is above 79.8 psi, flag it. Whether that valve rule applies to the fire service is open. Verify with the municipality | text held; applicability open |
-| Municipal DSSP §5.11(d) | Private hydrants are not on a separate service. They are on a service that has a constant draw | This conflicts with a dedicated fire service. Flag it to the owner and the municipality | text held; municipal confirmation open |
-| Municipal DSSP §5.11(e), (f), and (l) | A hydrant is within 45 m of the fire-department connection. Public hydrants are not on private lines. A dead end does not carry two hydrants | Loop the main. Keep the standpipe arrangement consistent with these limits | held |
-| Municipal DSSP §5.11(j) | The servicing standard cites "ABC 1997 §3.2.5.5" | That citation is stale. Read it as NBC 2023 Alberta Edition. Confirm it with the authority having jurisdiction | held, and flagged |
+| Municipal DSSP (01-May-2018) §5.9(a) | A private-hydrant service is at least 150 mm. A leg longer than 180 m to a hydrant is looped | Only if this standard is confirmed: loop the main and flag a dead leg longer than 180 m | text of that standard; not a job requirement until confirmed |
+| Municipal DSSP (01-May-2018) §5.9(d) | Static pressure above 550 kPa requires a pressure-reducing valve on the service | Only if this standard is confirmed: if static is above 79.8 psi, flag it. Whether that valve rule applies to the fire service is open. Verify with the municipality | text of that standard; applicability open |
+| Municipal DSSP (01-May-2018) §5.11(d) | Private hydrants are not on a separate service. They are on a service that has a constant draw | Only if this standard is confirmed: this conflicts with a dedicated fire service. Flag it to the owner and the municipality | text of that standard; municipal confirmation open |
+| Municipal DSSP (01-May-2018) §5.11(e), (f), and (l) | A hydrant is within 45 m of the fire-department connection. Public hydrants are not on private lines. A dead end does not carry two hydrants | Only if this standard is confirmed: loop the main and keep the standpipe arrangement inside these limits | text of that standard; not a job requirement until confirmed |
+| Municipal DSSP (01-May-2018) §5.11(j) | The servicing standard cites "ABC 1997 §3.2.5.5" | Only if this standard is confirmed: that citation is stale. Read it as NBC 2023 Alberta Edition and confirm it with the authority having jurisdiction | text of that standard, and flagged |
 | Private hydrants, NFPA 24 | NBC 2023 Alberta Edition 3.2.5.7.(2)(b) pins NFPA 24-2013 | NFPA 24-2013 is not held. Cite NFPA 24-2022 or NFPA 24-2025 and label it the nearest edition. A BCFC pin to NFPA 24 is also not held | NEEDS HOLD |
 
 Synthetic teaching, not a job: demand 900 gpm (0.20 gpm/ft² over 2,500 ft², plus 30 percent, plus 250 gpm hose) against a supply derated by 0.9. Residual is 63.3 psi at 900 gpm and 61.3 psi at 1,004 gpm, which is above 20.3 psi, so the cross-check is a provisional pass. That row has no system-side calculation. A pump verdict goes to `pump-envelope`. Duration is NFPA 13 plus the insurer. Do not cite ULC hours. On a Canada pin, cite NFPA 13-2019 for the demand (`density-area-dry-increase` section 1.0).
