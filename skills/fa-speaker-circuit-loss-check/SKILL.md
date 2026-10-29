@@ -60,7 +60,7 @@ DC NAC voltage drop: `fa-nac-voltage-drop-check`. Amplifier battery: `fa-seconda
 8. Note amplifier supervision (§10.19.1) and battery handoff to `fa-secondary-power-battery-calc` (24 h + 15 min at max load, §10.6.7.2.3 to .2.4).
 
 ## Worked screen
-Method only. Do not copy it as a job result. A 70.7 V circuit at 60 W and 1,900 ft on 14 AWG is about 1.163 dB of loss (signed form about -1.163 dB) and fails the 1.0 dB budget. The same run on 12 AWG is about 0.751 dB (about -0.751 dB) and passes. A battery calc that passes, for example 15.90 Ah against an 18 Ah pick at 24 h + 15 min, does not clear the failing circuit. Fix the wire, then rerun the loss.
+Method only. Do not copy it as a job result. A 70.7 V circuit at 60 W and 1,900 ft on 14 AWG is about 1.163 dB of loss (signed form about -1.163 dB) and fails the 1.0 dB budget. The same run on 12 AWG is about 0.751 dB (about -0.751 dB) and passes. A battery calc that passes, for example 15.90 Ah against an 18 Ah pick at 24 h + 15 min, does not clear the failing circuit. Fix the wire, then rerun the loss. The battery-spare follow-on is training only [PRACTICE]. It is not [CODE] and it is not an approved live design. Verify with the engineer of record. The 1.0 dB limit stays [CODE] on NFPA 72-2025. EVACS duration stays 24 h + 15 min [CODE] and governs over FM 24 h + 5 min [OWNER].
 
 ## Output
 Edition and label; input table with ASSUMED flags; per-gauge, per-voltage loss and PASS/FAIL; L_max; MIA used; fixes; open items.
