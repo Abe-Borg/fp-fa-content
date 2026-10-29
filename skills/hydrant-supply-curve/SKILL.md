@@ -650,4 +650,14 @@ Synthetic teaching only. Do not attach it to a city or a job. Wet only. The dry 
 
 Campus demand is one most-demanding remote area plus its hose (one fire), not a sum of halls. Governing flow is 750 gpm: FM DS 5-32 wet 0.20 gpm/ft² × 2,500 ft² = 500 gpm, plus 250 gpm hose. Governing volume depends on the duration election: 45,000 gal (FM, 60 min, supervised) or 49,500 gal (NFPA 13-2025 ordinary-hazard group 2, 550 gpm × 90 min unsupervised, §19.2.3.1.3). State the election on the basis of design. The supply must deliver at least 750 gpm at the required pressure and at least the elected volume. Verify the supervised election with the engineer of record.
 
-Do not sum two halls. 0.20 × 5,000 ft² + 500 gpm hose = 1,500 gpm and 90,000 gal doubles the demand. The halls are separate fire areas. Using the NFPA 1,500 ft² area when FM controls (550 gpm, below 750 gpm) is unconservative. NFPA 13-2025 §19.2.3.1.5 (the 3,000 ft² trigger) is `[V]` until a plain-text pull is in hand. Hand the governing flow and volume to `density-area-dry-increase` and then to this curve. Do not copy the teaching gallons onto another site.
+Do not sum two halls. 0.20 × 5,000 ft² + 500 gpm hose = 1,500 gpm and 90,000 gal doubles the demand. The halls are separate fire areas. Using the NFPA 1,500 ft² area when FM controls (550 gpm, below 750 gpm) is unconservative. The 3,000 ft² concealed-space trigger is owned by `density-area-dry-increase` §19 and restated as a supply target in §20. Do not copy the teaching gallons onto another site.
+
+## 20. Supply target when the 3,000 ft² trigger or the duration election changes
+
+Consume the demand from `density-area-dry-increase`. Do not rebuild it here. Synthetic wet campus only. Do not attach it to a city or a job. The dry and double-interlock area increase does not apply.
+
+- Documented supervision under NFPA 13-2025 §19.2.3.1.3, and the concealed-space trigger does not fire: supply at least **750 gpm** and **45,000 gal** (60 min).
+- Supervision not documented: **49,500 gal** governs (ordinary-hazard group 2, 550 gpm × 90 min). Do not take 60 min without that supervision basis on the basis of design.
+- A hall adjacent to a qualifying combustible concealed space: **760 gpm** and **45,600 gal** (column 2, 0.17 gpm/ft² over 3,000 ft² plus 250 gpm hose, 60 min). The code floor can beat the 750 gpm insurer figure.
+
+These gallons are a duration statement. They are not a tank size and not a local on-site storage clause. Do not sum halls. Hand the governing flow and volume through this curve. Verify the supervision election with the engineer of record.

@@ -213,7 +213,7 @@ Resolve **enforced** vs **latest** before reading any table. Format: `instrument
 
 | Layer | What to pin | Shop-pinned editions |
 |---|---|---|
-| Code floor | IFC high-piled (Ch.32); NFPA 13 storage family chapters; Li-ion storage per the **adopted IFC edition** (see Step 3.2c) | **IFC-2024** as adopted. **NFPA 13-2025** = delta reference. Unamended **2024 I-Codes** enforce **NFPA 13-2022**. **NFPA 13 storage chapters, IFC Ch.32, the IFC 2024 Li-ion storage section text, NFPA 855 primary text are not held** → every code-floor storage/Li-ion number is **`[V]` / `[verify vs primary]`**. |
+| Code floor | IFC high-piled (Ch.32); NFPA 13 storage family chapters; Li-ion storage per the **adopted IFC edition** (see Step 3.2c) | **IFC-2024** as adopted. **NFPA 13-2025** = delta reference. Unamended **2024 I-Codes** enforce **NFPA 13-2022**. Model IFC 2024 §§3207–3210 are paraphrased in the chapter note. **The rest of IFC Ch.32, including Table 3208.3 cell values, the IFC 2024 Li-ion storage section text, NFPA 13 storage-chapter cell values beyond the pins already cited, and NFPA 855 primary text are not held** → those numbers stay **`[V]` / `[verify vs primary]`**. |
 | Insurer (this Skill’s design sheet) | FM DS 8-1 classifies; **FM DS 8-9 protects**; **FM DS 7-112** at-rest overlay when Li-ion | **DS 8-1 Apr-2014 / IR Oct-2024.** **DS 8-9 March 2010 / IR April 2026** (103 pp, official ungated) — portal re-read obligation; corpus still Jul-2018 mined `[V]`. **DS 7-112 October 2024** (first publication). Layout companion **FM DS 2-0 Oct-2021 / IR Jan-2024 §2.5.4**. |
 | Insurer (hall adjacency only) | FM DS 5-32 / DS 3-26 | **DS 5-32 January 2026** — white-space comparator and mixed-use wall ratings, **not** the storage design sheet. **DS 3-26 April 2025 §2.2.5** greatest-hazard. Do **not** pull 0.2 / 2,500 / 3,500 / QR pendent into the storage row. |
 | Owner | Storage interlock, cutoff, commodity assumption, pallet policy, max SOC | Project-issued. Public posture ≠ basis of design. |
@@ -443,7 +443,7 @@ ds89_applies = height_gate_class123 OR height_gate_plastics OR area_gate
 | Tag | Use |
 |---|---|
 | **`[SYN]`** | Invented commodity, height, N@P row, K-factor, q_spr from guessed K√P, campus `qd` copied from hall 750/45,000, invented NFPA↔FM class map, synthetic mixed-program Space H copied as N@P default. |
-| **`[V]`** | IFC Ch.32 / IFC 2024 Li-ion storage section (§320 per corpus) / 2027 Ch. 43; NFPA 13-2025 storage chapters / ESFR wet-only listing (system type cited §14.2.2, pull 13-10; head listing must be cited, else Stop + RFI-variance, Verify with engineer of record); DS 8-9 Apr-2026 table body vs Jul-2018 corpus; SI wet-vs-dry via DS 5-48 (comparison-only); packaged-server CEP test; wire-deck 70% open; DS 7-112 cut-off FRR vs DS 5-33 2-hr. |
+| **`[V]`** | IFC Ch.32 outside the §§3207–3210 paraphrase (Table 3208.3 cells in particular) / IFC 2024 Li-ion storage section (§320 per corpus) / 2027 Ch. 43; NFPA 13-2025 storage chapters / ESFR wet-only listing (system type cited §14.2.2, pull 13-10; head listing must be cited, else Stop + RFI-variance, Verify with engineer of record); DS 8-9 Apr-2026 table body vs Jul-2018 corpus; SI wet-vs-dry via DS 5-48 (comparison-only); packaged-server CEP test; wire-deck 70% open; DS 7-112 cut-off FRR vs DS 5-33 2-hr. |
 | **`[inference]`** | Every DC consequence of DS 8-1 / DS 8-9 / DS 7-112 (those sheets have **zero** or near-zero DC content). Label it in the output. |
 | Grounded FM pins | §1.0 trigger; §2.3.3.5 15 ft; §2.3.3.7.2 no interpolation; Table 14 250/60 · 500/90 · 500/120; QR/pendent wet-only; dry SR 280 °F; open-frame App. A; DS 7-112 Oct-2024 SOC / incidental / damaged. Cite **section AND edition**. |
 
@@ -528,7 +528,7 @@ Cite the section and the edition. Do not invent a section. **FM DS 8-1 Apr-2014 
 1. **Li-ion state split.** At-rest / spare / staging / damaged → **CONTINUE** DS 7-112 sub-path here. Installed ESS → hand ESS Skill. ≤20 kWh BBU → hand power-isolation. Do **not** Stop→ESS for stored Li-ion.
 2. Confirm occupancy-hazard-fork consumed (`storage`/`mixed`, no HC on this row).
 3. Pin editions. DS 8-9 **Mar-2010 / IR April 2026** design pin + Jul-2018 corpus `[V]` / portal re-read. DS 7-112 **Oct-2024** when Li-ion. NFPA 13-2025 = **delta**, not the OH table.
-4. Run §1.0 trigger. Report IFC Ch.32 separately `[V]`. Do not dismiss on IFC. Portable-rack escape caution.
+4. Run §1.0 trigger. Report IFC Ch.32 separately. Model §§3207–3210 are the chapter note; the rest of the chapter, including Table 3208.3 cells, stays `[V]`. Do not dismiss storage on the IFC height gate. Portable-rack escape caution.
 5. Three-step commodity (pallet included) or DS 7-112 packaging→CUP/CEP/UUP/UEP. No invented default class.
 6. Open-frame test **before** any ceiling-only row.
 7. Fork wet vs dry and head family from **STS**. DI/dry → **SR upright 280 °F**. SI sheet language = comparison-only only.
@@ -537,3 +537,14 @@ Cite the section and the edition. Do not invent a section. **FM DS 8-1 Apr-2014 
 10. Table 14 from **protection-table** N (or DS 7-112 500/2 h when overlay governs). **Do not freeze campus on 750 / 45,000 (wet).** Hand off to hydrant/pump.
 11. ESFR in preaction/DI: [CODE NFPA 13-2022/2025 §14.2.2 (ESFR system-type limit; other system types only if specifically listed), pull 13-10]; no ESFR without a cited dry/preaction listing → Stop + RFI-variance (Verify with engineer of record).
 12. Show-and-verify. Status register + `[SYN]` / `[V]` / `[inference]` listed. Directional Δ vs NFPA 13-2025 **storage**. Write **only** to caller-named path.
+
+## Model IFC 2024 high-piled rack and shelf (sections 3207 through 3210)
+
+Model text only. State amendments are not checked. The fire code sets whether the high-piled rules apply. NFPA 13 sets the sprinkler design. FM DS 8-9 and the owner layer stay on their own rows. Wet, dry, and double-interlock only. Foam, clean agent, and single-interlock are out of scope.
+
+- §3207.2: sprinklers throughout the high-piled area, or the area is separated by 1-hour fire barriers (IBC §707). Shelf storage higher than 12 ft and lower than 15 ft is designed to NFPA 13. At 15 ft and above, the model text calls for special protection, such as in-rack sprinklers.
+- §3208: bin boxes higher than 5 ft are treated as racks. A solid shelf larger than 20 ft² follows the solid-shelf rules. Mesh that is at least 50 percent open, with openings not larger than 6 in., counts as open. Plastic shelves need protection engineered for that shelf. Flue spaces follow Table 3208.3. Check the table cells before copying them. A double-row transposition is possible, so the cell values stay `[V]`. Keep the flues clear. Column protection follows NFPA 13. An extra-high rack needs approval from the fire code official.
+- §3209 is an alarm and controls hook, not a density. A carousel larger than 500 ft² shuts down automatically. Smoke detection extends 15 ft beyond the unit, a local alarm sounds, and one detector stops the machine. An automated rack has a manual emergency shutdown switch. Above 500 ft², automatic shutdown is on waterflow or on detection.
+- §3210: paper records stored higher than 12 ft follow §§3206 and 3208. Archive rooms follow NFPA 232. That path is rarely the data-hall staging case.
+
+Flue and in-rack design rules in NFPA 13 Chapters 20 and 25 stay `[V]` here. This note does not close the rest of Chapter 32.

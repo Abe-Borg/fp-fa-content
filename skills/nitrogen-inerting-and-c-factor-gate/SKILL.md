@@ -446,4 +446,49 @@ Nitrogen = `n` on a dry/DI hall is **not** a Stop — it is a lever **not taken*
 
 ## Check before you finish
 
-1. Hard-scope gate: dry|DI only; wet → N/A; SI/NI-as-BOD → Stop `RFI-variance`; foam/mist Stop. Emit status on gate. 2. Check packet (optional) + STS `dry`|`double-interlock` + matrix nitrogen/C/inert rows; missing → `ASSUMED` (flagged), not a Stop. 3. Confirm other inputs; Stop tests. 4. Pin editions; name the holes (13 C-table, 1035 WHOLE/2024, NFPA 25, Hopkins raw per-port). 5. Union five parameters separately; status on each. 6. Elect inert vs air (AXA SI = comparison-only; AXA DI mandates N₂). 7. Elect generator vs cylinders. Liquid = Stop. Specify by duty + listed function (FM 1035 where claimed / certified); **ECS = default family**, UFS NGM+CTA = FM-certificate alternate, Potter IntelliGen = cited example; OEM values confirm at submittal. Two-number check (Σ gal vs maintenance; largest single vs 30-min fill); no Viking 0.01213 sizing from CFM @ max pressure. Draw compressor + generator. 8. Remote purge. Branch-end (+ dead-end) sample ports. Reject purge-valve / generator / AutoPurge / riser-vent / cabinet-SP readings as inerting evidence. Print the 8-week table + thin OEM sampling pointer. 9. Emit **C=100 always** (design-practice setting). C=120 = `comparison-only` line with ≈29 % shown. DS 2-1 does not grant 120. 10. ITM-lever eligibility; hand off to itm-design-for-testability (dry/DI + FM only). 11. Reciprocal hand-offs: water-delivery (fill ≠ delivery) / El-El / C&E / STS / matrix / density consumers. 12. Δ vs 13-2025 and vs NFPA 25. 13. Honesty: worked packages are method (Adapt, don't copy); no PLACEHOLDER; no invent purity/scfm/SKU/14-day. 14. Write **only** to the caller-named path.
+1. Hard-scope gate: dry|DI only; wet → N/A; SI/NI-as-BOD → Stop `RFI-variance`; foam/mist Stop. Emit status on gate. 2. Check packet (optional) + STS `dry`|`double-interlock` + matrix nitrogen/C/inert rows; missing → `ASSUMED` (flagged), not a Stop. 3. Confirm other inputs; Stop tests. 4. Pin editions; name the holes (13 C-table, 1035 WHOLE/2024, NFPA 25, Hopkins raw per-port). 5. Union five parameters separately; status on each. 6. Elect inert vs air (AXA SI = comparison-only; AXA DI mandates N₂). 7. Elect generator vs cylinders. Liquid = Stop. Specify by duty + listed function (FM 1035 where claimed / certified); **ECS = default family**, UFS NGM+CTA = FM-certificate alternate, Potter IntelliGen = cited example; OEM values confirm at submittal. Two-number check (Σ gal vs maintenance; largest single vs 30-min fill); no Viking 0.01213 sizing from CFM @ max pressure. Draw compressor + generator. 8. Remote purge. Branch-end (+ dead-end) sample ports. Reject purge-valve / generator / AutoPurge / riser-vent / cabinet-SP readings as inerting evidence. Print the 8-week table + thin OEM sampling pointer. 9. Emit **C=100 always** (design-practice setting). C=120 = `comparison-only` line with ≈29 % shown. DS 2-1 does not grant 120. 10. ITM-lever eligibility; hand off to itm-design-for-testability (dry/DI + FM only). 11. Reciprocal hand-offs: water-delivery (fill ≠ delivery) / El-El / C&E / STS / matrix / density consumers. 12. Δ vs 13-2025 and vs NFPA 25. 13. Honesty: worked packages are method (Adapt, don't copy); no PLACEHOLDER; no invent purity/scfm/SKU/14-day. 14. On a low-pressure double-interlock valve, run the §10 ladder before freezing cut-in, low-air, and high-air. 15. Write **only** to the caller-named path.
+
+## 10. Low-pressure valve and generator setpoint ladder
+
+Teaching setpoints. They stay ASSUMED until the valve instruction and the generator instruction are in the submittal. Wet is outside this ladder. Single-interlock is not a company system and is not this ladder. Foam and clean agent are out of scope.
+
+NFPA 13-2025 supervision, paraphrased:
+
+- §8.2.6.1: system pressure follows the valve instruction. Trip pressure plus 20 psi is the default only when the maker gives no pressure.
+- §8.2.6.3: provide the low and high supervisory switches.
+- §8.2.6.4: the low switch is at least 5 psi above the trip pressure, or at the manufacturer's setting.
+- §8.2.6.5: the high switch is at least 5 psi above the system pressure, or at the manufacturer's setting.
+- §8.3.2.5: preaction follows §8.2.6. Double-interlock supervisory air is at least 7 psi.
+
+Those 2025 numbers are not the 2022 trim numbers. In 2022 the check valve in the pneumatic supply is §8.2.6.4.2. Do not cite §8.2.6.4 as a check valve on a 2025 job, and do not cite it as the low-switch rule on a 2022 job.
+
+Worked ladder for an ECS-family generator feeding a Reliable low-pressure double-interlock valve. The valve maker caps system air at 30 psi (Technical Bulletin 751). Read the worst-case trip, top to bottom.
+
+| Rung | Setpoint | Rule |
+|---|---|---|
+| Low-pressure trip | 13 ± 2 psi, so 11 to 15 psi | Reliable Technical Bulletin 751 |
+| Low-air alarm | at least 20 psi | at least 5 psi above trip [CODE NFPA 13-2025 §8.2.6.4] |
+| Generator cut-in | at least 23 psi | generator instruction: at least 3 psi above low-air |
+| Maintain band | 26 to 28 psi | generator instruction: cut-in plus 3 to 5 psi |
+| Valve cap | at or below 30 psi | Technical Bulletin 751 note 6; this ladder passes |
+| Cut-out with an air-maintenance device | factory 60 psi, at least system pressure plus 20 psi, and at or below 95 psi | generator instruction |
+
+The 26 to 28 psi maintain band sits 8 to 10 psi above the maker's 18 psi minimum that carries a delay note (Technical Bulletin 751 note 2). That gap is an open delivery re-screen. Do not invent seconds. Water-delivery time stays in `dry-preaction-water-delivery-screen`. A fill rate already pinned on the job is unchanged by this ladder. A 40 psi nitrogen supervisory setting does not fit a 30 psi cap. Leave 40 psi ASSUMED until the valve instruction says otherwise.
+
+Reliable Bulletin 258 (February 2026) presets the RRMA low-pressure valve at cut-in 20 psi and cut-out 26 psi. Raising the preset keeps the differential. Above 5.5 cfm the compressor needs a receiver and a pressure-maintenance device. The NFPA 13 section number for that receiver threshold stays `[V]`.
+
+Two arrangements can pass, and both still need the delivery re-screen:
+
+- The generator-fed ladder in the table.
+- The RRMA preset raised to cut-in 23 psi and cut-out 29 psi, with low-air at 20 psi. The margin from the low end of the trip band is 5 psi, which meets §8.2.6.4.
+
+High air: system pressure plus 5 psi is 31 to 33 psi, which is above the 30 psi cap. Take the high setpoint from the Reliable instruction (§8.2.6.5, maker path). Do not set the high switch above the cap.
+
+Wrong settings:
+
+- A 40 / 30 / 25 psi triple copied from another valve family, including a Viking table, onto this Reliable valve. Maker tables do not transfer, and 40 psi exceeds the 30 psi cap.
+- Low-air at 15 psi. That point sits inside the 11 to 15 psi trip band, so the alarm does not warn before trip.
+- The 20 / 26 psi preset left as shipped, with low-air also at 20 psi. Cut-in equals the alarm, and the alarm chatters on every cycle.
+- One compressor on several double-interlock zones with no pressure-maintenance device, a tank-mounted compressor with no pressure-maintenance device, or a compressor above 5.5 cfm with no receiver and no pressure-maintenance device.
+
+Whether §8.2.6.4 is read on the nominal trip or on the low end of the tolerance is for the engineer of record and the authority having jurisdiction. The Reliable low-air and high-air instruction (the companion bulletins and the installation manual) is still unheld `[V]`. C emitted by this skill stays 100.

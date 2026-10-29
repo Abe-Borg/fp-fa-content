@@ -603,6 +603,7 @@ Shop codebook **by title** (not a required filesystem path). Prefer these sectio
 - Independent verify: q = density × area, Q = q + hose, V = Q × duration. Hose labeled inside `qd`.
 - Delta printed: FM 2,500→3,500 **≈+40%** vs NFPA **+30%** cited by edition (2025 §19.2.3.2.6 / 2022 §19.2.3.2.5 / 2019 §19.3.3.2.5). Wet: both bumps **avoided**.
 - Result labeled **density-method minimum**; handoff **`hydrant-supply-curve` then `pump-envelope`**.
+- Concealed-space trigger (§19): 3,000 ft² only when NFPA 13-2025 §19.2.3.1.5 fires, and only on the adjacent systems. Otherwise the wet campus rollup stands. Take 60 min only with the §19.2.3.1.3 supervision basis written down.
 - Status register complete: grounded / provisional / unresolved / comparison-only / handoff / RFI-variance + `[SYN]` / `[V]`.
 - Support ordinary-hazard wet duration recorded per §17. Supervised and monitored: **60 min**. FM DS 3-26 §2.3.1.13 is **60 min for all HC**. **E3=E1**. The 90 min branch only when the AHJ or the owner requires the unsupervised case.
 
@@ -633,4 +634,17 @@ Hose and duration: NFPA 13-2025 Table 19.2.3.1.2 and §19.2.3.1.3. The lower dur
 
 Rule: the campus is the single most-demanding remote area plus its hose. Governing flow is 750 gpm (FM). Governing volume is 45,000 gal if the supervised election is taken. Otherwise the NFPA ordinary-hazard group 2 unsupervised case, 49,500 gal, governs. State the election. Verify it with the engineer of record.
 
-Do not sum the halls. That sum is 1,500 gpm and 90,000 gal, and it is wrong: the halls are separate fire areas. Using the NFPA 1,500 ft² area when FM controls yields 550 gpm and is unconservative. FM DS 3-26 duration (section 17) is not the hall basis here. §19.2.3.1.5 (the 3,000 ft² trigger) stays `[V]` until pulled. Hand the governing flow to `hydrant-supply-curve`. Do not copy these gallons onto another site.
+Do not sum the halls. That sum is 1,500 gpm and 90,000 gal, and it is wrong: the halls are separate fire areas. Using the NFPA 1,500 ft² area when FM controls yields 550 gpm and is unconservative. FM DS 3-26 duration (section 17) is not the hall basis here. The 3,000 ft² concealed-space trigger is §19. Hand the governing flow to `hydrant-supply-curve`. Do not copy these gallons onto another site.
+
+## 19. Concealed-space 3,000 ft² trigger (NFPA 13-2025 §19.2.3.1.5)
+
+The minimum area of operation rises to 3,000 ft² only in the case below. The 2022 substance is the same rule. A few exception wordings differ by edition, so cite the edition you are in.
+
+- When unsprinklered combustible concealed spaces are not cleared by §19.2.3.1.5.2(1) through (12), §19.2.3.1.5.1 sets the minimum area of operation at 3,000 ft² (Table 19.2.3.1.1, column 2).
+- The increase applies only to systems adjacent to that space. A barrier rated for at least the water-supply duration breaks the adjacency.
+- A typical hall ceiling that is noncombustible, with containment or a plenum that meets the listed exceptions, does not trip the rule. Check the site. A raised floor with a heavy cable load, or a wood guard house or soffit, can trip it. A soffit exception applies only when that soffit meets the construction rule the exception names.
+- If the trigger fires on ordinary-hazard group 2, column 2 is 0.17 gpm/ft² over 3,000 ft² = 510 gpm, plus 250 gpm hose = **760 gpm**. At 60 min that is **45,600 gal**. That flow is above the FM DS 5-32 carrier figure of 750 gpm. The code floor can beat the insurer. Take the most stringent parameter.
+- Do not apply 0.20 gpm/ft² over the 3,000 ft². That misread is 850 gpm, and 76,500 gal at 90 min. Do not use column 2 to lower a density that has no concealed-space basis. Do not flag a noncombustible plenum as a trigger. Do not treat every data-center space as exempt. Do not apply 3,000 ft² to the whole building because one remote soffit exists.
+- Supervised duration, when it is elected under §19.2.3.1.3 and the trigger does not fire: 60 min, so the hall and the campus stay **750 gpm / 45,000 gal**. The condition is waterflow and supervisory devices electrically supervised to a constantly attended location. The NFPA 72 edition for that path stays `[V]`. If that supervision is not on the basis of design, use 90 min and 49,500 gal. Do not take 60 min without the supervision basis written down.
+
+Annex commentary on minimal combustible loading in a raised floor, and the FM duration when supervision is absent, stay `[V]`. This section does not elect foam, a clean agent, or single-interlock.

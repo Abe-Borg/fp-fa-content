@@ -21,7 +21,7 @@ It does **not** elect the hall sprinkler/preaction family (consume STS). It does
 
 **Design practice:** three-layer most-stringent **per parameter** (whether-trigger, class/hose, type/manual-vs-automatic, residual, gpm demand, pump-vs-FDC additivity, FDC geometry flags, multi-zone/pressure envelope, test-drain feature). Delta vs **NFPA 13-2025** where the standpipe interfaces a combination sprinkler riser / hose allowance. Cite **section AND edition**. Show-and-verify math. `[SYN]` / `[V]`. Status vocabulary every run: `grounded` / `provisional` / `unresolved` / `comparison-only` / `handoff` / `RFI-variance` (+ `PRACTICE REFUSED` when mist is presented). Company fence: controlling BOD = **`wet` | `dry` | `double-interlock` only** (consume STS — do **not** elect); SI/NI → Stop + `RFI-variance` / comparison-only; **Foam prohibited**; **Mist = `PRACTICE REFUSED`**; clean agent = **hand-away only**. Upstream (packet optional; gaps → `ASSUMED`): completed the input packet (optional) + STS `wet`|`dry`|`DI` (consumed, else `ASSUMED`) (+ `most-stringent-basis-matrix` when dual — **consume and return here**). Freeze strategy **consumed**, not invented. Caller-path-only. **NO PLACEHOLDER.** Generic — do not copy one city's local fire-code amendment, Bismarck/Fargo geometry, or UFGS federal apparatus as universal AHJ. Owner may **raise, never lower**.
 
-**Honesty — gpm primary now held via pull 14-01** (flow [CODE 2024 §10.6 / 2019·2016·2013 §7.10, pull 14-01]; pick the row by enforced edition). Corpus holds UFGS 21 12 00 height-tier / residual / combination pump rule, MasterSpec §211200 type dial, AXA XL ≥4 in. test-drain design rule, one city's local fire-code amendment as **local** §905.3.1 / dry-ban / 1000–1250 gpm-cap example, and secondary 500/250 recall (Clarke / NFSA blog) — **none of those seal NFPA 14-2024 demand tables** (the code text itself is now held: [CODE 2024 §10.6 / 2019·2016·2013 §7.10, pull 14-01]). Model IFC/IBC-2024 §905 trigger text is **not** held as primary. Recipe structure is **Ready**; sealed gpm / simultaneous-demand / residual-mechanism section pins → **Stop / `[V]` / RFI**.
+**Honesty — gpm primary now held via pull 14-01** (flow [CODE 2024 §10.6 / 2019·2016·2013 §7.10, pull 14-01]; pick the row by enforced edition). Corpus holds UFGS 21 12 00 height-tier / residual / combination pump rule, MasterSpec §211200 type dial, AXA XL ≥4 in. test-drain design rule, one city's local fire-code amendment as **local** §905.3.1 / dry standpipe limited to freezing exposures / 1000–1250 gpm-cap example, and secondary 500/250 recall (Clarke / NFSA blog) — **none of those seal NFPA 14-2024 demand tables** (the code text itself is now held: [CODE 2024 §10.6 / 2019·2016·2013 §7.10, pull 14-01]). Model IFC/IBC-2024 §905 trigger text is **not** held as primary. Recipe structure is **Ready**; sealed gpm / simultaneous-demand / residual-mechanism section pins → **Stop / `[V]` / RFI**.
 
 Write the election package **only** to the path the **caller** names. Write output only to the caller-named path.
 
@@ -204,7 +204,7 @@ Before §905 / Class / type / residual / gpm arithmetic:
 | **NFPA 13-2025** | Combination-riser / hose-allowance interface delta | Delta baseline where sprinkler interface matters — **not** standpipe demand primary. |
 | **FM DS 5-32** | Hose allowance interaction with supply duration | Insurer Layer-2 — reconcile simultaneous demand into supply; do not invent standpipe gpm from DS 5-32. |
 
-**Do not cite one city's local fire-code amendment dry-ban / dual two-way FDC / 100 psi topmost as universal.** Ask per jurisdiction.
+**Do not cite one city's local fire-code amendment, its freezing-only dry-standpipe limit, a dual two-way FDC rule, or a 100 psi topmost residual as universal.** Ask per jurisdiction. A printing of that city's §905.8 that drops the freezing exception is the wrong text.
 
 ### 3.2 Parameters, separately (three-layer union)
 
@@ -212,7 +212,7 @@ Before §905 / Class / type / residual / gpm arithmetic:
 |---|---|---|---|---|
 | **A. Whether** | Adopted IFC/IBC §905 / UFC §9-10 | Rarely adds standpipe *requirement* | May mandate Class I even if code silent | Parameterize edition; provisional if trigger text unheld |
 | **B. Class / hose** | Class I / II / III per code | — | Hyperscale → Class I no-hose | Default Class I; Class II/III → Stop/RFI unless written force |
-| **C. Type (manual/auto × wet/dry)** | NFPA 14 types + AHJ dry bans | Freeze / ITM overlays | Climate + ops | UFGS height-tier × freeze fork × MasterSpec dial |
+| **C. Type (manual/auto × wet/dry)** | NFPA 14 types + any local dry-standpipe limit, read with its freezing exception | Freeze / ITM overlays | Climate + ops | UFGS height-tier × freeze fork × MasterSpec dial |
 | **D. Residual** | NFPA 14 residual [CODE 2024 §10.2.6.1 / 2019·2016·2013 §7.8.1, pull 14-01] | May raise | May raise | NFPA 14 100 psi at the 2½ in. outlet is the floor; UFGS 65 / 100 height-tier = comparison-only; reconcile AHJ letter |
 | **D2. Pressure limits / PRDs** | Max 400 psi anywhere; PRD where 1½ in. residual >100 psi or any hose-connection static >175 psi (limit to 175); PRD inlet ≤ its rating; series PRDs for redundancy + NFPA 72 high-pressure supervision on master PRDs; parallel low-flow PRD where needed [CODE NFPA 14-2024 §10.1.1–10.1.1.1, §10.2.1, §10.2.4.1–10.2.4.3, §10.2.5(3)/(9), pulls 14-07, 14-13; 2019 §7.2 = pipe, limits in §7.8, pull 14-11] | — | — | Each FDC must supply system demand [CODE 2024 §10.4.1 / 2019 §7.7.1, pull 14-10] |
 | **E. Demand gpm** | NFPA 14 flow [CODE 2024 §10.6 / 2019·2016·2013 §7.10, pull 14-01] | Simultaneous with hose allowance | May raise | **Structure register; `ASSUMED` + `[V]` + RFI — never silently invent** |
@@ -227,7 +227,7 @@ Most-stringent wins **per row**. Name the controlling layer. Owner may raise, ne
 1. Record adopted **fire/building code + edition** (caller pin). Enforced ≠ latest.
 2. Collect geometry: highest occupied floor above lowest FD vehicle access; stories above/below grade plane; floor area; hose-travel if known. Survey open → `[V]`.
 3. Screen against **opened** §905 / UFC §9-10 text for **this AHJ**. If model trigger text is unheld → status `provisional` / `unresolved` on Layer-1 whether; **do not invent** numeric thresholds from memory.
-4. **Local pin example (not default):** one city's local fire-code amendment / locally amended 2021 IFC §905.3.1 — Class III throughout where four or more stories, or highest story >30 ft above/below FD access; exceptions allow Class I in fully sprinklered / named cases; **dry standpipes prohibited** (that city's fire code 905.8). Use only on jobs in that city.
+4. **Local pin example (not default):** one city's local fire-code amendment / locally amended 2021 IFC §905.3.1 — Class III throughout where four or more stories, or highest story >30 ft above/below FD access; exceptions allow Class I in fully sprinklered / named cases. That city's §905.8 does **not** impose a blanket dry-standpipe prohibition. Dry standpipes are omitted **except where the piping is subject to freezing, and then only as NFPA 14 allows**. A printing that drops the freezing exception is the wrong text. Use only where that amendment is adopted.
 5. If code silent but owner/EPC mandates firefighter access → record as **Layer-3 provision**; still open AHJ confirmation.
 6. If AHJ confirms **not required** → delete system rather than leave orphan risers. Emit election memo with negative finding and stop further type/demand work (or mark N/A).
 
@@ -267,7 +267,7 @@ Do not hang occupant hose in ITE buildings by habit.
 - Prefer **wet** only where ambient **>40 °F** continuous and supervised (FM DS 9-18 posture — cite sheet/edition when opened).
 - Where 40 °F cannot be held → **dry** standpipe leg — not “wet + hope.”
 - Heat-trace applies to **freeze-exposed wet runs that must stay wet** (MasterSpec §3.5.M → 210533 / 210700). **Heat-trace ≠ substitute** for a heated DI valve house. **Do not** heat-trace a declared dry standpipe instead of draining it.
-- Honor **local dry bans** when they exist (e.g. that city's fire code 905.8) — local pin only.
+- Honor a local dry-standpipe limit when it exists (the §905.8 pattern above). Read the freezing exception. A blanket ban that drops the exception is the wrong text. Local pin only.
 - Mist **REFUSED**. Antifreeze standpipe **not elected** unless caller cites listing + AHJ path (`[V]`).
 
 #### 3.5.1 Manual-dry supervisory air (national floor by edition, then local pins)
@@ -412,7 +412,7 @@ Do **not** emit: hall density×area transcript, hydrant P(Q) rebuild, pump namep
 | Claim | Pin | Status |
 |---|---|---|
 | Standpipe *whether* is code (§905), not NFPA 13 hazard | IFC/IBC Ch.9 **§905** adopted edition; UFC **§9-10** when federal | Model 2024 text unheld → `[V]` |
-| one city height triggers / dry ban / 1000–1250 caps | that city's fire marshal local bulletin (rev. Jun 2024) citing locally amended **2021** IFC/IBC §905.3.1 / 905.8; NFPA 14 7.10.1.1.5 as checklist pointer | **Local example only** |
+| one city height triggers / dry standpipe limited to freezing exposures / 1000–1250 caps | that city's fire marshal local bulletin (rev. Jun 2024) citing locally amended **2021** IFC/IBC §905.3.1 / 905.8; the §905.8 freezing exception stays in the sentence; NFPA 14 7.10.1.1.5 as checklist pointer | **Local example only** |
 | Manual <75 ft / auto 75–150 / auto ≥150; residual 65/100; combination pump rule | UFGS **21 12 00** §1.4 / §1.4.1 | Federal template; its 65 psi residual is comparison-only below the NFPA 14 100 psi floor (pull 14-01) |
 | Class I default; PRV where outlet could exceed 125 psi; set 100 psi | UFGS §1.4 / §2.1.3.1 | Federal template |
 | Type dial Manual/Automatic × Wet/Dry; heat-trace → 210533 | MasterSpec **§211200** (2013 / 06/12) | Edit before CD |
@@ -462,3 +462,23 @@ If notes conflict, **most-stringent wins** and both sources stay visible.
 | CAD / KB / worked examples / ARCHIVE writes | forbidden |
 
 ---
+
+## 9. Worked wet Class I demand (synthetic) and edition numbering
+
+Synthetic teaching. Five stories, about 75 ft, three stairs, sprinklered throughout, Hazen-Williams C = 100. Do not attach it to a city or a job. Friction losses and the hose-valve loss are `[SYN]` / ASSUMED. Do not paste the stack onto a sealed schedule.
+
+Cite NFPA 14-**2024** as Chapter 10. Demand is §10.6. A pressure-reducing device where hose-connection static exceeds 175 psi is §10.2.4.2. Residual at the most remote outlet is §10.2.6.1. Section 7.8 and §7.10 are 2013 through 2019 numbering. Read the edition label before citing. A local adoption may still enforce NFPA 14-2019. That edition pin stays `[V]` until the authority-having-jurisdiction map is held. The 2019-to-2024 crosswalk stays `[V]` on sections this note does not open.
+
+Flow structure [CODE NFPA 14-2024]: 500 gpm at the most remote standpipe (§10.6.1.1.1) plus 250 gpm for each of two additional standpipes (§10.6.1.1.4) = **1,000 gpm**, which is the sprinklered-building cap in §10.6.1.1.6 on this reading. Confirm that cap row in the enforced edition before it is sealed. A secondary note that attaches 1,000 gpm only to light hazard is not this code row. A data hall is not light hazard, and that attachment stays comparison-only. The 1,250 gpm figure is the unsprinklered cap. It is not a fourth-stair add.
+
+Combined demand is the greater of the sprinkler demand and the standpipe demand (§10.6.1.3.1). Sprinkler hose is not added on top (§10.6.4). A teaching double-interlock sprinkler demand of 390 gpm plus 250 gpm hose = 640 gpm sits below 1,000 gpm, so the standpipe governs. This skill does not compute that sprinkler demand.
+
+Pressure at the base `[SYN]`: 100 psi residual (§10.2.6.1) + 28.17 psi elevation + 0.96 psi riser friction + 3.88 psi common-pipe friction + 3.0 psi hose-valve loss (ASSUMED) = **136.01 psi at 1,000 gpm**. Show the sum: 100 + 28.17 + 0.96 + 3.88 + 3.0 = 136.01. Fire-department connection losses and check-valve losses are not in that stack.
+
+Pump screen `[SYN]`, 1,000 gpm at 80 psi rated: a supply residual of 57.34 psi plus 80 psi = 137.34 psi, which clears 136.01 psi by **1.33 psi**. The margin is thin. Verify the hose-valve loss and the margin with the engineer of record. Churn against the 175 psi component limit sits at equality. Flag it. The same duty at 100 psi rated churns to 183 psi or 203 psi. Both exceed 175 psi and fail NFPA 20-2025 §4.7.7.1.
+
+Wrong sums. Adding 1,000 + 390 + 250 = 1,640 gpm ignores the greater-of rule. Taking a fourth stair to 1,250 gpm overruns the sprinklered cap.
+
+A local fire-pump rule that asks for 20 psi residual at 150 percent of rated capacity is a separate check. On this screen that residual is 51.02 psi and passes. A local rule that three or more standpipes need at least two two-way inlets on the fire-department connection is local only. A pressure-reducing device at maximum churn near 172.8 psi is borderline against 175 psi `[SYN]`. Do not freeze a shop curve. Verify with the engineer of record.
+
+Agency or owner text that calls for a pressure-reducing valve where a Class I outlet could exceed 125 psi, set to 100 psi, is not the code trigger. The code trigger remains the 175 psi static limit and the 100 psi limit on a 1½ in. outlet in section D2.

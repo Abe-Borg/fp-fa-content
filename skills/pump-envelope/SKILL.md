@@ -715,3 +715,18 @@ After the deduction, the 4-hour rating must cover the brake horsepower [CODE §1
 Diesel main relief is NFPA 20-2025 §4.20.1.2, not the electric overpressure screen. Compare 121 percent of net rated shutoff (churn) plus maximum static suction with the component rating (175 psi where NFPA 13 §7.1.2 is the rating in hand). Option A: 1.21 × 125 psi + 40 psi = **191.25 psi**, which is above 175 psi, so a main relief valve is required. Size it per §4.20.2.1. Option B: 1.21 × 110 + 40 = 173.1 psi, which passes only if maximum static stays at or below **41.9 psi** (a purveyor letter). At 50 psi static the same churn is 183.1 psi and fails.
 
 Do not clear a diesel with electric §4.7.7.1. On option A, 125 + 40 = 165 psi, which is at or under 175 psi and looks acceptable, and it is the wrong test. A diesel governor can overspeed. Pressure scales about with the square of speed, about 1.21 at 110 percent speed. §4.20.1.2 is the diesel test.
+
+## 21. Second diesel screen — the electric churn rule still falsely clears
+
+Synthetic. Do not attach it to a job, and do not reuse the horsepower. Rated duty 1,000 gpm at 110 psi net. Shutoff (churn) 130 psi.
+
+A derate factor of 0.977 is already applied on this screen [CODE NFPA 20-2025 §11.2.2.4, §11.2.2.5, §11.2.2.7]. Nameplate 110 hp × 0.977 = **107.47 hp**, which covers 95 bhp, so the engine passes. State the altitude and the pump-room temperature that produced 0.977 before the factor is reused. Do not copy 0.977 onto another site.
+
+Diesel relief stays on §4.20.1.2, 121 percent of shutoff plus maximum static suction, against 175 psi where that is the component rating in hand:
+
+- Static 55 psi: 1.21 × 130 + 55 = **212.3 psi**. Main relief is required.
+- Static 40 psi: 1.21 × 130 + 40 = **197.3 psi**. Main relief is required.
+
+Static suction is a purveyor letter. It stays ASSUMED until that letter is in hand.
+
+Wrong clear, same 40 psi static: the electric screen in §4.7.7.1 is 130 + 40 = 170 psi, which is at or under 175 psi and looks acceptable. It leaves out the 121 percent overspeed term. Do not clear a diesel on that arithmetic. The 1,000 gpm at 40 psi teaching duty and the 1,250 gpm at 40 psi alternate note in §19 are unchanged.
