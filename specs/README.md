@@ -1,6 +1,6 @@
 # specs
 
-Master specification language as markdown, one CSI section per file. The everyday path appends up to 12 of these files, README excluded, and only the first 4,000 characters of each. Twelve covers the section set below. This README is the folder guide and is not a spec.
+Master specification language as markdown, one CSI section per file. The everyday path appends up to 12 of these files, README excluded, and only the first 5,000 characters of each. Twelve covers the section set below. This README is the folder guide and is not a spec.
 
 Anything the model writes from these notes is still a draft. The engineer of record verifies it before it is issued. Do not put an API key, a job name, a client name, a personal name, or a vendor catalog in this folder. When a calc tool returns a figure, that figure governs the issued number. Do not copy another hall's gallons, rated pump pressure, zone count, or panel program.
 
