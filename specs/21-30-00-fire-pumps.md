@@ -1,41 +1,41 @@
 # Section 21 30 00 — Fire pumps (draft)
 
-Draft language. Verify with the engineer of record before issue. This section is a pump serving wet pipe, dry pipe, or double-interlock preaction. Series pumps are out of scope. Electric drive, with or without a transfer switch, and diesel drive are both in scope.
+Draft. Verify with the engineer of record before issue. A pump for wet pipe, dry pipe, or double-interlock preaction. Series pumps are out of scope. Electric drive, with or without a transfer switch, and diesel drive are in scope.
 
 ## Part 1 — General
 
 ### 1.1 Summary
 
-Do not schedule a rated flow and pressure while the supply test, the basis-of-record suction, or another gating question is still open. A synthetic rated pressure written into an equipment schedule is not acceptable. Listed pressure ratings are not a menu of screening heads.
+Do not schedule rated flow and pressure while the supply test, the basis-of-record suction, or another gate is open. A synthetic rated pressure is not acceptable. Listed ratings are not a menu of heads.
 
-Screen the pump at rated flow, at churn, and at 150 percent of rated flow against the demand and the suction condition. Publish `rated gpm at rated psi` only after those gates pass. Do not copy another site's horsepower or rated pressure.
+Screen at rated flow, churn, and 150 percent of rated flow. Publish `rated gpm at rated psi` only after those gates pass. Do not copy another site's horsepower or rated pressure.
 
 ### 1.2 Driver and relief
 
-Diesel derate is per site. Do not reuse a prior site. NFPA 20-2022/2025 §11.2.2.4 is 3 percent per 1,000 ft above 300 ft. §11.2.2.5 is 1 percent per 10 °F above 77 °F. Include room-temperature rise (A.11.2.2.5). Prefer a continuous deduction. Adding the two deductions is shop practice. Verify the sum with the engineer of record. §11.2.2.7 then requires the 4-hour rating to meet brake horsepower. Schedule at least that computed horsepower, 4-hour, after the derate. Do not name a manufacturer or a model. Do not stack the §11.2.2.2 ten percent listing margin. An unamended 2024 I-Code floor references NFPA 20-2022 until adoption is verified.
+Diesel derate is per site. Do not reuse a prior site. NFPA 20-2022/2025 §11.2.2.4: 3 percent per 1,000 ft above 300 ft. §11.2.2.5: 1 percent per 10 °F above 77 °F, including room-temperature rise (A.11.2.2.5). Prefer a continuous deduction. Adding the two is shop practice. Verify the sum with the engineer of record. §11.2.2.7: 4-hour rating must meet brake horsepower. Schedule at least that horsepower. No manufacturer or model. Do not stack the §11.2.2.2 ten percent margin. An unamended 2024 I-Code floor references NFPA 20-2022 until verified.
 
-High-desert synthetic only: 4,500 ft, 104 °F, 140 bhp. 12.6 percent + 2.7 percent = 15.3 percent (factor 0.847). Floor = 140 / 0.847 = 165.3 hp. 150 hp derates to 127.05 hp and fails. 175 hp derates to 148.2 hp and passes. Whole-step rounding is about 162.8 hp. Do not copy the number.
+High-desert synthetic only: 4,500 ft, 104 °F, 140 bhp. 12.6 + 2.7 = 15.3 percent (factor 0.847). Floor = 140 / 0.847 = 165.3 hp. 150 hp fails at 127.05 hp. 175 hp passes at 148.2 hp. Do not copy it.
 
-Diesel relief is NFPA 20-2025 §4.20.1.2, not electric §4.7.7.1. Require a main relief valve only where 121 percent of net shutoff plus maximum static suction, adjusted for elevation, exceeds the rating. Overspeed makes pressure scale about with speed squared (about 1.21 at 110 percent). Option A: 1.21 × 125 + 40 = 191.25 psi, above 175, so the valve is required (§4.20.2.1). Option B: 1.21 × 110 + 40 = 173.1, within 175 only if maximum static is at or under 41.9 psi. Do not skip the check because a prior schedule had no valve.
+Diesel relief is NFPA 20-2025 §4.20.1.2, not electric §4.7.7.1. Require the valve only where 121 percent of net shutoff plus maximum static suction, adjusted for elevation, exceeds the rating. Option A: 1.21 × 125 + 40 = 191.25 psi, above 175, required (§4.20.2.1). Option B: 1.21 × 110 + 40 = 173.1, within 175 only if maximum static is at or under 41.9 psi.
 
-Reduced-voltage starting is the draft practice where the motor is 100 hp or larger, or where the pump is on a generator. Across-the-line is not the default in those two cases. Label the choice.
+Reduced-voltage starting is the draft practice at 100 hp or larger, or on a generator. Across-the-line is not the default in those cases. Label it.
 
 ## Part 2 — Products
 
-### 2.1 Controller
+### 2.1 Controller, setpoints, and diesel points
 
-Specify the controller by function and listing. Do not elect a catalog number. State on the submittal that lockout, load shed, and automatic stop are off. Those functions defeat a fire pump.
+Specify the controller by function and listing. No catalog number. Lockout and load shed stay off.
 
-On FM work, disable series, higher-zone, and lower-zone functions and say so on the submittal. Confirm the FM DS 3-7 revision in hand.
+Diesel stop [CODE NFPA 20 §12.7.3 to §12.7.6], same body in 2019, 2022, and 2025. Default is manual stop. Overspeed stops at once and locks out until manual reset. It does not use the run timer. Timed stop after automatic start is only for a test or AHJ approval, then at least 30 minutes.
 
-Publish both the minimum and the maximum pump-room temperature the controller listing allows. Do not invent a cooling-continuation time after power isolation. If a minute count is required and none is held, mark it unverified.
+Leave absolute psi blank until the shop curve and controller submittal. Order: jockey stop, jockey start, then fire-pump start below jockey start [PRACTICE]. Annex A.14.2.6(4) is advisory: jockey stop is churn plus minimum static; jockey start is at least 10 psi below that stop; fire-pump start is 5 psi below jockey start in 2019 and 2022, and 10 psi below in 2025. About 5 psi above jockey stop is the wrong pattern. On FM work, check DS 3-7 before freezing absolutes. Disable series, higher-zone, and lower-zone functions, and confirm the revision.
 
-Map each required remote signal to a named terminal. Controller-side cites: NFPA 20 §10.4.7 (electric), §12.4.2 (diesel), and §4.18. The fire-alarm class and the module count are specified in Section 28 31 00. One common diesel trouble point is the draft practice unless the owner, the insurer, or the authority having jurisdiction asks for the discrete points.
+Publish the listing's minimum and maximum pump-room temperature. Do not invent cooling minutes after power isolation.
+
+Diesel points, not the electric list [CODE NFPA 20-2025 §12.4]: D1 engine running, separate; D2 switch off or manual, separate supervisory; D3 controller or engine trouble, common or separate (§12.4.2.3(3); see §12.4.1.4 and §12.4.1.5); D4 fail to start, overspeed, low oil, or high temperature; D5 low fuel at two-thirds; D6 each battery failure; D7 room low temperature; D8 valve tamper; D9 low suction or low reservoir; D10 jockey run or trouble, optional. Keep D1 and D2 separate. D3 may stay one trouble until the owner elects splits. Class is Section 28 31 00.
 
 ## Part 3 — Execution
 
 ### 3.1 Acceptance
 
-Field acceptance includes the enforced NFPA 20 start counts. An owner overlay can require more starts. Take the union. Do not drop the code floor because an overlay was silent, and do not invent a start count.
-
-Provide a test header and a discharge path that can be used without flooding the room. Commissioning of the pump with the sprinkler and alarm systems is an integrated test. It is not a substitute for the pump field-acceptance test.
+Field acceptance includes the enforced NFPA 20 start counts. Take the union with any owner overlay. Do not drop the code floor or invent a count. Provide a test header that discharges without flooding the room. An integrated test does not replace pump acceptance.
