@@ -5,7 +5,7 @@ description: >-
  density), and completed most-stringent-basis-matrix + occupancy-hazard-fork
  results (plus fire-area-compartmentation-schedule on multi-hall jobs) ideally
  exist — if absent, assume and flag ASSUMED (never a stop) — and you must
- produce density×area demand (q_spr + hose + duration
+ produce density×area demand (country gate US or Canada; Canada pins NFPA 13-2019 §19.3.3) (q_spr + hose + duration
  gallons), including the FM dry-area 2,500→3,500 (≈+40%) vs NFPA 13-2025
  +30% fork (NFPA 13-2025 §19.2.3.2.6) — not for occupancy classification, system-family
  election, SI/NI election, hydrant curve, pump envelope, or node-by-node
@@ -15,7 +15,7 @@ description: >-
 
 **Intake.** The input packet is optional. A missing input is not a stop: state the value used and why, and label it ASSUMED. Do not present an ASSUMED value as a cited code or table value, and do not freeze a vendor SKU. **Scope lock.** Wet pipe, dry pipe, and double-interlock preaction only. Foam, clean agent, water mist, and single-interlock or non-interlock preaction are out of scope. If one of those is requested as the basis of design, record it and stop. Do not substitute another system and do not size it here. Cite the section and the edition. Decide each parameter by the most stringent of the code floor, the insurer sheet, and the owner standard. Verify judgment calls with the engineer of record.
 
-Reusable US data-center fire-protection recipe.
+Reusable data-center fire-protection recipe. **Country gate (US | Canada).** US pins below stay on a US job. On a Canada job read section 1.0. Do not port a US pin into a Canada row or a Canada pin into a US row.
 
 **This Skill owns** the **density×area demand calculation**: pin density and design area under a three-layer most-stringent union (separately), apply the FM dry/DI absolute-area fork (2,500 → 3,500 ≈ +40%) versus the NFPA 13 +30% delta [CODE NFPA 13 2025 §19.2.3.2.6 / 2022 §19.2.3.2.5 / 2019 §19.3.3.2.5], add hose and duration, and produce `q_spr` / `qd` / gallons through the shop `calcs` kernel.
 
@@ -28,6 +28,26 @@ It does **not** own occupancy classification, system-family election, fire-area 
 ---
 
 ## 1. Hard scope gate
+
+### 1.0 Country gate (US | Canada)
+
+Required at intake: country is US or Canada. On a Canada job, name the adopted code (NBC 2023 Alberta Edition, BCBC 2024, or OBC 2024). An unresolved country is ASSUMED. It is not a blanket stop. Verify judgment calls with the engineer of record. On a US job, sections 3 through 10 stay on the NFPA 13-2025 delta.
+
+On a Canada job the code-floor pin is NFPA 13-2019 only. That pin is the adoption in NBC 2023 Alberta Edition Table 1.3.1.2, BCBC 2024, OBC 2024, and the NBC 2025 model. Confirm the adopted table before use.
+
+| Topic | Cite on a Canada job (NFPA 13-2019) | Do not cite on a Canada job | Hold |
+|---|---|---|---|
+| Density and area method | §19.3.3 and Figure 19.3.3.1.1 | §19.2.3 | Section text is held. Figure 19.3.3.1.1 is not held as a readable figure. A density read off that figure is ASSUMED |
+| 1,500 ft² light-hazard and ordinary-hazard floor; 2,500 ft² extra-hazard floor | §19.3.3.2 | | held |
+| Dry and double-interlock area increase of 30 percent; density unchanged | §19.3.3.2.5 | §19.2.3.2.6 | held |
+| Hose and duration | Table 19.3.3.1.2. Ordinary hazard is 250 gpm for 60 to 90 min. Extra hazard is 500 gpm for 90 to 120 min. The lower duration applies when supervision reaches a constantly attended location | Table 19.2.3.1.2 | held |
+| Room design method | §19.3.3.3 requires rated walls. The ULC assembly listings are not held. Do not elect this method | | NEEDS HOLD |
+
+CAN/ULC-S561 is the supervising-station standard that would support a reduced duration. It is not held. NEEDS HOLD. State the duration election as ASSUMED. Do not cite hours. FM and AXA XL layers do not change with country. The density-area arithmetic is edition-neutral. If a tool prints a 2025 section number, cite the 2019 section in the package.
+
+Synthetic teaching, not a job: ordinary-hazard group 2 assumed at 0.20 gpm/ft² over 1,500 ft², times 1.30, is 1,950 ft². Sprinkler flow 390 gpm plus 250 gpm hose is 640 gpm. At 60 min that is 38,400 gal before fitting overage. Extra-hazard group 1 at 0.30 gpm/ft² over 2,500 ft², times 1.30, is about 1,475 gpm and 132,750 gal at 90 min. Do not copy these gallons onto a job.
+
+On a Canada job, do not cite NFPA 13-2025 §19.2.3.2.6, Table 19.2.3.1.2, or any other 2025 section as the code floor. Do not read a density off Figure 19.3.3.1.1 as a held value. Do not invent CAN/ULC-S561 hours.
 
 ### 1.1 Company system-family fence (elect / size only)
 

@@ -5,7 +5,7 @@ description: >-
   supervising station and how each is classed (alarm, supervisory, trouble),
   including BESS gas alarm, gas trouble, exhaust supervision and room fire
   detection (IFC 2024 1207.5.4, 1207.6.1.2.3; NFPA 855-2023 4.8.4, 9.6.5.6.7;
-  NFPA 72-2022 Ch 26).
+  NFPA 72-2022 Ch 26). Country gate: US or Canada.
 ---
 # Supervising station signal schedule
 
@@ -13,7 +13,7 @@ description: >-
 - The input packet is optional. Any missing input gets a stated value, labeled **ASSUMED** (value used + why). ASSUMED is never shown as a code value. Keep going.
 - Scope locks are hard Stops: suppression interface is wet, dry, or double-interlock preaction only. No clean agent. No foam. No water mist. Single-interlock as basis of design: record, Stop, RFI-variance.
 - Label every claim [CODE] [HB] [PARA] [PRACTICE] [OWNER]. Cite section AND edition. Never invent or paste licensed code text; paraphrase and cite. Unconfirmed section numbers carry **VERIFY**. Judgment calls carry **Verify with the engineer of record** with the conservative assumption stated.
-- Country gate (US | Canada). On a US job use the NFPA, IBC, and IFC pins in this skill. On a Canada job keep this skill. NBC 2025 Division B 3.2.4 is the held alarm overlay where this skill cites it. CAN/ULC-S524, S536, S537, S1001, and CEC Section 32 stay NEEDS HOLD. Do not invent those clause texts or battery hours. Do not port a US pin into a Canada row or a Canada pin into a US row. Foam and clean agent stay locked.
+- Country gate (US | Canada). On a US job use the NFPA, IBC, and IFC pins in this skill. On a Canada job keep this skill and use the fire-department notify rows below. NBC 2025 Division B 3.2.4 is the held alarm overlay where this skill cites it. CAN/ULC-S524, S536, S537, S1001, and CEC Section 32 stay NEEDS HOLD. Do not invent those clause texts or battery hours. Do not port a US pin into a Canada row or a Canada pin into a US row. Foam and clean agent stay locked.
 - Pin enforced editions first (IFC, NFPA 72, NFPA 855, NFPA 69, IMC); run `fa-code-edition-delta-check`. Three-layer basis (code x insurer x owner); most stringent wins.
 - Run math in a script; show inputs. Short sentences. No em dashes. Verify with the engineer of record. Do not claim a stamp. No CAD. Copy METHOD, not synthetic numbers.
 
@@ -64,3 +64,16 @@ Alarm receipt within 90 s, and supervisory and trouble receipt, follow NFPA 72-2
 
 ## Output
 Signal schedule with class, basis, station action, zone label, open items, delta vs NFPA 72-2022.
+
+## Canada supervising-station and fire-department notify gate
+
+When Country is Canada and the adopted code is NBC 2025, or a provincial code that adopts these NBC sentences:
+
+- A waterflow alarm notifies the fire department [CODE NBC 2025 Div. B 3.2.4.7.(2) and (4)].
+- A two-stage alert signal notifies the fire department that the alert was initiated [CODE 3.2.4.7.(3) and (4)].
+- Supervisory signals required by 3.2.4.9.(3) and (5) transmit to the fire department [CODE 3.2.4.9.(6) through 3.2.4.7.(4)].
+- The means of notification is CAN/ULC-S561. NEEDS HOLD: the body, the installation rules, the service rules, and the timing are not held. Do not invent CAN/ULC-S561 hours or retransmission times. Stop those claims until the text is held.
+- NFPA 72 Chapter 26 supervising-station practice is not a substitute for the NBC sentences or for CAN/ULC-S561 [PARA].
+- Trouble signals to the fire department are not in the held 3.2.4.7 text. Leave that row [OWNER] until CAN/ULC-S561 is held. Do not mark it CODE.
+
+Verify with the engineer of record.
