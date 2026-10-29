@@ -26,7 +26,7 @@ Isolate is supervisory and blocks the solenoid. Supervising station: alarm and r
 
 Three batteries. Building FACU: 24 h + 5 min [CODE §10.6.7.2.1 to §10.6.7.2.2]. EVACS: 24 h + 15 min at maximum connected load [CODE §10.6.7.2.3 to §10.6.7.2.4]. NFPA governs over FM DS 5-40 24 h + 5 min [OWNER]. Never put 90 h on EVACS or the building FACU. FM releasing: 90 h + 10 min [OWNER FM DS 5-40 §2.3.4]. Non-FM releasing: 24 h + 5 min is a paraphrase, not a releasing-only duration. A 100 Ah charger limit is unresolved. Split the load if the battery exceeds the listed size. Do not freeze a model.
 
-Speakers: 1.0 dB maximum line loss [CODE §18.3.7.2.1(1)]. A passing battery calc does not clear the speaker circuit.
+Speakers: 1.0 dB is [CODE] only in NFPA 72-2025 §18.3.7.2.1(1). 2019/2022: [PRACTICE]. A battery pass does not clear it.
 
 Aging: 1.20 on NFPA 72-2019 (§10.6.7.2.1.1); 1.25 on 2022 or 2025 (§10.6.7.2.14).
 
@@ -38,4 +38,4 @@ Size wire from the voltage-drop calculation. Cite the NEC table. Do not paste it
 
 ### 3.1 Layout
 
-Spot spacing and very-early warning follow adopted NFPA 72 and the insurer sheet. A raised floor is its own room. No arc-flash vent. Coordinate elevator recall. Egress lighting stays on. Remove critical load before water, then interlock cooling. No cooling minutes are held. A gas trouble is not a gas alarm. Single-interlock is comparison-only.
+Spot spacing and very-early warning follow adopted NFPA 72 and the insurer sheet. A raised floor is its own room. No arc-flash vent. Coordinate elevator recall. Egress lighting stays on. Remove critical load before water, then interlock cooling. No cooling minutes held. A gas trouble is not a gas alarm. Single-interlock is comparison-only.
