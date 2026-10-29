@@ -54,5 +54,8 @@ description: >-
 8. Thin margin rule: a small margin with synthetic currents or uncounted MVA/sync loss is reported FAILING until listed data is in.
 9. If ELL fails: split the NAC, move the booster, upsize the wire, or rerun as PTP with the measured spacing and the segment sum in step 7. Recheck when candela changes.
 
+## Worked screen
+Method only. Do not copy it as a job result. Start voltage 20.4 V [PRACTICE, no published CUSTV], minimum 16 V, ELL, no MVA. Fourteen appliances at 0.20 A (2.80 A), 600 ft one-way, 14 AWG stranded: end voltage about 9.85 V, fail. Split into two circuits of seven on 12 AWG (1.40 A each): end voltage about 17.07 V, pass [PRACTICE fix]. A horn or strobe NAC and an EVACS speaker circuit are separate checks. Run `fa-speaker-circuit-loss-check` on the speaker side. A passing battery does not clear a failing NAC.
+
 ## Output
 Input table with labels and ASSUMED flags; start voltage basis (CUSTV, CMSTV, MVA); Class and length basis; method (ELL or PTP); Table 8 values used; per-gauge Vdrop and end voltage (ELL end voltage, or the lowest PTP appliance voltage, with the segment drops); percent drop; pass or fail; ELL max length when that screen was run; fixes. File it as the NAC voltage drop calculation required in documentation [CODE NFPA 72 §7.2.1(8), 2019 / 2022 / 2025 (72-26, 72-20, 72-13)].

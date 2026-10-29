@@ -20,7 +20,7 @@ description: >-
 - Run math in a script; show inputs. Short sentences. No em dashes or en dashes (write the word to). Verify with the engineer of record. Do not claim a stamp. Copy METHOD, not synthetic numbers.
 
 ## Scope
-FA side only. The elevator contractor owns the controller and the ASME A17.1 response. FP owns the sprinklers in the machine room, hoistway and pit (rating, RTI, location, any pit-only valved line). FA owns the recall detectors, the three relay outputs, the shunt trip heat detectors and monitor points, annunciation and C&E rows. No elevator point is a DI release leg [PRACTICE]. Shunt trip is not ITE EPO (EPO stays NFPA 75 §11.4.5, held 2020 / 2024 in 75-08, / NEC 645) [PRACTICE]. Apply only where the job has an elevator; most data halls are single story [PRACTICE].
+FA side only. The elevator contractor owns the controller and the ASME A17.1 response. FP owns the sprinklers in the machine room, hoistway and pit (rating, RTI, location, any pit-only valved line). FA owns the recall detectors, the three relay outputs, the shunt trip heat detectors and monitor points, annunciation and C&E rows. No elevator point is a DI release leg [PRACTICE]. Shunt trip is not ITE EPO (EPO stays NFPA 75 §11.4.5, held 2020 / 2024 in 75-08, / NEC 645) [PRACTICE]. Apply only where the job has an elevator; most data halls are single story [PRACTICE]. A space with no elevator, including a diesel pump house, gets no elevator points.
 
 ## Basis (held sources by ask id)
 - [CODE] NFPA 72-2025 and 72-2022 §21.3* to §21.3.14.2* and §21.4 to §21.4.6, same duties (72-44). Same duties in both editions.
@@ -58,6 +58,7 @@ FA side only. The elevator contractor owns the controller and the ASME A17.1 res
 7. Annunciation: each device at the FACU; distinct visible for non-lobby devices [§21.3.11, §21.3.12]. Class alarm, or supervisory only with AHJ approval recorded [§21.3.13] [OWNER].
 8. Shunt trip: heat detector within 24 in. of each driving sprinkler; check rating AND RTI both lower in the script, with a negative test [§21.4.1*, §21.4.2*]. Tag the rating and placement rows [CODE]; tag the detector's signal class [PRACTICE] (§21.4 does not set it; QA-20 e20-1).
 9. Switches used for shunt trip: no time delay [§21.4.3*]. Shunt control voltage monitor point, loss = SUPV [§21.4.4*, §21.4.5]. Integrity monitoring of detectors and switches [§21.4.6].
+9a. A space with a shunt heat detector also has a recall smoke detector in that space [CODE §21.3]. Shunt trip is not self-resetting where IBC 2021 §3005.5 is adopted [CODE]. Placement, temperature rating, RTI, the 24 in limit, and no time delay stay [CODE §21.4.1 to §21.4.3]. The shunt heat detector's signal class is alarm [PRACTICE]. Do not upgrade that tag. Control-voltage loss stays supervisory [CODE §21.4.5].
 10. Relays: three outputs as ECF interfaces, located and monitored per §21.2.4 / §21.2.8 [CODE by edition: 3 ft on 2019 / 2022; 3 ft or 20 ft in raceway on 2025].
 11. FM / DI flags: none of these points is a DI leg. On FM DI jobs carry the intake flag and s2.4.3.2.1.3. VEWFD map per Design practice item 7 is unchanged.
 12. Hand off: FP (sprinkler rating, RTI, locations, pit line), elevator consultant and AHJ (A17.1 2.8 / 2.27).
