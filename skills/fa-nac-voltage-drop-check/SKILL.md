@@ -59,3 +59,11 @@ Method only. Do not copy it as a job result. Start voltage 20.4 V [PRACTICE, no 
 
 ## Output
 Input table with labels and ASSUMED flags; start voltage basis (CUSTV, CMSTV, MVA); Class and length basis; method (ELL or PTP); Table 8 values used; per-gauge Vdrop and end voltage (ELL end voltage, or the lowest PTP appliance voltage, with the segment drops); percent drop; pass or fail; ELL max length when that screen was run; fixes. File it as the NAC voltage drop calculation required in documentation [CODE NFPA 72 §7.2.1(8), 2019 / 2022 / 2025 (72-26, 72-20, 72-13)].
+
+## Campus strobe sync
+
+Voltage drop and sync are separate checks. A NAC that passes voltage can still fail sync where one view spans buildings.
+
+Visual appliances in a room, including appliances run by separate systems, flash in sync [CODE NFPA 72-2025 §18.5.5.7.2(2); same duty in 2022]. More than two corridor visuals in one view flash in sync [CODE §18.5.5.7.2(3)]. Skipping sync across buildings when the view spans them is rejected.
+
+Practice fixes: one campus sync master, with the other supplies following it, or a master in each building and a door that breaks the view. If the master or a sync module is lost, the strobes may keep flashing out of sync. Report trouble [PRACTICE]. One campus master is a single point of failure [OWNER]. A second master, or a boundary door, is the owner election. Foam and clean agent stay out of scope. Verify with the engineer of record.

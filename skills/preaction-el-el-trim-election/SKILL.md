@@ -357,3 +357,44 @@ Missing inputs stay ASSUMED and flagged. The scope lock above still stops.
 11. Δ vs 13-2025; Absent/`[V]` honesty.
 12. No PLACEHOLDER; no invent psi/SKU; no silent C&E rewrite; no SI controlling family row.
 13. Write **only** to the caller-named path.
+14. On a Reliable DDX-LP double-interlock valve, run the supervisory stack below before freezing low air, maintain, and high air. While GAP-B28R1-1 is open, every numeric low-air value is ASSUMED. Verify with the engineer of record.
+
+## Reliable DDX-LP supervisory stack
+
+Country gate (US | Canada). On a US job use the NFPA 13-2025 margins below, and pin the enforced edition. On a Canada job the NFPA 13 pin follows `most-stringent-basis-matrix` §4.2b (2019 unless a later edition is adopted). The 2019 section numbers for the 5 psi low-air and high-air margins are NEEDS HOLD. Do not cite the 2025 numbers as Canada code. Do not invent a ULC or NBC cite for them. Reliable tables are maker data. Canada listing stays [verify].
+
+Synthetic teaching only. Re-derive every psi on the job. Do not copy a hall.
+
+Maker data, Reliable Bulletin 505 (October 2026) Tables A and B, and Bulletin 760 (October 2026):
+
+- Table A minimum supervisory pressure by maximum water pressure, psi: 20 to 8, 30 to 10, 50 to 12, 75 to 13, 100 to 15, 125 to 16, 150 to 17, 175 to 18, 200 to 19, 250 to 22, 300 to 24.
+- Table B low-pressure nominal trip, plus or minus 2 psi: 20 to 5, 30 to 5, 50 to 7, 75 to 9, 100 to 10, 125 to 11, 150 to 12, 175 to 13, 200 to 13, 250 to 14, 300 to 14.
+- Absolute cap 30 psi (Bulletin 505 and Technical Bulletin 751 note 6). Type D electric double-interlock minimum supervisory pressure 15 psi (Bulletin 760). A tankless compressor starts at or above the Table A minimum.
+
+Hand math only. Do not invent a calc operation for this stack.
+
+- Worst-case trip equals the Table B nominal plus 2 psi.
+- Low air is at least that trip plus 5 psi [CODE NFPA 13-2025 §8.2.6.4 on a US job].
+- Maintain pressure is at least the Table A minimum and above low air.
+- High air is at least maintain plus 5 psi [CODE NFPA 13-2025 §8.2.6.5 on a US job] and at or below 30 psi.
+- Compressor cut-in, upstream of the pressure-maintenance device, is above maintain pressure.
+
+Teaching point at 125 psi water [SYN]: trip 11/13, low air 18 ASSUMED, Table A minimum 16, a fixed maintenance device at 23, high air 28, cap 30. A raised compressor preset of 26/32 passes that point. The margin thins above 150 psi water. At 300 psi water a 23 psi maintain sits below the Table A minimum of 24 and fails.
+
+The earlier band that put low air between trip-plus-2 and the Table A minimum is retired. It cannot meet the 5 psi rule on every row. Low air sits above the Table A minimum. Table A governs maintain pressure, not the switch.
+
+Wrong settings:
+
+- A tankless compressor left at cut-in 20 psi and cut-out 26 psi, with low air also at 20 psi. Cut-in equals the alarm, so the alarm chatters. That failure is not the nitrogen 40 psi cap flag. Hand the cap flag to `nitrogen-inerting-and-c-factor-gate`.
+- An adjustable maintenance device left at the factory 29/35 psi pair. The plus 2 psi tolerance can reach 37 psi, above the 30 psi cap.
+- A 10 psi fixed device on a low-pressure double-interlock valve whose minimum is higher.
+- A 23 psi maintain on a 300 psi water row, below Table A.
+
+Open:
+
+- GAP-B28R1-1 stays open. No held numeric low-air switch setpoint from the Reliable installation manual or the Potter switch bulletin. Any low-air number is ASSUMED. Verify with the engineer of record.
+- The delivery time at a 23 psi maintain stays open. Do not invent seconds. Verify with the engineer of record.
+
+Hand off to `fa-fire-pump-and-preaction-supervisory-points`: per zone, low-air and high-air supervisory points use this stack, labeled ASSUMED while GAP-B28R1-1 is open. On Type F, loss of air without detection is supervisory only and does not open water (Bulletin 760). This skill does not edit the fire-alarm point list.
+
+Stop if low air is placed inside the retired band, if high air exceeds 30 psi on a DDX-LP valve, if a low-air number is presented as a maker value while GAP-B28R1-1 is open, or if a 2025 section number is cited on a Canada pin.

@@ -503,4 +503,17 @@ Wrong moves: a US 100 ft fire-department-connection limit on a Canada job, which
 
 Same synthetic five-storey stack as §9. Do not attach it to a city or a job. The fixed part of the required pressure, without the hose valve, is 100 + 28.17 + 0.96 + 3.88 = 133.01 psi. Supply at 1,000 gpm is 137.34 psi. Margin is 4.33 psi minus the hose-valve loss. Every psi of valve loss is a psi of margin.
 
-The 3.0 psi ASSUMED teaching loss leaves 1.33 psi. That pass is thin. Verify the valve loss with the engineer of record. Break-even is 4.33 psi. A 5.0 psi loss leaves −0.67 psi and fails. Fix it with listed valve data [NFPA 14-2024 §10.2.6.1.1], a larger pump, or a larger main. A 4 in angle-valve equivalent length applied to a 2½ in outlet is the wrong row. That mis-apply is about 7.55 psi and fails. Equivalent-length rows are size-specific, and FM DS 3-0 is not the NFPA 14 basis for this loss. No maker loss sheet for a 2½ in hose valve is held. Do not invent one.
+The 3.0 psi ASSUMED teaching loss leaves 1.33 psi. That pass is thin. For a new run use the 4.0 psi envelope below. Verify the valve loss with the engineer of record. Break-even is 4.33 psi. A 5.0 psi loss leaves −0.67 psi and fails. Fix it with listed valve data [NFPA 14-2024 §10.2.6.1.1], a larger pump, or a larger main. A 4 in angle-valve equivalent length applied to a 2½ in outlet is the wrong row. That mis-apply is about 7.55 psi and fails. Equivalent-length rows are size-specific, and FM DS 3-0 is not the NFPA 14 basis for this loss. No maker loss sheet for a 2½ in hose valve is held. Do not invent one.
+
+## Class I hose-valve loss envelope
+
+US teaching case. The Canada gates above stay. This section adds no Canada cite. On a Canada job, NFPA 14 stays at the 2013 pin in `most-stringent-basis-matrix` §4.2b. Use 2013 numbering. Do not cite the 2024 sections below as Canada code.
+
+At 250 gpm and C = 100, held maker data: an angle valve near 3.1 psi (graph, about 0.2 psi either way) clears the 4.33 psi break-even above; a full-open valve with Cv 125 is 4.00 psi and clears by 0.33 psi; a pressure-restricting setting with Cv 73.32 is 11.6 psi and fails. Carry a restricting valve at its listed loss in the set position. Do not use the full-open number.
+
+Design envelope for new runs: 4.0 psi hose-valve loss. That figure is a data bound, not a listing value. It applies to a Class I election. Do not import a Class III listing without [verify]. It replaces the 3.0 psi ASSUMED teaching loss in §9 for new runs. Margin at 4.0 psi on the same stack is 4.33 minus 4.0 = 0.33 psi. That pass is thin. Verify with the engineer of record.
+
+Residual of 100 psi at the most remote 2½ in outlet is NFPA 14-2024 §10.2.6.1 and NFPA 14-2019 §7.8.1. The maker loss used in that residual is 2024 §10.2.6.1.1. Other held pairs: 2019 §7.2 is 2024 §10.2, and 2019 §7.10 is 2024 §10.6. Read the edition label before citing. Sections this note does not pair stay [verify].
+
+Recompute the §9 stack with 4.0 psi before a new run is sealed: 100 + 28.17 + 0.96 + 3.88 + 4.0 = 137.01 psi at 1,000 gpm, against 137.34 psi available.
+

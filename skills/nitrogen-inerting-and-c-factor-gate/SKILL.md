@@ -473,7 +473,7 @@ Worked ladder for an ECS-family generator feeding a Reliable low-pressure double
 | Valve cap | at or below 30 psi | Technical Bulletin 751 note 6; this ladder passes |
 | Cut-out with an air-maintenance device | factory 60 psi, at least system pressure plus 20 psi, and at or below 95 psi | generator instruction |
 
-The 26 to 28 psi maintain band sits 8 to 10 psi above the maker's 18 psi minimum that carries a delay note (Technical Bulletin 751 note 2). That gap is an open delivery re-screen. Do not invent seconds. Water-delivery time stays in `dry-preaction-water-delivery-screen`. A fill rate already pinned on the job is unchanged by this ladder. A 40 psi nitrogen supervisory setting does not fit a 30 psi cap. Leave 40 psi ASSUMED until the valve instruction says otherwise.
+The 26 to 28 psi maintain band sits 8 to 10 psi above the maker's 18 psi minimum that carries a delay note (Technical Bulletin 751 note 2). That gap is an open delivery re-screen. Do not invent seconds. Water-delivery time stays in `dry-preaction-water-delivery-screen`. A fill rate already pinned on the job is unchanged by this ladder. A 40 psi nitrogen supervisory setting does not fit a 30 psi cap. On a DDX-LP valve do not carry 40 psi. Re-derive maintain from `preaction-el-el-trim-election`.
 
 Reliable Bulletin 258 (February 2026) presets the RRMA low-pressure valve at cut-in 20 psi and cut-out 26 psi. Raising the preset keeps the differential. Above 5.5 cfm the compressor needs a receiver and a pressure-maintenance device. The NFPA 13 section number for that receiver threshold stays `[V]`.
 
@@ -505,3 +505,14 @@ Single-interlock low-air values do not transfer. A maker note that sets low air 
 Against the low-pressure stack in §10 (trip 11 to 15 psi, minimum 18 psi, cap 30 psi): a fixed 23 psi maintenance device is the teaching maintain, with low air at 20 psi ASSUMED. An adjustable device shipped near 29/35 psi and reset to 23/29 psi is conditional, because the +2 psi tolerance can reach 31 psi and exceed the 30 psi cap. Confirm at the system gauge. Verify with the engineer of record.
 
 Wrong moves: copying the single-interlock 4 psi or 7 psi pair onto the double-interlock valve, so low air sits below the trip band and §8.2.6.4 never warns; using a 10 psi fixed device on a valve whose minimum is 18 psi; leaving the adjustable device at the factory 29/35 psi pair, above the 30 psi cap; claiming the §8.2.8.2 exemption for a compressor that serves more than one system or is at or above 5.5 cfm. The delivery re-screen at the elected maintain band stays open. Do not invent seconds.
+
+## Nitrogen maintain against the 30 psi cap
+
+The country gate above stays. The 30 psi cap is maker data. Canada listing is [verify]. On a Canada pin do not cite NFPA 13-2025 section numbers for this flag. The 2019 equivalents are NEEDS HOLD. Do not invent them.
+
+A lineage maintain of 40 psi, including a generator fill basis printed at 40 psig, exceeds the Reliable DDX-LP cap of 30 psi (Bulletin 505 and Technical Bulletin 751 note 6). On that valve a 40 psi nitrogen maintain is invalid. Do not carry it. Re-derive maintain from `preaction-el-el-trim-election`: maintain at or above the Table A minimum, and high air at maintain plus 5 psi and at or below 30 psi. Leave the election unresolved until that stack is run. Verify with the engineer of record.
+
+Fill tables quoted at 40 psig are not the DDX-LP operating point. Rerun the 30-minute fill at the elected maintain pressure, at or below 30 psi. Do not scale a printed 40 psig listing by ratio. Use the maker's 20 psig row, or mark the row [verify] with the maker.
+
+This flag is not the chatter case in §10, where cut-in equals the low-air alarm. Keep those failures separate. Single-interlock remains out of scope.
+

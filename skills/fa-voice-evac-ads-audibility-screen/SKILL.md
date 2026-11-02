@@ -38,5 +38,12 @@ Spaces with average and 60 s max ambient (measure on real jobs), speaker data sh
 ## Output
 ADS table with intelligibility call and reason, level table, tap and spacing solve, AHJ path items, open items, delta vs the enforced edition.
 
-## Campus ADS pointer (EX-156)
-A loud room, 85 dBA ambient or more, is its own acoustically distinguishable space: tone plus visual, not voice [HB]. Do not skip that space. An audibility pass is not an intelligibility pass. Where the speech-transmission screen fails, redesign with more speakers at lower taps and retest. Do not log that failure as a pass. Corridor visual appliances are rated not less than 15 cd [CODE NFPA 72-2025 §18.5.5.8.2]. Speech-transmission targets are handbook or paraphrase, not [CODE]. Training fixture only. Do not copy the fixture numbers as a live design. Verify with the engineer of record.
+## Campus ADS and corridor speech-transmission screen
+
+A loud room, 85 dBA ambient or more, is its own acoustically distinguishable space: tone plus visual, not voice [HB]. Do not skip that space. An audibility pass is not an intelligibility pass. Where the speech-transmission screen fails, redesign with more speakers, lower taps, and a shorter throw, then retest. Do not log that failure as a pass. Speech-transmission targets are handbook or paraphrase, not [CODE].
+
+Handbook screen [HB NFPA 72-2025 D.2.4.1]: at least 90 percent of points at or above 0.45, and an average at or above 0.50. An average of 0.45 is not a pass.
+
+Corridor visual appliances are rated not less than 15 cd [CODE NFPA 72-2025 §18.5.5.8.2], within 15 ft of each end, and not more than 100 ft apart [CODE §18.5.5.8.4]. More than two in one view flash in sync [CODE §18.5.5.7.2(3)]. A further corridor-only sync sentence is not pinned.
+
+US teaching shape only, [ASSUMED] until the field test: six ceiling speakers, 25 ft on center, 0.25 W tap. A modeled average near 0.55 is not acceptance. Annex D field intelligibility is still required. Do not copy the teaching taps onto a live corridor. On a Canada job do not treat the US handbook screen as code, and do not invent a Canada intelligibility duration. Verify with the engineer of record.

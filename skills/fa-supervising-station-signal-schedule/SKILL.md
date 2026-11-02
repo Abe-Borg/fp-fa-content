@@ -77,3 +77,13 @@ When Country is Canada and the adopted code is NBC 2025, or a provincial code th
 - Trouble signals to the fire department are not in the held 3.2.4.7 text. Leave that row [OWNER] until CAN/ULC-S561 is held. Do not mark it CODE.
 
 Verify with the engineer of record.
+
+## US and Canada supervising-station crosswalk
+
+Country gate (US | Canada). One skill. Do not port a row across the gate.
+
+On a US job, waterflow is a fire alarm. Except as §26.2.2 and §29.10.9.7 permit, the supervising station retransmits it immediately [CODE NFPA 72-2025 §26.2.1.1 and §26.2.1.2]. Where verification is required, that check is not more than 90 s [CODE §26.2.2(4)]. The section that sends other supervisory signals to the supervising station is not pinned. Leave it NEEDS HOLD. Do not invent it.
+
+On a Canada job, keep the fire-department notify rows above. The 90 s verification has no held NBC equivalent. Do not tag it, or any other NFPA 72 Chapter 26 row, as Canada code. CAN/ULC-S561 stays NEEDS HOLD. Do not invent hours or retransmission times.
+
+Rejected: inventing CAN/ULC-S561 hours, tagging a US Chapter 26 row as Canada code, and treating foam or clean agent as a signal class. Foam and clean agent stay out of scope.
