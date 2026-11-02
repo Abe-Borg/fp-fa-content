@@ -512,7 +512,7 @@ The country gate above stays. The 30 psi cap is maker data. Canada listing is [v
 
 A lineage maintain of 40 psi, including a generator fill basis printed at 40 psig, exceeds the Reliable DDX-LP cap of 30 psi (Bulletin 505 and Technical Bulletin 751 note 6). On that valve a 40 psi nitrogen maintain is invalid. Do not carry it. Re-derive maintain from `preaction-el-el-trim-election`: maintain at or above the Table A minimum, and high air at maintain plus 5 psi and at or below 30 psi. Leave the election unresolved until that stack is run. Verify with the engineer of record.
 
-Fill tables quoted at 40 psig are not the DDX-LP operating point. Rerun the 30-minute fill at the elected maintain pressure, at or below 30 psi. Do not scale a printed 40 psig listing by ratio. Use the maker's 20 psig row, or mark the row [verify] with the maker.
+Fill tables quoted at 40 psig are not the DDX-LP operating point. Rerun the 30-minute fill at the elected maintain pressure, at or below 30 psi. Do not scale a printed 40 psig listing by ratio. The maker's 20 psig capacity row applies only when the elected maintain is at or below 20 psig. Above 20 psig, including the trim-stack teaching maintain of 23 psi and the 26 to 28 psi ladder, do not use that 20 psig row as an unconditional alternative. Require maker confirmation, or a capacity row for the elected maintain. The 30 psi DDX-LP cap still governs.
 
 This flag is not the chatter case in §10, where cut-in equals the low-air alarm. Keep those failures separate. Single-interlock remains out of scope.
 
