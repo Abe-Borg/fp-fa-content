@@ -82,3 +82,17 @@ On a Canada job add these supervisory points. They never release.
 - A listed-system municipal bulletin (Vancouver Bulletin 2020-003) says the fire alarm control unit monitors the listed conditions. Verify the report with the engineer of record before it is given to the building official [PRACTICE]. Not CODE.
 - On an NBC 2023 Alberta Edition job, the NBC and Alberta Edition sentence (5) rows bind. A municipal DSSP dated 01-May-2018 does not add a code row for egress heat trace. Apply an owner option for that egress supervision only after the project confirms that standard. Transmit the supervisory signal to the fire department per 3.2.4.9.(6). Use the Canada gate in `fa-supervising-station-signal-schedule` for that path.
 - Verify with the engineer of record.
+
+## Double-interlock low air and high air from the trim stack
+
+Per double-interlock zone, schedule low-air and high-air supervisory points [CODE NFPA 72-2025 §17.19.2.2.2; 2019 and 2022 §17.17.2.2.2]. The 2019 preaction tag stays [PRACTICE]. The 2022 and 2025 tags stay [CODE]. Setpoints come from `preaction-el-el-trim-election`. This skill does not invent psi.
+
+On a US job under NFPA 13-2025, the trim stack is: worst-case trip is the maker nominal trip plus 2 psi; low air is at least that trip plus 5 psi [CODE §8.2.6.4]; high air is at least the maintain pressure plus 5 psi [CODE §8.2.6.5] and, on a Reliable DDX-LP valve, not above the 30 psi cap (Bulletin 505 and Technical Bulletin 751 note 6). Maintain pressure comes from the trim skill. This skill writes the points. The trim skill owns the psi.
+
+GAP-B28R1-1 stays open. No held Reliable or Potter numeric low-air switch setpoint is in the pack. The installation manual and the switch bulletin are not held. Every numeric low-air value is ASSUMED. Verify with the engineer of record. Do not present that number as a maker value.
+
+On double-interlock Type F, loss of air without detection is a supervisory signal only. It does not open water [PRACTICE, maker bulletin]. It is still the release AND input when detection is also present. Air loss alone never releases.
+
+On a Canada job do not cite NFPA 13-2025 §8.2.6.4 or §8.2.6.5 as Canada code. The 2019 section numbers for those margins are NEEDS HOLD. Do not invent them. Maker tables are data. Canada listing stays [verify].
+
+Do not place low air inside the retired band between trip-plus-2 and the table minimum. Do not set high air above 30 psi on a DDX-LP valve. The heat-trace and fire-department transmit rows above stay as written.
