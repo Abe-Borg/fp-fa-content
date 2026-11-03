@@ -498,6 +498,8 @@ Private main: install and test to the NFPA 24-2013 pin. The 2013 text is not hel
 
 Wrong moves: a US 100 ft fire-department-connection limit on a Canada job, which also drops the AE entrance band; an NFPA 14-2024 dry-standpipe air band cited on a 2013 pin. NFPA 14-2013 has supervisory air at §6.1.1 and 20 psi over trip at §5.2.1.4.10. It does not state the later numeric air band. Latest is not enforced.
 
+Any CAN/ULC-S561 supervising-station or reduced-duration claim is NEEDS HOLD. Do not invent hours or durations. CSA B139 fuel or oil piping at a diesel fire-pump and standpipe interface is NEEDS HOLD. Do not invent CSA B139 body text.
+
 
 ## Hose-valve loss sensitivity
 

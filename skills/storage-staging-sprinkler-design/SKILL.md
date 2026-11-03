@@ -18,7 +18,7 @@ description: >-
 
 # Storage staging sprinkler design
 
-**Country gate (US | Canada).** US pins stay on a US job. On a Canada job do not cite IFC Chapter 32 as the code floor. Use `most-stringent-basis-matrix` §4.2b for the enforced editions. Do not port a US pin into a Canada row. CAN/ULC-S524, S536, S537, S1001, and CEC Section 32 stay NEEDS HOLD. Do not invent those clause texts.
+**Country gate (US | Canada).** Pin country and the enforced edition at intake. The model-A gate is §1.0. Do not port a US pin into a Canada row.
 
 **Intake.** The input packet is optional. A missing input is not a stop: state the value used and why, and label it ASSUMED. Do not present an ASSUMED value as a cited code or table value, and do not freeze a vendor SKU. **Scope lock.** Wet pipe, dry pipe, and double-interlock preaction only. Foam, clean agent, water mist, deluge, and single-interlock or non-interlock preaction are out of scope. If one of those is requested as the basis of design, record it and stop. Do not substitute another system and do not size it here. Cite the section and the edition. Decide each parameter by the most stringent of the code floor, the insurer sheet, and the owner standard. Verify judgment calls with the engineer of record. Do not claim a stamp.
 
@@ -37,6 +37,21 @@ Cite the section and the edition. Do not invent a section. Do not copy client-se
 ---
 
 ## 1. Hard scope gate
+
+### 1.0 Country gate (US | Canada)
+
+Required at intake: country is US or Canada, and the enforced edition is named. An unresolved country is ASSUMED. It is not a blanket stop. Scope locks in §1.1 stay hard. Verify judgment calls with the engineer of record.
+
+On a US job, keep the IFC, IBC, and NFPA 13 pins already used in this skill. FM DS 8-9, DS 8-1, and DS 7-112 stay the insurer layer. Report NFPA 13-2025 only as a delta where it is not the enforced edition.
+
+On a Canada job, name the adopted code (NBC 2023 Alberta Edition, BCBC 2024, or OBC 2024) and pin NFPA 13 from that code's Table 1.3.1.2 through `most-stringent-basis-matrix` §4.2b. Do not run US IFC Chapter 32 or NFPA 13-2025 storage sections as the Canadian code floor. FM DS 8-9 N@P may still run as insurer-sheet data. Any Canadian storage cite that is not held is NEEDS HOLD or ASSUMED. Do not invent Canada storage body. CAN/ULC-S524, S536, S537, S1001, and CEC Section 32 stay NEEDS HOLD. Do not invent those clause texts.
+
+Stop-class mis-cites on a Canada job:
+
+- NEG-CA-1: inventing CAN/ULC-S561 hours or durations.
+- NEG-CA-2: inventing CSA B139 text.
+- NEG-CA-3: citing US IFC Chapter 32 or NFPA 13-2025 storage sections as controlling on a Canada pin without a held Canadian equivalent.
+- NEG-CA-4: inventing OBC or NBC high-piled or rack-storage body that is not held.
 
 ### 1.1 Company system-family fence (this Skill designs storage N@P, not system family)
 
