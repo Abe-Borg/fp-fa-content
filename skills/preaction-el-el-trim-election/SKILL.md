@@ -357,7 +357,7 @@ Missing inputs stay ASSUMED and flagged. The scope lock above still stops.
 11. Δ vs 13-2025; Absent/`[V]` honesty.
 12. No PLACEHOLDER; no invent psi/SKU; no silent C&E rewrite; no SI controlling family row.
 13. Write **only** to the caller-named path.
-14. On a Reliable DDX-LP double-interlock valve, run the supervisory stack below before freezing low air, maintain, and high air. While GAP-B28R1-1 is open, every numeric low-air value is ASSUMED. Verify with the engineer of record.
+14. On a Reliable DDX-LP double-interlock valve, run the supervisory stack below before freezing low air, maintain, and high air. Factory low air of 18 psi is the held Potter PS25 switch default (document 5401564) only at water of 125 psi or less. Any other numeric low-air value stays ASSUMED while the GAP-B28R1-1 residual is open. Verify with the engineer of record.
 
 ## Reliable DDX-LP supervisory stack
 
@@ -379,7 +379,7 @@ Hand math only. Do not invent a calc operation for this stack.
 - High air is at least maintain plus 5 psi [CODE NFPA 13-2025 §8.2.6.5 on a US job] and at or below 30 psi.
 - Compressor cut-in, upstream of the pressure-maintenance device, is above maintain pressure.
 
-Teaching point at 125 psi water [SYN]: trip 11/13, low air 18 ASSUMED, Table A minimum 16, a fixed maintenance device at 23, high air 28, cap 30. A raised compressor preset of 26/32 passes that point. The margin thins above 150 psi water. At 300 psi water a 23 psi maintain sits below the Table A minimum of 24 and fails.
+Teaching point at 125 psi water [SYN]: trip 11/13, low air 18 held as the Potter PS25 factory default on decrease (document 5401564), valid only at water of 125 psi or less, Table A minimum 16, a fixed maintenance device at 23, high air 28, cap 30. The same document states factory high 28 psi on increase and a field range of 10 to 60 psi. That range is not a per-water-pressure setpoint table and it is not a tolerance. A raised compressor preset of 26/32 passes that point. The margin thins above 150 psi water. At 300 psi water a 23 psi maintain sits below the Table A minimum of 24 and fails.
 
 The earlier band that put low air between trip-plus-2 and the Table A minimum is retired. It cannot meet the 5 psi rule on every row. Low air sits above the Table A minimum. Table A governs maintain pressure, not the switch.
 
@@ -392,9 +392,12 @@ Wrong settings:
 
 Open:
 
-- GAP-B28R1-1 stays open. No held numeric low-air switch setpoint from the Reliable installation manual or the Potter switch bulletin. Any low-air number is ASSUMED. Verify with the engineer of record.
+- GAP-B28R1-1 is partial. The Potter PS25 factory pair (document 5401564) is held: low 18 psi on decrease and high 28 psi on increase, and only for water at or below 125 psi. The residual stays open: the valve-to-switch pairing is not held; no per-water-pressure switch table is held; the switch tolerance is not held. Do not invent those numbers. Above 125 psi water, re-derive low air. Do not leave factory 18 there. At 150 psi water the stack requires low air of at least 19 psi (Table B nominal 12, plus 2, plus 5).
+- A low-pressure row whose maintain sits below factory 18 leaves the switch in alarm. Re-derive low air so it stays below maintain and at least trip plus 5 psi. Do not invent a field floor or a tolerance.
+- A maintain of 25 psi puts high air on the 30 psi cap with no headroom. The switch tolerance is not held. Prefer the teaching maintain of 23 psi.
+- Do not cite an unheld installation bulletin as proof the valve and the Potter switch are paired.
 - The delivery time at a 23 psi maintain stays open. Do not invent seconds. Verify with the engineer of record.
 
-Hand off to `fa-fire-pump-and-preaction-supervisory-points`: per zone, low-air and high-air supervisory points use this stack, labeled ASSUMED while GAP-B28R1-1 is open. On Type F, loss of air without detection is supervisory only and does not open water (Bulletin 760). This skill does not edit the fire-alarm point list.
+Hand off to `fa-fire-pump-and-preaction-supervisory-points`: per zone, low-air and high-air supervisory points use this stack. At water of 125 psi or less, low air may cite the held Potter factory 18 psi. Elsewhere, and wherever the pairing residual applies, label the number ASSUMED. Do not claim GAP-B28R1-1 fully closed. On Type F, loss of air without detection is supervisory only and does not open water (Bulletin 760). This skill does not edit the fire-alarm point list. The Canada gate above stays. Do not cite a 2025 section number on a Canada pin.
 
-Stop if low air is placed inside the retired band, if high air exceeds 30 psi on a DDX-LP valve, if a low-air number is presented as a maker value while GAP-B28R1-1 is open, or if a 2025 section number is cited on a Canada pin.
+Stop if low air is placed inside the retired band, if high air exceeds 30 psi on a DDX-LP valve, if factory 18 psi is left on water above 125 psi, if a low-air number other than that factory pair is presented as a maker value while the residual is open, or if a 2025 section number is cited on a Canada pin.

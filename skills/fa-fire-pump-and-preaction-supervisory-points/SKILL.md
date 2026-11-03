@@ -13,7 +13,7 @@ description: >-
 ## Intake and scope (all FA skills)
 - The input packet is optional. Any missing input gets a stated value, labeled **ASSUMED** (value used + why). ASSUMED is never shown as a code value. Keep going.
 - Scope locks are hard Stops: wet, dry, or double-interlock (DI) preaction only. No clean agent. No foam. Single- or non-interlock as basis of design: record, Stop, RFI-variance.
-- Country gate (US | Canada). On a US job use the NFPA, IBC, and IFC pins in this skill. On a Canada job keep this skill and add the heat-trace rows below. NBC 2025 Division B 3.2.4 is the held alarm overlay where this skill cites it. CAN/ULC-S524, S536, S537, S1001, and CEC Section 32 stay NEEDS HOLD. Do not invent those clause texts or battery hours. Do not port a US pin into a Canada row or a Canada pin into a US row. Foam and clean agent stay locked.
+- Country gate (US | Canada). On a US job use the NFPA, IBC, and IFC pins in this skill. On a Canada job keep this skill and add the heat-trace rows below. Stop any claim that needs CAN/ULC-S524, S536, S537, S1001, CEC Section 32, or CSA B44 until that text is held. NBC 2025 Division B 3.2.4 is the held alarm overlay where this skill cites it. CAN/ULC-S524, S536, S537, S1001, and CEC Section 32 stay NEEDS HOLD. Do not invent those clause texts or battery hours. Do not port a US pin into a Canada row or a Canada pin into a US row. Do not map an NFPA 72 row as Canada code. Foam and clean agent stay locked.
 
 - On FM DI jobs carry the standing flag: "[OWNER]/insurer conflict: FM DS 5-32 (Jan 2026) s2.4.1.1 ranks DI preaction last. Company decision (design practice): keep DI. Flag to owner and FM on this job."
 - Label every claim [CODE] [HB] [PARA] [PRACTICE] [OWNER] (or [OWNER]/insurer). Cite section AND edition. Mark approximations with ~. Never invent code text; gaps get "section not pinned; verify before use.
@@ -78,7 +78,7 @@ On a Canada job add these supervisory points. They never release.
 ## Canada provincial heat-trace rows
 
 - NBC 2023 Alberta Edition sentence (5) matches the NBC 2025 duty above [CODE]. That Alberta Edition sentence is carried from the fire-protection extract. Confirm it in the adopted code. NBC 2023 Alberta Edition 3.2.4.8 (annunciator) is not confirmed in this skill. Verify before use.
-- OBC 2024 3.2.4.9.(5)(c): the annunciator shows loss of power to heat trace that keeps an exit, or a means of egress, free of ice and snow [PARA, verify]. That scope is wider than the NBC sentence. Do not upgrade it to CODE. The official consolidation is not confirmed here. Any 2012 qualifier is [verify]. Do not quote OBC body text that is not held.
+- OBC 3.2.4.9.(5)(c), Ontario only [CODE]: the fire alarm annunciator shows loss of power to heat tracing installed to keep an exit, or a means of egress, free of ice and snow. Do not carry (c) onto an NBC job or an NBC Alberta Edition job. Those jobs stay on sentence (5) for standpipe risers and sprinkler piping only. The prior verify tag on (c) is closed. Do not quote OBC text beyond this paraphrase.
 - A listed-system municipal bulletin (Vancouver Bulletin 2020-003) says the fire alarm control unit monitors the listed conditions. Verify the report with the engineer of record before it is given to the building official [PRACTICE]. Not CODE.
 - On an NBC 2023 Alberta Edition job, the NBC and Alberta Edition sentence (5) rows bind. A municipal DSSP dated 01-May-2018 does not add a code row for egress heat trace. Apply an owner option for that egress supervision only after the project confirms that standard. Transmit the supervisory signal to the fire department per 3.2.4.9.(6). Use the Canada gate in `fa-supervising-station-signal-schedule` for that path.
 - Verify with the engineer of record.
@@ -89,7 +89,7 @@ Per double-interlock zone, schedule low-air and high-air supervisory points [COD
 
 On a US job under NFPA 13-2025, the trim stack is: worst-case trip is the maker nominal trip plus 2 psi; low air is at least that trip plus 5 psi [CODE §8.2.6.4]; high air is at least the maintain pressure plus 5 psi [CODE §8.2.6.5] and, on a Reliable DDX-LP valve, not above the 30 psi cap (Bulletin 505 and Technical Bulletin 751 note 6). Maintain pressure comes from the trim skill. This skill writes the points. The trim skill owns the psi.
 
-GAP-B28R1-1 stays open. No held Reliable or Potter numeric low-air switch setpoint is in the pack. The installation manual and the switch bulletin are not held. Every numeric low-air value is ASSUMED. Verify with the engineer of record. Do not present that number as a maker value.
+GAP-B28R1-1 is partial. At water of 125 psi or less, low air may cite the Potter PS25 factory default of 18 psi on decrease (document 5401564). The valve-to-switch pairing, any per-water-pressure switch table, and the switch tolerance are not held. Do not invent them. Any other numeric low-air value is ASSUMED. Verify with the engineer of record. Do not present that number as a maker value. Do not claim the gap fully closed.
 
 On double-interlock Type F, loss of air without detection is a supervisory signal only. It does not open water [PRACTICE, maker bulletin]. It is still the release AND input when detection is also present. Air loss alone never releases.
 

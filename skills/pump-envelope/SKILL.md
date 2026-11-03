@@ -743,3 +743,12 @@ NFC 2023 AE room fork, short paraphrase. 4.3.13.1.(1)(b) allows indoor fire-pump
 Churn screen, ASSUMED suction 60 psi plus 120 psi net churn = 180 psi, which is over the 175 psi ceiling, so it fails. Fix by lowering rated pressure, a flatter curve, or the NFPA 20-2016 pressure-control path. That section number is [verify]. Do not freeze rated pressure or the relief setting. Replace the ASSUMED suction with the site flow test.
 
 Wrong moves: a Group D tank left in the pump room; an industrial compartment counted as the fire-pump tank only; summer-grade diesel or biodiesel.
+
+Stop-class mis-cites on a Canada pump house. Each is NEEDS HOLD:
+
+- NEG-CA-1: inventing a ULC 2 h assembly number.
+- NEG-CA-2: inventing CSA B139 piping text.
+- NEG-CA-3: inventing an NFPA 20-2016 pressure-control section number that is not pinned.
+- NEG-CA-4: citing NFPA 20-2019 or NFPA 20-2025 section numbers as the code floor on a 2016 pin.
+
+Suction and horsepower on the screen above stay ASSUMED until the site letter and the maker curve are in hand.

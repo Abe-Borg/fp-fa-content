@@ -439,7 +439,15 @@ Part 3 overlays, short paraphrase:
 - 3.2.5.18.(1): the fire pump follows NFPA 20 at that code's Table 1.3.1.2 edition.
 - NFC 2023 AE 4.3.13.3: fuel-tank static head at or below 70 kPa.
 
-Still unresolved: the fire-code NFPA 24 pin, NFPA 24-2013 text, a city building bylaw versus BCBC, the OBC entrance-band sentence, the adopted electrical-code edition, and ULC assembly hours. Do not invent those texts.
+Stop-class mis-cites on a Canada job. Each is NEEDS HOLD:
+
+- NEG-CA-1: inventing ULC assembly fire-resistance hours.
+- NEG-CA-2: inventing CSA B139 text.
+- NEG-CA-3: inventing OBC 3.2.5.7 or 3.2.5.15.(3) body that is not held.
+- NEG-CA-4: porting US IFC or IBC fire-department-connection or frost pins into a Canada row.
+- NEG-CA-5: inventing a fire-code NFPA 24 pin or a city-bylaw pin that is not held.
+
+Still unresolved: the fire-code NFPA 24 pin, NFPA 24-2013 text, a city building bylaw versus BCBC, the OBC entrance-band sentence, the adopted electrical-code edition, ULC assembly hours, and CSA B139. Do not invent those texts.
 
 ### 4.3 NFPA 13-2025 delta discipline
 
