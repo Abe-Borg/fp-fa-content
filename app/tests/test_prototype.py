@@ -816,6 +816,112 @@ class KeyAndSkillTests(unittest.TestCase):
             os.environ.pop("FPFA_USE_KEYRING", None)
             keystore.clear_api_key()
 
+    def test_frozen_app_calls_keyring_in_process(self):
+        """A PyInstaller build must not relaunch sys.executable (fpfa.exe) to reach keyring."""
+        import importlib.util
+        import threading
+        from unittest.mock import patch
+
+        _isolate_data()
+        # Earlier tests here swap fpfa.keystore._keyring_call for fakes and leave them in
+        # place. Load a private copy so this test sees the real dispatcher.
+        spec = importlib.util.spec_from_file_location(
+            "fpfa_keystore_frozen_probe", APP_DIR / "fpfa" / "keystore.py"
+        )
+        keystore = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(keystore)
+
+        store = {}
+        release = threading.Event()
+
+        def delete_password(service, account):
+            del store[(service, account)]
+
+        fake_keyring = SimpleNamespace(
+            set_password=lambda service, account, value: store.__setitem__((service, account), value),
+            get_password=lambda service, account: store.get((service, account)),
+            delete_password=delete_password,
+        )
+        launched = []
+
+        def no_launch(*args, **kwargs):
+            launched.append(args)
+            raise AssertionError("the frozen app relaunched sys.executable")
+
+        frozen_exe = str(Path(tempfile.gettempdir()) / "fpfa" / "fpfa.exe")
+        with patch.object(sys, "frozen", True, create=True), \
+                patch.object(sys, "executable", frozen_exe), \
+                patch.dict(sys.modules, {"keyring": fake_keyring}), \
+                patch.object(subprocess, "run", no_launch), \
+                patch.object(subprocess, "Popen", no_launch):
+            self.assertEqual(keystore._keyring_call("set", "sk-ant-frozen-test", timeout=2), "ok")
+            self.assertEqual(keystore._keyring_call("get", timeout=2), "sk-ant-frozen-test")
+            self.assertEqual(keystore._keyring_call("delete", timeout=2), "ok")
+            self.assertEqual(keystore._keyring_call("get", timeout=2), "")
+            self.assertEqual(keystore._keyring_call("delete", timeout=2), "ok")
+
+            os.environ["FPFA_USE_KEYRING"] = "1"
+            try:
+                self.assertEqual(keystore.save_api_key("sk-ant-frozen-test"), "keyring")
+                self.assertEqual(keystore.load_api_key(), "sk-ant-frozen-test")
+                self.assertFalse((keystore.data_dir() / "anthropic-api-key").exists())
+                keystore.clear_api_key()
+                self.assertNotIn((keystore.SERVICE, keystore.ACCOUNT), store)
+            finally:
+                os.environ.pop("FPFA_USE_KEYRING", None)
+
+            def hang(service, account):
+                release.wait(10)
+                return None
+
+            fake_keyring.get_password = hang
+            try:
+                with self.assertRaises(subprocess.TimeoutExpired):
+                    keystore._keyring_call("get", timeout=0.2)
+            finally:
+                release.set()
+
+            # A delete that timed out must not land after a later save and remove it.
+            fake_keyring.get_password = lambda service, account: store.get((service, account))
+            slow_delete = threading.Event()
+
+            def delayed_delete(service, account):
+                slow_delete.wait(10)
+                store.pop((service, account), None)
+
+            fake_keyring.delete_password = delayed_delete
+            try:
+                with self.assertRaises(subprocess.TimeoutExpired):
+                    keystore._keyring_call("delete", timeout=0.2)
+                try:
+                    keystore._keyring_call("set", "sk-ant-replacement", timeout=0.2)
+                except subprocess.TimeoutExpired:
+                    pass
+            finally:
+                slow_delete.set()
+            self.assertEqual(keystore._keyring_call("get", timeout=2), "sk-ant-replacement")
+            fake_keyring.delete_password = delete_password
+            self.assertEqual(keystore._keyring_call("delete", timeout=2), "ok")
+
+            def no_backend(service, account):
+                raise RuntimeError("No recommended backend was available.")
+
+            fake_keyring.get_password = no_backend
+            with self.assertRaises(RuntimeError) as caught:
+                keystore._keyring_call("get", timeout=2)
+            self.assertIn("No recommended backend", str(caught.exception))
+
+            _isolate_data()
+            self.assertEqual(keystore.save_api_key("sk-ant-frozen-test"), "file")
+            with patch.object(keystore.sys, "platform", "win32"):
+                text = keystore.key_status()
+            self.assertIn("user-only file", text)
+            self.assertIn("Credential Manager", text)
+            self.assertIn("packaged app", text)
+            self.assertNotIn("pywin32", text)
+            keystore.clear_api_key()
+        self.assertEqual(launched, [])
+
     def test_skills_come_from_the_pack(self):
         from fpfa.paths import content_root
         from fpfa.skills_loader import list_skills, read_skill

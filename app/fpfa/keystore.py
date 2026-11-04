@@ -4,13 +4,21 @@ Windows uses Credential Manager through the keyring package (install pywin32).
 Other desktops store a user-only file unless FPFA_USE_KEYRING=1, because a
 missing system keyring can open a blocking password dialog. The key is never
 written into a project.
+
+A source run calls keyring in a short-lived child Python process. A packaged
+(PyInstaller) app cannot do that, because sys.executable is fpfa.exe, not
+Python. It calls keyring in-process on one worker thread with the same
+timeout. That thread runs calls in the order they were made, so a call that
+timed out cannot land after a later save.
 """
 
 from __future__ import annotations
 
 import os
+import queue
 import subprocess
 import sys
+import threading
 from pathlib import Path
 
 from fpfa.paths import data_dir, read_config, write_config
@@ -45,8 +53,88 @@ def _delete_file() -> None:
         path.unlink()
 
 
+def _is_frozen() -> bool:
+    """True in a PyInstaller build, where sys.executable is the app, not Python."""
+    return bool(getattr(sys, "frozen", False))
+
+
 def _keyring_call(action: str, secret: str | None = None, timeout: float = 2.0) -> str:
-    """Run keyring in a child process so a missing secret service cannot hang the app."""
+    """Run one keyring action without letting a stuck backend hang the app.
+
+    Raises subprocess.TimeoutExpired, RuntimeError, or OSError on failure.
+    """
+    if _is_frozen():
+        return _keyring_in_process(action, secret, timeout)
+    return _keyring_subprocess(action, secret, timeout)
+
+
+def _keyring_action(action: str, secret: str | None) -> str:
+    """The same work as the child script in _keyring_subprocess, in this process."""
+    import keyring
+
+    if sys.platform == "win32":
+        try:
+            # Registers WinVaultKeyring even if the bundle lost keyring's entry points.
+            import keyring.backends.Windows  # noqa: F401
+        except ImportError:
+            pass
+    if action == "set":
+        keyring.set_password(SERVICE, ACCOUNT, secret or "")
+        return "ok"
+    if action == "get":
+        value = keyring.get_password(SERVICE, ACCOUNT)
+        return "" if value is None else value
+    if action == "delete":
+        try:
+            keyring.delete_password(SERVICE, ACCOUNT)
+        except Exception:
+            pass
+        return "ok"
+    raise ValueError("unknown action")
+
+
+_keyring_jobs: queue.SimpleQueue = queue.SimpleQueue()
+_keyring_worker: threading.Thread | None = None
+_keyring_worker_lock = threading.Lock()
+
+
+def _run_keyring_jobs() -> None:
+    """Run keyring calls one at a time, in the order they were queued."""
+    while True:
+        action, secret, outcome, done = _keyring_jobs.get()
+        try:
+            outcome["value"] = _keyring_action(action, secret)
+        except BaseException as exc:  # noqa: BLE001 - reported to the caller
+            outcome["error"] = exc
+        finally:
+            done.set()
+
+
+def _keyring_in_process(action: str, secret: str | None, timeout: float) -> str:
+    """Queue one keyring call on the worker thread and wait up to timeout for it.
+
+    A call that times out stays queued and still runs. Later calls wait behind
+    it, so a slow delete cannot remove a key saved after it.
+    """
+    global _keyring_worker
+    with _keyring_worker_lock:
+        if _keyring_worker is None or not _keyring_worker.is_alive():
+            _keyring_worker = threading.Thread(target=_run_keyring_jobs, name="fpfa-keyring", daemon=True)
+            _keyring_worker.start()
+    outcome: dict[str, object] = {}
+    done = threading.Event()
+    _keyring_jobs.put((action, secret, outcome, done))
+    if not done.wait(timeout):
+        raise subprocess.TimeoutExpired(cmd="keyring", timeout=timeout)
+    error = outcome.get("error")
+    if error is not None:
+        detail = str(error).strip() or type(error).__name__
+        raise RuntimeError(detail.splitlines()[-1][:300])
+    return str(outcome.get("value") or "").strip()
+
+
+def _keyring_subprocess(action: str, secret: str | None, timeout: float) -> str:
+    """Run keyring in a child Python so a missing secret service cannot hang the app."""
     script = r"""
 import sys
 import keyring
@@ -155,6 +243,7 @@ def key_storage_help() -> str:
     """Shown in Settings so a designer can see where Save key will put the key."""
     return (
         "On Windows the key is stored in Credential Manager when keyring and pywin32 are available. "
+        "The packaged Windows app bundles keyring and its Credential Manager support. "
         "If Credential Manager cannot store it, the key is stored in a user-only file under "
         "%APPDATA%\\fpfa-assistant. On other computers that user-only file is the default unless "
         "FPFA_USE_KEYRING=1. The key is not written into the project, the chat, or the exported section."
@@ -170,6 +259,11 @@ def key_status() -> str:
         return "API key stored in Windows Credential Manager (this PC only)."
     if backend == "keyring":
         return "API key stored in the system keyring (this computer only)."
+    if sys.platform == "win32" and _is_frozen():
+        return (
+            "API key stored in a user-only file. Credential Manager did not take it in this "
+            "packaged app. Save the key again; if it still lands here, reinstall the app."
+        )
     if sys.platform == "win32":
         return (
             "API key stored in a user-only file. Credential Manager did not take it. "
