@@ -66,3 +66,12 @@ FA side only. The elevator contractor owns the controller and the ASME A17.1 res
 
 ## Output
 Device schedule (device, location, level, cite, basis label); trigger map to the three outputs; shunt trip check table (sprinkler rating / RTI vs detector, distance, PASS / FAIL); monitor points (voltage loss SUPV, integrity); C&E rows; annunciation list; ASSUMED list; FP and elevator handoff rows; open the edition text ids; edition note (2022 vs 2025 wording at §21.3.2, §21.3.5.1, §21.3.8, §21.4.5; 2019 vs 2022 at §21.3.3.2, §21.3.6, §21.3.8, 72-46).
+
+## Campus recall initiators
+
+- Lobby smoke initiates Phase I recall [CODE NFPA 72 §21.3.3.1]. Heat used where §21.3.10 permits it is the same initiating set [CODE §21.3.3.1].
+- General wet waterflow does not recall. It is not a §21.3.3.1 initiator.
+- Double-interlock release does not recall. It is not a §21.3.3.1 initiator.
+- Waterflow on a separately valved sprinkler line that protects only the elevator pit may initiate Phase I [CODE §21.3.3.2].
+- Do not write elevator recall on ordinary waterflow as [CODE]. An owner add is [OWNER]. Verify with the engineer of record.
+- On a Canada job, stop. CSA B44 and NBC 3.2.6 are NEEDS HOLD. Do not map these NFPA 72 rows as Canada code. Foam and clean agent stay locked.

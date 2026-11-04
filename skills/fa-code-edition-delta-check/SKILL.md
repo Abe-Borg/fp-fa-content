@@ -111,7 +111,7 @@ On a Canada job, also report the NBC pin, the NEEDS HOLD status for CAN/ULC-S524
 
 Class N §12.3.6, detail in `fa-pathway-survivability-election`:
 
-- Shared-segment ban: 2022 item (5) moves to 2025 item (7) [CODE]. The 2025 wording is a delta note [PARA], not a full-body pull.
+- Shared-segment ban: 2022 item (5) moves to 2025 item (7) [CODE]. The NFPA 72-2025 §12.3.6 body is held. Relabel those 2025 rows as [CODE]. The earlier delta-note label is retired. Item (1) scope stays open. Annex A.12.3.6 is not held. NFPA 4-2024 §4.5.1(6), the functional matrix, is held. Do not leave that item marked unconfirmed.
 - Single-fault isolation: 2025 item (5) [CODE]. The 2022 cite in the pathway skill is item (3). A conflicting reading says 2022 has no such item. Do not relabel until both bodies are checked. Verify with the engineer of record.
 - Redundant path: 2022 item (1); 2025 items (1) and (3). Single-endpoint exception: 2022 item (1) exception; 2025 item (2) [PARA].
 - Item (1) scope, one endpoint versus two or more, stays open. Annex A.12.3.6 is not held.
@@ -121,3 +121,4 @@ NEC, pinned separately from NFPA 72, detail in `fa-nec-table-8-wire-sizing`:
 - Chapter 9 Table 8 ohms are [CODE] on NEC 2023 only. NEC 2026 Table 8 is NEEDS HOLD.
 - Article 760.41(B) multiwire ban is [CODE] where NEC 2026 is adopted. It is not in the held 2023 text [PARA]. The ground-fault and arc-fault ban is in both.
 - Canada: CAN/ULC-S524 and CEC Section 32 stay NEEDS HOLD. Stop those claims. Do not invent clause text.
+- On a Canada job, stop and return NEEDS HOLD for each of these until the named text is held. Do not map NFPA 72 or NFPA 4 as Canada code. Voice and acoustically distinguishable spaces: CAN/ULC-S524. Elevator recall: CSA B44 and NBC 3.2.6. Pathway survivability: CAN/ULC-S524 and CEC Section 32, and no NBC pathway rule is held. NAC voltage drop: CAN/ULC-S524 and CEC Section 32. Spot-smoke spacing: CAN/ULC-S524. Battery hours: CAN/ULC-S524. Integrated testing: CAN/ULC-S1001. The federal alarm overlay used here is NBC 2025 Division B 3.2.4. Do not swap that pin for an earlier printing.

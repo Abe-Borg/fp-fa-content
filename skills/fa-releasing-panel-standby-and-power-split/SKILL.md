@@ -61,3 +61,9 @@ Battery arithmetic and the general §10.6.7 basis live in `fa-secondary-power-ba
 
 ## Output
 Scenario table (A, B, C) per supply and per case, with the governing case marked: standby_h, alarm time, Is, Ia, required Ah, pick, margin, THIN flag, charger check. Recommended split and why, taken from the governing case. Trouble and supervision rows for C&E. Extended-standby status. ASSUMED list. Items for the fire-protection method (solenoid listing, valve area per head).
+
+## Releasing labels
+
+F = 1.25 on NFPA 72-2022 and 2025 [CODE §10.6.7.2.14]. F = 1.20 is NFPA 72-2019 only. The FM releasing case is 90 h standby plus 10 min of release and alarm [OWNER FM DS 5-40 §2.3.4]. It is not 90 h + 5 min. Print the NFPA 5 min alarm [CODE §10.6.7.2.2], read as [PARA] for releasing, beside a 10 min [OWNER] row.
+
+Method only. Do not copy the ampere-hours as a job result. Corrected labels at F = 1.25: a 15.20 Ah base becomes 19.0 Ah, pick 26 Ah. The FM case, 56.45 Ah base, becomes 70.6 Ah, pick 100 Ah. The picks are unchanged. Do not copy a stale 1.20 product (18.24 Ah or 67.34 Ah) or a 90 h + 5 min base (56.12 Ah). A 20 percent spare over required Ah is training [PRACTICE], not [CODE]. Verify with the engineer of record. On a Canada job, stop. CAN/ULC-S524 battery hours are NEEDS HOLD. Do not invent them. Foam and clean agent stay locked.

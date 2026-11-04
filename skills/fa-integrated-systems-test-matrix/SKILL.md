@@ -58,12 +58,17 @@ IST matrix CSV, ITM row table by edition, judgment-call list, open items.
 
 Integrated testing is still required when a written plan is not required [CODE NFPA 4-2024 §4.5.3.1]. The functional matrix is NFPA 4-2024 §4.5.1 item (6) [CODE]. Synthetic campus only. Do not copy the rows onto a hall.
 
-- Waterflow, wet building: fire alarm, supervising-station alarm, and voice in that building. No elevator recall. Waterflow is not an elevator-recall initiator. An owner add is [OWNER]. Verify with the engineer of record.
+- Waterflow, wet building: fire alarm, supervising-station alarm, and voice in that building. No elevator recall. General waterflow is not a Phase I initiator [CODE NFPA 72 §21.3.3.1]. An owner add is [OWNER]. Verify with the engineer of record.
 - Double-interlock detection only: pre-alarm or alarm. No valve release.
 - Double-interlock low air only: supervisory. No release.
-- Double-interlock detection and low air: release, waterflow, voice, and supervising station.
+- Double-interlock detection and low air: release, waterflow, voice, and supervising station. No elevator recall. Release is not a Phase I initiator.
+- Elevator lobby smoke: Phase I recall [CODE NFPA 72 §21.3.3.1]. A dedicated valved pit line may recall on its own waterflow [CODE §21.3.3.2]. Detail is `fa-elevator-recall-and-shunt-trip`.
 - Generator-room detection: room ventilation shuts down [CODE NFPA 37-2024 §11.3.4, where adopted]. Fuel stays open. The interface is `fa-hvac-door-and-lock-interfaces`.
 - Supervising-station path loss: trouble at the station.
-- Energy-storage gas at setpoint: optional, and only where that room exists. Exhaust start and signal class follow the owner map [OWNER].
+- Energy-storage gas, optional and only where that room is on the campus. Detail is `fa-bess-gas-relay-map-and-cause-effect`.
+  - At or above 10 percent of LFL: start concentration reduction and send an alarm to the FACU [CODE NFPA 855-2023 §9.6.5.6.7(1) and (5)(b)].
+  - Above 25 percent of LFL: start mechanical exhaust if it is not already running [CODE §9.6.5.1.5.4(1)].
+  - Detector fault or power loss: trouble at the FACU [PRACTICE].
+  - Maker response delay: use listed maker data [ASSUMED]. Do not invent a time.
 - Release only when both double-interlock conditions are present. Detection alone and low air alone never release.
-- Canada: stop. CAN/ULC-S1001 is NEEDS HOLD. Do not invent Canadian integrated-test rows. Foam, clean agent, and single-interlock stay locked.
+- Canada: stop. CAN/ULC-S1001 is NEEDS HOLD. Do not map NFPA 4 or NFPA 72 as Canada code. Do not invent Canadian integrated-test rows. Foam, clean agent, and single-interlock stay locked.

@@ -91,7 +91,7 @@ Campus, NFPA 72-2025: a relocation or partial-evacuation building at 2 h elects 
 
 Pin NFPA 72 before citing §12.3.6. Do not mix item numbers across editions.
 
-- Shared segment: 2022 §12.3.6(5); 2025 §12.3.6(7) [CODE]. The 2025 shared-segment sentence is from a delta note, not a full 2025 body pull. Keep that [PARA] on the wording. The item number itself is the pin.
+- Shared segment: 2022 §12.3.6(5); 2025 §12.3.6(7) [CODE]. The NFPA 72-2025 §12.3.6 body is held, items (1) through (7). Cite the 2025 items as [CODE]. The earlier delta-note label on that wording is retired. Item (5): a single open, ground, short, or combination of those faults on one pathway does not affect another pathway. Item (7): primary and redundant paths do not share traffic over the same physical segment.
 - Single-fault isolation: 2025 §12.3.6(5) [CODE]. The live map also cites 2022 §12.3.6(3). Another reading says 2022 has no single-fault item. Keep the live cite. Do not relabel either edition until both bodies are checked side by side. Verify with the engineer of record.
 - Redundant path: 2022 item (1); 2025 items (1) and (3). Single-endpoint exception: 2022 item (1) exception; 2025 item (2). That map is [PARA].
 - Two or more remote amplifiers: dual path on separate physical segments. Cite (5) on 2022, and (7) plus (5) on 2025.

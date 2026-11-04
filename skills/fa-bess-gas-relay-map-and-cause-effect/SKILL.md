@@ -83,6 +83,16 @@ The 2 h versus 3 h fire-barrier election sets door ratings and damper ratings on
 
 Hard-fail table. Relay map with landings. FACP point list. Cause-and-effect matrix. Sequence notes. Notification schedule. RFI list.
 
+## Integrated-test setpoints
+
+Optional, and only where an energy-storage room is on the campus. The parts-per-million figures in a worked mixture are examples. Use the job mixture LFL. Do not invent maker times. The test rows live in `fa-integrated-systems-test-matrix`.
+
+- Gas at or above 10 percent of LFL starts the concentration-reduction exhaust and sends an alarm to the FACU [CODE NFPA 855-2023 §9.6.5.6.7(1) and (5)(b)]. That is the low-start relay and the low-alarm relay above.
+- Gas above 25 percent of LFL starts mechanical exhaust if it is not already running [CODE §9.6.5.1.5.4(1)].
+- A gas-detector fault or loss of power sends trouble to the FACU [PRACTICE].
+- Maker response delay follows listed maker data [ASSUMED].
+- On a Canada job, stop. CAN/ULC-S1001 and CAN/ULC-S524 are NEEDS HOLD. Do not map NFPA 4 or NFPA 855 as Canada code.
+
 ## Out of scope
 
 Foam, clean agent, water mist, and single-interlock as the sprinkler basis. Do not size the exhaust fan or the duct sprinklers here. See the country gate in this skill.
