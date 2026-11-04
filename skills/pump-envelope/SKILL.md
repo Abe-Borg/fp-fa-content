@@ -14,7 +14,7 @@ description: >-
 ---
 # Pump envelope
 
-> **Intake rule (the engineer, 2026-10-07 — overrides any older gate wording below):** The assignment packet is optional and never a gate. Start from exactly what is given. A missing packet, a missing upstream result (STS token, matrix row, occupancy fork, density, C&E, etc.), or a missing input blank is **not** a Stop: run the upstream Skill if practical, otherwise fill the gap with a stated **ASSUMED** value (the value used + why), flag it in the output and the status register, and continue. ASSUMED is not verified. "Never invent" / "refuse invent" rules on project numbers mean do not *silently* invent: label the number ASSUMED; never present an ASSUMED value as a cited code or table value; never freeze a vendor SKU. **Company scope locks stay hard Stops and are not softened by this rule:** wet / dry / double-interlock preaction only; foam prohibited; clean agent not done (hand-away); water mist `PRACTICE REFUSED`; single-interlock / non-interlock / other preaction never the elected system (SI/NI-as-BOD → Stop + `RFI-variance`, comparison-only). Cite section and edition, use `_calc/run.py` for governed math, design to the most-stringent 3-layer basis; the engineer is the engineer of record.
+> **Intake rule (the engineer, 2026-10-07 — overrides any older gate wording below):** The assignment packet is optional and never a gate. Start from exactly what is given. A missing packet, a missing upstream result (STS token, matrix row, occupancy fork, density, C&E, etc.), or a missing input blank is **not** a Stop: run the upstream Skill if practical, otherwise fill the gap with a stated **ASSUMED** value (the value used + why), flag it in the output and the status register, and continue. ASSUMED is not verified. "Never invent" / "refuse invent" rules on project numbers mean do not *silently* invent: label the number ASSUMED; never present an ASSUMED value as a cited code or table value; never freeze a vendor SKU. **Company scope locks stay hard Stops and are not softened by this rule:** wet / dry / double-interlock preaction only; foam prohibited; clean agent not done (hand-away); water mist `PRACTICE REFUSED`; single-interlock / non-interlock / other preaction never the elected system (SI/NI-as-BOD → Stop + `RFI-variance`, comparison-only). Cite section and edition, use `calcs/fp/run.py` for governed math, design to the most-stringent 3-layer basis; the engineer is the engineer of record.
 
 Reusable US data-center fire-protection recipe.
 
@@ -271,7 +271,7 @@ Do **not** MAX whole layers. Union each row; name the controlling layer; overrid
 
 ## 7A. Driver block — cited pins (not kernel keys; not a nameplate)
 
-`_calc/run.py` has **no** fuel-tank, OCPD or jockey op — **do not invent one**. Print each rule below as a pin with section **and** edition, show the arithmetic inline, and keep OEM values (engine consumption, motor LRC, jockey curve, seal type) as **`confirm at submittal`**. Most-stringent wins **per row**; enforced ≠ latest.
+`calcs/fp/run.py` has **no** fuel-tank, OCPD or jockey op — **do not invent one**. Print each rule below as a pin with section **and** edition, show the arithmetic inline, and keep OEM values (engine consumption, motor LRC, jockey curve, seal type) as **`confirm at submittal`**. Most-stringent wins **per row**; enforced ≠ latest.
 
 ### 7A.1 Diesel fuel tank
 
@@ -335,18 +335,18 @@ NFPA 20-**2019 §4.20.1.3** [CODE NFPA 20-2019/2022/2025 §4.20.1.3, §4.20.1.3.
 | Water surface **below** the pump / static suction lift (tank, wet pit, reservoir) | **Vertical turbine** | FM DS 3-7 §2.4.1.1 (no split-case / end-suction / in-line on static lift); §2.4.2 (VT where water level is below the discharge flange) |
 | Permanently **flooded positive suction** | HSC / end-suction / in-line permitted | NFPA 20 positive-suction doctrine; OEM IOMs |
 
-VT fences: bowls at OEM minimum submergence at **minimum** water depth (§2.4.2.2); **exclude water below minimum submergence from duration** (§2.4.2.3); right-angle gear max power and thrust ≤ nameplate (§2.4.2.4); diesel VT → mass-elastic torsional analysis (§2.4.2.5). Method: Arvada CO worked package `…arvada-co__vt-vs-hsc-suction-regime-election-single-oem-vt-install` (synthetic, 2026-09-22; not in CASE_INDEX) — refuse HSC on a below-grade tank. Elect the family; never freeze an OEM SKU.
+VT fences: bowls at OEM minimum submergence at **minimum** water depth (§2.4.2.2); **exclude water below minimum submergence from duration** (§2.4.2.3); right-angle gear max power and thrust ≤ nameplate (§2.4.2.4); diesel VT → mass-elastic torsional analysis (§2.4.2.5). Method: a prior site worked package (synthetic; not in CASE_INDEX) — refuse HSC on a below-grade tank. Elect the family; never freeze an OEM SKU.
 
 ---
 
-## 8. Run `_calc/run.py` — kernel is source of truth
+## 8. Run `calcs/fp/run.py` — kernel is source of truth
 
 Stdlib kernel. Agents **set inputs and interpret**. Paste **stdout**. QA re-runs the **same JSON**. Exit **2** on bad inputs. Transcript ends with `TRANSCRIPT_OK`. Rounding: **4 decimal places** unless the value is an integer. Booleans `true` / `false`.
 
 **Preferred: JSON batch** (write the JSON at the **caller-named** path, next to the deliverable):
 
 ```
-python3 _calc/run.py path/to/name.calc.json
+python3 calcs/fp/run.py path/to/name.calc.json
 ```
 
 JSON shape (ops `pump_envelope` / `pump-envelope`):
@@ -379,7 +379,7 @@ JSON shape (ops `pump_envelope` / `pump-envelope`):
 **Ad-hoc** (one op, no JSON; still paste stdout; prefer JSON for QA):
 
 ```
-python3 _calc/run.py pump-envelope --qr 750 --pr 40 --qd 900 --suction-static 70 --churn-frac 1.20 --ceiling 175
+python3 calcs/fp/run.py pump-envelope --qr 750 --pr 40 --qd 900 --suction-static 70 --churn-frac 1.20 --ceiling 175
 ```
 
 CLI flags (from `run.py`): `--qr` `--pr` `--qd` required; `--suction-static` required; `--churn-frac` default 1.20; `--churn-frac-max` default 1.40; `--qd-nfpa-cap` → `nfpa_flow_cap` default 1.50; `--fm-flow-cap` default 1.40; `--p150-frac` default 0.65; `--ceiling` default 175.
@@ -650,7 +650,7 @@ Shop codebook **by title** (not a required filesystem path). Prefer these sectio
 | Packing only (2025) vs FM conditional seal | NFPA 20-2025 SR-8/9; NFPA 20-2022 SR-6; FM DS 3-7 §2.4.5 |
 | VS relief ≥10 psi above set where shutoff > component rating | [CODE NFPA 20-2019/2022/2025 §4.20.1.3, §4.20.1.3.1; pull 20-06] |
 | VT on static lift; exclude water below submergence | FM DS 3-7 §2.4.1.1, §2.4.2, §2.4.2.3 |
-| Worked method | `case-2026-10-05-bf` (jockey 155/140 inside 175 psi); Arvada CO VT-vs-HSC package; electric-fire-pump-breaker packages (NEC 2017 vs 2020 jockey LRC; 430.62 cap) |
+| Worked method | `case-2026-10-05-bf` (jockey 155/140 inside 175 psi); a prior site worked package; electric-fire-pump-breaker packages (NEC 2017 vs 2020 jockey LRC; 430.62 cap) |
 
 **Demand / supply consumed (do not re-cite as this Skill’s work):** FM DS 5-32 **January 2026** §2.4.3.3.1.1.A (0.2 gpm/ft²; 2,500 wet / 3,500 dry); hose 250 gpm §2.4.1.5; 60 min §2.4.1.6 — **density-area-dry-increase**. Hydrant Adequacy / pump need / suction points — **hydrant-supply-curve**.
 
@@ -703,7 +703,7 @@ Shop codebook **by title** (not a required filesystem path). Prefer these sectio
 - [ ] Gating-RFI gate done **before** any schedule sentence. Open → envelope + `provisional [RFI-…]`; **no `FP-1 = Q @ P`**.
 - [ ] `pr_psi` treated as **input**. Not invented from 100/125/150 or a shop curve. Not frozen while BOR is open.
 - [ ] 3-layer union **per parameter** (flow cap, listed flow, rated net, churn, 150% floor, ceiling, N+1, driver). Kernel `fm_flow_cap` / `nfpa_flow_cap` **overridden** to the controlling cap (AXA 1.20; FM-multiple 1.10; FM-single 1.40; NFPA 1.50). Not left at defaults out of habit.
-- [ ] JSON written at **caller path**; `python3 _calc/run.py <that.json>` run; **full stdout pasted**; `TRANSCRIPT_OK`; exit 0. QA can re-run the same file.
+- [ ] JSON written at **caller path**; `python3 calcs/fp/run.py <that.json>` run; **full stdout pasted**; `TRANSCRIPT_OK`; exit 0. QA can re-run the same file.
 - [ ] Independent verify: `min_qr_fm = qd/fm_cap`, `min_qr_nfpa = qd/1.5`, `qd_over_qr` vs caps, `churn_net_* = frac × pr`, `churn_system_* = net + suction` vs 175, interpolation formula **only** in 100–150% band. Kernel wins.
 - [ ] Output labeled **listed envelope (churn / 100% / 150%)**, not a shop curve. Interpolation note pasted.
 - [ ] N+1 / driver mix printed as **flags**, not as kernel keys.
