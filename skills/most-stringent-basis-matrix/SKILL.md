@@ -1,19 +1,19 @@
 ---
 name: Most stringent basis matrix
 description: >-
- use this when setting or restamping a data-center fire-protection
- basis-of-design as a per-parameter three-layer most-stringent matrix across
- adopted code, applicable insurer(s), and owner, including
- wet/dry/double-interlock system-family gating and dual-carrier reconciliation,
- before occupancy classification, density-area calculation, or pump-envelope
- work; emit a status register per row/election
- (grounded/provisional/unresolved/comparison-only/handoff/RFI-variance).
+  use this when setting or restamping a US data-center fire-protection
+  basis-of-design as a per-parameter three-layer most-stringent matrix across
+  adopted code, applicable insurer(s), and owner, including
+  wet/dry/double-interlock system-family gating and dual-carrier reconciliation,
+  before occupancy classification, density-area calculation, or pump-envelope
+  work; emit a status register per row/election
+  (grounded/provisional/unresolved/comparison-only/handoff/RFI-variance).
 ---
 # Most stringent basis matrix
 
-**Intake.** The input packet is optional. A missing input is not a stop: state the value used and why, and label it ASSUMED. Do not present an ASSUMED value as a cited code or table value, and do not freeze a vendor SKU. **Scope lock.** Wet pipe, dry pipe, and double-interlock preaction only. Foam, clean agent, water mist, and single-interlock or non-interlock preaction are out of scope. If one of those is requested as the basis of design, record it and stop. Do not substitute another system and do not size it here. Cite the section and the edition. Decide each parameter by the most stringent of the code floor, the insurer sheet, and the owner standard. Verify judgment calls with the engineer of record.
+> **Intake rule (the engineer, 2026-10-07 — overrides any older gate wording below):** The assignment packet is optional and never a gate. Start from exactly what is given. A missing packet, a missing upstream result (STS token, matrix row, occupancy fork, density, C&E, etc.), or a missing input blank is **not** a Stop: run the upstream Skill if practical, otherwise fill the gap with a stated **ASSUMED** value (the value used + why), flag it in the output and the status register, and continue. ASSUMED is not verified. "Never invent" / "refuse invent" rules on project numbers mean do not *silently* invent: label the number ASSUMED; never present an ASSUMED value as a cited code or table value; never freeze a vendor SKU. **Company scope locks stay hard Stops and are not softened by this rule:** wet / dry / double-interlock preaction only; foam prohibited; clean agent not done (hand-away); water mist `PRACTICE REFUSED`; single-interlock / non-interlock / other preaction never the elected system (SI/NI-as-BOD → Stop + `RFI-variance`, comparison-only). Cite section and edition, use `_calc/run.py` for governed math, design to the most-stringent 3-layer basis; the engineer is the engineer of record.
 
-Reusable data-center fire-protection recipe. **Country gate (US | Canada).** US pins below stay on a US job. On a Canada job use the Canada section and `most-stringent-basis-matrix` §4.2b. Do not port a US pin into a Canada row or a Canada pin into a US row.  This Skill sets or restamps a prototype fire-protection basis-of-design as a **per-parameter reconciliation matrix**:
+Reusable US data-center fire-protection recipe. This Skill sets or restamps a prototype fire-protection basis-of-design as a **per-parameter reconciliation matrix**:
 
 > adopted code floor × insurer A × insurer B or `n/a` × owner → most-stringent applicable result per parameter
 
@@ -28,9 +28,9 @@ Every run must state, for each row and each election/gate:
 5. Directional delta versus NFPA 13-2025 where applicable
 6. Required handoffs
 
-**Design practice:** code is the legal floor; insurer sheet(s) and owner may raise it. Most-stringent is resolved **per parameter**, never by ranking or MAX-ing whole layers. Elect only wet pipe, dry pipe, or double-interlock preaction. SI/NI = `comparison-only`. Foam prohibited. Mist `PRACTICE REFUSED`. Cite **section AND edition**. Show-and-verify arithmetic this Skill owns. Mark invented values `[SYN]` / unpinned values `[V]`. Status vocabulary: `grounded` / `provisional` / `unresolved` / `comparison-only` / `handoff` / `RFI-variance`. Write **only** to the path the **caller** names.
+**the engineer Way:** code is the legal floor; insurer sheet(s) and owner may raise it. Most-stringent is resolved **per parameter**, never by ranking or MAX-ing whole layers. Elect only wet pipe, dry pipe, or double-interlock preaction. SI/NI = `comparison-only`. Foam prohibited. Mist `PRACTICE REFUSED`. Cite **section AND edition**. Show-and-verify arithmetic this Skill owns. Mark invented values `[SYN]` / unpinned values `[V]`. Status vocabulary: `grounded` / `provisional` / `unresolved` / `comparison-only` / `handoff` / `RFI-variance`. Write **only** to the path the **caller** names.
 
-This is the Design practice in detail:
+This is the engineer Way in detail:
 
 - Code is the legal floor.
 - Insurer sheet(s) and owner standard may raise the basis where applicable.
@@ -45,9 +45,12 @@ This is the Design practice in detail:
 
 This Skill is not a space-list classifier, density-area calculator, pump-envelope calculator, hydraulic-tree generator, CAD tool, or assignment-packet rebuild.
 
-Write output only to the path the caller names. Do not write to,,, or .
+Write output only to the path the caller names. Do not write to `KNOWLEDGE_BASE`, `EXERCISES`, `_pruner`, `_surveyor`, `_engineer`, or `ARCHIVE`.
 
 ---
+
+### 1.0 Country/edition gate at intake (model A — stop-vocab normalize 2026-11-04, staged)
+Pin country + enforced edition per row first (enforced ≠ latest). Missing pin → `ASSUMED` (value + why) + flag, continue. US → §4.2 resolver; Canada (BC/AB/ON) → §4.2b pins + NEG-CA list (no invented ULC/CSA/OBC/BCFC/VBBL text; unheld → `unresolved` + RFI, not a run-Stop). Company scope locks stay hard.
 
 ## 1. Hard scope gate
 
@@ -144,96 +147,96 @@ The caller must supply:
 
 1. **Parameter list**
 
- If omitted, do not stop: use the suggested default rows below and flag the list `ASSUMED`.
+   If omitted, do not stop: use the suggested default rows below and flag the list `ASSUMED`.
 
- Suggested default rows, extend only when a cited source requires them:
+   Suggested default rows, extend only when a cited source requires them:
 
- - System family / allowed election
- - Carrier system preference or ranking, as comparison evidence
- - Density / area
- - Hose allowance and duration
- - Water-delivery time
- - Head temperature / response
- - Ceiling height or cap
- - Compartmentation rating
- - Compartmentation extent
- - Door rating
- - Damper trigger and rating
- - Detection or VEWFD
- - Power isolation
- - Leak detection
- - In-rack Li-ion barrier / kWh gate / cooling-not-gas
- - In-rack Li-ion density uplift
- - Supervisory air or nitrogen
- - Pipe material / corrosion controls
- - Fire-water demand consequence, without running the demand calculation
- - Required handoff to density-area or pump-envelope work
+   - System family / allowed election
+   - Carrier system preference or ranking, as comparison evidence
+   - Density / area
+   - Hose allowance and duration
+   - Water-delivery time
+   - Head temperature / response
+   - Ceiling height or cap
+   - Compartmentation rating
+   - Compartmentation extent
+   - Door rating
+   - Damper trigger and rating
+   - Detection or VEWFD
+   - Power isolation
+   - Leak detection
+   - In-rack Li-ion barrier / kWh gate / cooling-not-gas
+   - In-rack Li-ion density uplift
+   - Supervisory air or nitrogen
+   - Pipe material / corrosion controls
+   - Fire-water demand consequence, without running the demand calculation
+   - Required handoff to density-area or pump-envelope work
 
- A special-hazard row may be included only as a record-only applicability or prohibition row. It must not become a design election in this Skill.
+   A special-hazard row may be included only as a record-only applicability or prohibition row. It must not become a design election in this Skill.
 
 2. **Jurisdiction-instrument register**
 
- The caller must supply, or the must resolve, the jurisdiction information in §4.
+   The caller must supply, or the runner must resolve, the jurisdiction information in §4.
 
- A generic 2024-cycle table is not an enforced-edition pin.
+   A generic 2024-cycle table is not an enforced-edition pin.
 
 3. **Carrier A**
 
- Supply:
+   Supply:
 
- - Carrier identity
- - Sheet title
- - Sheet revision or edition/date
- - Applicable sections or pages
- - Confirmation that the carrier actually controls the job or phase
+   - Carrier identity
+   - Sheet title
+   - Sheet revision or edition/date
+   - Applicable sections or pages
+   - Confirmation that the carrier actually controls the job or phase
 
 4. **Carrier B**
 
- For a dual-carrier or ambiguous job, supply the same information for Carrier B.
+   For a dual-carrier or ambiguous job, supply the same information for Carrier B.
 
- For a single-carrier job, explicitly set Carrier B to `n/a`.
+   For a single-carrier job, explicitly set Carrier B to `n/a`.
 
- A missing second carrier sheet on a dual-carrier job is not a Stop: carry the row as `ASSUMED` (state the value used + why), flagged. Do not silently invent a missing value.
+   A missing second carrier sheet on a dual-carrier job is not a Stop: carry the row as `ASSUMED` (state the value used + why), flagged. Do not silently invent a missing value.
 
 5. **Owner layer**
 
- Supply the owner standard or written project direction if available.
+   Supply the owner standard or written project direction if available.
 
- If the owner standard is NDA or not in hand:
+   If the owner standard is NDA or not in hand:
 
- - Keep the owner column.
- - Use structure only.
- - Do not invent numeric owner requirements.
- - Mark the applicable cell `[V] owner standard not in hand`.
- - Treat the row as conditional or unresolved where the owner could change the election.
+   - Keep the owner column.
+   - Use structure only.
+   - Do not invent numeric owner requirements.
+   - Mark the applicable cell `[V] owner standard not in hand`.
+   - Treat the row as conditional or unresolved where the owner could change the election.
 
 6. **Source-type and sheet-routing information**
 
- Identify whether each source is:
+   Identify whether each source is:
 
- - Adopted code or local administrative instrument
- - Occupancy-specific insurer sheet
- - General installation sheet
- - Component sheet
- - Hydraulic or calculation-method sheet
- - ITM or acceptance sheet
- - Stand-alone insurer sheet
- - Owner standard
- - Public owner material
- - Secondary summary
- - Unmined root PDF or pointer only
+   - Adopted code or local administrative instrument
+   - Occupancy-specific insurer sheet
+   - General installation sheet
+   - Component sheet
+   - Hydraulic or calculation-method sheet
+   - ITM or acceptance sheet
+   - Stand-alone insurer sheet
+   - Owner standard
+   - Public owner material
+   - Secondary summary
+   - Unmined root PDF or pointer only
 
 7. **Rule selector**
 
- The caller may preassign Rule A, B, C, or D. If omitted, assign exactly one matching rule per row and record it.
+   The caller may preassign Rule A, B, C, or D. If omitted, assign exactly one matching rule per row and record it.
 
- Do not invent a fifth resolution rule.
+   Do not invent a fifth resolution rule.
 
 8. **Caller output path**
 
- Required for file output.
+   Required for file output.
 
- If no path is named, return the matrix in the response and stop. Do not choose a corpus location.
+   If no path is named, return the matrix in the response (output-routing rule, not a design Stop). Do not choose a corpus location.
 
 Optional inputs may include:
 
@@ -343,6 +346,8 @@ Resolve the enforced code before filling code-floor cells.
 
 Use the canonical resolver note:
 
+`enforced-edition-resolver-and-reference-pins.md`
+
 The resolver requires:
 
 1. Permit address
@@ -356,11 +361,11 @@ The resolver requires:
 9. Any direct NFPA or NEC adoption outside the I-Codes
 10. Separate NEC resolution
 11. Administrative overlays:
- - Bulletins
- - Plan-review guides
- - Adopted checklists
- - Emergency rules
- - Appeals or official interpretations
+    - Bulletins
+    - Plan-review guides
+    - Adopted checklists
+    - Emergency rules
+    - Appeals or official interpretations
 12. Contractual applicability of insurer and owner requirements
 13. Delta reporting versus NFPA 13-2025
 
@@ -400,6 +405,7 @@ Under an unamended 2024 I-Code adoption, the corpus supports these reference pin
 | NFPA 70 / NEC | 2023 reference, resolve independently | 2026 |
 | NFPA 75 | no direct Chapter 80/35 pin | 2024 |
 | NFPA 855 | 2023 best-supported reference | 2026 |
+| NFPA 2001 | 2022 | 2025 |
 
 These are reference pins only until the project’s adopted instrument is verified.
 
@@ -408,46 +414,45 @@ Do not cite NFPA 13-2025 as the code minimum unless the AHJ separately adopted i
 The code-floor citation must use the enforced edition and enforcing instrument, for example:
 
 - `IFC-2024 §903.3.1.1 → NFPA 13-2022`
-- `local amendment → adopted IFC edition → NFPA 13 edition`
+- `Fargo ND FMC §§9-0701 / 9-0704 → IFC-2024`
+- `Benton County AR Ord. O-2023-71 → AFPC 2021`
 - `FM DS 5-32 Jan-2026 §2.4.3.2.1.2`
 
 Use the exact local instrument where local amendments change the result.
 
-### 4.2b Country gate (US | Canada)
+### 4.2b Canada jobs — code-floor pins (B26/Lead28 restamp 2026-10-29; supersedes 2026-10-09 fence)
 
-A jurisdiction outside the stated NFPA, IBC, and IFC basis, and outside a country-gated Canada job, stays unresolved. Ask which codes are adopted. Do not port US pins into a Canada row or Canada pins into a US row. Insurer and owner layers still apply. Listing questions stay open until the listing is checked.
+Canada is **unlocked** for BC / AB / ON (SK/Saskatoon still parked). The old rule "every Canadian code-floor cell = `unresolved`" is **retired**: fill the Layer-1 code floor from the pins below; a cell stays `unresolved` + RFI **only** where the pin is not held (see GAPs). Do **not** port US pins (IFC/IBC §§, US state amendments, US frost depths, IFC 100 ft FDC) into a Canadian row. Insurer and owner layers apply as written. ULC vs UL listing → `[verify]`. Company scope locks (wet/dry/DI only; foam prohibited; clean agent hand-away; mist refused) do not change at the border. No ULC hours / CSA text invented.
 
-On a Canada job fill the code floor from the pins below. A cell stays unresolved only where the pin is not held. Wet, dry, and double-interlock only. Foam and clean agent stay locked. Do not invent ULC hours or CEC Section 32 clause text. Saskatchewan stays unresolved.
+**Referenced-standard pins (Layer 1; Table 1.3.1.2 of each code; quote-checked 32/32 B26-R1 + OBC 4/4 Lead28):**
 
-Referenced-standard pins from each code's Table 1.3.1.2. Enforced is not latest. Report the US column only as a delta. NFPA 24-2013 text is not held. Use 24-2022 or 24-2025 wording labelled [nearest].
-
-| Standard | NBC/NFC 2025 model | BCBC 2024 | NBC 2023 AE | OBC 2024 / OFC | US delta |
-| --- | --- | --- | --- | --- | --- |
+| Std | NBC/NFC 2025 model | BC (BCBC 2024) | AB (NBC/NFC 2023 AE) | ON (OBC 2024 Table 1.3.1.2 / OFC 2026) | US delta baseline |
+|---|---|---|---|---|---|
 | NFPA 13 | 2019 | 2019 | 2019 | 2019 | 2025 |
-| NFPA 14 | 2013 | 2013 | 2013 | 2013 | 2024 |
-| NFPA 20 | 2019 | 2016 | 2016 | 2016 | 2025 |
-| NFPA 24 | none in the table | none in the BCBC table (fire-code gap) | 2013 | 2013 | 2025 |
-| NFPA 25 | 2020 (NFC) | per the fire code (2020) | 2020 | 2017 (deemed-to-comply) | 2026 |
+| NFPA 14 | 2013 | 2013 | 2013 | 2013 (OBC) | 2024 |
+| NFPA 20 | **2019** | 2016 | 2016 | 2016 (OBC) | 2025 |
+| NFPA 24 | none in table | none in BCBC table — **BCFC GAP** | 2013 (NBC AE) | 2013 (OBC + OFC) | 2025 |
+| NFPA 25 | 2020 (NFC) | per BCFC (2020) | 2020 (NFC AE) | **2017** (OFC deemed-to-comply) | 2026 |
 
-Part 3 overlays, short paraphrase:
+Enforced ≠ latest: always cite the pinned edition; report the US-2025 value only as a delta row. NFPA 24-2013 text is not held → use 24-2022/2025 wording labelled **[nearest]**.
 
-- 3.2.5.9.(2) (NBC 2025, BCBC 2024, NBC 2023 AE): a dry standpipe that is not connected to a water supply does not count. That is not a ban on an NFPA 14 automatic-dry standpipe.
-- 3.2.5.9.(3): total standpipe supply need not exceed 30 L/s. That is the code minimum. The owner may raise it.
-- 3.2.5.15.(1) and (2): standpipe and sprinkler fire-department connections are within 45 m, unobstructed, of a hydrant.
-- NBC 2023 AE 3.2.5.15.(3) only: the connection is also at least 3 m and at most 15 m from the principal entrance. That band is absent from NBC 2025 and from BCBC 2024. Do not transplant it. Whether OBC has the same band stays [verify].
-- 3.2.5.17.(1): freeze protection is performance only. Take the method from the pinned NFPA 13 edition. See `freeze-heat-trace-fp-piping`.
-- 3.2.5.18.(1): the fire pump follows NFPA 20 at that code's Table 1.3.1.2 edition.
-- NFC 2023 AE 4.3.13.3: fuel-tank static head at or below 70 kPa.
+**Part 3 overlays (code-floor rows):**
+- **3.2.5.9.(2)** (NBC 2025 / BCBC 2024 / AE 2023): a dry standpipe *not connected to a water supply* does not count — this is **not** a ban on NFPA 14 automatic-dry.
+- **3.2.5.9.(3)**: total standpipe supply need not exceed **30 L/s** (code minimum; owner may raise).
+- **3.2.5.15.(1)/(2)**: standpipe and sprinkler FDC ≤ **45 m** unobstructed to a hydrant (ON: OFC Compendium equivalent).
+- **AB only — NBC 2023 AE 3.2.5.15.(3):** FDC **≥ 3 m and ≤ 15 m from the principal entrance**, in addition to ≤45 m to hydrant. Absent from NBC 2025 / BCBC 2024 (OBC [verify e-Laws]) — do not transplant.
+- **3.2.5.17.(1)**: freeze protection is performance-only → method from the pinned NFPA 13 edition (see `freeze-heat-trace-fp-piping`).
+- **3.2.5.18.(1)**: fire pump per NFPA 20 at that code's Table 1.3.1.2 edition.
+- **NFC(AE) 2023 4.3.13.3**: fuel tank static head ≤ 70 kPa (confirmed in AE PDF, Lead28).
 
-Stop-class mis-cites on a Canada job. Each is NEEDS HOLD:
+**NEG-CA (explicit stop list — prior fold Lead31, GAP-B29R1-2):**
+- NEG-CA-1 inventing ULC assembly fire-resistance hours.
+- NEG-CA-2 inventing CSA B139 text.
+- NEG-CA-3 inventing OBC 3.2.5.7 / 3.2.5.15.(3) body not held.
+- NEG-CA-4 porting US IFC/IBC FDC / frost pins into a Canadian row.
+- NEG-CA-5 inventing BCFC NFPA 24 or VBBL pins.
 
-- NEG-CA-1: inventing ULC assembly fire-resistance hours.
-- NEG-CA-2: inventing CSA B139 text.
-- NEG-CA-3: inventing OBC 3.2.5.7 or 3.2.5.15.(3) body that is not held.
-- NEG-CA-4: porting US IFC or IBC fire-department-connection or frost pins into a Canada row.
-- NEG-CA-5: inventing a fire-code NFPA 24 pin or a city-bylaw pin that is not held.
-
-Still unresolved: the fire-code NFPA 24 pin, NFPA 24-2013 text, a city building bylaw versus BCBC, the OBC entrance-band sentence, the adopted electrical-code edition, ULC assembly hours, and CSA B139. Do not invent those texts.
+**Still `unresolved` + RFI:** BCFC NFPA 24 pin; NFPA 24-2013 text; Vancouver (VBBL) vs BCBC; OBC 3.2.5.15.(3) existence; AB CE Code edition; ULC assembly hours; CSA B139; municipal servicing standards outside the province (Vancouver/Markham).
 
 ### 4.3 NFPA 13-2025 delta discipline
 
@@ -458,9 +463,9 @@ The following may be reported when applicable:
 - Dry-system water-delivery restructuring: NFPA 13-2025 §8.2.4
 - VCI systems: NFPA 13-2025 §8.2.11
 - Vacuum dry or vacuum preaction: NFPA 13-2025 §8.11
-- Ceilings over 30 ft (OH1 area +30%, OH2/EH density): NFPA 13-2025 §19.2.3.2.5 [CODE 2025]
+- Ceilings over 30 ft (OH1 area +30%, OH2/EH density): NFPA 13-2025 §19.2.3.2.5 [CODE 2025, pull 13-03]
 
-Dry-pipe / double-interlock +30%: [CODE NFPA 13 2025 §19.2.3.2.6 / 2022 §19.2.3.2.5 / 2019 §19.3.3.2.5]. §19.2.3.2.5 is a different rule in each edition (2022 = dry-pipe / double-interlock +30%; 2025 = ceilings over 30 ft), so always cite it with its edition.
+Dry-pipe / double-interlock +30%: [CODE NFPA 13 2025 §19.2.3.2.6 / 2022 §19.2.3.2.5 / 2019 §19.3.3.2.5, pull 13-03]. §19.2.3.2.5 is a different rule in each edition (2022 = dry-pipe / double-interlock +30%; 2025 = ceilings over 30 ft), so always cite it with its edition.
 
 When the NFPA 13-2025 number or section is not pinned:
 
@@ -476,6 +481,8 @@ When the NFPA 13-2025 number or section is not pinned:
 Apply the source’s own scope and cross-references before comparing Carrier A against Carrier B.
 
 Canonical method:
+
+`fm-occupancy-vs-installation-sheet-precedence-ds-5-32-and-ds-2-0.md`
 
 ### 5.1 Occupancy overlay versus installation base
 
@@ -821,7 +828,7 @@ For distributed Li-ion where FM DS 5-32 §2.4.3.6.4.1 applies:
 
 - Record clean agent/hybrid prohibition.
 - Do not size gas.
-- Route any adjunct question to out of scope.
+- Route any adjunct question to the clean-agent or special-hazard Skill.
 
 For foam:
 
@@ -851,7 +858,7 @@ For every row:
 2. Identify the insurer union.
 3. Compare them on the same axis.
 4. If the code floor is more stringent, set the code override.
-5. If the code floor is absent, mark the row provisional and unresolved.
+5. If the code floor is absent, mark the row `provisional` / `unresolved` with a stated `ASSUMED` floor (value + why) + RFI and continue — not a Stop.
 
 ### 9.2 Door-ratio check
 
@@ -897,7 +904,7 @@ This is not a default that the insurer wins. It is an explicit incomplete three-
 
 The general dry/double-interlock +30% comparison is:
 
-- Cited [CODE NFPA 13 2025 §19.2.3.2.6 / 2022 §19.2.3.2.5 / 2019 §19.3.3.2.5]
+- Cited [CODE NFPA 13 2025 §19.2.3.2.6 / 2022 §19.2.3.2.5 / 2019 §19.3.3.2.5, pull 13-03]
 - No invented section
 - No fabricated percentage beyond a cited source
 - Cite by edition: the 2025 pointer is §19.2.3.2.6 (2025 §19.2.3.2.5 is the ceilings-over-30 ft rule)
@@ -908,7 +915,7 @@ If FM DS 5-32 supplies `2,500 ft² wet` and `3,500 ft² dry`, the FM comparison 
 FM dry increase = (3500 − 2500) / 2500 = 0.40 = +40%
 ```
 
-The NFPA 13 general +30% rule is held: [CODE NFPA 13 2025 §19.2.3.2.6 / 2022 §19.2.3.2.5 / 2019 §19.3.3.2.5].
+The NFPA 13 general +30% rule is held: [CODE NFPA 13 2025 §19.2.3.2.6 / 2022 §19.2.3.2.5 / 2019 §19.3.3.2.5, pull 13-03].
 
 ---
 
@@ -990,7 +997,7 @@ Emit with Outputs. **Every parameter row, election, and gate gets a Status-regis
 | `provisional` | Insurer-union result with open non-gating assumptions, or code/owner layer not yet closed but row still usable as provisional insurer union (assumptions stated) |
 | `unresolved` | Blocking hole: missing parameter list; missing jurisdiction/permit path; dual-carrier sheet missing; mandatory code override cannot be evaluated for a final claim; owner-sensitive election without evidence |
 | `comparison-only` | SI/NI / other preaction evidence; FM DS 5-32 preference ranking; AXA SI preference / DI penalty; carrier ranking rows — **never** the controlling company election |
-| `handoff` | Work owned elsewhere: density-area; pump-envelope; occupancy-hazard-fork; STS election; ITM; out of scope; releasing C&E; jurisdiction research |
+| `handoff` | Work owned elsewhere: density-area; pump-envelope; occupancy-hazard-fork; STS election; ITM; clean-agent / special-hazard; releasing C&E; jurisdiction research |
 | `RFI-variance` | Company-fence gate: SI/NI/foam/mist (or other prohibited family/medium) presented as election/BOD; prohibited system-family stop |
 
 **Rules:**
@@ -1015,7 +1022,7 @@ This Skill owns:
 
 This Skill does not own:
 
-- Density-area `calcs`
+- Density-area `_calc`
 - Pump sizing
 - Supply-curve margin
 - Node-by-node hydraulic calculations
@@ -1024,9 +1031,9 @@ This Skill does not own:
 ### 12.1 Double-interlock lever comparison
 
 ```text
-fm_di_area = 3500 ft²
+fm_di_area  = 3500 ft²
 axa_di_area = 2500 ft² × 1.30
- = 3250 ft²
+             = 3250 ft²
 
 verification:
 0.30 × 2500 = 750 ft²
@@ -1041,9 +1048,9 @@ Do not stack `3500 × 1.30` without a cited requirement.
 
 ```text
 fm_increase = (3500 − 2500) / 2500
- = 1000 / 2500
- = 0.40
- = +40%
+            = 1000 / 2500
+            = 0.40
+            = +40%
 ```
 
 This is an FM comparison, not a substitute citation for the unpinned general NFPA 13-2025 +30% rule.
@@ -1054,16 +1061,16 @@ The matrix may show the named consequence without running the density-area Skill
 
 ```text
 Q_sprinkler = density × design area
-Q_total = Q_sprinkler + hose allowance
-V_min = Q_total × duration
+Q_total     = Q_sprinkler + hose allowance
+V_min       = Q_total × duration
 ```
 
 Example using grounded FM wet values:
 
 ```text
 0.2 gpm/ft² × 2500 ft² = 500 gpm
-500 gpm + 250 gpm = 750 gpm
-750 gpm × 60 min = 45,000 gal
+500 gpm + 250 gpm      = 750 gpm
+750 gpm × 60 min       = 45,000 gal
 ```
 
 Label these as derived only when the inputs are grounded and the arithmetic is independently checked. Hand the actual hydraulic design and supply adequacy to `density-area-dry-increase` and `pump-envelope`.
@@ -1071,9 +1078,9 @@ Label these as derived only when the inputs are grounded and the arithmetic is i
 ### 12.4 Li-ion arithmetic
 
 ```text
-kWh per cell = Ah × V / 1000
+kWh per cell   = Ah × V / 1000
 kWh per module = kWh per cell × cells per module
-kWh per rack = kWh per module × modules per rack
+kWh per rack   = kWh per module × modules per rack
 ```
 
 Do not invent `Ah`, voltage, cell count, or module count.
@@ -1085,35 +1092,35 @@ Do not invent `Ah`, voltage, cell count, or module count.
 Use these fallbacks in order:
 
 1. Both carriers silent and code floor present:
- - Code floor controls.
+   - Code floor controls.
 2. One carrier quantitative and the other qualitative or silent:
- - Rule A; quantitative source controls provisionally.
+   - Rule A; quantitative source controls provisionally.
 3. Carrier conflict on same axis:
- - Select the more stringent applicable value.
- - Preserve both sources.
- - Log `CONFLICT`.
+   - Select the more stringent applicable value.
+   - Preserve both sources.
+   - Log `CONFLICT`.
 4. Different carrier axes:
- - Rule C; retain the union.
+   - Rule C; retain the union.
 5. All layers absent:
- - Mark `unresolved`.
- - Do not invent.
+   - Mark `unresolved`.
+   - Do not invent.
 6. Code floor absent:
- - Carry provisional insurer union.
- - Mark code override unresolved.
- - Do not label final or code-compliant.
+   - Carry provisional insurer union.
+   - Mark code override unresolved.
+   - Do not label final or code-compliant.
 7. Owner standard absent:
- - Structure-only owner column.
- - Do not infer a number.
+   - Structure-only owner column.
+   - Do not infer a number.
 8. Dual-carrier sheet or values missing:
- - Stop.
+   - Stop.
 9. Third carrier named but source missing:
- - Stop.
+   - Stop.
 10. Caller requests prohibited system family (SI/NI/other) as election/BOD:
- - **Stop** with `RFI-variance` / company-fence gate (evidence may remain `comparison-only`).
+    - **Stop** with `RFI-variance` / company-fence gate (evidence may remain `comparison-only`).
 11. Caller requests foam or mist as election/design/BOD:
- - **Stop** with `RFI-variance` (foam prohibited; mist `PRACTICE REFUSED`); route to special-hazard / STS (`handoff`).
+    - **Stop** with `RFI-variance` (foam prohibited; mist `PRACTICE REFUSED`); route to special-hazard / STS (`handoff`).
 12. Caller asks this Skill to perform occupancy, density-area, pump, or hydraulic-tree work:
- - **Stop** and hand off (`handoff`).
+    - **Stop** and hand off (`handoff`).
 
 ---
 
@@ -1180,7 +1187,7 @@ Do not emit:
 
 - Space-by-space occupancy classification
 - A new hazard-classification schedule
-- Density-area `calcs` transcript
+- Density-area `_calc` transcript
 - Pump rated flow or pressure selection
 - Supply-curve adequacy proof
 - Node-by-node hydraulic tree
@@ -1194,7 +1201,7 @@ Do not emit:
 
 ## 15. Stop conditions
 
-Missing inputs stay ASSUMED and flagged. The scope lock above still stops.
+> **2026-10-07 intake rule:** any item below that is a missing packet, a missing upstream result, or a missing input blank is **not** a Stop — proceed with a stated `ASSUMED` value (value + why), flagged in the output and status register. Only company scope-lock items (SI/NI-as-BOD → `RFI-variance`, foam, water mist `PRACTICE REFUSED`, clean agent as company BOD) and wrong-Skill / out-of-scope routing remain hard Stops.
 
 Return the blocking item (hard **Stop** only for scope-lock / wrong-Skill items; input gaps → stated `ASSUMED`, flagged) when:
 
@@ -1227,9 +1234,9 @@ Return the blocking item (hard **Stop** only for scope-lock / wrong-Skill items;
 | Node-by-node sprinkler hydraulics | hydraulic-tree Skill (not yet in shop) |
 | Detection and releasing cause-and-effect | `preaction-releasing-c-and-e-soo` |
 | Power isolation and electrical coordination | `power-isolation-disconnect-control` |
-| Clean agent or other special hazard | the out-of-scope method / the out-of-scope method |
+| Clean agent or other special hazard | `clean-agent-enclosure-integrity` / `clean-agent-concentration-and-quantity` |
 | ITM and acceptance | `itm-design-for-testability` / `commissioning-ist-acceptance-packet` |
-| Retrieve and adapt an existing assignment packet | the input packet |
+| Retrieve and adapt an existing assignment packet | `dc-fp-assignment-packet` |
 | Jurisdiction adoption and AHJ instrument research | jurisdiction-edition-resolver |
 | Owner standard or unresolved owner election | owner RFI |
 | CAD, BIM, or delegated design | outside Skills |
@@ -1242,12 +1249,12 @@ Consume another Skill’s output when supplied. Do not duplicate its work.
 
 Use the shop codebook by title. Every requirement citation must include section and edition/date where the source provides them.
 
-### Design practice
+### the engineer Way and method
 
-- `The Design practice` — three-layer basis, per-parameter most-stringent rule, enforced-versus-latest distinction, and delta reporting
-- — adoption chain, jurisdiction resolver, Chapter 80/35 pins, independent NEC resolution, and NFPA 13-2025 delta discipline
-- — owner evidence ladder, asymmetric raise-only rule, and NDA/public-owner limits
-- — base/overlay, component, stand-alone, routing, and silence-not-permission rules
+- `The engineer Way` — three-layer basis, per-parameter most-stringent rule, enforced-versus-latest distinction, and delta reporting
+- `enforced-edition-resolver-and-reference-pins.md` — adoption chain, jurisdiction resolver, Chapter 80/35 pins, independent NEC resolution, and NFPA 13-2025 delta discipline
+- `hyperscaler-owner-standard-layer.md` — owner evidence ladder, asymmetric raise-only rule, and NDA/public-owner limits
+- `fm-occupancy-vs-installation-sheet-precedence-ds-5-32-and-ds-2-0.md` — base/overlay, component, stand-alone, routing, and silence-not-permission rules
 
 ### FM DS 5-32
 
@@ -1281,15 +1288,15 @@ Use the shop codebook by title. Every requirement citation must include section 
 - Leak detection: p. 4
 - Li-ion density reinforcement: p. 8
 - 125°F damage-onset criterion: pp. 4, 9
-- PRC overlay behavior: , “How AXA XL’s PRC library actually works”
+- PRC overlay behavior: `AXA XL insurer design basis.md`, “How AXA XL’s PRC library actually works”
 
 ### Code and delta
 
 - NFPA 13-2025 §8.2.4 — dry-system water-delivery restructuring, where applicable
 - NFPA 13-2025 §8.2.11 — VCI systems, where applicable
 - NFPA 13-2025 §8.11 — vacuum dry or vacuum preaction, where applicable
-- NFPA 13-2025 §19.2.3.2.5 — ceilings over 30 ft ; in 2022 the same number is the dry-pipe / double-interlock +30% rule, so always cite it with its edition
-- NFPA 13 dry/double-interlock +30% — [CODE NFPA 13 2025 §19.2.3.2.6 / 2022 §19.2.3.2.5 / 2019 §19.3.3.2.5]
+- NFPA 13-2025 §19.2.3.2.5 — ceilings over 30 ft (pull 13-03); in 2022 the same number is the dry-pipe / double-interlock +30% rule, so always cite it with its edition
+- NFPA 13 dry/double-interlock +30% — [CODE NFPA 13 2025 §19.2.3.2.6 / 2022 §19.2.3.2.5 / 2019 §19.3.3.2.5, pull 13-03]
 - IBC-716 opening-protective table — `[V]` unless the adopted edition and table are held
 - IBC-717 damper table — `[V]` unless the adopted edition and table are held
 - NFPA 72-2025 releasing provisions — `[V]` unless the enforced and latest primary pins are held
@@ -1297,13 +1304,13 @@ Use the shop codebook by title. Every requirement citation must include section 
 
 ### Scope fences
 
-- — foam is not a hyperscale white-space primary; route only when a cited hazard sheet requires it
-- — technology-selection routing and current mist correction
+- `foam-extinguishing-and-foam-water-sfff.md` — foam is not a hyperscale white-space primary; route only when a cited hazard sheet requires it
+- `suppression-technology-selection-by-space-and-objective.md` — technology-selection routing and current mist correction
 - Water-mist design-basis notes — mist remains `PRACTICE REFUSED` for this company scope
 
 ---
 
-## Design practice
+## 18. the engineer Way
 
 1. Code is the floor; insurer and owner may raise it.
 2. Most-stringent is per parameter, never per layer.
@@ -1327,7 +1334,7 @@ Use the shop codebook by title. Every requirement citation must include section 
 
 ---
 
-## Check before you finish
+## 19. Runner checklist
 
 1. Confirm the parameter list and caller-named output path.
 2. Apply the wet/dry/double-interlock Hard scope gate.
@@ -1347,22 +1354,23 @@ Use the shop codebook by title. Every requirement citation must include section 
 16. Add provenance labels (`grounded` / `derived` / `synthetic` / `verify`).
 17. **Emit Status register** (mandatory): `grounded` / `provisional` / `unresolved` / `comparison-only` / `handoff` / `RFI-variance` on every row/election/gate (§11.3 / §14.3).
 18. Show and verify ratio and lever arithmetic.
-19. Name the density/area row without running `calcs` (`handoff` to density-area).
+19. Name the density/area row without running `_calc` (`handoff` to density-area).
 20. Add generic handoffs (`handoff` tokens where work is owned elsewhere).
 21. Add directional NFPA 13-2025 deltas only where valid.
 22. Preserve `[SYN]`, `[V]`, `[U]`, and conflict notes beside Status-register tokens.
 23. Add the dual-carrier collapse note where applicable.
 24. Write only to the caller-named path, or return the matrix and stop if no path was named.
-25. On the hose-and-duration row for a support ordinary-hazard wet space, record **E3=E1**: **60 min for all HC** (FM DS 3-26 §2.3.1.13) and NFPA 13-2025 §19.2.3.1.3 when supervised and monitored. The 90 min branch is only the unsupervised case.
 
----
+## Support-space duration pin — Lead18/18b B16-R2 (E1; E3 CLOSED = E1), 2026-10-27
+- Support OH2 wet: **60 min** under NFPA 13-2025 §19.2.3.1.3 (supervised + monitored at a constantly attended location). Show-and-verify [SYN]: 550 gpm × 60 = **33,000 gal**.
+- FM layer agrees: FM DS 3-26 (Apr 2019 / IR Apr 2025) §2.3.1.13 → **60 min for all HC**; hose **250 gpm** for HC-1/HC-2 (§2.3.1.12). E3 is closed and equals E1. Delta vs NFPA 13-2025: none on duration.
+- E2 (90 min, 49,500 gal) only if AHJ/owner requires the unsupervised branch. Hall demand × duration (e.g. 66,797 gal) still governs supply and storage.
 
-## Support-space duration — E3=E1, 60 min for all HC
 
-Put this on the hose-and-duration row. Do not run the gallons here. Hand the arithmetic to `density-area-dry-increase`.
+## 2026-11-03 — prior fold Lead31: GAP-B29R1-2 NEG-CA list
+Added explicit NEG-CA-1..5 above §4.2b Still-unresolved list (substance already in prose). Unresolved + RFI list kept unchanged.
 
-- **E1.** Support ordinary-hazard group 2, wet: **60 min** under NFPA 13-2025 §19.2.3.1.3 when waterflow and supervisory devices are supervised and monitored at a constantly attended location. Show-and-verify `[SYN]`: 550 gpm × 60 min = **33,000 gal**.
-- **E3.** Closed. **E3=E1**. FM DS 3-26 (April 2019, interim revision April 2025) §2.3.1.13 is **60 min for all HC**. Hose is **250 gpm** for HC-1 and HC-2 (§2.3.1.12). Delta versus NFPA 13-2025 on duration: none.
-- **E2.** 90 min and 49,500 gal only when the AHJ or the owner requires the unsupervised branch.
-
-A larger hall demand times duration (teaching figure 66,797 gal) still governs supply and storage. Code is the floor. The insurer sheet agrees on 60 min, so the union does not raise duration. An owner may still raise it. Foam, clean agent, and single-interlock stay out of scope on this row.
+## 2026-11-04 — stop-vocab normalize (staged)
+- Inserted short §1.0 Country/edition gate pointing to existing §4.2/§4.2b + NEG-CA (no new cites).
+- `If no path is named, return the matrix in the response and stop. Do no…` → `If no path is named, return the matrix in the response (output-routing rule, not a design …`
+- `5. If the code floor is absent, mark the row provisional and unresolve…` → `5. If the code floor is absent, mark the row `provisional` / `unresolved` with a stated `A…`

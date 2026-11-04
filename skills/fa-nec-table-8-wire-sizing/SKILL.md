@@ -12,12 +12,13 @@ description: >-
 ## Intake and scope (all FA skills)
 - The input packet is optional. Any missing input gets a stated value, labeled **ASSUMED** (value used + why). ASSUMED is never shown as a code value. Keep going.
 - Scope locks are hard Stops: wet, dry, or double-interlock (DI) preaction only. No clean agent. No foam. Single- or non-interlock as basis of design: record, Stop, RFI-variance.
-- Country gate (US | Canada). On a US job use the NFPA, IBC, and IFC pins in this skill. On a Canada job keep this skill. NBC 2025 Division B 3.2.4 is the held alarm overlay where this skill cites it. CAN/ULC-S524, S536, S537, S1001, and CEC Section 32 stay NEEDS HOLD. Do not invent those clause texts or battery hours. Do not port a US pin into a Canada row or a Canada pin into a US row. Foam and clean agent stay locked.
-- On FM DI jobs carry the standing flag: "[OWNER]/insurer conflict: FM DS 5-32 (Jan 2026) s2.4.1.1 ranks DI preaction last. Company decision: keep DI. Flag to owner and FM on this job."
-- Label every claim [CODE] [HB] [PARA] [PRACTICE] [OWNER] (or [OWNER]/insurer). Cite section AND edition. Mark approximations with ~. Never invent code text; gaps get edition text not confirmed.
-- Pin the enforced NFPA 72 edition first. A label can change by edition (run `fa-code-edition-delta-check`). Table 8 itself is NEC 2023, not 72; pin 72 when length or drop/dB rules are in play.
+- Country gate (US | Canada). Canada in scope (the engineer 2026-10-29). NBC 2025 Div. B 3.2.4 held (fold26). CAN/ULC-S524, S536, S537, S1001, and CEC Sec. 32 are NEEDS HOLD. Foam and clean agent still locked. On a Canada job, stop any claim that needs S524/S536/S537/S1001/CEC 32 until held. Do not invent S524 battery hours.
+- On FM DI jobs carry the standing flag: "[OWNER]/insurer conflict: FM DS 5-32 (Jan 2026) s2.4.1.1 ranks DI preaction last. Company decision (the engineer, standing): keep DI. Flag to owner and FM on this job."
+- Label every claim [CODE] [HB] [PARA] [PRACTICE] [OWNER] (or [OWNER]/insurer). Cite section AND edition. Mark approximations with ~. Never invent code text; gaps get "needs LiNK: <id>".
+- Pin the enforced NFPA 72 edition first. A label can change by edition (run `fa-code-edition-delta-check`). Pin the enforced **NEC** edition for Table 8 separately (not the same as 72).
+- NEC Table 8 edition gate (Chunk 19 / LOCAL-13 GAP3 close): held ohms are **NEC 2023** (70-03) and **NEC 2020** match for 18 to 10 AWG uncoated copper (70-08). **NEC 2026 Ch. 9 Table 8 body is NEEDS HOLD** (not pulled). On a NEC 2026 job (example: TX state min / the site plan-review per held notes site-dallas-nec-2026-local-status-2026-11-04.md` [PARA]): STOP inventing 2026 ohms. Do not tag 2023 Table 8 values as [CODE 2026]. Either hold for LiNK Table 8 2026, or if the job must proceed, use 2023 held ohms only as **ASSUMED / VERIFY** and report the NEC 2026 gap. Never invent numbers.
 - Three-layer basis (code x insurer x owner); most stringent wins; report delta vs the enforced edition and NFPA 72-2025.
-- Run math in a script; show inputs. Short sentences. No em dashes or en dashes (write the word to). Verify with the engineer of record. Do not claim a stamp. Copy METHOD, not synthetic numbers.
+- Run math in a script; show inputs. Short sentences. No em dashes or en dashes (write "to"). the engineer is engineer of record; no stamp claim. Copy METHOD, not synthetic numbers.
 
 ## Not this skill
 - DC NAC voltage-drop pass/fail and V_eol: `fa-nac-voltage-drop-check`.
@@ -35,11 +36,11 @@ description: >-
 | 12 | 1.93 | 1.98 |
 | 10 | 1.21 | 1.24 |
 
-- Use the coated column if strands are coated (coated values not held here; needs product sheet or further the edition text). Aluminum also in Table 8; FA NAC/speaker feeders are copper unless the sheet says otherwise.
+- Use the coated column if strands are coated (coated values not held here; needs product sheet or further LiNK). Aluminum also in Table 8; FA NAC/speaker feeders are copper unless the sheet says otherwise.
 - [CODE] Table 8 Note 2 temperature correction for copper: R2 = R1 [1 + 0.00323 (T2 - 75)], with T2 in °C and R1 the 75°C table value. (Aluminum alpha 0.00330 is in the held note; not used for copper FA runs.)
 - [CODE] NFPA 72-2025 §18.3.7.3: length follows the intended path, including right angles and vertical changes; lengths in calcs include the total length of both conductors; the calc form states whether the displayed length is doubled in the calc or already out and back; wire resistance values are **not doubled** for length and reflect NEC Table 8 or the maker data sheet. Label [CODE 2025]. On a 72-2019 or 72-2022 job the both-conductor / Table 8 method is **[PRACTICE]** (72-16, 72-17; run `fa-code-edition-delta-check`).
 - [CODE] §18.3.7.5: wiring designed for a minimum of 167°F (75°C), or the expected operating temperature if higher.
-- Edition of Table 8: held pull is **NEC 2023 only** (70-03). NEC 2020 Table 8 is held (70-08): uncoated copper 75°C values for 18 to 10 AWG match 2023. Cite NEC 2020 Table 8 [CODE] on a 2020 job.
+- Edition of Table 8: held pulls are **NEC 2023** (70-03) and **NEC 2020** (70-08; 18 to 10 AWG uncoated copper 75°C match 2023). Cite [CODE] only for the enforced edition that is held. **NEC 2026 Table 8: NEEDS HOLD.** Do not invent 2026 ohms. Do not cite 2023 ohms as [CODE 2026].
 
 ## Inputs (ASSUME and flag any missing)
 1. Circuit kind: DC NAC, or speaker / AC NAC feeder (for how the budget is stated later).
@@ -65,4 +66,7 @@ description: >-
 7. Hand off: NAC V_eol / percent drop / PASS-FAIL to `fa-nac-voltage-drop-check`; speaker dB loss / PASS-FAIL to `fa-speaker-circuit-loss-check`. Do not restate those pass rules here.
 
 ## Output
-Input table with ASSUMED flags; stranding/coating/temp basis; Table 8 R1 and R2 used; per-gauge ohm/kft and max-length (or R_circuit) table; elected gauge; handoff note to NAC or speaker skill; NEC edition cited (2020 held 70-08; 2023 held 70-03).
+Input table with ASSUMED flags; stranding/coating/temp basis; Table 8 R1 and R2 used; per-gauge ohm/kft and max-length (or R_circuit) table; elected gauge; handoff note to NAC or speaker skill; NEC edition cited (2020 held 70-08; 2023 held 70-03; 2026 Table 8 NEEDS HOLD).
+
+## Sources
+KB: 60_power-battery-and-voltage-drop/nac-voltage-drop-calculations.md (Table 8 section). Filed LiNK: held notes/held-nfpa-link-70-03-nec-ch9-table8-2023-2026-10-15.md; 70-08 (2020 Table 8). Adoption [PARA]: held notes/the site-dallas-nec-2026-local-status-2026-11-04.md (Chunk 19). Method only: EXERCISES/worked/fixture-02-nac-voltage-drop.md, _calc/ex02_nac_vdrop.py (do not copy its synthetic numbers). Companion skills: fa-nac-voltage-drop-check, fa-speaker-circuit-loss-check, fa-code-edition-delta-check. (Paths under held training corpus unless absolute.)

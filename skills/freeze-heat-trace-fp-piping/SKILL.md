@@ -13,23 +13,29 @@ description: >-
 
 # Freeze program and heat-trace for FP piping
 
-**Intake.** The input packet is optional. A missing input is not a stop: state the value used and why, and label it ASSUMED. Do not present an ASSUMED value as a cited code or table value, and do not freeze a vendor SKU. **Scope lock.** Wet pipe, dry pipe, and double-interlock preaction only. Foam, clean agent, water mist, and single-interlock or non-interlock preaction are out of scope. If one of those is requested as the basis of design, record it and stop. Do not substitute another system and do not size it here. Cite the section and the edition. Decide each parameter by the most stringent of the code floor, the insurer sheet, and the owner standard. Verify judgment calls with the engineer of record.
+> **Intake rule (the engineer, 2026-10-07 — overrides any older gate wording below):** The assignment packet is optional and never a gate. Start from exactly what is given. A missing packet, a missing upstream result (STS token, matrix row, occupancy fork, density, C&E, etc.), or a missing input blank is **not** a Stop: run the upstream Skill if practical, otherwise fill the gap with a stated **ASSUMED** value (the value used + why), flag it in the output and the status register, and continue. ASSUMED is not verified. "Never invent" / "refuse invent" rules on project numbers mean do not *silently* invent: label the number ASSUMED; never present an ASSUMED value as a cited code or table value; never freeze a vendor SKU. **Company scope locks stay hard Stops and are not softened by this rule:** wet / dry / double-interlock preaction only; foam prohibited; clean agent not done (hand-away); water mist `PRACTICE REFUSED`; single-interlock / non-interlock / other preaction never the elected system (SI/NI-as-BOD → Stop + `RFI-variance`, comparison-only). Cite section and edition, use `_calc/run.py` for governed math, design to the most-stringent 3-layer basis; the engineer is the engineer of record.
 
-Reusable data-center fire-protection recipe. **Country gate (US | Canada).** US pins below stay on a US job. On a Canada job use the Canada section and `most-stringent-basis-matrix` §4.2b. Do not port a US pin into a Canada row or a Canada pin into a US row.  **This Skill screens freeze exposure from the 100-year DMT / cold-climate map, elects the freeze strategy (heated envelope / heated valve enclosure vs heat-trace on wet-must-stay-wet vs dry/DI supervisory drain), structures the OEM FS vs non-FS heat-trace path + FACP low-temp / leak / circuit-supervision alarm schedule, and emits a generic MasterSpec §210533 / §210700 edit checklist** — after the assignment packet exists and STS has elected company `wet` | `dry` | `DI`.
+Reusable US data-center fire-protection recipe. **This Skill screens freeze exposure from the 100-year DMT / cold-climate map, elects the freeze strategy (heated envelope / heated valve enclosure vs heat-trace on wet-must-stay-wet vs dry/DI supervisory drain), structures the OEM FS vs non-FS heat-trace path + FACP low-temp / leak / circuit-supervision alarm schedule, and emits a generic MasterSpec §210533 / §210700 edit checklist** — after the assignment packet exists and STS has elected company `wet` | `dry` | `DI`.
 
 It does **not** elect the hall sprinkler/preaction family (consume STS). It does **not** elect Class I standpipe type (consume `standpipe-class-i-election-and-demand`). It does **not** invent site DMT °F, OEM wattage tables, circuit amps, or controller setpoints as universal defaults. It does **not** size closed-top tank heaters (companion / handoff). It does **not** design foam, mist, CAF, or clean agent. It does **not** CAD cable routes.
 
-**Core thesis:** Freeze protection is a **campus program** first (**FM DS 9-18, July 2022** when the site is freeze-prone), not a cable SKU. Step 0 is the **FM Worldwide Freeze Map** 100-year DMT — **never invent zone °F** from App. D overview figures. When **100-year DMT ≤ 20°F (−6.7°C)**, DS 9-18 applies: hold water-filled FP spaces **> 40°F (4°C)**; electric pump rooms **> 40°F**; diesel **> 70°F**; exterior preaction/dry/deluge valves in an **insulated heated enclosure** with temperature to a **constantly attended** location; plan utility loss **≥ 3 days**. Where 40°F cannot be held on a wet portion → dry / preaction / dry pendant / antifreeze **only when the occupancy sheet allows** — and company BOD remains **`wet` | `dry` | `DI` only** (consume STS; do **not** silently elect SI). **Heat-trace ≠ substitute for a heated DI / dry valve house** (DS 9-18 §2.2.6; OEM FS guides). Heat-trace applies only to **freeze-exposed wet runs that must stay wet**; declared dry standpipe / dry DI legs stay drained / empty — do **not** heat-trace them instead of draining. OEM **FS** (UL 515A / FM / c-UL-us VGNJ fire-sprinkler path) vs **non-FS** campus MEP path must be elected honestly — XL-Trace Edge trio (H58489 / H58033 / H55838) is a **held method example**, not a locked campus SKU. **Listing fence (held, H60742 2025 pp. 5/8):** the RAYCHEM 465 FS controller is c-UL-us / UL **VGNJ** listed with **5XLE / 8XLE only** — **12XLE is not on the 465 listed cable list**; a 12XLE FS circuit needs **separate listing evidence** (e.g. with C910-485 / ACS-30), otherwise solve with thicker / lower-k insulation or parallel runs. **Never invent DMT, cable W/ft, or controller defaults** — structure the register and **Stop / `[V]` / RFI** when the primary is unheld.
+**Core thesis:** Freeze protection is a **campus program** first (**FM DS 9-18, July 2022** when the site is freeze-prone), not a cable SKU. Step 0 is the **FM Worldwide Freeze Map** 100-year DMT — **never invent zone °F** from App. D overview figures. When **100-year DMT ≤ 20°F (−6.7°C)**, DS 9-18 applies: hold water-filled FP spaces **> 40°F (4°C)**; electric pump rooms **> 40°F**; diesel **> 70°F**; exterior preaction/dry/deluge valves in an **insulated heated enclosure** with temperature to a **constantly attended** location; plan utility loss **≥ 3 days**. Where 40°F cannot be held on a wet portion → dry / preaction / dry pendant / antifreeze **only when the occupancy sheet allows** — and company BOD remains **`wet` | `dry` | `DI` only** (consume STS; do **not** silently elect SI). **Heat-trace ≠ substitute for a heated DI / dry valve house** (DS 9-18 §2.2.6; OEM FS guides). Heat-trace applies only to **freeze-exposed wet runs that must stay wet**; declared dry standpipe / dry DI legs stay drained / empty — do **not** heat-trace them instead of draining. OEM **FS** (UL 515A / FM / c-UL-us VGNJ fire-sprinkler path) vs **non-FS** campus MEP path must be elected honestly — XL-Trace Edge trio (H58489 / H58033 / H55838) is a **held method example**, not a locked campus SKU. **Listing fence (held, H60742 2025 pp. 5/8):** the RAYCHEM 465 FS controller is c-UL-us / UL **VGNJ** listed with **5XLE / 8XLE only** — **12XLE is not on the 465 listed cable list**; a 12XLE FS circuit needs **separate listing evidence** (e.g. with C910-485 / ACS-30), otherwise solve with thicker / lower-k insulation or parallel runs. **Never invent DMT, cable W/ft, or controller defaults** — structure the register and carry a stated `ASSUMED` value (value + why) + `[V]` + RFI, flagged `provisional` — not a Stop (the engineer intake rule) when the primary is unheld.
 
-**Design practice:** three-layer most-stringent **per parameter** (map gate / applicability, ambient floors, valve-house vs heat-trace fork, wet-vs-dry leg strategy, OEM FS listing path, GFEP / backup power, FACP alarm schedule, MasterSpec 210533/210700 hooks, utility-outage / ERP). Delta vs **NFPA 13-2025** freeze / heated-enclosure §§ where held (else `[V]` — vendor often cites **13-2019 §8.3.1.8.2.3**). Cite **section AND edition**. Show-and-verify math. `[SYN]` / `[V]`. Status vocabulary every run: `grounded` / `provisional` / `unresolved` / `comparison-only` / `handoff` / `RFI-variance` (+ `PRACTICE REFUSED` when mist is presented). Company fence: controlling BOD = **`wet` | `dry` | `double-interlock` only** (consume STS — do **not** elect); SI/NI → Stop + `RFI-variance` / comparison-only; **Foam prohibited**; **Mist = `PRACTICE REFUSED`**; clean agent = **hand-away only**. Upstream (packet optional; gaps → `ASSUMED`): completed the input packet (optional) + STS `wet`|`dry`|`DI` (consumed, else `ASSUMED`) (+ `most-stringent-basis-matrix` when dual — **consume and return here**). Consume standpipe type when freeze-exposed standpipe legs exist — do **not** re-elect Class. N₂ plant ≠ freeze program (`nitrogen-inerting-and-c-factor-gate`). Caller-path-only. **NO PLACEHOLDER.** Generic — do not copy Bismarck / Fargo / MN Becker geometry, nVent SKUs, or Thermon TCM2 printed setpoints as universal defaults. Owner may **raise, never lower**.
+**the engineer Way:** three-layer most-stringent **per parameter** (map gate / applicability, ambient floors, valve-house vs heat-trace fork, wet-vs-dry leg strategy, OEM FS listing path, GFEP / backup power, FACP alarm schedule, MasterSpec 210533/210700 hooks, utility-outage / ERP). Delta vs **NFPA 13-2025** freeze / heated-enclosure §§ where held (else `[V]` — vendor often cites **13-2019 §8.3.1.8.2.3**). Cite **section AND edition**. Show-and-verify math. `[SYN]` / `[V]`. Status vocabulary every run: `grounded` / `provisional` / `unresolved` / `comparison-only` / `handoff` / `RFI-variance` (+ `PRACTICE REFUSED` when mist is presented). Company fence: controlling BOD = **`wet` | `dry` | `double-interlock` only** (consume STS — do **not** elect); SI/NI → Stop + `RFI-variance` / comparison-only; **Foam prohibited**; **Mist = `PRACTICE REFUSED`**; clean agent = **hand-away only**. Upstream (packet optional; gaps → `ASSUMED`): completed `dc-fp-assignment-packet` (optional) + STS `wet`|`dry`|`DI` (consumed, else `ASSUMED`) (+ `most-stringent-basis-matrix` when dual — **consume and return here**). Consume standpipe type when freeze-exposed standpipe legs exist — do **not** re-elect Class. N₂ plant ≠ freeze program (`nitrogen-inerting-and-c-factor-gate`). Caller-path-only. **NO PLACEHOLDER.** Generic — do not copy Bismarck / Fargo / MN Becker geometry, nVent SKUs, or Thermon TCM2 printed setpoints as universal defaults. Owner may **raise, never lower**.
 
-**Honesty — DMT / wattage / setpoints unheld as defaults.** Corpus holds **FM DS 9-18 (July 2022)** campus floors + App. C tracing preference; OEM FS design paths (RAYCHEM **H58489 / EN-2504 (2025)**, Chromalox **PX143**, Thermon **TEP0165**, Nelson **GA-2499 Rev.0 2015** ★dated); XL-Trace IOM **H58033 / EN-2602 (©2026)**; non-FS **H55838** (defers FS → H58489); MasterSpec wet §211313 §3.4.Q / standpipe §211200 §3.5.M → **210533 / 210700** hooks; worked Bismarck / Fargo packages as **`[SYN]` method**. **Now held (2026-10-05 mining):** H58489 pass-2 grids **Tables 1–7 and 9** (Qb, indoor / k multiples, voltage factors, valve / support adders, max circuit length, transformer A/ft); XL-Trace data sheet **H51349 / EN-2504 (2025)** (8XLE ≈ **8.8 W/ft @ 40 °F** on metal — **graph read**, not printed; min install **0 °F**; 50/65 °F start-up rows = 110 °F maintain only); RAYCHEM **465 IOM H60742 (©2025)** (VGNJ listing scope, seven-condition supervisory relay, OEM defaults). Live site **100-year DMT °F**, Fig. 11 curves as printed numbers, grid rows below **−20 °F** start-up, TraceCalc outputs, and the **NFPA 13-2025** valve-enclosure section number are **not** held / not sealed defaults. Recipe structure is **Ready**; sealed DMT / sealed W/ft / sealed controller setpoints → **Stop / `[V]` / RFI**.
+**Honesty — DMT / wattage / setpoints unheld as defaults.** Corpus holds **FM DS 9-18 (July 2022)** campus floors + App. C tracing preference; OEM FS design paths (RAYCHEM **H58489 / EN-2504 (2025)**, Chromalox **PX143**, Thermon **TEP0165**, Nelson **GA-2499 Rev.0 2015** ★dated); XL-Trace IOM **H58033 / EN-2602 (©2026)**; non-FS **H55838** (defers FS → H58489); MasterSpec wet §211313 §3.4.Q / standpipe §211200 §3.5.M → **210533 / 210700** hooks; worked Bismarck / Fargo packages as **`[SYN]` method**. **Now held (2026-10-05 mining):** H58489 pass-2 grids **Tables 1–7 and 9** (Qb, indoor / k multiples, voltage factors, valve / support adders, max circuit length, transformer A/ft); XL-Trace data sheet **H51349 / EN-2504 (2025)** (8XLE ≈ **8.8 W/ft @ 40 °F** on metal — **graph read**, not printed; min install **0 °F**; 50/65 °F start-up rows = 110 °F maintain only); RAYCHEM **465 IOM H60742 (©2025)** (VGNJ listing scope, seven-condition supervisory relay, OEM defaults). Live site **100-year DMT °F**, Fig. 11 curves as printed numbers, grid rows below **−20 °F** start-up, TraceCalc outputs, and the **NFPA 13-2025** valve-enclosure section number are **not** held / not sealed defaults. Recipe structure is **Ready**; sealed DMT / sealed W/ft / sealed controller setpoints → stated `ASSUMED` value (value + why) + `[V]` + RFI, flagged `provisional` — not a Stop (the engineer intake rule); never `grounded`.
 
-Write the freeze / heat-trace package **only** to the path the **caller** names. Write output only to the caller-named path.
+Write the freeze / heat-trace package **only** to the path the **caller** names. Do not write into KNOWLEDGE_BASE, EXERCISES, `_pruner`, `_surveyor`, `_engineer`, or ARCHIVE. Do not retrieve CASE_INDEX. Do not CAD.
 
-Look up shop codebook notes **by title**: *Freeze prevention / 100-year DMT and cold-climate FP*; *Design practice*; *Enforced-vs-latest edition resolver*; *Standpipe & hose systems (NFPA 14)*; *ITM basis and design for testability*; *Water tanks for fire protection* (tank-heater companion handoff).
+Look up shop codebook notes **by title**: *Freeze prevention / 100-year DMT and cold-climate FP*; *The engineer Way*; *Enforced-vs-latest edition resolver*; *Standpipe & hose systems (NFPA 14)*; *ITM basis and design for testability*; *Water tanks for fire protection* (tank-heater companion handoff).
 
 ---
+
+### 1.0 Country/edition gate at intake (model A — stop-vocab normalize 2026-11-04, staged)
+Pin country + enforced edition first (enforced ≠ latest). Missing pin → `ASSUMED` (value + why) + flag, continue per intake rule; scope locks (§1.1 family fence, foam prohibited, clean agent hand-away, mist `PRACTICE REFUSED`, SI/NI comparison-only) stay hard.
+- **US** → AHJ-adopted IFC/IBC + NFPA editions as used in this Skill; NFPA 13-2025 (and NFPA 20-2025 / 14-2024 where used) only as delta when not enforced.
+- **Canada (BC/AB/ON)** → pin via `most-stringent-basis-matrix` §4.2b; Canada freeze chain per the Canada section below (cUL/CSA VGNJ7; maker W/ft empty, no invent). Never cite US IFC/IBC §§ or US NFPA editions as the Canadian code floor.
+- **NEG-CA (stop-class mis-cites):** never invent ULC hours, CSA B139 text, OBC/NBC/BCFC bodies, or unheld Canadian pins. Unheld → `NEEDS HOLD` / `unresolved` + RFI (do not invent; do not Stop the whole run).
 
 ## 1. Hard scope gate
 
@@ -50,7 +56,7 @@ Comparison-only (never elected here; never the controlling BOD):
 - Non-interlock preaction
 - Any other preaction type
 
-**This Skill does not elect hall families.** It **consumes** the completed the input packet and the STS token `wet` | `dry` | `DI`, then runs the freeze recipe. Freeze strategy may **force dry/DI legs** on freeze-exposed portions — that is a **posture consequence**, not a silent SI election. If freeze forces a family change vs the packet STS token → **Stop** / handoff to STS reconcile — do **not** silently substitute SI.
+**This Skill does not elect hall families.** It **consumes** the completed `dc-fp-assignment-packet` and the STS token `wet` | `dry` | `DI`, then runs the freeze recipe. Freeze strategy may **force dry/DI legs** on freeze-exposed portions — that is a **posture consequence**, not a silent SI election. If freeze forces a family change vs the packet STS token → **not a Stop**: carry that portion as `ASSUMED` dry/DI (flagged) + `handoff` to STS reconcile (matches §3 step 3) — do **not** silently substitute SI.
 
 If the caller presents single-interlock, non-interlock, or another prohibited preaction type as the **basis of design** / controlling family on the packet:
 
@@ -112,7 +118,13 @@ Emit a status token on **(a)** Hard-scope gate, **(b)** packet + STS (+ matrix w
 
 Worked Bismarck XL-Trace trio + Fargo single-OEM FACP packages = **`[SYN]` method** only. Do **not** copy −20°F BOD Ta, 12XLE2 / 8XLE2 SKUs, ACS-30 channel counts, or synthetic pipe lengths as project defaults. MN Becker / Duluth −35°F / Chicago −20°F = **illustration** zones in DS 3-2 / OEM worked cells — **not** this site. Nelson GA-2499 **2015** = dated compare; refuse as primary without current listing letter. Thermon TCM2 printed **Maintain 38°C** ≠ DS 9-18 / H58489 **40°F** campus floor. **NO PLACEHOLDER.**
 
-**Negative case (carry as a lesson, do not retrieve):** a worked example (Bismarck XL-Trace retest, verdict corpus-insufficient, `[SYN]`) — the earlier 2026-09-21 package elected **12XLE2 + ACS-30 on FS pipe**, which sits **outside the held VGNJ listing** (465 + 5XLE/8XLE). The retest re-solved with **5XLE2 + thicker FG insulation** (3 / 2 / 1½ in.) and **3 × 15 A / 30 mA, 3 × 465**, and flagged that Tables 7/9 stop at **−20 °F** start-up (colder Ta → TraceCalc). Lesson: check the listing fence **before** cable selection; do not copy the retest's lengths, Ta, or SKUs.
+**Negative case (carry as a lesson, do not retrieve):** `case-2026-10-05-bi` (Bismarck XL-Trace retest, verdict corpus-insufficient, `[SYN]`) — the earlier 2026-09-21 package elected **12XLE2 + ACS-30 on FS pipe**, which sits **outside the held VGNJ listing** (465 + 5XLE/8XLE). The retest re-solved with **5XLE2 + thicker FG insulation** (3 / 2 / 1½ in.) and **3 × 15 A / 30 mA, 3 × 465**, and flagged that Tables 7/9 stop at **−20 °F** start-up (colder Ta → TraceCalc). Lesson: check the listing fence **before** cable selection; do not copy the retest's lengths, Ta, or SKUs.
+
+**Silver notes (Corpus Miner Chunk 1, strengthened 2026-11-04):**
+1. **465 listing fence:** RAYCHEM 465 VGNJ listing covers **5XLE / 8XLE only** (H60742 ©2025 pp. 5/8). A **12XLE** pick on a 465 FS circuit is **invalid** — status `RFI-variance` unless separate listing evidence is opened; re-solve with insulation / lower-k / parallel runs.
+2. **H58489 printed example errors:** the worked examples in H58489 (pp. 19–21) contain arithmetic errors (standpipe Step 2 applies 0.88 to Qb 8.6 — correct 12.4 × 0.88 = 10.9 ≥ 9.8; branch prints 0.97 where Table 2 gives 0.79). Recompute from Tables 1–9; never copy the printed example numbers.
+3. **−20 °F table floor:** H58489 Tables 7/9 stop at **−20 °F** start-up. Colder design Ta → OEM **TraceCalc** output (or equivalent OEM software) required; until held, `ASSUMED` + `[V]` + RFI, `provisional`, never extrapolate the tables.
+
 
 ---
 
@@ -122,7 +134,7 @@ Caller must supply. Do **not** invent DMT °F, OEM wattage, or controller defaul
 
 | Input | Required | Notes / Stop |
 |---|---|---|
-| the input packet (optional) | no | Packet is **optional, never a gate**. Consume nearest components (`suppression` / `bod` / climate / water-supply). Do not rebuild; do not retrieve prior job files. Missing → proceed from the inputs given; label filled-in values `ASSUMED` (value + why). |
+| `dc-fp-assignment-packet` (optional) | no | Packet is **optional, never a gate**. Consume nearest components (`suppression` / `bod` / climate / water-supply). Do not rebuild; do not retrieve `CASE_INDEX`. Missing → proceed from the inputs given; label filled-in values `ASSUMED` (value + why). |
 | **STS token `wet` \| `dry` \| `DI`** | **yes** | From `suppression-technology-selection`. Missing → **not a Stop**: proceed with a stated `ASSUMED` value (value + why), flagged. SI/NI-as-BOD → **Stop** (`RFI-variance`). Mist → `PRACTICE REFUSED`. Foam → **Stop**. |
 | **Consumed `most-stringent-basis-matrix` rows** | **yes when dual-carrier** | **Consume when present** (missing → `ASSUMED`, flagged) — do **not** Stop-away forever. Unresolved freeze / ambient / valve-house rows → **not a Stop**: carry the more stringent candidate value as `ASSUMED` (value + why), flagged (or `handoff` to complete matrix), then **return here**. |
 | **Site location for Freeze Map** | **yes** | City / county / lat-long sufficient for live FM Worldwide Freeze Map lookup. Missing → **not a Stop**: proceed with a stated `ASSUMED` value (value + why), flagged. |
@@ -140,7 +152,7 @@ Optional: owner colder design-day / longer fuel autonomy; elected OEM FS brand (
 
 | Upstream Skill | Consume | Do not |
 |---|---|---|
-| the input packet | Packet context — **optional** (consume when present) | Rebuild the packet; retrieve prior job files |
+| `dc-fp-assignment-packet` | Packet context — **optional** (consume when present) | Rebuild the packet; retrieve `CASE_INDEX` |
 | `suppression-technology-selection` | Elected wet/dry/DI | Elect a system family; silent-substitute SI→DI; treat mist/foam as BOD |
 | `most-stringent-basis-matrix` | Freeze / ambient / dual-carrier rows when dual | Rebuild dual-carrier BOD; invent DMT |
 | `standpipe-class-i-election-and-demand` | Consumed standpipe type for wet/dry leg fork | Elect whether / Class / residual / gpm; heat-trace a declared dry standpipe |
@@ -158,7 +170,7 @@ If SI/NI/foam/mist is presented as BOD → **Stop** (company scope lock — stay
 
 | Peer | They own | This Skill owns |
 |---|---|---|
-| the input packet | Assignment context | **Consume only** — optional; absent → proceed, flag `ASSUMED` |
+| `dc-fp-assignment-packet` | Assignment context | **Consume only** — optional; absent → proceed, flag `ASSUMED` |
 | `suppression-technology-selection` | Family election wet\|dry\|DI + fence status | **Consume** STS; freeze may force dry/DI legs → handoff reconcile; SI/NI → Stop; mist `PRACTICE REFUSED`; foam prohibited |
 | `most-stringent-basis-matrix` | Per-parameter union / dual-carrier rows | **Consume only** when dual — then elect freeze package **here** |
 | `standpipe-class-i-election-and-demand` | Class I / type / residual / demand | **Consume** type; emit wet-vs-dry freeze fork consequences; do not re-elect Class |
@@ -173,7 +185,7 @@ Emit one `HAND OFF — <peer>: <what they own>` line per open peer dependency.
 
 Example lines:
 
-- `HAND OFF — the input packet: optional. Missing → proceed from given inputs; flag `ASSUMED`.`
+- `HAND OFF — dc-fp-assignment-packet: optional. Missing → proceed from given inputs; flag `ASSUMED`.`
 - `HAND OFF — suppression-technology-selection: wet|dry|DI election. This Skill consumes; freeze-forced dry/DI legs → reconcile; SI/NI → Stop RFI-variance; mist PRACTICE REFUSED; foam prohibited.`
 - `HAND OFF — most-stringent-basis-matrix: dual-carrier / freeze-ambient rows when dual. Consume; return here after.`
 - `HAND OFF — standpipe-class-i-election-and-demand: consume standpipe type; do not elect Class; dry legs stay dry.`
@@ -188,7 +200,7 @@ Example lines:
 
 ## 3. Steps
 
-### 3.0 Hard scope + status register first (Method item 0)
+### 3.0 Hard scope + status register first (Runner item 0)
 
 Before map / strategy / OEM / FACP arithmetic:
 
@@ -216,14 +228,14 @@ Before map / strategy / OEM / FACP arithmetic:
 | **IEEE 515.1** (edition per OEM) | Monitoring / spray-shadow pattern | Coordination — cite OEM-held edition |
 | **UL 515A** (when Chromalox/Thermon path) | FS freeze listing class | Honesty vs RAYCHEM c-UL-us VGNJ / 465 path — do not conflate listing language |
 
-**Do not cite Bismarck Art. 45-18 / Fargo 5 psi / a local dry-standpipe ban as universal.** Ask per jurisdiction.
+**Do not cite Bismarck Art. 45-18 / Fargo 5 psi / the site dry-ban as universal.** Ask per jurisdiction.
 
 ### 3.2 Parameters, separately (three-layer union)
 
-| Parameter | Code floor (L1) | Insurer (L2) | Owner (L3) | Method action |
+| Parameter | Code floor (L1) | Insurer (L2) | Owner (L3) | Runner action |
 |---|---|---|---|---|
 | **A. Map / applicability** | Climate / AHJ freeze rules | DS 9-18 ≤20°F 100-yr DMT | May apply warmer voluntarily | Live map; refuse invent °F |
-| **B. Ambient floors** | NFPA 13 40°F trigger [CODE NFPA 13-2019/2022 §16.4.1.1, pull 13-01]; 2025 §16.4.1.1 drops the 40°F trigger (subject to freezing, judged by average annual extreme minimum per §16.4.1.1.1) | DS 9-18 >40°F wet spaces; pump >40/70 | May raise | Stamp DS floors when FM; else provisional |
+| **B. Ambient floors** | NFPA 13 40°F trigger [CODE NFPA 13-2019/2022 §16.4.1.1, pull 13-01]; 2025 §16.4.1.1 drops the 40°F trigger ("subject to freezing", judged by average annual extreme minimum per §16.4.1.1.1) | DS 9-18 >40°F wet spaces; pump >40/70 | May raise | Stamp DS floors when FM; else provisional |
 | **C. Valve house** | Listed enclosure / heated room `[V]` vs 13-2025 | DS 9-18 §2.2.6 mandatory exterior | May raise | Trace ≠ substitute — hard fence |
 | **D. Strategy fork** | Wet only if heated; else dry/preaction | §2.2.7 system-type fork | DI/N₂ often already elected | Consume STS; force dry/DI legs honestly |
 | **E. Heat-trace scope** | Listed electrical tracing allowed | App. C preference; OEM FS listing | Brand preference | Wet-must-stay-wet only |
@@ -240,7 +252,7 @@ Most-stringent wins **per row**. Name the controlling layer. Owner may raise, ne
 2. Require **live FM Worldwide Freeze Map** 100-year DMT °F (warm-side zone value). App. D overview figures in the PDF are **not** a site pin.
 3. Gate: if **100-year DMT ≤ 20°F (−6.7°C)** → DS 9-18 recommendations **apply** (freeze-prone). If warmer → sheet not mandatory; may still apply voluntarily / by owner — record Layer-3.
 4. If map not yet pulled → status `provisional` / `unresolved` on parameter A; **do not invent** °F from climate class narratives (Bismarck / Fargo / MN Becker).
-5. Routing sentence form (fill only held values): *Site 100-year DMT per FM Worldwide Freeze Map [ZONE °F]; campus freeze per FM DS 9-18 (July 2022); FS heat-trace per [elected OEM guide + edition]; heated valve enclosure per DS 9-18 §2.2.6 (trace ≠ substitute).*
+5. Routing sentence form (fill only held values): *"Site 100-year DMT per FM Worldwide Freeze Map [ZONE °F]; campus freeze per FM DS 9-18 (July 2022); FS heat-trace per [elected OEM guide + edition]; heated valve enclosure per DS 9-18 §2.2.6 (trace ≠ substitute)."*
 
 ### 3.4 Step — Campus ambient / program floors (DS 9-18)
 
@@ -310,7 +322,7 @@ Lengths / IPS from BIM or field measure — label `[V]` / `[SYN]` if synthetic s
 - Thermon TCM2 Maintain **38°C** as DS 9-18 **40°F** floor.
 - H55838 tables to size **FS** circuits (explicit deferral).
 - Non-FS controller (e.g. 460 / ECW-GF) as the **FS** controller when FS shortlist exists.
-- 12XLE on an FS circuit on the strength of the H58489 p. 3 general-purpose block or the 465 shortlist — **refuse** without separate listing evidence (negative case a worked example).
+- 12XLE on an FS circuit on the strength of the H58489 p. 3 general-purpose block or the 465 shortlist — **refuse** without separate listing evidence (negative case `case-2026-10-05-bi`).
 - A 50 °F or 65 °F start-up row of Table 7 / H51349 for a 40 °F freeze circuit — those rows are **110 °F maintain only** (red in source); overstates allowable length.
 
 **Sizing method spine (when OEM guide held — show-and-verify):** ΔT = Tm − Ta → Qb (table) → insulation/indoor multiples → select cable ≥ Qcorrected → length = pipe + valve/support/sprinkler adders + kits → circuit max vs start-up Ta / GF CB → transformer kW. Use OEM software (e.g. TraceCalc Pro) when grids incomplete. **Ta = live map / project design-day — never silent −20°F default.**
@@ -322,15 +334,15 @@ Lengths / IPS from BIM or field measure — label `[V]` / `[SYN]` if synthetic s
 | Coldest start-up row | Grids end at **−20 °F** start-up; colder start-up / Ta → **TraceCalc** (or OEM calc), `[V]` until stamped | H58489 Tables 7/9; case-bi |
 | 50 / 65 °F start-up rows | **110 °F maintain only** — never used for freeze (40 °F) circuits; freeze rows are −20 / 0 / 20 / 40 °F | H51349 p. 2 colour read |
 | Cable ladder at 40 °F (metal, nominal) | 5XLE 5.6 (printed) · 8XLE ≈ **8.8** (graph read) · 12XLE2 12.4 (printed) W/ft, then × Table 4 voltage factor (208 V: 0.90 / 0.94 / 0.88) | H58489 p. 19 / Table 4; H51349 p. 3 |
-| Printed example errors | Standpipe Step 2 applies 0.88 to Qb (8.6) — correct is 12.4 × 0.88 = 10.9 ≥ 9.8; branch prints 0.97 where Table 2 gives 0.79 | H58489 pp. 19–21 (a check check) |
+| Printed example errors | Standpipe Step 2 applies 0.88 to Qb (8.6) — correct is 12.4 × 0.88 = 10.9 ≥ 9.8; branch prints 0.97 where Table 2 gives 0.79 | H58489 pp. 19–21 (pipeline check) |
 | Minimum install temperature | **0 °F (−18 °C)** — a **construction-schedule** constraint for winter installs, not a design-Ta limit | H51349 p. 2 |
 | GFEP | Every heating-cable branch circuit; smallest appropriate GF CB | H58489 p. 22 |
 
-Run ΔT / Qcorrected / length / kW arithmetic through `calcs/fp/run.py` only if the op exists; otherwise show the arithmetic inline as a printed pin — **do not invent a kernel op**.
+Run ΔT / Qcorrected / length / kW arithmetic through `_calc/run.py` only if the op exists; otherwise show the arithmetic inline as a printed pin — **do not invent a kernel op**.
 
 **Shared FS fences (held class — confirm on elected OEM):** GFEP on **each** heating-cable branch circuit; alarm dry contacts → **FACP**; backup power covers freeze loads; buried: jacket class + no buried splices/tees + connections above grade (depth still DS 3-10 for mains); sprinkler insulation **spray-shadow** / head rating coordination (often ≥**155°F / 68°C** peer fence — apply as coordination, not W/ft paste).
 
-**465 controller fences (held, H60742 ©2025 — confirm at submittal on the elected OEM):** indoor only (TYPE 12, ambient **32–105 °F**) within **328 ft** of the sensor point, ambient sensor representative of the sprinkler piping incl. elevation; one 465 per circuit; branch CB **≤30 A**; non-combustible insulation with sealed non-combustible (metal) cover; min sprinkler rating **155 °F**. **Factory defaults are OEM values, not campus floors — schedule as `confirm at submittal`:** setpoint **40 °F** / low-temperature supervisory **35 °F** / GF supervisory 20 mA / **GF trip 30 mA** (latching). **External contactor** → the 465 can no longer monitor load or GF current → a **separate GFEPD is required** (H60742 pp. 10, 16). Carry the relay conflict (IOM DPST vs H58489 Table 14 SPST) — IOM controls; confirm cut sheet.
+**465 controller fences (held, H60742 ©2025 — confirm at submittal on the elected OEM):** indoor only (TYPE 12, ambient **32–105 °F**) within **328 ft** of the sensor point, ambient sensor representative of the sprinkler piping incl. elevation; one 465 per circuit; branch CB **≤30 A**; non-combustible insulation with sealed non-combustible (metal) cover; min sprinkler rating **155 °F**. **pipeline defaults are OEM values, not campus floors — schedule as `confirm at submittal`:** setpoint **40 °F** / low-temperature supervisory **35 °F** / GF supervisory 20 mA / **GF trip 30 mA** (latching). **External contactor** → the 465 can no longer monitor load or GF current → a **separate GFEPD is required** (H60742 pp. 10, 16). Carry the relay conflict (IOM DPST vs H58489 Table 14 SPST) — IOM controls; confirm cut sheet.
 
 ### 3.8 Step — FACP / supervisory alarm schedule (handshake)
 
@@ -415,16 +427,16 @@ Write **only** to the caller-named path (or return in-response and stop). Typica
 8. **Reciprocal HAND OFF lines** to live peers.
 9. **Δ vs NFPA 13-2025** + `[SYN]`/`[V]` register.
 
-Do **not** emit: hall density×area transcript, standpipe Class election, N₂ purity calc, DI ≤30 s proof, tank Btu schedule as sealed, CAD coordinates, prior job files retrieval, foam/mist/clean-agent BOD, or KB writes.
+Do **not** emit: hall density×area transcript, standpipe Class election, N₂ purity calc, DI ≤30 s proof, tank Btu schedule as sealed, CAD coordinates, CASE_INDEX retrieval, foam/mist/clean-agent BOD, or KB writes.
 
 ---
 
 ## 5. Stop
 
-> A missing input is ASSUMED (state the value and why). It is not a stop. Scope locks stay hard stops.
+> **2026-10-07 intake rule:** any item below that is a missing packet, a missing upstream result, or a missing input blank is **not** a Stop — proceed with a stated `ASSUMED` value (value + why), flagged in the output and status register. Only company scope-lock items (SI/NI-as-BOD → `RFI-variance`, foam, water mist `PRACTICE REFUSED`, clean agent as company BOD) and wrong-Skill / out-of-scope routing remain hard Stops.
 
 1. SI/NI (or other prohibited preaction) presented as **basis of design** → `RFI-variance`. Foam-as-BOD → Stop. Mist-as-BOD → `PRACTICE REFUSED`. Clean-agent as company BOD → Stop / hand-away only.
-2. Missing the input packet → not a Stop (packet optional). Missing STS → `ASSUMED` (flagged), not a Stop. Missing matrix rows when dual → assume most-stringent row (`ASSUMED`, flagged) or hand off, then return.
+2. Missing `dc-fp-assignment-packet` → not a Stop (packet optional). Missing STS → `ASSUMED` (flagged), not a Stop. Missing matrix rows when dual → assume most-stringent row (`ASSUMED`, flagged) or hand off, then return.
 3. Freeze-exposed standpipe legs present but standpipe type unconsumed → `ASSUMED` type (flagged) + `handoff` to `standpipe-class-i-election-and-demand`; not a Stop.
 4. Site DMT / OEM W/ft / circuit schedule needed but primary unheld → stated `ASSUMED` value (value + why) + `[V]` + RFI, not a Stop — **never silently invent**; no vendor SKU frozen.
 5. Heat-trace proposed as substitute for heated DI/dry valve enclosure → **Stop**; elect enclosure.
@@ -433,7 +445,7 @@ Do **not** emit: hall density×area transcript, standpipe Class election, N₂ p
 8. Cross-OEM wattage / IR-gate paste → **Stop** / refuse.
 9. Antifreeze white-space as elective BOD without written force → Stop / RFI.
 10. Caller wants tank heater Btu, standpipe gpm, N₂ plant, DI delivery proof, or CAD as this Skill’s deliverable → wrong Skill / handoff.
-11. KB / worked examples / ARCHIVE writes; prior job files retrieve.
+11. KB / EXERCISES / ARCHIVE writes; CASE_INDEX retrieve.
 
 ---
 
@@ -460,7 +472,7 @@ Do **not** emit: hall density×area transcript, standpipe Class election, N₂ p
 | Min install temperature | H51349 p. 2 — **0 °F (−18 °C)** | Construction constraint |
 | 465 defaults | H60742 — setpoint 40 °F / low alarm 35 °F / GF trip 30 mA | OEM — confirm at submittal |
 | External contactor | H60742 pp. 10, 16 — GF / load monitoring disabled → separate GFEPD | `grounded` |
-| Negative case | a worked example — 12XLE2 + ACS-30 on FS pipe outside VGNJ listing | Lesson only |
+| Negative case | `case-2026-10-05-bi` — 12XLE2 + ACS-30 on FS pipe outside VGNJ listing | Lesson only |
 | Non-FS defers FS | H55838 p.2 → H58489 | `grounded` fence |
 | GFEP each branch | H58489 / H58033 / PX143 / peers | `grounded` class |
 | IR accept (RAYCHEM IOM example) | H58033 **>1000 MΩ** @ 500/1000/2500 Vdc | Owning-OEM only |
@@ -473,7 +485,7 @@ Do **not** emit: hall density×area transcript, standpipe Class election, N₂ p
 
 ---
 
-## 7. Design practice
+## 7. the engineer Way
 
 1. **Hard-scope + status first.** Company fence = wet | dry | DI only (consume STS — do not elect). SI/NI → Stop + `RFI-variance`. Foam prohibited. Mist = `PRACTICE REFUSED`. Clean agent = hand-away only. Status every run. Packet optional; STS (+ matrix when dual) consumed when present, else `ASSUMED` (flagged). **NO PLACEHOLDER.** **Never silently invent DMT / W/ft / controller defaults — if not given, state an ASSUMED value + why and flag it.**
 2. Three-layer most-stringent **per parameter** (map, ambient, valve house, strategy, HT scope, OEM path, supervision, utility/ERP, tank handoff).
@@ -494,7 +506,7 @@ If notes conflict, **most-stringent wins** and both sources stay visible.
 |---|---|
 | System-family election wet\|dry\|DI; mist/foam fence | `suppression-technology-selection` — **consume**; mist BOD = `PRACTICE REFUSED`; foam prohibited; SI/NI-as-BOD → `RFI-variance` |
 | Dual-carrier BOD authorship | `most-stringent-basis-matrix` — consume+return when dual |
-| Assignment packet authorship | the input packet — consume only |
+| Assignment packet authorship | `dc-fp-assignment-packet` — consume only |
 | Standpipe whether / Class I / type / residual / gpm | `standpipe-class-i-election-and-demand` — **consume type**; do not elect |
 | Hall DI ≤30 s / volume-cut proof | `dry-preaction-water-delivery-screen` — freeze/dry consume only |
 | N₂ plant / C-factor / AMD | `nitrogen-inerting-and-c-factor-gate` — N₂ ≠ freeze |
@@ -503,21 +515,40 @@ If notes conflict, **most-stringent wins** and both sources stay visible.
 | Closed-top tank heater Btu / DS 3-2 Tables | Tank companion / future Skill — **handoff** |
 | White-space density×area | `density-area-dry-increase` |
 | Clean-agent concentration / enclosure | Clean-agent Skills — **hand-away only** |
-| CAD / KB / worked examples / ARCHIVE writes | forbidden |
+| CAD / KB / EXERCISES / ARCHIVE writes | forbidden |
 
 ---
 
+## 9. Runner checklist (execute in order)
 
-## Canada freeze and heat trace
+0. **Hard scope + status register first.** STS = wet|dry|DI (consume — do not elect). SI/NI → Stop `RFI-variance`. Foam → Stop. Mist → `PRACTICE REFUSED`. Clean-agent as company BOD → Stop / hand-away. Packet if present (optional); matrix when dual (consume+return); standpipe type when freeze legs. Emit status skeleton (§1.4). Restate **no silent DMT / W/ft / controller defaults — ASSUMED + why when not given**. **NO PLACEHOLDER.**
+1. Pin DS 9-18 / OEM FS·IOM·non-FS / MasterSpec 210533·210700 / NFPA 13-2025 posture; mark unheld primaries `[V]`.
+2. Live Freeze Map **100-year DMT** gate — provisional if map pending; **never invent °F**.
+3. Campus ambient / pump-room / ≥3-day / ERP floors (DS 9-18).
+4. Strategy fork: heated envelope vs **heated valve enclosure** vs heat-trace vs dry/DI drain; hard fence trace ≠ house; dry legs stay dry; STS reconcile if freeze forces family change.
+5. Wet-must-stay-wet takeoff register structure; out-of-scope dry/N₂/plastic-ban/tank.
+6. OEM FS vs non-FS election + honesty; parameterize brand (XL-Trace trio = method example); **check the FS listing fence first** (465 VGNJ = 5XLE/8XLE only; 12XLE needs separate evidence); sizing spine on held Tables 1–7/9 within range, −20 °F floor → TraceCalc, never 50/65 °F rows for freeze; 0 °F install constraint; 465 defaults confirm at submittal; external contactor → separate GFEPD; no cross-OEM paste.
+7. FACP / supervisory alarm schedule structure; HT points = supervisory not release.
+8. MasterSpec §210533 / §210700 edit checklist (generic); tank handoff if present; optional combustion-air free-area note.
+9. Δ vs NFPA 13-2025; status register complete; `[SYN]`/`[V]`; open RFIs; reciprocal HAND OFF lines.
 
-Country gate (US | Canada). On a Canada job the trigger is NBC 3.2.5.17.(1) (NBC 2025, BCBC 2024, and NBC 2023 AE): protect fire-protection equipment from freezing where freezing can affect it and the area is unheated. The sentence is performance only. It states no method and no temperature. Take the method from the NFPA 13 edition in `most-stringent-basis-matrix` §4.2b. FM DS 9-18 still applies when that insurer is on the job.
+## Canada freeze / heat-trace chain (AB teaching; BC/ON same NBC family) — B26-R4/R5 / Lead28 fold, 2026-10-29
 
-NFPA 13-2019 §16.4.1.4.1 is listed heat tracing, and a branch line needs a branch-line listing. §16.4.1.4.2 is supervision that the circuit is energized. §8.1.4: heat tracing is not a substitute for a heated dry or double-interlock valve enclosure. The valve stays in a heated room.
+Canada unlocked. Teaching case SYNTHETIC the province DI hall + wet support (NBC 2023 AE; NFPA 13-2019 pin; NFPA 25-2020 ITM).
 
-Listing is a cUL or CSA fire-protection heat-trace system (UL category VGNJ7 for Canada). A city electrical bulletin is a local reference only, not the code floor. Confirm acceptance on the job. The controller follows IEEE 515.1 for ambient sensing, low temperature, and continuity. Cable identity, watts per foot, and circuit length stay empty until the maker data is in hand. Do not invent them.
+1. **Trigger:** NBC 2023 AE 3.2.5.17.(1) (same NBC 2025/BCBC 2024) — protect FP equipment from freezing if affected by freezing and in an unheated area. **Performance only** — no method or temperature; take method from the pinned NFPA 13 edition. FM DS 9-18 still applies via the insurer layer.
+2. **Method:** NFPA 13-2019 §16.4.1.4.1 (listed heat trace; branch lines need branch-line listing) + §16.4.1.4.2 (supervised energized). **§8.1.4: heat trace is not in lieu of a heated dry/DI valve enclosure** → DI valves stay in a heated room.
+3. **Listing:** cUL/CSA-certified FP heat-trace system (UL VGNJ7 Canada). Vancouver Bulletin 2020-003 PME route = Vancouver-specific, best-practice reference only; the province acceptance [verify]. Controller per IEEE 515.1 (ambient sensing, low-temp + continuity). SKU and W/ft / circuit length = maker-pending (empty cells; no invent).
+4. **CE Code Rule 62-116 shop rule (secondary sources only, no CSA text):** heat-cable GFP is equipment protection; FP circuits **trip at 30 mA AND send GF/loss-of-power supervisory to FACU**. Alarm-only GF is **rejected** for FP. AB adopted CE Code edition [verify].
+5. **Supervision:** NBC 2023 AE 3.2.4.9.(5) trace loss-of-power, 3.2.4.9.(3)(g) valve-room low temp, (c) low air, (a) tamper, (f) pump power → FA lane (7 points + FA-8 pump-room low-temp held as FA open). ULC S524/S537 = FA lane; no ULC hours.
+- **B26R4-NEG-1:** NEC 427 / 702 labels on a Canadian job → restamp CE Code 62-116 + provincial power class.
+- **B26R4-NEG-2:** alarm-only GF on FP trace → 30 mA trip + supervisory.
+- **B26R4-NEG-3:** heat trace in lieu of heated DI valve room → FAIL (§8.1.4).
+- R5 Design Team: FP-501 freeze/HT/DI valve-room shop register — maker cells stay empty.
 
-CE Code Rule 62-116 clause text is not held. Shop rule from secondary notes only, labelled [PRACTICE], not [CODE]: ground-fault protection on fire-protection heat trace trips at 30 mA and sends a ground-fault or loss-of-power supervisory signal to the fire alarm panel. Alarm-only ground fault is rejected. Confirm the adopted electrical code before treating 30 mA as code.
-
-Supervision goes to the fire alarm lane and never releases: NBC 3.2.4.9.(5) heat-trace loss of power; 3.2.4.9.(3)(g) valve-room low temperature; (c) low air; (a) tamper; (f) pump power loss. CAN/ULC-S524 and S537 stay NEEDS HOLD. Do not invent hours.
-
-Wrong moves: a US electrical-article label on a Canada job; alarm-only ground fault on fire-protection heat trace; heat trace in place of a heated double-interlock valve room (§8.1.4 fails).
+## 2026-11-04 — stop-vocab normalize (staged)
+- `structure the register and **Stop / `[V]` / RFI** when the primary is …` → `structure the register and carry a stated `ASSUMED` value (value + why) + `[V]` + RFI, fla…`
+- `sealed DMT / sealed W/ft / sealed controller setpoints → **Stop / `[V]…` → `sealed DMT / sealed W/ft / sealed controller setpoints → stated `ASSUMED` value (value + w…`
+- `If freeze forces a family change vs the packet STS token → **Stop** / …` → `If freeze forces a family change vs the packet STS token → **not a Stop**: carry that port…`
+- Inserted §1.0 Country/edition gate (model A) + NEG-CA before §1.
+- Added consolidated Silver notes block (465 5XLE/8XLE only → 12XLE invalid; H58489 printed example errors; −20 °F table floor → TraceCalc) after negative case.

@@ -6,7 +6,7 @@ description: >-
   produced company-scoped wet/dry/DI `qd_gpm`, and matrix pump rows are closed
   (any absent input is assumed and flagged ASSUMED, not a stop), and you
   must screen a listed centrifugal envelope (rated / churn / 150%) through
-  `calcs/fp` without freezing `FP-1 = Q @ P` while gating RFIs or BOR pressure are
+  `_calc` without freezing `FP-1 = Q @ P` while gating RFIs or BOR pressure are
   open, plus the driver block as cited pins (diesel fuel-tank hours, NEC 695
   OCPD, jockey sizing/setpoints, seal, VS relief, VT vs HSC) — SI/NI/foam/mist
   refused as BOD; not occupancy, density×area, hydrant curve rebuild,
@@ -14,11 +14,11 @@ description: >-
 ---
 # Pump envelope
 
-**Intake.** The input packet is optional. A missing input is not a stop: state the value used and why, and label it ASSUMED. Do not present an ASSUMED value as a cited code or table value, and do not freeze a vendor SKU. **Scope lock.** Wet pipe, dry pipe, and double-interlock preaction only. Foam, clean agent, water mist, and single-interlock or non-interlock preaction are out of scope. If one of those is requested as the basis of design, record it and stop. Do not substitute another system and do not size it here. Cite the section and the edition. Decide each parameter by the most stringent of the code floor, the insurer sheet, and the owner standard. Verify judgment calls with the engineer of record.
+> **Intake rule (the engineer, 2026-10-07 — overrides any older gate wording below):** The assignment packet is optional and never a gate. Start from exactly what is given. A missing packet, a missing upstream result (STS token, matrix row, occupancy fork, density, C&E, etc.), or a missing input blank is **not** a Stop: run the upstream Skill if practical, otherwise fill the gap with a stated **ASSUMED** value (the value used + why), flag it in the output and the status register, and continue. ASSUMED is not verified. "Never invent" / "refuse invent" rules on project numbers mean do not *silently* invent: label the number ASSUMED; never present an ASSUMED value as a cited code or table value; never freeze a vendor SKU. **Company scope locks stay hard Stops and are not softened by this rule:** wet / dry / double-interlock preaction only; foam prohibited; clean agent not done (hand-away); water mist `PRACTICE REFUSED`; single-interlock / non-interlock / other preaction never the elected system (SI/NI-as-BOD → Stop + `RFI-variance`, comparison-only). Cite section and edition, use `calcs/fp/run.py` for governed math, design to the most-stringent 3-layer basis; the engineer is the engineer of record.
 
-Reusable data-center fire-protection recipe. **Country gate (US | Canada).** US pins below stay on a US job. On a Canada job use the Canada section and `most-stringent-basis-matrix` §4.2b. Do not port a US pin into a Canada row or a Canada pin into a US row. 
+Reusable US data-center fire-protection recipe.
 
-**This Skill owns** the **listed centrifugal envelope screen** (rated / churn / 150%) against a company-scoped demand, through the shop `calcs/fp` `pump_envelope` op. It screens a candidate (`qr_gpm`, `pr_psi` as **inputs**) and reports whether that candidate sits inside the controlling flow-cap / churn / 150% / ceiling envelope. It also emits the **driver block** (§7A): diesel fuel-tank sizing basis, electric OCPD / GFPE / acceptance-amp pins, jockey capacity + setpoint window, seal election, VS relief, and VT vs HSC — as **cited pins**, not kernel outputs and not a nameplate.
+**This Skill owns** the **listed centrifugal envelope screen** (rated / churn / 150%) against a company-scoped demand, through the shop `_calc` `pump_envelope` op. It screens a candidate (`qr_gpm`, `pr_psi` as **inputs**) and reports whether that candidate sits inside the controlling flow-cap / churn / 150% / ceiling envelope. It also emits the **driver block** (§7A): diesel fuel-tank sizing basis, electric OCPD / GFPE / acceptance-amp pins, jockey capacity + setpoint window, seal election, VS relief, and VT vs HSC — as **cited pins**, not kernel outputs and not a nameplate.
 
 It sits **after `hydrant-supply-curve`**. Density-area owns demand (`q_spr` + hose + duration gallons). Hydrant owns the **supply curve** and the **pump need / no-need verdict**. This Skill owns the **listed envelope** **only after** hydrant (or a parent-cited closed supply proof) has said a pump is needed — it is explicitly **not** a supply curve and **not** a nameplate mint.
 
@@ -26,15 +26,21 @@ It sits **after `hydrant-supply-curve`**. Density-area owns demand (`q_spr` + ho
 
 The shop arithmetic kernel is the source of truth, not a hand spreadsheet and **not a manufacturer shop curve**.
 
-**Design practice:** three-layer basis (code floor × insurer sheet × owner standard) → **most-stringent union PER PUMP PARAMETER** (listed flow / flow-cap, churn, 150% pressure floor, component ceiling, N+1, driver — each separately). Report the **delta vs NFPA 13-2025** (demand context) **and vs NFPA 20-2025** (pump floor). Cite **section AND edition**. Show-and-verify math. Mark invented values `[SYN]` / unpinned values `[V]`. Status vocabulary: `grounded` / `provisional` / `unresolved` / `comparison-only` / `handoff` / `RFI-variance`. Consume upstream Skills; do not rebuild them. Generic — do not copy a prototype hall onto another job.
+**the engineer Way:** three-layer basis (code floor × insurer sheet × owner standard) → **most-stringent union PER PUMP PARAMETER** (listed flow / flow-cap, churn, 150% pressure floor, component ceiling, N+1, driver — each separately). Report the **delta vs NFPA 13-2025** (demand context) **and vs NFPA 20-2025** (pump floor). Cite **section AND edition**. Show-and-verify math. Mark invented values `[SYN]` / unpinned values `[V]`. Status vocabulary: `grounded` / `provisional` / `unresolved` / `comparison-only` / `handoff` / `RFI-variance`. Consume upstream Skills; do not rebuild them. Generic — do not copy a prototype hall onto another job.
 
 **Process guardrail (load-bearing):** `pr_psi` is an **envelope input, not a scheduled rating.** Do **not** write `FP-1 = Q @ P` while BOR demand is open or gating RFIs are open. Recipe: run the envelope, paste stdout, keep `pr_psi` as an input, print `provisional [RFI-…]`. Honest prose does not save a frozen schedule.
 
-**Negative teaching:** (1) A prior campus fire-pump-selection worked package (`corpus-insufficient`) froze a **synthetic rated pressure (100 psi)** into the equipment schedule — failure mode this Skill exists to prevent. (2) A prior pump schedule's first pass QA (`needs-rework`) scheduled **750 gpm @ 40 psi net** while gating RFIs were open. Shop codebook process note (by title): *Do not schedule rated pump gpm/psi on open gating RFIs*.
+**Negative teaching:** (1) The MS campus fire-pump-selection worked package (`corpus-insufficient`) froze a **synthetic rated pressure (100 psi)** into the equipment schedule — failure mode this Skill exists to prevent. (2) the campus Mesa FP-1 first-pass QA (`needs-rework`) scheduled **750 gpm @ 40 psi net** while gating RFIs were open. Shop codebook process note (by title): *Do not schedule rated pump gpm/psi on open gating RFIs*.
 
-Write output only to the caller-named path.
+Write output **only** to the path the **caller** names. Do not write into `KNOWLEDGE_BASE`, `EXERCISES`, `_pruner`, `_surveyor`, `_engineer`, or `ARCHIVE`. Look up shop codebook notes **by title**.
 
 ---
+
+### 1.0 Country/edition gate at intake (model A — stop-vocab normalize 2026-11-04, staged)
+Pin country + enforced edition first (enforced ≠ latest). Missing pin → `ASSUMED` (value + why) + flag, continue per intake rule; scope locks (§1.1 family fence, foam prohibited, clean agent hand-away, mist `PRACTICE REFUSED`, SI/NI comparison-only) stay hard.
+- **US** → AHJ-adopted IFC/IBC + NFPA editions as used in this Skill; NFPA 13-2025 (and NFPA 20-2025 / 14-2024 where used) only as delta when not enforced.
+- **Canada (BC/AB/ON)** → pin via `most-stringent-basis-matrix` §4.2b; NFPA 20 per that code's Table 1.3.1.2 (2016 BC/AB/ON-OBC; 2019 NBC 2025 model) — see Canada diesel section. Never cite US IFC/IBC §§ or US NFPA editions as the Canadian code floor.
+- **NEG-CA (stop-class mis-cites):** never invent ULC hours, CSA B139 text, OBC/NBC/BCFC bodies, or unheld Canadian pins. Unheld → `NEEDS HOLD` / `unresolved` + RFI (do not invent; do not Stop the whole run).
 
 ## 1. Hard scope gate
 
@@ -90,7 +96,7 @@ SI/NI may appear in a **comparison / delta** column only (e.g., “if SI were al
 
 | In scope | Out of scope |
 |---|---|
-| Listed centrifugal envelope (churn / 100% / 150%) via `calcs/fp` | Occupancy / HC / OH classification |
+| Listed centrifugal envelope (churn / 100% / 150%) via `_calc` | Occupancy / HC / OH classification |
 | Candidate `qr` / `pr` **screening** (inputs, not nameplate) | System-family election |
 | Flow-cap / churn / ceiling boolean harvest | Density × area re-calc |
 | 3-layer union **per pump parameter** | Hydrant / municipal supply curve / Adequacy verdict |
@@ -147,13 +153,13 @@ Optional (do not invent; flag `[V]` / `unresolved`): standpipe add-on if IFC/IBC
 | `suppression-technology-selection` | Elected wet/dry/DI (handshake); comparison-only / prohibited status | Elect a system family |
 | `occupancy-hazard-fork` | Only if hall HC/OH context is still needed and missing from density/hydrant | Re-classify occupancy |
 | `fire-area-compartmentation-schedule` | Hall / fire-area id when multi-hall identity is required | Design ratings, doors, dampers |
-| the input packet | Packet context when present | Rebuild the packet |
+| `dc-fp-assignment-packet` | Packet context when present | Rebuild the packet |
 
 If an upstream result presents SI/NI/foam/mist as BOD → **Stop** (company scope lock — stays hard). If a required upstream result is missing, or marks a controlling pump / system row `unresolved` → **not a Stop**: proceed with a stated `ASSUMED` value (value + why), flagged (more stringent candidate; or run the upstream Skill first).
 
 ### 2.2 Look up by title
 
-*Design practice*; *Do not schedule rated pump gpm/psi on open gating RFIs*; *Fire-pump selection & installation (NFPA 20 + insurer overlay)*; *Water-supply analysis & the supply-vs-demand curve*; *Variable-speed pressure-limiting pumps and the zone pressure envelope*; *Enforced-vs-latest edition resolver and reference pins*; shop `calcs/fp` README / `formulas.pump_envelope`.
+*The engineer Way*; *Do not schedule rated pump gpm/psi on open gating RFIs*; *Fire-pump selection & installation (NFPA 20 + insurer overlay)*; *Water-supply analysis & the supply-vs-demand curve*; *Variable-speed pressure-limiting pumps and the zone pressure envelope*; *Enforced-vs-latest edition resolver and reference pins*; shop `_calc` README / `formulas.pump_envelope`.
 
 ---
 
@@ -182,23 +188,23 @@ Inherit pins from `most-stringent-basis-matrix` when present. Always cite **sect
 6. Elected system is **wet \| dry \| double-interlock**. SI/NI-as-BOD → **Stop** (§1.1). Foam/mist BOD → **Stop** (§1.2).
 7. If occupancy or density is missing and required to interpret `qd` → run that Skill first or carry a stated `ASSUMED` `qd` (flagged); not a Stop.
 8. If two carriers both apply **and pump parameters differ** (flow cap, churn preference, N+1, driver mix) without a closed matrix union → **not a Stop**: take the more stringent value per parameter as `ASSUMED` (flagged) or hand off to **most-stringent-basis-matrix**. Do not blend FM 140%/110% with AXA 120% here.
-9. If the caller asks to **skip** hydrant and freeze a pump nameplate from density-area alone → **Stop**; order is density → **hydrant** → pump.
+9. If the caller asks to **skip** hydrant and freeze a pump nameplate from density-area alone → **Stop** (process guardrail, not a missing-input stop): order is density → **hydrant** → pump. A merely *missing* hydrant result is not this case — carry `ASSUMED` per item 2.
 10. If the caller has not named an output path → return the screen in the response and stop; do not pick a codebook location.
 
 ---
 
-## 5. Kernel formula (do not hand-roll; use `calcs/fp`; listed envelope, not a shop curve)
+## 5. Kernel formula (do not hand-roll; use `_calc`; listed envelope, not a shop curve)
 
 ```
-min_qr_fm = qd / fm_flow_cap
-min_qr_nfpa = qd / nfpa_flow_cap
-qd_over_qr = qd / qr
+min_qr_fm      = qd / fm_flow_cap
+min_qr_nfpa    = qd / nfpa_flow_cap
+qd_over_qr     = qd / qr
 churn_net_pref = churn_frac * pr
-churn_net_max = churn_frac_max * pr
-p150_min = p150_frac * pr
-q150 = 1.5 * qr
+churn_net_max  = churn_frac_max * pr
+p150_min       = p150_frac * pr
+q150           = 1.5 * qr
 churn_system_pref = churn_net_pref + suction_static_psi
-churn_system_max = churn_net_max + suction_static_psi
+churn_system_max  = churn_net_max + suction_static_psi
 ```
 
 Linear interpolate **net at `qd` between 100% (`pr`) and 150% (`p150_min`) only if** `qr <= qd <= 1.5*qr`:
@@ -215,7 +221,7 @@ Defaults in the kernel: `churn_frac = 1.20`, `churn_frac_max = 1.40`, `nfpa_flow
 
 ## 6. Gating-RFI gate **BEFORE** scheduling (always; this is the Skill’s process step)
 
-Rated flow and rated net are **nameplate cells**. They stay `provisional [RFI-…]` / `TBD [RFI-…]` until the RFIs that *gate* them close, or the engineer of record accepts the under-design risk **in the rating itself**.
+Rated flow and rated net are **nameplate cells**. They stay `provisional [RFI-…]` / `TBD [RFI-…]` until the RFIs that *gate* them close, or the engineer accepts the under-design risk **in the rating itself**.
 
 Typical gating holes (any one is enough to refuse a freeze):
 
@@ -234,20 +240,20 @@ Typical gating holes (any one is enough to refuse a freeze):
 
 **Open gating RFIs + caller asks to freeze `FP-1 = Q @ P` → STOP.** Still **run the envelope** if `qd`/`qr`/`pr`/`suction_static` are supplied as screening inputs **and** the hydrant need gate passed; paste stdout; keep `pr_psi` labeled **input**.
 
-Arithmetic matching is not coordination. Byte-identical `calcs/fp` stdout can still be `needs-rework` if the schedule froze the rating.
+Arithmetic matching is not coordination. Byte-identical `_calc` stdout can still be `needs-rework` if the schedule froze the rating.
 
 ---
 
-## 7. Design practice 3-layer on **pump parameters separately** (then set kernel caps)
+## 7. the engineer Way 3-layer on **pump parameters separately** (then set kernel caps)
 
 Do **not** MAX whole layers. Union each row; name the controlling layer; override kernel caps to match. Kernel defaults are **not** the most-stringent union. Prefer closed matrix pins; do not rebuild the matrix here.
 
-| Parameter | Code floor (NFPA 20-2025) | Insurer | Owner | What this method does |
+| Parameter | Code floor (NFPA 20-2025) | Insurer | Owner | What the runner does |
 |---|---|---|---|---|
 | **Flow cap** (`qd/qr` max) | Listed centrifugal guaranteed to **150%** → `nfpa_flow_cap = 1.50`. Sizing screen `Qr ≥ Qd / 1.5` [CODE NFPA 20-2019/2022/2025 §6.2.1, pull 20-08]. | **FM DS 3-7 §2.4.6.4 (p.14):** single 100%-Qmax centrifugal **140%**. **§2.4.6.5:** **multiple** centrifugal **110%** (most stringent number in the codebook). **AXA XL PRC.14.2.1 p.4:** demand **≤ 120%** of rated; never accept > 150%. UFC 3-600-01 §9-5: ≤ **140%** (federal comparison, not commercial control). | May tighten. | Set `fm_flow_cap` / `nfpa_flow_cap` to the **controlling** cap. AXA job → **1.20**, not the kernel 1.40 default. FM two-or-more pumps → **1.10**. |
 | **Listed flow** (`qr`) | Round **up** to a listed rating after `min_qr_*`. | AXA XL p.4 standard ratings **500 / 1000 / 1250 / 1500 / 2000 / 2500 gpm**. Rounding `min_qr_fm` up is an **interpretation**, not a kernel output. Process note names **FM DS 3-7 Table 2.3.4.3-1** as the listed-flow round-up table; the install note indexes that table as **piping data** — `[V]` the listed-flow set vs the licensed sheet before treating **750 gpm** (or any non-AXA rating) as listed. | May force a larger spare. | Screen the **candidate** `qr` the caller named. Rounding up is post-kernel. |
 | **Rated net** (`pr_psi`) | `Pnet,req(Qd) = Pdischarge,demand − Psuction + Psafety` `[verify §]`. | AXA XL p.4 “standard” pressures **100 / 125 / 150 psi** are **not a menu of screening heads**. Do **not** invent 40 or 100 psi from that list. | May raise component class. | **Keep as INPUT.** Do not invert the envelope to “find” a nameplate. |
-| **Churn** | Shutoff head **≤ 140%** rated. **§4.7.7.1:** net churn + max static suction, elevation-adjusted, ≤ component rating [CODE NFPA 20-2019/2022/2025 §4.7.7.1 | AXA XL p.3,7: **prefer ≤ 120%**, allow 140%. FM DS 3-7 §2.3.4.2: main relief only when churn + max static can exceed the component rating (**usually 175 psi**). Both carriers: **do not design a system that needs a relief valve to survive churn.** Diesel: FM takes pressure to **121%** of net rated shutoff (governor may permit 110% speed; pressure ∝ speed²). | May force VSPLC / flatter curve. | Leave kernel `churn_frac=1.20` / `churn_frac_max=1.40` unless the controlling sheet / matrix states otherwise. Read `churn_system_*_le_ceiling`. |
+| **Churn** | Shutoff head **≤ 140%** rated. **§4.7.7.1:** net churn + max static suction, elevation-adjusted, ≤ component rating [CODE NFPA 20-2019/2022/2025 §4.7.7.1; pull 20-06]. | AXA XL p.3,7: **prefer ≤ 120%**, allow 140%. FM DS 3-7 §2.3.4.2: main relief only when churn + max static can exceed the component rating (**usually 175 psi**). Both carriers: **do not design a system that needs a relief valve to survive churn.** Diesel: FM takes pressure to **121%** of net rated shutoff (governor may permit 110% speed; pressure ∝ speed²). | May force VSPLC / flatter curve. | Leave kernel `churn_frac=1.20` / `churn_frac_max=1.40` unless the controlling sheet / matrix states otherwise. Read `churn_system_*_le_ceiling`. |
 | **150% pressure floor** | Pump must still deliver **≥ 150% rated flow**. | FM DS 3-7 §2.4 preamble (p.13): still **≥150% rated flow at ≥65% rated pressure**. AXA XL: pumps that hold demand out to **120–150%** of rated. | — | Kernel `p150_frac = 0.65`. Do not swap in a shop-curve 150% point and call it the envelope. |
 | **Component ceiling** | — | AXA XL p.6 and FM DS 3-7: design **≤ 175 psi** where practical (most sprinkler components not listed above 175). AXA XL BOR design-pressure ceiling **≤ 125 psi** is a **supply-analysis** overlay, not a kernel input — report it; do not silently replace `ceiling_psi`. | May specify 175 / 250 / 300 class. | Default `ceiling_psi = 175`. |
 | **Component rating (code floor, 2026-10-22)** | — | Components rated for the max working pressure and not less than 175 psi aboveground / 150 psi underground [CODE NFPA 13-2022/2025 §7.1.2, pull 13-30]. Where normal (non-fire) pressure can exceed 175 psi and components are not listed for it, a listed PRV is required, with inlet/outlet gauges, a ≥½ in. relief downstream and a test connection [CODE NFPA 13-2022/2025 §16.9.7.1–16.9.7.5, pull 13-30]. The FM/AXA 175 psi target sits on top of this floor. |
@@ -279,7 +285,8 @@ Do **not** MAX whole layers. Union each row; name the controlling layer; overrid
 
 - **Governing rule:** compute every applicable layer and take the **larger** tank. At equal consumption, NFPA 20-2022+TIA (12 h) exceeds FM (8 h, the lower insurer floor); on an NFPA 20-2019 AHJ, compare 1 gal/hp against FM 8 h × consumption. **Never cite an 8-hour NFPA 20 rule** (rejected at the 2022 First Draft). Verify with the engineer of record (UFGS invoked): conservative assumption = add UFGS 1 gal/hp + 10 % as an owner layer and take the max of the enforced NFPA 20 edition, FM 8 h and UFGS (no UFGS pull on file).
 - **Arithmetic pin:** `run volume = t_h × q_published (gal/hr)`, then add 5 % expansion + 5 % sump as printed. Corpus example (not a default): 290 hp engine at 13.5 gal/hr → 12 h = **162 gal** run volume vs ≈ **290 gal** by the 1 gal/hp fallback — obtaining the published consumption roughly halves the tank. Use **consumption**, not the engine's fuel-**supply** rate.
-- Diesel pump room and tank are sprinklered extra hazard group 2 [CODE NFPA 20-2019/2022 §4.14.1.3; 20-2025 §4.14.1.3.2]. Day tanks are not approved (committee record, not book text). Edition wording: 2019 §4.14.1.3 names diesel engine pump drivers and day tanks; 2022 §4.14.1.3 names diesel engine pump drivers and fuel tanks; 2025 §4.14.1.3.2 names diesel engine pump drivers or fuel tanks serving diesel engine pump drivers [CODE NFPA 20-2019/2022 §4.14.1.3; 20-2025 §4.14.1.3.2]. 
+- Diesel pump room + tank sprinklered EH2 [CODE NFPA 20-2019/2022 §4.14.1.3; 20-2025 §4.14.1.3.2; pull 20-06]; day tanks not approved (committee record, not book text). Edition wording: 2019 §4.14.1.3 says "diesel engine pump drivers and day tanks"; 2022 §4.14.1.3 says "diesel engine pump drivers and fuel tanks"; 2025 §4.14.1.3.2 says "diesel engine pump drivers or fuel tanks serving diesel engine pump drivers" [CODE NFPA 20-2019/2022 §4.14.1.3; 20-2025 §4.14.1.3.2; pull 20-06].
+
 ### 7A.2 Electric drive — NEC 695 / NFPA 20 power pins
 
 | Item | Rule | Pin |
@@ -291,35 +298,35 @@ Do **not** MAX whole layers. Union each row; name the controlling layer; overrid
 | Acceptance-test amps | By enforced edition: **2025** nameplate service-factor amps (or manufacturer documentation), FLA × SF only where SF amps are not provided [CODE 2025 §14.2.6.7.1 / §14.2.6.7.1.1]; **2019/2022** FLA × nameplate SF [CODE 2019 §14.2.6.6.4; 2022 §14.2.6.7.1]; pull 20-12. Verify with the engineer of record: where SF amps are listed, conservative assumption = check both figures on any edition and the lower governs; Table 430.250 FLC still sizes OCPDs only | NFPA 20-2025 SR-23/SR-24; [CODE 2025 §14.2.6.7.1 (SF amps; §14.2.6.7.1.1 FLA × SF where SF amps not provided), pull 20-09 (ORD-FP-012); pull 20-12: 2022 §14.2.6.7.1 and 2019 §14.2.6.6.4 require FLA × SF] |
 | Jockey supply | Not through the fire-pump controller / transfer switch (no junction-box use) | [CODE NEC 2017/2020/2023 §695.6(I)(6); 2026 §695.7(I)(8), pull 70-01]; FM DS 3-7 §2.4.14 |
 
-Breaker coordination, voltage drop (≤15 % start), feeder routing, and the 230.95 GFPE collision → **HAND OFF** to *Fire-pump circuit power integrity and selective coordination*. No breaker is sized here without nameplate LRC and the AHJ NEC year.
+Breaker coordination, voltage drop (≤15 % start), feeder routing, and the 230.95 GFPE collision → **HAND OFF** to *Fire-pump circuit power integrity and selective coordination*. No breaker is "sized" here without nameplate LRC and the AHJ NEC year.
 
 ### 7A.3 Jockey (pressure-maintenance) pump
 
-1. **Capacity ≥ normal leakage** ([CODE NFPA 20-2019/2022/2025 §4.27.3;  §4.27.1 is the means-to-maintain-pressure clause, pull 20-09 (ORD-FP-012)]; the fire pump is never the jockey — [CODE NFPA 20-2019/2022/2025 §4.27.7, pull 20-06]; FM DS 3-7 §2.4.7.4). Lower bound from **FM DS 3-10 (Jan 2022 IR) §2.3.1.6** allowable leakage: **2 qt/hr per 100 joints** + 1 fl oz/in. valve dia/hr per metal-seated valve + 5 oz/min per dry-barrel hydrant if tested open.
-2. **Upper bound (derivation, a worked example):** keep jockey capacity **below one sprinkler's flow at its minimum pressure** (e.g. K5.6 @ 7 psi = 5.6 × √7 = 14.8 gpm; 7 psi = minimum operating pressure of any sprinkler [CODE NFPA 13-2022/2025 §28.2.4.11.1, pull 13-07]) so a single open head is not masked.
+1. **Capacity ≥ normal leakage** ([CODE NFPA 20-2019/2022/2025 §4.27.3; pull 20-06; §4.27.1 is the means-to-maintain-pressure clause, pull 20-09 (ORD-FP-012)]; the fire pump is never the jockey — [CODE NFPA 20-2019/2022/2025 §4.27.7, pull 20-06]; FM DS 3-7 §2.4.7.4). Lower bound from **FM DS 3-10 (Jan 2022 IR) §2.3.1.6** allowable leakage: **2 qt/hr per 100 joints** + 1 fl oz/in. valve dia/hr per metal-seated valve + 5 oz/min per dry-barrel hydrant if tested open.
+2. **Upper bound (derivation, `case-2026-10-05-bf`):** keep jockey capacity **below one sprinkler's flow at its minimum pressure** (e.g. K5.6 @ 7 psi = 5.6 × √7 = 14.8 gpm; 7 psi = minimum operating pressure of any sprinkler [CODE NFPA 13-2022/2025 §28.2.4.11.1, pull 13-07]) so a single open head is not masked.
 3. **Setpoints — FM DS 3-7 §2.4.11.6:** jockey start = churn + max static suction + **5 psi**; jockey stop = start + **10 psi**; fire-pump start = jockey start − **5 to 10 psi**; **10 psi** decrements per additional pump. NFPA 20 committee example: 155 psi jockey stop / 145 psi pump start.
-4. **Window inside the component rating:** the jockey stop (and jockey churn + max suction) must stay ≤ the system component rating (usually **175 psi**) **and** ≤ the jockey pump's OEM flange MAWP (confirm at submittal). If the FM cascade breaks the rating, elect a window inside it and record the trade-off — a worked example: FM start = 120 + 52 + 5 = **177 > 175** → elected jockey stop/start **155/140**, FP-1 start 130, FP-2 120; max system 120 + 52 = 172 ≤ 175 (fire-pump start sits below churn — documented). Each controller gets its **own sensing line** (§2.4.11.1).
+4. **Window inside the component rating:** the jockey stop (and jockey churn + max suction) must stay ≤ the system component rating (usually **175 psi**) **and** ≤ the jockey pump's OEM flange MAWP (confirm at submittal). If the FM cascade breaks the rating, elect a window inside it and record the trade-off — `case-2026-10-05-bf`: FM start = 120 + 52 + 5 = **177 > 175** → elected jockey stop/start **155/140**, FP-1 start 130, FP-2 120; max system 120 + 52 = 172 ≤ 175 (fire-pump start sits below churn — documented). Each controller gets its **own sensing line** (§2.4.11.1).
 5. Jockey pump itself need not be listed; its **controller** must be. A packaged VFD booster is not a listed jockey controller.
 
 ### 7A.4 Seal election
 
 | Layer | Rule | Pin |
 |---|---|---|
-| NFPA 20-**2025** | **Packing only** for centrifugal (new §6.1.1.5) and vertical-shaft pumps — mechanical seals excluded (UL dropped them for new listings in 2021) | SR-8 / SR-9; [CODE 2025 §6.1.1.5 sealing type for centrifugal pumps shall be packing, pull 20-09 (ORD-FP-012)]; not in 2019 |
+| NFPA 20-**2025** | **Packing only** for centrifugal (new §6.1.1.5) and vertical-shaft pumps — mechanical seals excluded (UL dropped them for new listings in 2021) | SR-8 / SR-9; [CODE 2025 §6.1.1.5 "sealing type for centrifugal pumps shall be packing", pull 20-09 (ORD-FP-012)]; not in 2019 |
 | NFPA 20-**2022** | Mechanical seals only with public-main / clean closed-top tank / maker-spec water [CODE NFPA 20-2022/2025 §4.6.2.1.1]; clean-water flush for the seals at positive pressure [CODE NFPA 20-2022/2025 §4.6.2.1.2]; 'positive inlet pressure' = [UNSOURCED / committee record SR-6], not code | 2025 via pull 20-09 stage capture; 2022 [CODE NFPA 20-2022 §4.6.2.1.1, §4.6.2.1.2, pull 20-21]; 2022/2025 only; not in 2019 |
 | **FM DS 3-7** (Apr 2012 / IR Oct 2021) | Mechanical seal only on an FM Approved-for-seal pump and only where **all**: clean suction (never open water), suction positive at all flows, **spare split seal set on site**, **weekly** testing | §2.4.5 (p.14); §3.1.8 |
 
-Annex support (advisory, not a requirement): NFPA 20-2022 A.4.6.2.1.1 says mechanical seals should be restricted to those applications where only clean water is pumped and the pump should operate with positive pressure conditions at the pump inlet at all times (pull 20-25). This backs the packing default where the suction is an open tank, pond or river, or can go negative.
+Annex support (advisory, not a requirement): NFPA 20-2022 A.4.6.2.1.1 says mechanical seals "should be restricted to those applications where only clean water is pumped" and the pump "should operate with positive pressure conditions at the pump inlet at all times" (pull 20-25). This backs the packing default where the suction is an open tank, pond or river, or can go negative.
 
 Default = **packing** (most stringent). A mechanical seal on a pre-2025 AHJ needs every FM §2.4.5 condition in writing.
 
 ### 7A.5 Variable-speed / pressure-limiting relief
 
-**Diesel derate.** `calcs/fp` `diesel_derate` (`pump_bhp`, `altitude_ft`, `ambient_f`, `nameplate_hp?`, `stepwise?`, `gear_loss_hp?`): deduct 3 %/1,000 ft above 300 ft [CODE NFPA 20-2025 §11.2.2.4; 2022 identical] and 1 %/10 °F above 77 °F [CODE NFPA 20-2025 §11.2.2.5]; gear loss is a caller input [§11.2.2.6]; derated rating ≥ pump BHP [§11.2.2.7] via `engine_ok` / `deficit_hp`. **Additive combination is a design practice, not code text. Verify with the engineer of record** (conservative: additive gives the larger deduction). Prefer the engine OEM's published derate when it is larger. Worked example: 17.64 % → 186.98 hp required; 175 hp fails, 200 hp OK. Use the job's altitude and design ambient; never a demo value.
+**Diesel derate op (batch10 R3, 2026-10-23).** `_calc` `diesel_derate` (`pump_bhp`, `altitude_ft`, `ambient_f`, `nameplate_hp?`, `stepwise?`, `gear_loss_hp?`): deduct 3 %/1,000 ft above 300 ft [CODE NFPA 20-2025 §11.2.2.4; 2022 identical] and 1 %/10 °F above 77 °F [CODE NFPA 20-2025 §11.2.2.5]; gear loss is a caller input [§11.2.2.6]; derated rating ≥ pump BHP [§11.2.2.7] via `engine_ok` / `deficit_hp`. **Additive combination is a Design practice (batch9 F2), not code text — Verify with the engineer of record** (conservative: additive gives the larger deduction). Prefer the engine OEM's published derate when it is larger. Worked (batch10 R21, the site): 17.64 % → 186.98 hp required; 175 hp fails, 200 hp OK. Use the job's altitude and design ambient; never a demo value.
 
-**Diesel main relief (2026-10-23b).** Where a diesel pump is installed and **1.21 × net rated shutoff (churn) + max static suction, elevation-adjusted > component rating**, a main relief valve is required [CODE NFPA 20-2019/2022/2025 §4.20.1.2]. 2025 says main relief valve; 2019 and 2022 say pressure relief valve. This metric uses the **net shutoff**, not `churn_frac`. `calcs/fp` op `relief_check` (`net_shutoff_psi`, `max_static_suction_psi`, `component_rating_psi`=175 default, signed `elevation_adj_psi`) returns `relief_check_psi`. The 175 psi default is the NFPA 13 §7.1.2 aboveground floor (pull 13-30); use the actual lowest component rating. Unknown max static: Design practice C1 = min static + 10 psi, `ASSUMED`, **Verify with the engineer of record**; get the purveyor value on a real job.
+**Diesel main relief (2026-10-23b).** Where a diesel pump is installed and **1.21 × net rated shutoff (churn) + max static suction, elevation-adjusted > component rating**, a main relief valve is required [CODE NFPA 20-2019/2022/2025 §4.20.1.2; 2025 says "main relief valve", 2019/2022 "pressure relief valve"]. This metric uses the **net shutoff**, not `churn_frac`. `_calc` op `relief_check` (`net_shutoff_psi`, `max_static_suction_psi`, `component_rating_psi`=175 default, signed `elevation_adj_psi`) returns `relief_check_psi`. The 175 psi default is the NFPA 13 §7.1.2 aboveground floor (pull 13-30); use the actual lowest component rating. Unknown max static: Design practice C1 = min static + 10 psi, `ASSUMED`, **Verify with the engineer of record**; get the purveyor value on a real job.
 
-NFPA 20-**2019 §4.20.1.3** [CODE NFPA 20-2019/2022/2025 §4.20.1.3, §4.20.1.3.1]. A variable-speed or diesel pressure-limiting drive needs a **relief valve where shutoff head at rated speed exceeds the component rating**, set **at least 10 psi above** the pressure-limiting set pressure. FM DS 3-7 §3.1.11: VS best avoided if possible. Do not design a constant-speed system that needs a relief valve to survive churn (§7 churn row). VSPLC sizing → **handoff**.
+NFPA 20-**2019 §4.20.1.3** [CODE NFPA 20-2019/2022/2025 §4.20.1.3, §4.20.1.3.1; pull 20-06]: VS or diesel pressure-limiting drive → **relief valve required where shutoff head at rated speed exceeds the component rating**, set **≥ 10 psi above** the pressure-limiting set pressure. FM DS 3-7 §3.1.11: VS "best avoided if possible". Do not design a constant-speed system that needs a relief valve to survive churn (§7 churn row). VSPLC sizing → **handoff**.
 
 ### 7A.6 Pump type — VT vs HSC (election row)
 
@@ -328,7 +335,7 @@ NFPA 20-**2019 §4.20.1.3** [CODE NFPA 20-2019/2022/2025 §4.20.1.3, §4.20.1.3.
 | Water surface **below** the pump / static suction lift (tank, wet pit, reservoir) | **Vertical turbine** | FM DS 3-7 §2.4.1.1 (no split-case / end-suction / in-line on static lift); §2.4.2 (VT where water level is below the discharge flange) |
 | Permanently **flooded positive suction** | HSC / end-suction / in-line permitted | NFPA 20 positive-suction doctrine; OEM IOMs |
 
-VT fences: bowls at OEM minimum submergence at **minimum** water depth (§2.4.2.2); **exclude water below minimum submergence from duration** (§2.4.2.3); right-angle gear max power and thrust ≤ nameplate (§2.4.2.4); diesel VT → mass-elastic torsional analysis (§2.4.2.5). Method: a prior site worked package `…arvada-co__vt-vs-hsc-suction-regime-election-single-oem-vt-install` (synthetic, 2026-09-22; not in prior job files) — refuse HSC on a below-grade tank. Elect the family; never freeze an OEM SKU.
+VT fences: bowls at OEM minimum submergence at **minimum** water depth (§2.4.2.2); **exclude water below minimum submergence from duration** (§2.4.2.3); right-angle gear max power and thrust ≤ nameplate (§2.4.2.4); diesel VT → mass-elastic torsional analysis (§2.4.2.5). Method: a prior site worked package (synthetic; not in CASE_INDEX) — refuse HSC on a below-grade tank. Elect the family; never freeze an OEM SKU.
 
 ---
 
@@ -401,7 +408,7 @@ CALC KERNEL TRANSCRIPT
 job: (adhoc)
 steps: 1
 
---- step pump_envelope op=pump_envelope formula=pump rated/churn/150% envelope ---
+--- step pump_envelope  op=pump_envelope  formula=pump rated/churn/150% envelope ---
 inputs
   qr_gpm: 750 gpm
   pr_psi: 40 psi
@@ -446,15 +453,15 @@ If stdout disagrees with a hand product, **the kernel wins**. Re-check inputs (e
 Write the arithmetic in the markdown verification so a reviewer can recompute without the kernel. Substitutions for the contract-demo numbers above:
 
 ```
-min_qr_fm = 900 / 1.40 = 642.8571 gpm VERIFY: 1.40 × 642.8571 = 900
-min_qr_nfpa = 900 / 1.50 = 600 gpm VERIFY: 1.50 × 600 = 900
-qd_over_qr = 900 / 750 = 1.20 → ≤ 1.40 FM single? true; ≤ 1.50 NFPA? true
+min_qr_fm   = 900 / 1.40 = 642.8571 gpm     VERIFY: 1.40 × 642.8571 = 900
+min_qr_nfpa = 900 / 1.50 = 600 gpm          VERIFY: 1.50 × 600 = 900
+qd_over_qr  = 900 / 750 = 1.20              → ≤ 1.40 FM single? true; ≤ 1.50 NFPA? true
 churn_net_pref = 1.20 × 40 = 48 psi
-churn_net_max = 1.40 × 40 = 56 psi
-p150_min = 0.65 × 40 = 26 psi
-q150 = 1.5 × 750 = 1125 gpm
+churn_net_max  = 1.40 × 40 = 56 psi
+p150_min       = 0.65 × 40 = 26 psi
+q150           = 1.5 × 750 = 1125 gpm
 churn_system_pref = 48 + 70 = 118 psi ≤ 175? true
-churn_system_max = 56 + 70 = 126 psi ≤ 175? true
+churn_system_max  = 56 + 70 = 126 psi ≤ 175? true
 in_band: 750 ≤ 900 ≤ 1125 → interpolate
 p_net_qd = 40 + (26 − 40) × (900 − 750) / (0.5 × 750)
          = 40 + (−14) × 150 / 375
@@ -465,8 +472,8 @@ p_net_qd = 40 + (26 − 40) × (900 − 750) / (0.5 × 750)
 **Ceiling-fail check** (same flows, `pr_psi = 100` — the **synthetic-pressure anti-pattern**, not a nameplate):
 
 ```
-churn_system_pref = 1.20 × 100 + 70 = 190 psi → le_ceiling false
-churn_system_max = 1.40 × 100 + 70 = 210 psi → le_ceiling false
+churn_system_pref = 1.20 × 100 + 70 = 190 psi  →  le_ceiling false
+churn_system_max  = 1.40 × 100 + 70 = 210 psi  →  le_ceiling false
 ```
 
 That is the envelope telling you a 100 psi **input** overruns 175 psi at this suction — **not** a license to schedule 100 psi anyway. The MS worked package scheduled 100 psi synthetic from the AXA standard-pressure list while BOR pressure was unclosed. **Do not copy that freeze.**
@@ -508,11 +515,11 @@ Post-kernel interpretation (not kernel output): round `min_qr_*` **up** to a lis
 - Dual-carrier pump rows still disagree / unresolved → **`most-stringent-basis-matrix`**.
 - Occupancy / HC / OH missing → **`occupancy-hazard-fork`**.
 - System-family election missing / SI/NI-as-BOD / foam / mist → **`suppression-technology-selection`** + `RFI-variance` (do not elect here).
-- Packet missing → **the input packet**.
+- Packet missing → **`dc-fp-assignment-packet`**.
 - Multi-hall identity missing → **`fire-area-compartmentation-schedule`**.
-- Looped-main / one-leg-out diameter → looped-main recipe (`calcs/fp` `hw` is a **single segment**, not a network).
+- Looped-main / one-leg-out diameter → looped-main recipe (`_calc` `hw` is a **single segment**, not a network).
 - Churn vs 175 psi fails and the job needs modulation → *Variable-speed pressure-limiting pumps and the zone pressure envelope* (VSPLC). FM DS 3-7 §3.1.11 posture is “best avoided if possible”; NFPA 20 has barred a PRV from controlling churn since 2003. **This Skill does not size VSPLC.**
-- Combustion-air / louver free-area → `calcs/fp` `louver` / **`combustion-air-and-hall-free-area`**. Diesel ventilation numbers live on FM DS 3-7 §§2.4.17–2.4.25 — not here.
+- Combustion-air / louver free-area → `_calc` `louver` / **`combustion-air-and-hall-free-area`**. Diesel ventilation numbers live on FM DS 3-7 §§2.4.17–2.4.25 — not here.
 - Breaker coordination / voltage drop / feeder routing / 230.95 GFPE collision → *Fire-pump circuit power integrity and selective coordination* (this Skill prints only the §7A.2 OCPD rule).
 - Node-by-node BOR psi, pipe schedule → hydraulic-tree Skill.
 - Certified **shop curve** / field 3-point (or FM App. C 6-point) acceptance → submittal / commissioning, not this screen.
@@ -523,7 +530,7 @@ Post-kernel interpretation (not kernel output): round `min_qr_*` **up** to a lis
 
 ## 12. Output
 
-Write output only to the caller-named path.
+Write **only** to the path the **caller names** (typically a `.calc.json` transcript plus a short markdown verification beside it). Do **not** write into `KNOWLEDGE_BASE`, `EXERCISES`, `_pruner`, `_surveyor`, `_engineer`, `ARCHIVE`, or any shop codebook tree.
 
 **`.calc.json`** — the JSON actually run (QA re-runs this file). Keep a `.calc.stdout.txt` (or paste stdout into the markdown). Transcript must end with `TRANSCRIPT_OK`.
 
@@ -548,7 +555,7 @@ Do **not** emit: occupancy schedule, density×area re-calc, hydrant Adequacy reb
 
 ## 13. Stop
 
-> A missing input is ASSUMED (state the value and why). It is not a stop. Scope locks stay hard stops.
+> **2026-10-07 intake rule:** any item below that is a missing packet, a missing upstream result, or a missing input blank is **not** a Stop — proceed with a stated `ASSUMED` value (value + why), flagged in the output and status register. Only company scope-lock items (SI/NI-as-BOD → `RFI-variance`, foam, water mist `PRACTICE REFUSED`, clean agent as company BOD) and wrong-Skill / out-of-scope routing remain hard Stops.
 
 Return the blocker (hard Stop only for scope-lock / wrong-Skill items). For a missing input, use a stated `ASSUMED` value (flagged) — stated, not a silent guess.
 
@@ -565,7 +572,7 @@ Return the blocker (hard Stop only for scope-lock / wrong-Skill items). For a mi
 11. Unpinned **carrier** (cannot choose FM 140/110 vs AXA 120 vs NFPA 150).
 12. Trying to **re-classify occupancy**, **re-run density×area**, **re-run hydrant**, **size a looped main**, **size combustion-air louvers**, or **draw CAD** here.
 13. Trying to **replace the listed envelope with a shop curve** (or invent points outside 100–150%).
-14. Caller asks to write outside the caller-named path.
+14. Caller asks to write into `KNOWLEDGE_BASE` / `EXERCISES` / `_pruner` / `_surveyor` / `_engineer` / `ARCHIVE`.
 
 Missing `pr_psi` as a screening input is **not a Stop**: the kernel requires it, so use a stated `ASSUMED` screening pressure (value + why) labeled **`ASSUMED` / `[SYN]` input**. It is not a rated-point selection — if it came from the standard-pressure list, say so. Do not schedule or freeze it.
 
@@ -575,20 +582,20 @@ Missing `pr_psi` as a screening input is **not a Stop**: the kernel requires it,
 
 Shop codebook **by title** (not a required filesystem path). Prefer these section+edition pins; omit or `[V]` anything not here. **Do not invent section numbers.**
 
-**Design practice / process**
+**the engineer Way / process**
 
-- *Design practice* — 3-layer most-stringent; cite section **and** edition; enforced ≠ latest; show-and-verify; `[SYN]`/`[V]`; status vocabulary. Pump delta vs **NFPA 20-2025**; demand-context delta vs **NFPA 13-2025**.
-- *Do not schedule rated pump gpm/psi on open gating RFIs* (seedling) — `pr_psi` is an input; rounding `min_qr` up is interpretation; honest prose does not save a frozen schedule; listed 100/125/150 psi are not a screening-head menu. Negative teaching: prior campus pump worked package froze **100 psi synthetic** (`corpus-insufficient`); a prior pump schedule scheduled **750 @ 40** on open RFIs (`needs-rework`).
+- *The engineer Way* — 3-layer most-stringent; cite section **and** edition; enforced ≠ latest; show-and-verify; `[SYN]`/`[V]`; status vocabulary. Pump delta vs **NFPA 20-2025**; demand-context delta vs **NFPA 13-2025**.
+- *Do not schedule rated pump gpm/psi on open gating RFIs* (seedling) — `pr_psi` is an input; rounding `min_qr` up is interpretation; honest prose does not save a frozen schedule; listed 100/125/150 psi are not a screening-head menu. Negative teaching: MS campus pump worked package froze **100 psi synthetic** (`corpus-insufficient`); the campus Mesa FP-1 scheduled **750 @ 40** on open RFIs (`needs-rework`).
 
 **NFPA 20-2025** (*Fire-pump selection & installation*) — rows carry their pull; any row still marked `[verify §]` is not yet pinned
 
 | Claim | Pin |
 |---|---|
-| `Qr ≥ Qd / 1.5`; hard rule: greatest single system demand ≤ 150% of rated flow | [CODE NFPA 20-2025 §4.10.1, pull 20-23, raw text checked: greatest single demand for any fire protection system connected to the pump is less than or equal to 150 percent of the rated capacity (flow)]; 2019/2022 numbering not pulled `[V]` |
+| `Qr ≥ Qd / 1.5`; hard rule: greatest single system demand ≤ 150% of rated flow | [CODE NFPA 20-2025 §4.10.1, pull 20-23, raw text checked: "greatest single demand for any fire protection system connected to the pump is less than or equal to 150 percent of the rated capacity (flow)"]; 2019/2022 numbering not pulled `[V]` |
 | Shutoff (churn) ≤ **140%** rated | [CODE NFPA 20-2019/2022/2025 §6.2.2, pull 20-08] |
-| Net churn + max static suction ≤ component rating | [CODE NFPA 20-2019/2022/2025 §4.7.7.1 |
+| Net churn + max static suction ≤ component rating | [CODE NFPA 20-2019/2022/2025 §4.7.7.1; pull 20-06] |
 | Suction ≥0 psi at the suction flange with all pumps at 150% (required, not a preference); **−3 psi** at 150% suction-tank exception | [CODE NFPA 20-2019/2022/2025 §4.16.3.1 (identical); §4.16.3.2 tank tied to water level after full demand at or above pump centerline (2022/2025) vs tank base at or above pump (2019); pull 20-13] |
-| Jockey required; fire pump is not the jockey | [CODE NFPA 20-2019/2022/2025 §4.27.7 |
+| Jockey required; fire pump is not the jockey | [CODE NFPA 20-2019/2022/2025 §4.27.7; pull 20-06] |
 | Alternate power for electric when unreliable / high-rise; start voltage drop ≤15% | [CODE 2025 §9.3.1; 2019 §9.3.1 (high-rise) + §9.3.2 (unreliable); 15% drop 2019/2025 §9.4.1, pull 20-09 (ORD-FP-012)] |
 | 2025 exemption: no alternate power for the primary pump where a backup engine-, steam- or electric-driven pump with an independent source meeting §9.2.2 is installed; 2022 wording same as 2019 | [CODE NFPA 20-2025 §9.3.2; NFPA 20-2019/2022 §9.3.1–9.3.2, pull 20-20] |
 | Suction control valve: listed OS&Y; no other control valve within 50 ft of the suction flange except §4.29.3 devices; closure ≥5 s; automated valves need position indication + supervisory switch (no butterfly in that zone) | [CODE NFPA 20-2025 §4.16.5.1–4.16.5.4, pull 20-15] |
@@ -638,33 +645,32 @@ Shop codebook **by title** (not a required filesystem path). Prefer these sectio
 | Generator-side cap | NEC §430.62(A) + Table 430.52(C)(1) + Table 430.250 |
 | No GFPE in fire-pump circuit; 240.13 exemption | [CODE NEC 2017/2020/2023 §695.6(G); 2026 §695.7(G), pull 70-01]; NEC 2020 §240.13; FM DS 3-7 §2.4.12.11 |
 | Acceptance amps by edition (2025 SF amps; 2019/2022 FLA × SF; lower governs = Verify with the engineer of record) | NFPA 20-2025 SR-23/24; [CODE 2025 §14.2.6.7.1, fallback FLA × SF §14.2.6.7.1.1, pull 20-12]; 2022 §14.2.6.7.1 and 2019 §14.2.6.6.4 require FLA × SF (edition fork applied) |
-| Jockey capacity ≥ leakage; FM leakage | [CODE NFPA 20-2019/2022/2025 §4.27.3;  FM DS 3-10 Jan 2022 §2.3.1.6 |
+| Jockey capacity ≥ leakage; FM leakage | [CODE NFPA 20-2019/2022/2025 §4.27.3; pull 20-06]; FM DS 3-10 Jan 2022 §2.3.1.6 |
 | Jockey cascade | FM DS 3-7 §2.4.11.6 (start = churn + max static + 5; stop +10; FP start −5 to −10) |
 | Packing only (2025) vs FM conditional seal | NFPA 20-2025 SR-8/9; NFPA 20-2022 SR-6; FM DS 3-7 §2.4.5 |
-| VS relief ≥10 psi above set where shutoff > component rating | [CODE NFPA 20-2019/2022/2025 §4.20.1.3, §4.20.1.3.1 |
+| VS relief ≥10 psi above set where shutoff > component rating | [CODE NFPA 20-2019/2022/2025 §4.20.1.3, §4.20.1.3.1; pull 20-06] |
 | VT on static lift; exclude water below submergence | FM DS 3-7 §2.4.1.1, §2.4.2, §2.4.2.3 |
-| Worked method | a worked example (jockey 155/140 inside 175 psi); a prior site VT-vs-HSC package; electric-fire-pump-breaker packages (NEC 2017 vs 2020 jockey LRC; 430.62 cap) |
+| Worked method | `case-2026-10-05-bf` (jockey 155/140 inside 175 psi); a prior site worked package; electric-fire-pump-breaker packages (NEC 2017 vs 2020 jockey LRC; 430.62 cap) |
 
 **Demand / supply consumed (do not re-cite as this Skill’s work):** FM DS 5-32 **January 2026** §2.4.3.3.1.1.A (0.2 gpm/ft²; 2,500 wet / 3,500 dry); hose 250 gpm §2.4.1.5; 60 min §2.4.1.6 — **density-area-dry-increase**. Hydrant Adequacy / pump need / suction points — **hydrant-supply-curve**.
 
-**Kernel** — `calcs/fp` README / `run.py` / `formulas.pump_envelope`: formula block in §5; interpolation only in the 100–150% band; **not a shop curve**.
+**Kernel** — `_calc` README / `run.py` / `formulas.pump_envelope`: formula block in §5; interpolation only in the 100–150% band; **not a shop curve**.
 
-**Negative teaching (exercise, not a codebook number):** worked package *hyperscale campus fire-water supply — fire-pump selection* (diesel N+1), verdict **`corpus-insufficient`**, froze **100 psi synthetic** rated pressure while BOR array friction was unclosed. a prior pump schedule scheduled **750 gpm @ 40 psi** on open gating RFIs. Do not copy either freeze. The arrangement/SOO half of the prior package is not this Skill’s output.
+**Negative teaching (exercise, not a codebook number):** worked package *hyperscale campus fire-water supply — fire-pump selection* (MS / AXA XL / diesel N+1), verdict **`corpus-insufficient`**, froze **100 psi synthetic** rated pressure while BOR array friction was unclosed. the campus Mesa FP-1 scheduled **750 gpm @ 40 psi** on open gating RFIs. Do not copy either freeze. The arrangement/SOO half of the MS package is not this Skill’s output.
 
 **Company fence (consume, do not re-elect):** STS / matrix / density / hydrant wet/dry/DI handshake; FM DS 5-32 §2.4.1.1 ranking = comparison evidence only.
 
 ---
 
-## 15. Design practice
+## 15. the engineer Way
 
-1. **Three-layer, most stringent, on pump parameters separately.** Code (NFPA 20-2025) is the floor (150% listed curve, 140% churn max, §4.7.7.1 overpressure [CODE NFPA 20-2019/2022/2025 §4.7.7.1]). The **insurer sheet** usually sets the real basis: FM DS 3-7 usable **140% / 110%**, count, driver mix, N+1; AXA XL **120%** demand cap and **120%** preferred churn. The **owner standard** can raise N+1 / diesel again. Cite the sheet. Do not assert N+1 or diesel from habit — on FM it is Layer-2; on AXA below 2000 gpm it is often Layer-3.
+1. **Three-layer, most stringent, on pump parameters separately.** Code (NFPA 20-2025) is the *floor* (150% listed curve, 140% churn max, §4.7.7.1 overpressure [CODE NFPA 20-2019/2022/2025 §4.7.7.1; pull 20-06]). The **insurer sheet** usually sets the real basis: FM DS 3-7 usable **140% / 110%**, count, driver mix, N+1; AXA XL **120%** demand cap and **120%** preferred churn. The **owner standard** can raise N+1 / diesel again. Cite the sheet. Do not assert N+1 or diesel from habit — on FM it is Layer-2; on AXA below 2000 gpm it is often Layer-3.
 2. **Delta vs NFPA 20-2025 every time** (pump), **and vs NFPA 13-2025** (consumed demand). If the numeric NFPA 20 floor isn’t in the licensed primary, say **directional `[V]`**. Do not invent a 20-2025 section number.
 3. **Show-and-verify.** Kernel stdout + independent `min_qr`, cap, churn+suction vs 175, interpolation. Kernel wins on arithmetic.
 4. **Current editions; enforced ≠ latest.** Default NFPA 20-**2025** / 13-**2025** for delta baselines; report the AHJ-referenced editions when they differ.
-5. **Honesty on the nameplate.** The envelope **screens** a candidate (`qr`, `pr` as **inputs**). It does not mint `FP-1 = Q @ P`. Density `qd` is a **minimum**. Open gating RFIs → `provisional [RFI-…]`. A prior synthetic 100 psi freeze and a prior 750 gpm at 40 psi freeze are the anti-patterns.
+5. **Honesty on the nameplate.** The envelope **screens** a candidate (`qr`, `pr` as **inputs**). It does not mint `FP-1 = Q @ P`. Density `qd` is a **minimum**. Open gating RFIs → `provisional [RFI-…]`. The MS synthetic-100-psi freeze and the campus 750@40 freeze are the anti-patterns.
 6. **Company fence + upstream order.** Wet/dry/DI only. Density → hydrant → pump. Consume; do not rebuild.
 7. **Driver block = pins, most-stringent per row.** Fuel tank: larger of enforced NFPA 20 edition (12 h + TIA / 1 gal/hp) and FM 8 h. OCPD sum by the AHJ NEC year. Jockey window inside the component rating. Packing by default. VT on static lift. No invented kernel op; no frozen SKU.
-8. **Duty, not a catalog number (§19).** The teaching rated duty to keep is **1000@40** (1,000 gpm at 40 psi). Screen it. Do not freeze a maker or a model.
 
 ---
 
@@ -676,14 +682,36 @@ Shop codebook **by title** (not a required filesystem path). Prefer these sectio
 | System-family election (wet/dry/DI) | `suppression-technology-selection` |
 | Density × area `qd` / gallons | `density-area-dry-increase` (**consume** `qd_gpm`; label density-method **minimum**) |
 | Dual-carrier per-parameter BOD / controlling pump rows | `most-stringent-basis-matrix` (**consume** controlling pump rows; do not blend caps here) |
-| Assignment packet | the input packet |
+| Assignment packet | `dc-fp-assignment-packet` |
 | Hydrant / municipal supply curve / pump need verdict | `hydrant-supply-curve` (**mandatory** need verdict + suction handoff) |
 | Looped-main / one-leg-out diameter | looped-main recipe (`hw` = one segment) |
 | Node-by-node BOR psi, pipe schedule | hydraulic-tree Skill |
 | VSPLC / zone pressure envelope | *Variable-speed pressure-limiting pumps and the zone pressure envelope* |
-| Combustion air / louver | `combustion-air-and-hall-free-area` / `calcs/fp` `louver` |
+| Combustion air / louver | `combustion-air-and-hall-free-area` / `_calc` `louver` |
 | Shop curve, CAD, pump-room architecture, test-header (→ `itm-design-for-testability`), fuel-tank construction details / containment drawings | other recipes / specs / ITM as applicable (fuel-tank **sizing rule** is §7A.1 here) |
-| Writing outside the caller-named path | forbidden |
+| Writing into `KNOWLEDGE_BASE`, `EXERCISES`, `_pruner`, `_surveyor`, `_engineer`, `ARCHIVE` | forbidden |
+
+---
+
+## 17. Runner checklist
+
+- [ ] Hydrant **pump-needed** consumed (or parent closed proof cited). Density alone not used as pump permission. Suction/static from hydrant handoff.
+- [ ] Packet consumed (not rebuilt). Occupancy not reclassified. Density×area not rerun; `qd_gpm` consumed and labeled **density-method minimum**. Wet **750** / dry/DI **950** when those FM HC-2 minima apply — **not** “wet/SI 750”.
+- [ ] Company fence: elected wet/dry/DI only. SI/NI-as-BOD / foam / mist → stopped with `RFI-variance`.
+- [ ] Matrix pump-parameter pins closed (or inherited). Dual-carrier conflict → stopped / handed to matrix.
+- [ ] Editions pinned: NFPA 20-2025 (delta) + AHJ pin; NFPA 13-2025 demand context; FM DS 3-7 Apr-2012/Oct-2021 (IR Apr-2025 `[V]` re-pin) and/or AXA XL PRC.14.2.1 2021; owner posture.
+- [ ] Gating-RFI gate done **before** any schedule sentence. Open → envelope + `provisional [RFI-…]`; **no `FP-1 = Q @ P`**.
+- [ ] `pr_psi` treated as **input**. Not invented from 100/125/150 or a shop curve. Not frozen while BOR is open.
+- [ ] 3-layer union **per parameter** (flow cap, listed flow, rated net, churn, 150% floor, ceiling, N+1, driver). Kernel `fm_flow_cap` / `nfpa_flow_cap` **overridden** to the controlling cap (AXA 1.20; FM-multiple 1.10; FM-single 1.40; NFPA 1.50). Not left at defaults out of habit.
+- [ ] JSON written at **caller path**; `python3 calcs/fp/run.py <that.json>` run; **full stdout pasted**; `TRANSCRIPT_OK`; exit 0. QA can re-run the same file.
+- [ ] Independent verify: `min_qr_fm = qd/fm_cap`, `min_qr_nfpa = qd/1.5`, `qd_over_qr` vs caps, `churn_net_* = frac × pr`, `churn_system_* = net + suction` vs 175, interpolation formula **only** in 100–150% band. Kernel wins.
+- [ ] Output labeled **listed envelope (churn / 100% / 150%)**, not a shop curve. Interpolation note pasted.
+- [ ] N+1 / driver mix printed as **flags**, not as kernel keys.
+- [ ] Driver block (§7A) printed as pins: fuel tank (enforced NFPA 20 edition vs FM 8 h, larger governs; consumption not supply rate); NEC-year OCPD sum + 240.6 + 430.62 cap + no GFPE; acceptance SF amps; jockey leakage bracket + FM §2.4.11.6 cascade checked against 175 psi; seal (packing default); VS relief; VT vs HSC. OEM values confirm at submittal.
+- [ ] Deltas printed vs NFPA 20-2025 (pump) and NFPA 13-2025 (demand context).
+- [ ] Status register present: `grounded` / `provisional` / `unresolved` / `comparison-only` / `handoff` / `RFI-variance` + `[SYN]` / `[V]` / `provisional [RFI-…]`.
+- [ ] Negative teaching remembered: do **not** copy the MS synthetic-100-psi freeze or the campus 750@40 freeze.
+- [ ] No codebook / EXERCISES / agent-worktree writes. No CAD / louver / looped-main / occupancy / hydrant rebuild.
 
 ---
 
@@ -694,61 +722,39 @@ Shop codebook **by title** (not a required filesystem path). Prefer these sectio
 - **DS 5-20** *Electrical Testing* IR Oct 2025 is the 2-81 **ATS test** target — ITM Skill, not envelope sizing.
 - **DS 5-23** is facility gensets, not the listed fire-pump envelope.
 
----
+## Duty-not-SKU pin — Lead18 B16-R3, 2026-10-27
+- Write rated duty + NFPA 20-2025 envelope (§4.8.1; churn §4.7.7.1). Never freeze a maker/model; contractor picks the listed unit.
+- Teaching duty **KEEP 1,000 gpm @ 40 psi** (city+pump 96.67 vs 47.92, +48.75 on the capped design curve). Motor ≥ 40 hp class ASSUMED, per listed curve.
+- Optional alternate **C 1,250 @ 40** (city+pump 100.72, PASS) = alternate duty criteria note only; no auto restamp. If a live job elects it: re-check NFPA 20 / NEC 695 feeder and test header. Option with 8.6 psi churn margin to 175 psi = least preferred. Verify with the engineer of record.
 
-## 19. Rated duty, not a catalog number — 1000@40
+## 2026-10-28 update — prior fold Lead24: diesel derate + §4.20.1.2 relief + B22R2-NEG-1 (worked-only, SYNTHETIC)
+Source: EXERCISES/worked/batch22-r2__diesel-fp-derate-relief-screen.md (_calc exit 0). Synthetic 4,500 ft / 104 °F, 1,500 gpm diesel, max BHP 140.
+- **Derate:** NFPA 20-2022/2025 §11.2.2.4 (3 %/1,000 ft above 300 ft) + §11.2.2.5 (1 %/10 °F above 77 °F; A.11.2.2.5 include room temp rise). 3×4.2 = 12.6 % + 1×2.7 = 2.7 % → 15.3 %, factor 0.847 → engine ≥ **165.3 hp** 4-h (140/0.847 = 165.29). 150 hp FAIL (127.05); 175 hp PASS (148.2). Additive combination = Lead practice, code silent → Verify with the engineer of record; continuous vs stepwise (162.8 hp). Verify with the engineer of record. §11.2.2.2 10 % listing margin is not a designer derate — don't stack. Schedule: "≥ 165.3 hp after §11.2.2.4/.5 derate", no SKU.
+- **Diesel relief NFPA 20-2025 §4.20.1.2:** 121 % × churn + max static vs 175 psi (NFPA 13 §7.1.2 rating). Option A 1.21×125+40 = **191.25 > 175 → MRV required** (size per §4.20.2.1). Option B 1.21×110+40 = 173.1 PASS only if max static ≤ **41.9 psi** (50 psi → 183.1 FAIL). Purveyor max-static letter needed.
+- **B22R2-NEG-1:** using electric §4.7.7.1 (125+40 = 165 ≤ 175 "OK") falsely clears diesel — misses ~110 % overspeed (pressure ∝ speed² ≈ 1.21).
+- Not restamped into the site (electric). C = 1,250@40 alt note and 1,000@40 duty unchanged.
 
-Write the rated duty and the NFPA 20-2025 envelope (§4.8.1; churn §4.7.7.1). The contractor selects the listed unit. This skill does not freeze a maker or a model, and it does not write `FP-1 = Q @ P` while a gating input is still open.
+## 2026-10-29 PDT — prior fold Lead25: B23R2-NEG-1 (electric relief rule falsely clears diesel)
+Source: `EXERCISES/worked/batch23-r2__diesel-fp-controller-config-supervision.md` (`_calc` exit 0). Synthetic 1,000 gpm / 110 psi net diesel, shutoff 130.
+- Derate: 110 hp nameplate × 0.977 → 107.47 hp ≥ 95 bhp → PASS (NFPA 20-2025 §11.2.2.4/.5/.7).
+- Diesel relief screen is NFPA 20-2025 §4.20.1.2 (121 % overspeed shutoff basis): static 55 → 212.3 psi; static 40 → 197.3 psi; both > 175 → **MRV required**.
+- **B23R2-NEG-1:** at static 40 the electric §4.7.7.1 churn screen gives 170 ≤ 175 and looks "compliant". That is a false clear for diesel, because the electric rule leaves out the 121 % overspeed term. Always screen diesel on §4.20.1.2. (Extends B22R2-NEG-1.) Static suction = purveyor letter (ASSUMED until held).
 
-Teaching duty to **keep**: **1000@40**, meaning **1,000 gpm @ 40 psi**. On the capped design curve from `hydrant-supply-curve`, municipal supply plus that duty is 96.67 psi against 47.92 psi, margin +48.75 psi. Motor horsepower at or above the 40 hp class stays ASSUMED until the listed curve is in hand.
+## Canada diesel pump house (AB/BC/ON) — B26-R2 / Lead28 fold, 2026-10-29
 
-An alternate duty of 1,250 gpm at 40 psi (municipal supply plus pump 100.72 psi, still a pass) is an alternate criteria note only. Do not restamp the basis to it automatically. If the owner elects it, re-check the NFPA 20 feeder rules, NEC 695, and the test header. A third option whose churn margin to 175 psi is only 8.6 psi is the least preferred. Verify with the engineer of record before any of the three leaves the screen. The 1,000 gpm at 40 psi duty and the 1,250 gpm at 40 psi note are unchanged by the diesel example below.
+Canada unlocked; pin NFPA 20 per that code's Table 1.3.1.2 (**2016** BC/AB/ON-OBC; **2019** NBC 2025 model) — never cite 2019/2025 §§ on an AB/BC job. Teaching case is SYNTHETIC (the province DI campus; 1,000 gpm @ 100 psi diesel; suction 60 psi, 125 hp ASSUMED).
 
-## 20. Diesel derate and main relief (synthetic)
-
-Synthetic high-desert example only. Do not attach it to a city or a job. Do not reuse the horsepower. Inputs: 4,500 ft, 104 °F ambient, 1,500 gpm diesel, maximum brake horsepower 140. Cite the enforced NFPA 20 edition. An unamended 2024 I-Code floor is NFPA 20-2022 until adoption is verified. The delta print is NFPA 20-2022/2025.
-
-Derate [CODE §11.2.2.4, §11.2.2.5]: 3 percent per 1,000 ft above 300 ft, and 1 percent per 10 °F above 77 °F. Include pump-room temperature rise (A.11.2.2.5). Here, 3 × 4.2 = 12.6 percent and 2.7 percent, summed to 15.3 percent, factor 0.847. Adding the two deductions is shop practice. The code states each deduction separately. Verify the sum with the engineer of record. Prefer a continuous (prorated) deduction. Whole-step rounding on this example moves the floor to about 162.8 hp. That election is for the engineer of record.
-
-After the deduction, the 4-hour rating must cover the brake horsepower [CODE §11.2.2.7]. Floor = 140 / 0.847 = **165.3 hp**. A 150 hp engine derates to 127.05 hp and fails. A 175 hp engine derates to 148.2 hp and passes. Schedule the engine as at least 165.3 hp, 4-hour, after the §11.2.2.4 and §11.2.2.5 derate. Do not name a manufacturer or a model. The §11.2.2.2 ten percent listing margin is not a designer derate. Do not stack it.
-
-Diesel main relief is NFPA 20-2025 §4.20.1.2, not the electric overpressure screen. Compare 121 percent of net rated shutoff (churn) plus maximum static suction with the component rating (175 psi where NFPA 13 §7.1.2 is the rating in hand). Option A: 1.21 × 125 psi + 40 psi = **191.25 psi**, which is above 175 psi, so a main relief valve is required. Size it per §4.20.2.1. Option B: 1.21 × 110 + 40 = 173.1 psi, which passes only if maximum static stays at or below **41.9 psi** (a purveyor letter). At 50 psi static the same churn is 183.1 psi and fails.
-
-Do not clear a diesel with electric §4.7.7.1. On option A, 125 + 40 = 165 psi, which is at or under 175 psi and looks acceptable, and it is the wrong test. A diesel governor can overspeed. Pressure scales about with the square of speed, about 1.21 at 110 percent speed. §4.20.1.2 is the diesel test.
-
-## 21. Second diesel screen — the electric churn rule still falsely clears
-
-Synthetic. Do not attach it to a job, and do not reuse the horsepower. Rated duty 1,000 gpm at 110 psi net. Shutoff (churn) 130 psi.
-
-A derate factor of 0.977 is already applied on this screen [CODE NFPA 20-2025 §11.2.2.4, §11.2.2.5, §11.2.2.7]. Nameplate 110 hp × 0.977 = **107.47 hp**, which covers 95 bhp, so the engine passes. State the altitude and the pump-room temperature that produced 0.977 before the factor is reused. Do not copy 0.977 onto another site.
-
-Diesel relief stays on §4.20.1.2, 121 percent of shutoff plus maximum static suction, against 175 psi where that is the component rating in hand:
-
-- Static 55 psi: 1.21 × 130 + 55 = **212.3 psi**. Main relief is required.
-- Static 40 psi: 1.21 × 130 + 40 = **197.3 psi**. Main relief is required.
-
-Static suction is a purveyor letter. It stays ASSUMED until that letter is in hand.
-
-Wrong clear, same 40 psi static: the electric screen in §4.7.7.1 is 130 + 40 = 170 psi, which is at or under 175 psi and looks acceptable. It leaves out the 121 percent overspeed term. Do not clear a diesel on that arithmetic. The 1,000 gpm at 40 psi teaching duty and the 1,250 gpm at 40 psi alternate note in §19 are unchanged.
+- **Fuel:** NFPA 20-2016 §11.4.1.3.1 (1 gal/hp + 5% + 5%) → 125 × 1.05 × 1.05 ≈ 137.8 gal ≈ **522 L** (ASSUMED hp; mfr curve governs).
+- **NFC Part 4 room fork:** NFC(AE) 2023 4.3.13.1.(1)(b) allows indoor fire-pump fuel; 4.3.13.4.(1) routes to a **4.3.14 room** except per 4.2.8. **Branch F2 (industrial):** 4.2.8.2.(1)(b) incidental ≤5 000 L Class IB–IIIA **per fire compartment, summing all tanks** (generator day tanks too). **Branch Group D:** 4.2.8 N/A → dedicated 4.3.14 room: ≥2 h separation, contain ≥100% largest tank, liquid-tight joint, no other use. Room cannot close until AHJ/architect pins F2 vs D. Static head ≤**70 kPa** (NFC(AE) 2023 4.3.13.3 — confirmed). Heat ≥40 °F (NFPA 20-2016 §4.13.3.1; FM DS 3-7); winter-grade diesel, no biodiesel (FM DS 3-7 §2.4.21).
+- **Churn NEG (B26R2-NEG-3, STANDS):** 60 psi ASSUMED suction + 120 psi net churn = **180 > 175 psi** ceiling → FAIL. Fix path: lower Pr / flatter curve / NFPA 20-2016 pressure control (section pin [verify]); do not freeze Pr or relief; replace ASSUMED suction with the province flow test.
+- Other NEGs: **NEG-1** Group D with tank in pump room (4.2.8 is industrial-only) → 4.3.14 room; **NEG-2** F2 count of only the FP tank → sum compartment; **NEG-4** summer diesel/biodiesel.
+- **NEG-CA (prior fold Lead31, GAP-B29R1-2 — supersedes the prior "Open (no invent)" line):** NEG-CA-1 inventing a ULC 2 h assembly number; NEG-CA-2 inventing CSA B139 piping text; NEG-CA-3 inventing an NFPA 20-2016 pressure-control § number not pinned; NEG-CA-4 citing NFPA 20-2019/2025 §§ on an AB/BC 2016 pin. Each → NEEDS HOLD. Still open: ASSUMED suction/hp.
 
 
-## Canada diesel pump house
+## 2026-11-03 — prior fold Lead31: GAP-B29R1-2 NEG-CA list
+Canada diesel pump-house "Open (no invent)" upgraded to NEG-CA-1..4. B26R2-NEG-3 churn and NEG-1/2/4 unchanged.
 
-Country gate (US | Canada). Pin NFPA 20 from `most-stringent-basis-matrix` §4.2b: 2016 on BCBC 2024, NBC 2023 AE, and OBC 2024; 2019 on the NBC 2025 model. Do not cite 2019 or 2025 section numbers as the code floor on a 2016 job. The screen below is synthetic. Do not attach it to a city or a job.
-
-Fuel, NFPA 20-2016 §11.4.1.3.1, one gallon per horsepower plus 5 percent plus 5 percent. At an ASSUMED 125 hp: 125 × 1.05 × 1.05 = 137.8 gal (about 522 L). The maker fuel curve governs. Do not freeze the horsepower.
-
-NFC 2023 AE room fork, short paraphrase. 4.3.13.1.(1)(b) allows indoor fire-pump fuel. 4.3.13.4.(1) routes that fuel to a 4.3.14 room except as 4.2.8 allows. An industrial occupancy may use 4.2.8.2.(1)(b): incidental storage at or below 5 000 L of Class IB to IIIA, per fire compartment, summing every tank in that compartment, including generator day tanks. A Group D occupancy does not use 4.2.8, so the tank needs the dedicated 4.3.14 room: at least a 2 h separation, containment of at least 100 percent of the largest tank, a liquid-tight joint, and no other use. Do not close the room until the occupancy is pinned. Static head is at or below 70 kPa [NFC 2023 AE 4.3.13.3]. Heat is at least 40 °F [NFPA 20-2016 §4.13.3.1; FM DS 3-7]. Winter-grade diesel, no biodiesel [FM DS 3-7 §2.4.21]. The ULC assembly number for the 2 h separation is not held. Do not invent it.
-
-Churn screen, ASSUMED suction 60 psi plus 120 psi net churn = 180 psi, which is over the 175 psi ceiling, so it fails. Fix by lowering rated pressure, a flatter curve, or the NFPA 20-2016 pressure-control path. That section number is [verify]. Do not freeze rated pressure or the relief setting. Replace the ASSUMED suction with the site flow test.
-
-Wrong moves: a Group D tank left in the pump room; an industrial compartment counted as the fire-pump tank only; summer-grade diesel or biodiesel.
-
-Stop-class mis-cites on a Canada pump house. Each is NEEDS HOLD:
-
-- NEG-CA-1: inventing a ULC 2 h assembly number.
-- NEG-CA-2: inventing CSA B139 piping text.
-- NEG-CA-3: inventing an NFPA 20-2016 pressure-control section number that is not pinned.
-- NEG-CA-4: citing NFPA 20-2019 or NFPA 20-2025 section numbers as the code floor on a 2016 pin.
-
-Suction and horsepower on the screen above stay ASSUMED until the site letter and the maker curve are in hand.
+## 2026-11-04 — stop-vocab normalize (staged)
+- Inserted §1.0 Country/edition gate (model A) + NEG-CA before §1.
+- `9. If the caller asks to **skip** hydrant and freeze a pump nameplate …` → `9. If the caller asks to **skip** hydrant and freeze a pump nameplate from density-area al…`
+- Kept hard (method guardrails, not blank-gates): hydrant Adequate/no-pump → Stop; open gating RFIs + freeze FP-1 = Q@P → Stop (envelope still runs).
