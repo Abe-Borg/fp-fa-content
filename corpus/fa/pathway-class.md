@@ -16,7 +16,7 @@ Integrity exemptions changed. In 2022, a shunt, a notification circuit in the sa
 
 NFPA 72-2022 §12.3.6(1) describes Class N as two or more pathways, with a one-device exception that allows a single pathway. NFPA 72-2025 §12.3.6(1) ties the redundant path to two or more endpoint devices, and §12.3.6(2) allows a single path when only one endpoint is connected. Whether a lone remote amplifier needs the redundant path on 2022 and not on 2025 is not settled. The annex was not compared. Design practice provides the redundant path on both editions until the engineer of record rules otherwise.
 
-The shared-segment item number also moved: 2022 §12.3.6(5), 2025 §12.3.6(7).
+The shared-segment item number also moved: 2022 §12.3.6(5), 2025 §12.3.6(7). The 2025 wording is a delta note, not a full-body pull. A single open, ground, short, or combination of those faults on one Class N pathway does not affect another pathway (NFPA 72-2025 §12.3.6(5)). The pathway skill also cites 2022 §12.3.6(3) for that single-fault duty. Another reading says 2022 has no such item. Keep the cited number and verify with the engineer of record before relabeling. Annex A.12.3.6 is not held. Do not paraphrase it. Item (1), one endpoint versus two or more, differs by edition and stays open. Provide the redundant path on both editions until that scope is closed. Between buildings, separate conduit and separate switches are [ASSUMED]. CAN/ULC-S524 is NEEDS HOLD.
 
 No numeric device cap on one signaling-line fault was in the Chapter 12 pull. Isolators remain a design-practice layout.
 

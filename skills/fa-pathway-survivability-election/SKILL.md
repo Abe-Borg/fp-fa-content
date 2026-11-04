@@ -86,3 +86,16 @@ Edition pin; allowed Levels table; elected Level with [CODE]/[PRACTICE] labels; 
 Set evacuation strategy, then the fire-resistance rating, then the level, one building at a time. Pin the edition first. Do not cite Level 4 on a 2019 job. On 2022 and 2025, total evacuation with no relocation and no partial evacuation may use Level 0, 1, 2, 3, or 4 [CODE §24.3.14.4.1]. Level 1 on a sprinklered total-evacuation building is a [PRACTICE] pick; Level 0 is also permitted. Relocation or partial evacuation at 2 h uses Level 2 or Level 3, or §24.3.14.4.6 [CODE §24.3.14.4.3]. At 1 h and under 2 h, Level 4 or §24.3.14.4.6 [CODE §24.3.14.4.4]. Firefighter telephone circuits in 2 h construction use Level 2 or Level 3 [CODE §24.3.14.8]. Reject Level 0 on a relocation building. Reject Level 1 on those telephone circuits. Do not copy the picks as a live design.
 
 Campus, NFPA 72-2025: a relocation or partial-evacuation building at 2 h elects Level 2 [CODE §24.3.14.4.3]. A building and the connecting link at 1 h and under 2 h elect Level 4, or the §24.3.14.4.6 alternate [CODE §24.3.14.4.4]. Pin 2025 before that election. A modeled speech score stays [ASSUMED]. Field intelligibility verification stays. Annex D quantitative measurement only when the AHJ or the project basis elects it. Campus sync uses the hot-standby master in `fa-nac-voltage-drop-check` [PRACTICE]. Never tag that backup as [CODE]. On a Canada job, stop. Do not invent a Canada pathway or voice rule. Verify with the engineer of record.
+
+## Class N campus paths by edition
+
+Pin NFPA 72 before citing §12.3.6. Do not mix item numbers across editions.
+
+- Shared segment: 2022 §12.3.6(5); 2025 §12.3.6(7) [CODE]. The 2025 shared-segment sentence is from a delta note, not a full 2025 body pull. Keep that [PARA] on the wording. The item number itself is the pin.
+- Single-fault isolation: 2025 §12.3.6(5) [CODE]. The live map also cites 2022 §12.3.6(3). Another reading says 2022 has no single-fault item. Keep the live cite. Do not relabel either edition until both bodies are checked side by side. Verify with the engineer of record.
+- Redundant path: 2022 item (1); 2025 items (1) and (3). Single-endpoint exception: 2022 item (1) exception; 2025 item (2). That map is [PARA].
+- Two or more remote amplifiers: dual path on separate physical segments. Cite (5) on 2022, and (7) plus (5) on 2025.
+- One remote amplifier: item (1) scope differs by edition. That hold stays open. Default: provide the redundant path on both editions [PRACTICE]. Do not close it from annex silence.
+- Between buildings, run the primary and redundant paths in separate conduit and on separate switches [ASSUMED].
+- Annex A.12.3.6 is not held. Do not quote it and do not paraphrase it.
+- Canada: stop. CAN/ULC-S524 is NEEDS HOLD. Do not invent a pathway rule. Foam and clean agent stay locked.

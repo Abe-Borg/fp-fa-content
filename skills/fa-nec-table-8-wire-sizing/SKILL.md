@@ -69,4 +69,16 @@ description: >-
 Input table with ASSUMED flags; stranding/coating/temp basis; Table 8 R1 and R2 used; per-gauge ohm/kft and max-length (or R_circuit) table; elected gauge; handoff note to NAC or speaker skill; NEC edition cited (2020 held 70-08; 2023 held 70-03; 2026 Table 8 NEEDS HOLD).
 
 ## Sources
-KB: 60_power-battery-and-voltage-drop/nac-voltage-drop-calculations.md (Table 8 section). Filed LiNK: held notes/held-nfpa-link-70-03-nec-ch9-table8-2023-2026-10-15.md; 70-08 (2020 Table 8). Adoption [PARA]: held notes/the site-dallas-nec-2026-local-status-2026-11-04.md (Chunk 19). Method only: EXERCISES/worked/fixture-02-nac-voltage-drop.md, _calc/ex02_nac_vdrop.py (do not copy its synthetic numbers). Companion skills: fa-nac-voltage-drop-check, fa-speaker-circuit-loss-check, fa-code-edition-delta-check. (Paths under held training corpus unless absolute.)
+The ohm table above is the held NEC 2023 screen. NEC 2020 matches it for 18 to 10 AWG uncoated copper. NEC 2026 Table 8 is NEEDS HOLD. Do not copy a local adoption note or a source-archive path into the calc.
+
+## Campus feeder and the 2026 gate
+
+Pin the NEC edition at intake. It is not the NFPA 72 edition.
+
+- NEC 2023: the Table 8 ohms above are [CODE] for that edition. A campus feeder uses Vd = 2 x one-way length (ft) x ohm/kft / 1000 x I. Pick the smallest gauge that meets the allowed drop, or add a booster. The voltage budget stays [ASSUMED] until the panel and the appliance data are pinned.
+- Teaching screen, NEC 2023 ohms only, not a hall design: 14 AWG, 300 ft one way, 0.8 A, is 1.507 V. 12 AWG, 800 ft one way, 1.5 A, is 4.752 V and fails a 3.6 V assumed budget (20.4 V down to 16.8 V). 10 AWG on that run is 2.976 V and passes. Re-derive on the job.
+- NEC 2026: do not invent Table 8 ohms and do not label the 2023 ohms as 2026 code. If the job must move, the 2023 ohms are an [ASSUMED] screen and the hold stays on the output. Any other unheld edition is NEEDS HOLD.
+- Article 760.41(B), where NEC 2026 is adopted: the fire alarm branch circuit is not part of a multiwire branch circuit and is not supplied through a ground-fault or arc-fault interrupter [CODE].
+- NEC 2023 Article 760.41(B): the held text bars ground-fault and arc-fault interrupters only. It does not state the multiwire bar [PARA]. Do not cite a multiwire ban as 2023 code.
+- Canada: stop. CEC Section 32 is NEEDS HOLD. Do not invent Canadian ohms or wiring rules.
+- Failures: inventing 2026 Table 8 ohms; labeling 2023 ohms as 2026 code; designing foam or clean agent from this skill.

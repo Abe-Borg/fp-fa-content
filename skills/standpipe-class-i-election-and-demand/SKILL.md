@@ -554,7 +554,7 @@ Churn 82 + 91 = 173 ≤ 175 → no PRD trigger at 2½ in outlets (14-2019 §7.2.
 ### Pins to apply on every US Class I demand run
 1. **Hose-valve loss:** use the **current maker envelope 4.0 psi @250 gpm** (prior fold/Lead30 elected; prior fold R3 AFS hygiene leaves 4.0 unchanged). Do **not** fall back to NFPA 14 Table 11.3.1.3 when current maker data is held. Class III listing caveat on Giacomini stands — confirm Class I before submittal.
 2. **ASSUMED device-stack** (DCDA / check / alarm / similar): label **ASSUMED** and **Verify with the engineer of record**. Thin margins under an ASSUMED stack are not live-job PASS without maker losses. Verify with the engineer of record (GAP-B30R4-1).
-3. **Greater-of, not sum:** combined system demand = greater of sprinkler(+hose) **or** standpipe — **not** the sum (NFPA 14-2024 §10.6.1.3.1; 2019 counterpart per crosswalk). If sprinkler(+hose) > standpipe flow, re-run feed/riser loss at that flow (GAP-B30R4-2 OPEN — B30R4-NEG-5).
+3. **Greater-of, not sum:** combined system demand = greater of sprinkler(+hose) **or** standpipe — **not** the sum. Cite the edition in force: NFPA 14-2019 §7.10.1.3.1.1 and §7.10.1.3.1.2, or NFPA 14-2024 §10.6.1.3.1. The crosswalk between those sections is not held (GAP-B31R1-1). If sprinkler(+hose) > standpipe flow, re-run feed/riser loss at that flow. The greater-of re-check itself is closed. Summing the two demands stays a failure (B30R4-NEG-5).
 4. **NEG — AFS indicative as design (B30R4-NEG-4):** AFS NYC graph ≈2.5 psi @250 is **indicative only** (graph-read, not tabulated). Using 2.5 as design inflates margin falsely. Keep 4.0 envelope.
 5. **NEG — PRV / restricting at remote when static <175 + thin margin (B30R4-NEG-3):** remote 2½ in outlet must be full-open / non-restricting when static ≤175 and margin is thin; a PRV/restricting setting adds loss beyond 4.0 and fails 100 psi residual. Carry listed set-position loss only when a PRV is actually required.
 6. **Sch 40 IDs via `_calc`:** use Schedule 40 IDs (6 in → **6.065**, 8 in → **7.981**) through `_calc/run.py` `hw`. Do **not** hand Sch-10 IDs (e.g. 6.357) on standpipe riser/feed takeoffs for this teaching stack (B30R4-NEG-1 root cause with omitted valve loss).
@@ -568,7 +568,7 @@ Churn 82 + 91 = 173 ≤ 175 → no PRD trigger at 2½ in outlets (14-2019 §7.2.
 - **B30R4-NEG-CA** — Canada invent wall (OBC / CSA B139 / ULC S524–S561); model A gate — US NFPA 14 numbers above are US basis only.
 
 ### Open GAPs (do not invent close)
-GAP-B30R4-1 device-stack maker @750; GAP-B30R4-2 greater-of re-check at sprinkler flow; GAP-B30R4-3 narrowed by DT R5. Crosswalk row 20 PART / row 35 RENDER unchanged. Potter-Roemer 4085 curve still procurement.
+GAP-B30R4-1 device-stack maker @750; GAP-B30R4-2 greater-of re-check is closed; GAP-B30R4-3 narrowed. The 2019-to-2024 crosswalk for the greater-of sections is not held (GAP-B31R1-1). The FM rated-cap check stays open (GAP-B31R1-2). Potter-Roemer 4085 curve still procurement.
 
 Supersedes B23/B25 **3.0 ASSUMED** teaching loss for **new** US runs (prior fold 4.0 envelope already elected); B23/B25 historical margins stay as dated sensitivity only.
 
@@ -577,3 +577,18 @@ Supersedes B23/B25 **3.0 ASSUMED** teaching loss for **new** US runs (prior fold
 - `sealed gpm / simultaneous-demand / residual-mechanism section pins → *…` → `sealed gpm / simultaneous-demand / residual-mechanism section pins → stated `ASSUMED` valu…`
 - Inserted §1.0 Country/edition gate (model A) + NEG-CA before §1 (Canada section unchanged).
 - Kept hard: Class II/III → Stop/RFI unless written force (company/owner fence, not a missing-input stop); 'output path unnamed → return in response' (not a design stop).
+
+## Greater-of demand and FM rated cap
+
+Synthetic teaching only. Re-derive every gpm and psi on the job. Do not copy a hall. Do not apply these NFPA 14 numbers as a Canada basis. Do not invent OBC, CAN/ULC-S561, or CSA body text.
+
+1. **Greater-of, not sum.** Combined demand is the greater of sprinkler demand (including hose) or standpipe demand. On a 2019 pin cite NFPA 14-2019 §7.10.1.3.1.1 and §7.10.1.3.1.2. On a 2024 pin cite NFPA 14-2024 §10.6.1.3.1. Do not cross-quote the section numbers. The crosswalk row is not held.
+2. **Supply at the governing flow.** When sprinkler demand (including hose) is larger, re-run feed, riser, and supply loss at that flow. Show the arithmetic.
+3. **Remote outlet at its own flow.** The most remote 2-1/2 in. outlet still has to make its residual at the standpipe flow. A pass at the sprinkler point does not waive that check.
+4. **FM rated cap, when that sheet applies.** Single pump: rated flow at least demand divided by 1.4 (FM DS 3-7 §2.4.6.4). Multiple pumps: the 1.10 factor in §2.4.6.5. An NFPA 150 percent pass with an FM fail stays open. Carry the next listed size as ASSUMED. Verify with the engineer of record. Do not resize silently. Hand the envelope to `pump-envelope`.
+
+Teaching point [SYN], a two-story double-interlock hall on an NFPA 14-2019 pin: sprinkler plus hose at 1,055.9 gpm governs over a 750 gpm standpipe. The sprinkler point passes. The remote standpipe check at 750 gpm is a thin pass on an ASSUMED 8.0 psi device stack. Verify with the engineer of record. A graph-read near 3.2 psi is indicative only. Do not use it as the design loss to widen that margin. Where FM applies, 750 gpm rated needs at least 754.2 gpm (1,055.9 / 1.4) and fails. Next listed size 1,000 gpm is ASSUMED if FM governs. Do not freeze a model number.
+
+Failures: summing sprinkler and standpipe demand; checking supply only at the standpipe flow when sprinkler demand governs; dropping the remote-outlet check because the sprinkler point passed; calling a pass on the NFPA cap alone when FM applies and rated flow is under demand / 1.4; promoting the graph-read stack to design.
+
+Open: the 2019-to-2024 crosswalk for these sections; the FM rated-cap size; the device-stack maker loss at the governing flow. Foam and clean agent stay locked.

@@ -12,6 +12,8 @@ Double-interlock means two events: detection, and loss of sprinkler-system press
 
 Stacking a pneumatic-actuator band near 30 psi on an electric/electric low-air switch near 7 to 15 psi is a failed election, not a field adjustment. Pick one opened sheet and use that sheet's band. Graph or table values that scale with water pressure are read from the printed graph, not from a remembered approximation.
 
+On a Reliable DDX-LP valve, low air is at least the low-pressure trip plus 2 psi plus 5 psi on a US NFPA 13-2025 job (§8.2.6.4), and high air stays at or below 30 psi. Bulletin 505 at 20, 30, and 50 psi maximum water sets minimum supervisory pressure at 8, 10, and 12 psi, with caps of 10, 14, and 16 psi. Factory low air of 18 psi is above every one of those caps and has to be lowered in the field. The 5 psi margin cannot be shown inside those caps, so that low-air number stays assumed. Verify with the engineer of record. The Potter PS25 pairing on the PrePaK is named in Reliable Bulletin 747 (November 2022). A full per-pressure switch table and the switch tolerance are still not held. Do not cite the 2025 section numbers on a Canada pin. The 2019 section numbers for the 5 psi margins are NEEDS HOLD.
+
 A manufacturer accelerator setting versus zone volume is not printed as a rule. A prior screen that used a low setting only under about 1,200 gallons is `[V]`. Confirm with the manufacturer's technical support. Do not copy it.
 
 Quick-opening-device trip time is still not water-delivery time. Hand the proof to `water-delivery-screen.md`.

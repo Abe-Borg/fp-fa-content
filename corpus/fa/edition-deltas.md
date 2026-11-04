@@ -24,3 +24,11 @@ There is no single 2022-to-2025 crosswalk. Compare the section, then name the ed
 Chapter roles in the 2025 book: 7 documentation, 10 fundamentals including power at §10.6, 11 cybersecurity, 12 pathways, 14 inspection and testing, 17 initiating devices, 18 notification, 21 emergency control functions, 23 protected premises including releasing at §23.11, 24 emergency communications, 26 supervising station.
 
 Battery factor, secondary hours, notification numbers, and the releasing sequence are in their own notes. Do not treat a moved section number as a new rule.
+
+## Class N item numbers
+
+Shared physical segment: NFPA 72-2022 §12.3.6(5); NFPA 72-2025 §12.3.6(7). A fault on one Class N pathway that must not affect another pathway is 2025 §12.3.6(5). The pathway skill cites 2022 §12.3.6(3) for that duty, and a conflicting reading says 2022 has no such item. Verify with the engineer of record before relabeling. Annex A.12.3.6 is not held. Item (1), one endpoint versus two or more, differs by edition. Provide the redundant path on both editions until that scope is closed.
+
+## NEC is a separate pin
+
+NFPA 72 edition and NEC edition are not the same pin. NEC 2023 Chapter 9 Table 8, stranded uncoated copper at 75°C, ohm per 1,000 ft: 14 AWG 3.14, 12 AWG 1.98, 10 AWG 1.24. NEC 2026 Table 8 is not held. Article 760.41(B) on NEC 2026, where adopted, also bars a multiwire branch circuit. The held 2023 text bars ground-fault and arc-fault interrupters and does not state the multiwire bar. CEC Section 32 is NEEDS HOLD.

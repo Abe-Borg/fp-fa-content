@@ -28,7 +28,9 @@ NFPA 4 §4.1.3 requires integrated testing of new or existing fire protection an
 
 The owner selects the integrated test team (§4.2.2 in the 2024 text). At a minimum the team is the integrated testing agent and the installation, testing, or maintenance personnel for each integrated system (§4.2.3).
 
-NFPA 4-2024 says a written plan is not required for a building with limited integrated systems, and that testing is still required when the plan is not. A hall with double-interlock preaction, elevators, smoke control, or energy storage is not a limited system. Expect a written plan.
+NFPA 4-2024 says a written plan is not required for a building with limited integrated systems, and that testing is still required when the plan is not (§4.5.3.1). A hall with double-interlock preaction, elevators, smoke control, or energy storage is not a limited system. Expect a written plan.
+
+A campus wet and double-interlock test still runs when the plan is not required. Waterflow alarms that building and the supervising station and starts voice in that building. It does not recall an elevator. Detection alone does not open a double-interlock valve. Low air alone is supervisory and does not release. Detection and low air together release. Generator-room detection shuts down room ventilation and does not close fuel. Loss of a supervising-station path is trouble. An energy-storage gas row is optional and only where that room exists. On a Canada job, CAN/ULC-S1001 is NEEDS HOLD. Do not invent those rows.
 
 After a change, NFPA 4-2024 §6.4.3 retests the changed functions plus 10 percent of unaffected inputs, up to 50 devices. FM DS 5-40 §2.2.7, September 2007, uses the same 100 percent of affected devices plus 10 percent, capped at 50, after a software change. Confirm that alarm sheet is still in force.
 

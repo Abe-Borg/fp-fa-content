@@ -77,3 +77,16 @@ The script rejects each of these.
 
 ## Output
 Duct detector schedule with basis per detector, fan stop matrix, relay distance check, door and lock table with pass or fail, C&E rows, open items, delta vs edition.
+
+## Generator-room ventilation
+
+This is the engine enclosure, not the diesel pump house. The pump-house rule above stays: a duct detector stops its own non-engine fan only.
+
+- Where mechanical ventilation of the engine enclosure is provided, it shuts down when fire detection in that enclosure activates [CODE NFPA 37-2024 §11.3.4, where that edition is adopted]. The 2021 section states the same shutdown.
+- Combustion air is not that output [ASSUMED]. Verify with the engineer of record.
+- Radiator air is not that output [ASSUMED]. Verify with the engineer of record.
+- Fuel stop on a life-safety generator is a separate output. Do not close fuel on detection. That fuel-stop decision stays open.
+- The §11.3.4.1 exception is not used by default [OWNER]. Verify with the engineer of record.
+- Do not treat fuel stop and ventilation shutdown as one point.
+- Campus integrated-test rows for this shutdown live in `fa-integrated-systems-test-matrix`.
+- Canada: stop. Do not invent a Canadian generator-room rule. Foam and clean agent stay locked.
