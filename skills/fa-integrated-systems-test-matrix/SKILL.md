@@ -66,8 +66,8 @@ Integrated testing is still required when a written plan is not required [CODE N
 - Generator-room detection: room ventilation shuts down [CODE NFPA 37-2024 §11.3.4, where adopted]. Fuel stays open. The interface is `fa-hvac-door-and-lock-interfaces`.
 - Supervising-station path loss: trouble at the station.
 - Energy-storage gas, optional and only where that room is on the campus. Detail is `fa-bess-gas-relay-map-and-cause-effect`.
-  - At or above 10 percent of LFL: start concentration reduction and send an alarm to the FACU [CODE NFPA 855-2023 §9.6.5.6.7(1) and (5)(b)].
-  - Above 25 percent of LFL: start mechanical exhaust if it is not already running [CODE §9.6.5.1.5.4(1)].
+  - Concentration-reduction path: when measured concentration reaches a start setpoint selected at no more than 10 percent of LFL, start concentration reduction and send an alarm to the FACU [CODE NFPA 855-2023 §9.6.5.6.7(1) and (5)(b)]. A reading of zero does not start. Exhaust-rate path: that early 10 percent start is [PRACTICE], not [CODE]. The code start on the rate path is the 25 percent row. Do not fail a rate-path test for lacking a code 10 percent start.
+  - When measured concentration exceeds 25 percent of LFL, start mechanical exhaust if it is not already running [CODE §9.6.5.1.5.4(1) on the exhaust-rate path].
   - Detector fault or power loss: trouble at the FACU [PRACTICE].
   - Maker response delay: use listed maker data [ASSUMED]. Do not invent a time.
 - Release only when both double-interlock conditions are present. Detection alone and low air alone never release.
