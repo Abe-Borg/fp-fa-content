@@ -29,6 +29,10 @@ Battery factor, secondary hours, notification numbers, and the releasing sequenc
 
 Shared physical segment: NFPA 72-2022 §12.3.6(5); NFPA 72-2025 §12.3.6(7). The 2025 §12.3.6 body is held. A fault on one Class N pathway that must not affect another pathway is 2025 §12.3.6(5). The pathway skill cites 2022 §12.3.6(3) for that duty, and a conflicting reading says 2022 has no such item. Verify with the engineer of record before relabeling. Annex A.12.3.6 is not held. Item (1), one endpoint versus two or more, differs by edition. Provide the redundant path on both editions until that scope is closed.
 
+## 2025 label hygiene
+
+Ground-fault detection conductors that need not be monitored are NFPA 72-2025 §12.6.8. Do not cite §12.6.9 for that duty. In 2025, §12.6.9 is computer and keyboard cabling. The 2022 20 ft enclosure exemption remains §12.6.9 on a 2022 job. Spot-smoke location on a 2025 job is §17.7.4.1.3 for a specific hazard, §17.7.4.2.1* for ceiling or sidewall within 12 in., and §17.7.4.2.2* for a listed raised-floor orientation. §17.7.3 in 2025 is sensitivity. Do not cite it for location. The 2019 air-sampling number §17.7.3.6 is a different cite and stays. NFPA 4-2024 §4.5.1(6) stays closed on a US job. Do not mark that matrix item unheld.
+
 ## NEC is a separate pin
 
 NFPA 72 edition and NEC edition are not the same pin. NEC 2023 Chapter 9 Table 8, stranded uncoated copper at 75°C, ohm per 1,000 ft: 14 AWG 3.14, 12 AWG 1.98, 10 AWG 1.24. NEC 2026 Table 8 is not held. Article 760.41(B) on NEC 2026, where adopted, also bars a multiwire branch circuit. The held 2023 text bars ground-fault and arc-fault interrupters and does not state the multiwire bar. CEC Section 32 is NEEDS HOLD. On a Canada job, stop voice, elevator recall, pathway survivability, NAC voltage drop, spot-smoke spacing, battery hours, and integrated testing until CAN/ULC-S524, CEC Section 32, CSA B44, NBC 3.2.6, or CAN/ULC-S1001 is held for that claim. Do not map NFPA 72 or NFPA 4 as Canada code. NFPA 4-2024 §4.5.1(6), the functional matrix of inputs and outputs, is held on a US job.

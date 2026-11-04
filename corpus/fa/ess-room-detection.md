@@ -18,7 +18,7 @@ NFPA 72 does not classify a gas signal. The distinct gas alarm is IFC §916.8, w
 
 The 10 percent threshold may be of the mixture or of the individual components (NFPA 855-2023 §9.6.5.6.7(1)). A sensor that reads one species and is set on a pure-gas scale can trip late. Hydrogen, methane, and ethylene lower flammable limits used as pure-gas references are NFPA 497-2024 Table 4.4.2: hydrogen 4 percent, methane 5 percent, ethylene 2.7 percent by volume. If the project basis lists a lower value, use the lower value. Do not relax a 10 percent energy-storage setpoint to a 25 percent process-gas setpoint.
 
-Multiple panels aggregate to a master or annunciator at a location the authority approves (NFPA 855-2023 §4.8.2.2). Alarm signals go to a supervising station (§4.8.4).
+Multiple panels aggregate to a master or annunciator at a location the authority approves (NFPA 855-2023 §4.8.2.2). Alarm signals from the detection system go to a supervising station (§4.8.4). Do not replace the §4.8.3 two-hour alarm period with the five-minute building-alarm period.
 
 ## Before the detector layout
 

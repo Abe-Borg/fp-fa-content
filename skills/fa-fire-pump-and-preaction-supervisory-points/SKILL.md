@@ -96,3 +96,5 @@ On double-interlock Type F, loss of air without detection is a supervisory signa
 On a Canada job do not cite NFPA 13-2025 §8.2.6.4 or §8.2.6.5 as Canada code. The 2019 section numbers for those margins are NEEDS HOLD. Do not invent them. Maker tables are data. Canada listing stays [verify].
 
 Do not place low air inside the retired band between trip-plus-2 and the table minimum. Do not set high air above 30 psi on a DDX-LP valve. The heat-trace and fire-department transmit rows above stay as written.
+
+Pump running may be supervisory or alarm [CODE NFPA 72-2025 §23.8.5.9.1]. Other pump signals are supervisory [CODE §23.8.5.9.2]. On a Canada job, do not map NFPA 72 or NFPA 20 rows as Canada code. Return NEEDS HOLD for CAN/ULC-S524, and for integrated testing return NEEDS HOLD for CAN/ULC-S1001. The NBC and provincial heat-trace rows already written above stay where they are marked [CODE]. Do not add new Canada rows. Do not invent clause text.

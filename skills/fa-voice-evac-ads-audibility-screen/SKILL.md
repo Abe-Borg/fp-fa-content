@@ -19,6 +19,9 @@ description: >-
 - [CODE] 18.4.4.1: public mode is the greater of 15 dB over average ambient or 5 dB over the max lasting 60 s or more.
 - [CODE] 18.4.1.2: 110 dBA max at minimum hearing distance. 18.4.1.1: over 105 dBA ambient, visual appliances required.
 - [CODE] 18.4.4.2: with AHJ approval, audible may be reduced or eliminated when visual meets 18.5.
+- [CODE] 18.4.1.5.6: document the design sound level for each coverage area for acceptance testing.
+- [CODE] 18.4.4.5.3*: relays, circuits, or interfaces that stop or reduce ambient noise meet Chapters 10, 12, 21, and 23.
+- [CODE] 18.4.12.2: each acoustically distinguishable space is marked as requiring intelligibility or not. 18.4.12.5: quantitative measurement is not required. 24.4.2.2.2* (2022 and 2025): the design designates those spaces in occupiable areas as Chapter 18 requires. The field pass value stays [OWNER]. Do not invent it. A modeled speech score is never a field pass.
 - [CODE] 18.3.7.2.1: speaker NAC electrical loss 1.0 dB max, include MIA (18.3.7.2.2). Run `fa-speaker-circuit-loss-check`.
 - [CODE] 10.19.1: amplifier failure gives trouble.
 - [CODE IBC 2021/2024 907.5.2.2]: where EVACS is code required, paging zones per that section. Where voice is owner choice, tag [OWNER].

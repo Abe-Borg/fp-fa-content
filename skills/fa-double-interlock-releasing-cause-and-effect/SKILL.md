@@ -60,3 +60,7 @@ FA side only. Valve, trim, air/N2, water delivery belong to FP (skills preaction
 
 ## Output
 Boolean, truth table, labeled C&E matrix (as the §7.4.9 / §7.5.5.2 SOO), releasing ITM rows for the ITM plan (18(4)/(8) where used, 18(6), 18(9); §14.2.6.4 secure and §14.2.6.6 restore [CODE] in 2019, 2022 and 2025; [CLOSED ]), FM flag block, ASSUMED list, FP handoff rows, delta vs NFPA 72-2025.
+
+## Disconnect and Canada gate
+
+The releasing unit is listed for releasing service, and the releasing devices are listed for use with it [CODE §23.11.1 and §23.11.2]. Each releasing device is monitored for integrity [CODE §23.11.3 to §23.11.4]. The disconnect is a physical switch [CODE §23.11.5.2, same duty in 2019, 2022, and 2025]. Software does not perform that disconnect. Operating the disconnect or a disable function is supervisory at the releasing unit [CODE §23.11.5.1]. On a Canada job, do not map these NFPA 72 rows as Canada code. CAN/ULC-S524 stays NEEDS HOLD. The owner double-interlock Boolean may still be stated as [OWNER]. It is not a Canada code row. Where the mapped detection leg uses the open 0.2 %/ft per port hold, carry the same ASSUMED flag as `fa-two-level-detection-stagger-and-fm-mapping`. Do not close that hold here. Wet, dry, and double-interlock only. Foam and clean agent stay locked.

@@ -2,7 +2,7 @@
 
 ## Spot-type smoke
 
-Support rooms (electrical, UPS, mechanical, office, raised floor) use NFPA 72 Chapter 17. Smooth-ceiling spacing is 30 ft nominal, and every ceiling point lies within 0.7 times the spacing (NFPA 72-2025 §17.7.4.2.3.1; 2019 §17.7.3.2.3.1). Sidewall detectors are within 12 in. of the ceiling (§17.7.4.2.1). Do not place the detector in the supply airstream (§17.7.7.3.2).
+Support rooms (electrical, UPS, mechanical, office, raised floor) use NFPA 72 Chapter 17. Smooth-ceiling spacing is 30 ft nominal, and every ceiling point lies within 0.7 times the spacing (NFPA 72-2025 §17.7.4.2.3.1; 2019 §17.7.3.2.3.1). Sidewall detectors are within 12 in. of the ceiling (§17.7.4.2.1*). Do not place the detector in the supply airstream (§17.7.7.3.2). Where the intent is to protect a specific hazard, the detector may sit closer, in a position that can intercept the smoke (§17.7.4.1.3). Under a raised floor, mount the detector only in an orientation for which it is listed (§17.7.4.2.2*). In 2025, §17.7.3 is sensitivity. Do not cite §17.7.3 for location. The 2019 spacing numbers above are a different cite.
 
 Area per detector follows the airflow table. Pick the smallest table row whose air changes are at or above the room. Do not interpolate. The held endpoints match in 2019, 2022, and 2025: 60 air changes per hour is 125 ft², and 7.5 air changes and below is 900 ft² (NFPA 72-2025 Table 17.7.7.3.3.2; 2022 the same table; 2019 Table 17.7.6.3.3.2). The table applies above 7.5 air changes (2025 §17.7.7.3.3.1). Above 60 air changes the table stops. See `asd-performance.md`. FM DS 5-48 Table 4 places the 900 ft² row at 6 air changes or fewer, which is stricter between 6 and 7.5.
 

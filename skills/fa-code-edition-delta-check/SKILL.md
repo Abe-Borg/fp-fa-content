@@ -121,4 +121,15 @@ NEC, pinned separately from NFPA 72, detail in `fa-nec-table-8-wire-sizing`:
 - Chapter 9 Table 8 ohms are [CODE] on NEC 2023 only. NEC 2026 Table 8 is NEEDS HOLD.
 - Article 760.41(B) multiwire ban is [CODE] where NEC 2026 is adopted. It is not in the held 2023 text [PARA]. The ground-fault and arc-fault ban is in both.
 - Canada: CAN/ULC-S524 and CEC Section 32 stay NEEDS HOLD. Stop those claims. Do not invent clause text.
-- On a Canada job, stop and return NEEDS HOLD for each of these until the named text is held. Do not map NFPA 72 or NFPA 4 as Canada code. Voice and acoustically distinguishable spaces: CAN/ULC-S524. Elevator recall: CSA B44 and NBC 3.2.6. Pathway survivability: CAN/ULC-S524 and CEC Section 32, and no NBC pathway rule is held. NAC voltage drop: CAN/ULC-S524 and CEC Section 32. Spot-smoke spacing: CAN/ULC-S524. Battery hours: CAN/ULC-S524. Integrated testing: CAN/ULC-S1001. The federal alarm overlay used here is NBC 2025 Division B 3.2.4. Do not swap that pin for an earlier printing.
+- On a Canada job, stop and return NEEDS HOLD for each of these until the named text is held. Do not map NFPA 72 or NFPA 4 as Canada code. Voice and acoustically distinguishable spaces: CAN/ULC-S524. Elevator recall: CSA B44 and NBC 3.2.6. Pathway survivability: CAN/ULC-S524 and CEC Section 32, and no NBC pathway rule is held. NAC voltage drop: CAN/ULC-S524 and CEC Section 32. Spot-smoke spacing: CAN/ULC-S524. Battery hours: CAN/ULC-S524. Integrated testing: CAN/ULC-S1001. The federal alarm overlay used here is NBC 2025 Division B 3.2.4. Do not swap that pin for an earlier printing. CAN/ULC-S536, S537, and CAN/ULC-S561 stay NEEDS HOLD with that list. Do not invent their text.
+
+## 2025 label hygiene
+
+These labels are edition-specific. Do not move them across editions.
+
+- Ground-fault detection conductors that need not be monitored for integrity are NFPA 72-2025 §12.6.8. Do not cite §12.6.9 for that duty. In 2025, §12.6.9 is computer and keyboard cabling.
+- The 2022 20 ft control-equipment enclosure exemption remains §12.6.9 on a 2022 job, in conduit or equivalent protection. The 2025 20 ft exemption is §12.6.7 and needs metal raceway or metal armored cable. That pair is not the ground-fault exemption.
+- Spot-smoke location on a 2025 job: specific hazard §17.7.4.1.3; ceiling or sidewall within 12 in. §17.7.4.2.1*; raised-floor listed orientation §17.7.4.2.2*. In 2025, §17.7.3 is sensitivity. Do not cite §17.7.3 for location. The 2019 air-sampling cite §17.7.3.6 is a different number and stays.
+- NFPA 4-2024 §4.5.1(6), the functional matrix of inputs and outputs, stays closed. Do not mark it unheld. Do not invent the other plan-item sentences.
+- NEC 2026 Table 8 stays NEEDS HOLD. Do not state ohms for that edition.
+- Class N item (1), one endpoint versus two or more, stays open. Verify with the engineer of record.

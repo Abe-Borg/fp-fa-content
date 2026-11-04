@@ -1,6 +1,6 @@
 # Double-interlock releasing cause and effect
 
-Write the fire-alarm sequence for a double-interlock zone on a listed releasing panel. NFPA 72-2025 §23.11 is the releasing chapter to check against the enforced edition (`fa-code-edition-delta-check`). This note does not set trim pressures or delivery time.
+Write the fire-alarm sequence for a double-interlock zone on a listed releasing panel. NFPA 72-2025 §23.11 is the releasing chapter to check against the enforced edition (`fa-code-edition-delta-check`). The control unit is listed for releasing service, and the releasing devices are listed for use with it (§23.11.1 and §23.11.2). The disconnect is a physical switch, not a software function (§23.11.5.2, same duty in 2019, 2022, and 2025). Operating that disconnect or a disable function is a supervisory signal at the releasing unit (§23.11.5.1). This note does not set trim pressures or delivery time.
 
 The cause-and-effect matrix is the sequence of operation required on the shop drawings (NFPA 72 §7.4.9) and reissued with the record drawings to match the program actually loaded (NFPA 72 §7.5.5.2). The same section numbers are used in 2019, 2022, and 2025.
 

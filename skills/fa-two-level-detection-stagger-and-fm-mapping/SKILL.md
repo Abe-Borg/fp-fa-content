@@ -58,3 +58,7 @@ Full port, return and head layout: `fa-asd-vewfd-data-hall-sampling-layout`. Rel
 
 ## Output
 Stagger decision with label; ports per level; return ports; signal map table; ASSUMED list (76 status, mapped level); FM flags; handoffs to the ASD and DI skills.
+
+## L2 trip obscuration, open
+
+On an FM double-interlock job, where the mapped Action or Fire 1 level is the detection leg, hold the trip obscuration at 0.2 %/ft per port. Label it ASSUMED. It is not settled code and it is not a closed insurer pin. FM DS 5-32 January 2026 body §2.4.3.2.1.3.1 actuates the valve on the pre-alarm. §2.4.3.2.1.3.2 bars cross-zoned detection. Those body sentences outrank §3.3.2 rationale text that says an L3 alarm initiates suppression. §3.3.2 still states the 0.2 %/ft pre-alarm figure [OWNER]/insurer. Do not hand 0.2 %/ft as [CODE]. Do not invent a trip from 0.4 to 0.6 %/ft, and do not use 1.0 %/ft as the detection-leg trip, unless the engineer of record closes the hold. Carry the same flag on `preaction-releasing-c-and-e-soo` and on `fa-double-interlock-releasing-cause-and-effect`. NFPA 72 and NFPA 13 set no obscuration trip. Where FM is not in the basis, owner thresholds stay [OWNER]. On a Canada job the FM sheet is the same when that insurer is on the job. Do not assert an NBC or NFC detection overlay. CAN/ULC-S524 stays NEEDS HOLD. Do not map NFPA 72 as Canada code. Wet, dry, and double-interlock only. Foam and clean agent stay locked. Verify with the engineer of record.

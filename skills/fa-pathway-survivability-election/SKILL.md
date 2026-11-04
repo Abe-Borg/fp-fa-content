@@ -99,3 +99,15 @@ Pin NFPA 72 before citing §12.3.6. Do not mix item numbers across editions.
 - Between buildings, run the primary and redundant paths in separate conduit and on separate switches [ASSUMED].
 - Annex A.12.3.6 is not held. Do not quote it and do not paraphrase it.
 - Canada: stop. CAN/ULC-S524 is NEEDS HOLD. Do not invent a pathway rule. Foam and clean agent stay locked.
+
+## Shared pathways and integrity exemptions
+
+Chapter 12 shared-pathway performance levels are not the Chapter 24 survivability levels above. Do not mix the two number sets.
+
+- Level 3 pathways use equipment dedicated to the life safety system [CODE NFPA 72 §12.5.4*].
+- Level 1 pathways prioritize life-safety data over other data [CODE NFPA 72-2025 §12.5.2.2].
+- A Level 3 default on an owner network is [PRACTICE]. Level 2 needs owner sign-off [OWNER]. Do not invent Level 0 or Level 2 requirement text.
+- Monitoring for integrity is not required for listed equipment interconnected inside one enclosure [CODE NFPA 72-2025 §12.6.6*].
+- It is not required for ground-fault detection conductors where one ground fault does not stop required operation [CODE §12.6.8]. Do not cite §12.6.9 for that exemption. In 2025, §12.6.9 is computer and keyboard cabling.
+- The 20 ft enclosure line above stays: 2022 §12.6.9 versus 2025 §12.6.7. That pair is the enclosure exemption, not the ground-fault exemption.
+- A modeled speech score stays [OWNER] or [ASSUMED]. It is never a field pass. NEC 2026 Table 8 stays NEEDS HOLD. Do not state ohms. Class N item (1) stays open. On a Canada job, stop. Do not map NFPA 72 as Canada code.
