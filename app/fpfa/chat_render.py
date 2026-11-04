@@ -81,15 +81,17 @@ def _line_segments(line: str, *, first: bool) -> list[Segment] | None:
 
 
 _TABLE_RULE_CELL = re.compile(r"^:?-{2,}:?$")
+# A cell boundary is a pipe that is not escaped. "A \| B" stays in one cell.
+_CELL_BOUNDARY = re.compile(r"(?<!\\)\|")
 
 
 def _table_cells(line: str) -> list[str]:
     body = line.strip()
     if body.startswith("|"):
         body = body[1:]
-    if body.endswith("|"):
+    if body.endswith("|") and not body.endswith("\\|"):
         body = body[:-1]
-    return [cell.strip() for cell in body.split("|")]
+    return [cell.strip().replace("\\|", "|") for cell in _CELL_BOUNDARY.split(body)]
 
 
 def _strip_inline(text: str) -> str:

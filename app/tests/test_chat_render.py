@@ -82,6 +82,21 @@ class MarkdownSegmentsTests(unittest.TestCase):
         self.assertEqual(segments[-2], ("\n", ("pre",)))
         self.assertEqual(segments[-1], ("after", ()))
 
+    def test_escaped_pipe_stays_inside_its_cell(self):
+        from fpfa.chat_render import plain_text
+
+        text = (
+            "| leg | logic |\n"
+            "| --- | --- |\n"
+            "| solenoid | detection_leg \\| manual_release |\n"
+            "| alarm | smoke \\| heat \\|"
+        )
+        lines = plain_text(text).split("\n")
+        self.assertEqual(lines[0], "leg       logic")
+        self.assertEqual(len(lines[1].split()), 2)
+        self.assertEqual(lines[2], "solenoid  detection_leg | manual_release")
+        self.assertEqual(lines[3], "alarm     smoke | heat |")
+
     def test_table_without_a_rule_row_is_shown_as_written(self):
         from fpfa.chat_render import plain_text
 
