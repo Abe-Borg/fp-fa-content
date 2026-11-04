@@ -881,6 +881,28 @@ class KeyAndSkillTests(unittest.TestCase):
             finally:
                 release.set()
 
+            # A delete that timed out must not land after a later save and remove it.
+            fake_keyring.get_password = lambda service, account: store.get((service, account))
+            slow_delete = threading.Event()
+
+            def delayed_delete(service, account):
+                slow_delete.wait(10)
+                store.pop((service, account), None)
+
+            fake_keyring.delete_password = delayed_delete
+            try:
+                with self.assertRaises(subprocess.TimeoutExpired):
+                    keystore._keyring_call("delete", timeout=0.2)
+                try:
+                    keystore._keyring_call("set", "sk-ant-replacement", timeout=0.2)
+                except subprocess.TimeoutExpired:
+                    pass
+            finally:
+                slow_delete.set()
+            self.assertEqual(keystore._keyring_call("get", timeout=2), "sk-ant-replacement")
+            fake_keyring.delete_password = delete_password
+            self.assertEqual(keystore._keyring_call("delete", timeout=2), "ok")
+
             def no_backend(service, account):
                 raise RuntimeError("No recommended backend was available.")
 

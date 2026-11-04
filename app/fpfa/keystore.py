@@ -7,12 +7,15 @@ written into a project.
 
 A source run calls keyring in a short-lived child Python process. A packaged
 (PyInstaller) app cannot do that, because sys.executable is fpfa.exe, not
-Python. It calls keyring in-process on a worker thread with the same timeout.
+Python. It calls keyring in-process on one worker thread with the same
+timeout. That thread runs calls in the order they were made, so a call that
+timed out cannot land after a later save.
 """
 
 from __future__ import annotations
 
 import os
+import queue
 import subprocess
 import sys
 import threading
@@ -90,20 +93,38 @@ def _keyring_action(action: str, secret: str | None) -> str:
     raise ValueError("unknown action")
 
 
-def _keyring_in_process(action: str, secret: str | None, timeout: float) -> str:
-    """Run keyring on a daemon thread. A backend that does not answer is left behind."""
-    outcome: dict[str, object] = {}
+_keyring_jobs: queue.SimpleQueue = queue.SimpleQueue()
+_keyring_worker: threading.Thread | None = None
+_keyring_worker_lock = threading.Lock()
 
-    def work() -> None:
+
+def _run_keyring_jobs() -> None:
+    """Run keyring calls one at a time, in the order they were queued."""
+    while True:
+        action, secret, outcome, done = _keyring_jobs.get()
         try:
             outcome["value"] = _keyring_action(action, secret)
-        except BaseException as exc:  # noqa: BLE001 - reported to the caller below
+        except BaseException as exc:  # noqa: BLE001 - reported to the caller
             outcome["error"] = exc
+        finally:
+            done.set()
 
-    worker = threading.Thread(target=work, name="fpfa-keyring", daemon=True)
-    worker.start()
-    worker.join(timeout)
-    if worker.is_alive():
+
+def _keyring_in_process(action: str, secret: str | None, timeout: float) -> str:
+    """Queue one keyring call on the worker thread and wait up to timeout for it.
+
+    A call that times out stays queued and still runs. Later calls wait behind
+    it, so a slow delete cannot remove a key saved after it.
+    """
+    global _keyring_worker
+    with _keyring_worker_lock:
+        if _keyring_worker is None or not _keyring_worker.is_alive():
+            _keyring_worker = threading.Thread(target=_run_keyring_jobs, name="fpfa-keyring", daemon=True)
+            _keyring_worker.start()
+    outcome: dict[str, object] = {}
+    done = threading.Event()
+    _keyring_jobs.put((action, secret, outcome, done))
+    if not done.wait(timeout):
         raise subprocess.TimeoutExpired(cmd="keyring", timeout=timeout)
     error = outcome.get("error")
     if error is not None:
