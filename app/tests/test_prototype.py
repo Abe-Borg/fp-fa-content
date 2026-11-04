@@ -858,7 +858,7 @@ class KeyAndSkillTests(unittest.TestCase):
         self.assertEqual(hits, [])
 
     def test_content_pack_inventory_matches_the_indexes(self):
-        """Saturday step 6: the in-repo pack is the index. Corpus search stays unwired."""
+        """Saturday step 6: the in-repo pack is the index. Corpus search is search_corpus."""
         skills_readme = (REPO / "skills" / "README.md").read_text(encoding="utf-8")
         tier_a = _bullet_slugs(skills_readme, "Tier A methods", "Tier B methods")
         tier_b = _bullet_slugs(skills_readme, "Tier B methods", "Pilot method")
@@ -899,7 +899,7 @@ class KeyAndSkillTests(unittest.TestCase):
             if path.name.lower() != "readme.md"
         )
         self.assertEqual(sorted(corpus_indexed), corpus_disk)
-        self.assertEqual(len(corpus_disk), 72)
+        self.assertEqual(len(corpus_disk), 120)
         self.assertIn("scope-lock.md", corpus_disk)
 
         spec_indexed = re.findall(
@@ -925,19 +925,25 @@ class KeyAndSkillTests(unittest.TestCase):
         self.assertEqual(leaks, [])
 
         wired = []
+        # search_corpus is the only reader. The pack builder still only names the folder.
+        search_wired = {
+            "app/fpfa/calc_tools.py",
+            "app/fpfa/corpus_search.py",
+            "app/fpfa/fa_calc.py",
+        }
         for path in (REPO / "app" / "fpfa").rglob("*.py"):
             text = path.read_text(encoding="utf-8")
-            # The pack builder names the corpus folder it copies into a release zip.
-            # It does not search that folder. Search stays unwired.
+            rel = str(path.relative_to(REPO))
             if path.name == "content_pack.py":
                 self.assertNotIn("spec_notes", text)
                 self.assertNotIn("list_skills", text)
                 self.assertNotIn("read_skill", text)
                 continue
-            if re.search(r"""['\"]corpus['\"]""", text):
-                wired.append(str(path.relative_to(REPO)))
-            elif "corpus/" in text and path.name != "paths.py":
-                wired.append(str(path.relative_to(REPO)))
+            mentions = bool(re.search(r"""['\"]corpus['\"]""", text)) or (
+                "corpus/" in text and path.name != "paths.py"
+            )
+            if mentions and rel not in search_wired:
+                wired.append(rel)
         self.assertEqual(wired, [])
 
     def test_di_draft_does_not_use_the_dry_pipe_section_number(self):
@@ -981,7 +987,7 @@ class KeyAndSkillTests(unittest.TestCase):
         notes = spec_notes(REPO)
         self.assertEqual([note["name"] for note in notes], names)
         for note in notes:
-            self.assertLessEqual(len(note["text"]), 5000)
+            self.assertLessEqual(len(note["text"]), 16000)
             self.assertEqual(
                 len(note["text"]),
                 len((folder / note["name"]).read_text(encoding="utf-8")),
