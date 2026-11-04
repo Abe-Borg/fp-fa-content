@@ -14,6 +14,8 @@ Hose stream and duration ride with the demand. They are not added a second time 
 
 Screen a listed centrifugal pump at rated flow, at churn, and at 150 percent of rated flow through `calcs/fp` (`pump_envelope`). Pass or fail against the demand and the suction condition. Do not publish `rated gpm at rated psi` as the job's pump until those gates are closed.
 
+Where the demand is a combined standpipe and sprinkler greater-of, screen both caps on that flow. NFPA 20-2025 §4.10.1 wants rated flow at least demand divided by 1.5. When FM applies, FM DS 3-7 §2.4.6.4 wants rated flow at least demand divided by 1.4, and §2.4.6.5 uses 1.10 for multiple pumps. An NFPA pass with an FM fail is not a silent resize. Verify with the engineer of record and carry the next listed size as assumed.
+
 Relief: NFPA 20 §4.20. Compare net shutoff plus maximum static suction with the rating. The calc returns whether a relief valve is needed. Do not skip the check because a prior schedule omitted it.
 
 Diesel driver derate, NFPA 20-2025 §11.2.2.4 and §11.2.2.5, is additive: 3 percent per 1,000 ft above 300 ft, plus 1 percent per 10 °F above 77 °F. Altitude and temperature are site inputs. Do not reuse a prior site's horsepower.

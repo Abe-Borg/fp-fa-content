@@ -106,3 +106,18 @@ All rows [CODE] per edition shown, from 72-12, 72-13, 72-16 to 72-39, except the
 Edition pin (enforced, design-to, ASSUMED?), delta table for the job, relabel list (claim, old label, new label), gap list with edition text not confirmed.
 
 On a Canada job, also report the NBC pin, the NEEDS HOLD status for CAN/ULC-S524, S536, S537, S1001, CAN/ULC-S561, CEC Section 32, and CSA B44, and any Canada claim that stopped.
+
+## Class N and NEC relabel
+
+Class N §12.3.6, detail in `fa-pathway-survivability-election`:
+
+- Shared-segment ban: 2022 item (5) moves to 2025 item (7) [CODE]. The 2025 wording is a delta note [PARA], not a full-body pull.
+- Single-fault isolation: 2025 item (5) [CODE]. The 2022 cite in the pathway skill is item (3). A conflicting reading says 2022 has no such item. Do not relabel until both bodies are checked. Verify with the engineer of record.
+- Redundant path: 2022 item (1); 2025 items (1) and (3). Single-endpoint exception: 2022 item (1) exception; 2025 item (2) [PARA].
+- Item (1) scope, one endpoint versus two or more, stays open. Annex A.12.3.6 is not held.
+
+NEC, pinned separately from NFPA 72, detail in `fa-nec-table-8-wire-sizing`:
+
+- Chapter 9 Table 8 ohms are [CODE] on NEC 2023 only. NEC 2026 Table 8 is NEEDS HOLD.
+- Article 760.41(B) multiwire ban is [CODE] where NEC 2026 is adopted. It is not in the held 2023 text [PARA]. The ground-fault and arc-fault ban is in both.
+- Canada: CAN/ULC-S524 and CEC Section 32 stay NEEDS HOLD. Stop those claims. Do not invent clause text.

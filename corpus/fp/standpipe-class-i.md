@@ -12,6 +12,8 @@ Other documents in the pack disagree with each other: a federal guide uses a hei
 
 Demand in gallons per minute follows the enforced NFPA 14 edition (2019 §7.10 is the held cite for the hydraulic demand in that edition). If the adopted code's Chapter 80 has no NFPA 14 row, the edition is `[V]`.
 
+Combined demand is the greater of the sprinkler demand, including hose, or the standpipe demand. It is not the sum. Cite the edition in force: NFPA 14-2019 §7.10.1.3.1.1 and §7.10.1.3.1.2, or NFPA 14-2024 §10.6.1.3.1. The crosswalk between those sections is not held. Do not copy a section number from the other edition. When the sprinkler demand governs, re-run the supply at that flow, and still check the remote standpipe outlet at the standpipe flow. Where an FM sheet applies, also check rated flow against demand divided by 1.4 for a single pump (FM DS 3-7 §2.4.6.4; 1.10 where §2.4.6.5 applies). A pass on the NFPA 150 percent cap with a fail on that FM cap stays open. Carry the next listed size as assumed. Verify with the engineer of record. Do not resize silently. Do not apply these NFPA 14 numbers as a Canada basis.
+
 ## Manual-dry supervisory air
 
 Where the standpipe is manual-dry, NFPA 14-2024 §8.3.2.1.1 requires supervisory air on the piping, §8.3.2.1.2 sets a 7 psi minimum (lower only if the manufacturer permits), and §8.3.2.1.3 sets a 20 psi maximum (only automatic and semiautomatic systems may exceed it). NFPA 14-2019 §6.1.1 requires monitoring with supervisory air and sets no psi band, so a 7 to 20 psi band is not a 2019 requirement.

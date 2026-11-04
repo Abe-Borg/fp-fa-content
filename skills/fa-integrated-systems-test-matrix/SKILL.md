@@ -53,3 +53,17 @@ description: >-
 
 ## Output
 IST matrix CSV, ITM row table by edition, judgment-call list, open items.
+
+## Campus wet and double-interlock rows
+
+Integrated testing is still required when a written plan is not required [CODE NFPA 4-2024 §4.5.3.1]. The functional matrix is NFPA 4-2024 §4.5.1 item (6) [CODE]. Synthetic campus only. Do not copy the rows onto a hall.
+
+- Waterflow, wet building: fire alarm, supervising-station alarm, and voice in that building. No elevator recall. Waterflow is not an elevator-recall initiator. An owner add is [OWNER]. Verify with the engineer of record.
+- Double-interlock detection only: pre-alarm or alarm. No valve release.
+- Double-interlock low air only: supervisory. No release.
+- Double-interlock detection and low air: release, waterflow, voice, and supervising station.
+- Generator-room detection: room ventilation shuts down [CODE NFPA 37-2024 §11.3.4, where adopted]. Fuel stays open. The interface is `fa-hvac-door-and-lock-interfaces`.
+- Supervising-station path loss: trouble at the station.
+- Energy-storage gas at setpoint: optional, and only where that room exists. Exhaust start and signal class follow the owner map [OWNER].
+- Release only when both double-interlock conditions are present. Detection alone and low air alone never release.
+- Canada: stop. CAN/ULC-S1001 is NEEDS HOLD. Do not invent Canadian integrated-test rows. Foam, clean agent, and single-interlock stay locked.

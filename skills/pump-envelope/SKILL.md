@@ -758,3 +758,14 @@ Canada diesel pump-house "Open (no invent)" upgraded to NEG-CA-1..4. B26R2-NEG-3
 - Inserted §1.0 Country/edition gate (model A) + NEG-CA before §1.
 - `9. If the caller asks to **skip** hydrant and freeze a pump nameplate …` → `9. If the caller asks to **skip** hydrant and freeze a pump nameplate from density-area al…`
 - Kept hard (method guardrails, not blank-gates): hydrant Adequate/no-pump → Stop; open gating RFIs + freeze FP-1 = Q@P → Stop (envelope still runs).
+
+## NFPA cap and FM cap on the governing demand
+
+When the demand is a combined standpipe and sprinkler greater-of (`standpipe-class-i-election-and-demand`), screen both caps on that governing flow.
+
+- NFPA: rated flow at least demand divided by 1.5 (NFPA 20-2025 §4.10.1).
+- FM, when that sheet applies: rated flow at least demand divided by 1.4 (FM DS 3-7 §2.4.6.4). Multiple pumps use 1.10 (§2.4.6.5).
+
+An NFPA pass with an FM fail is not a closed selection. Carry the next listed size as ASSUMED. Verify with the engineer of record. Do not resize silently and do not freeze a model number.
+
+Teaching point [SYN]: 1,055.9 gpm governing demand needs at least 754.2 gpm rated on the FM single-pump cap. A 750 gpm candidate fails that cap. 1,000 gpm is the ASSUMED next size, not a scheduled pump. The FM cap check stays open. No calc operation is added for it.
