@@ -1,0 +1,192 @@
+# Build the Windows app when an app-v* tag is pushed.
+# Assets: fpfa-setup-<version>.exe and fpfa-windows-<version>.zip.
+# Does not build or tag a content pack. Content stays on content-v*.
+
+name: Windows app
+
+on:
+  push:
+    tags:
+      - "app-v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "App version (major.minor.patch), for example 0.1.1. Publishes tag app-v<version>."
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Resolve version
+        id: version
+        shell: pwsh
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          if ($env:EVENT_NAME -eq "workflow_dispatch") {
+            $version = "$env:INPUT_VERSION".Trim()
+          } else {
+            $tag = "$env:REF_NAME".Trim()
+            if ($tag -notmatch '^app-v(\d+\.\d+\.\d+)$') {
+              throw "Tag must look like app-v0.1.1. Got: $tag"
+            }
+            $version = $Matches[1]
+          }
+          if ($version -notmatch '^\d+\.\d+\.\d+$') {
+            throw "Version must look like 0.1.1. Got: $version"
+          }
+          $initPath = Join-Path $env:GITHUB_WORKSPACE "app\fpfa\__init__.py"
+          $init = Get-Content -Raw -LiteralPath $initPath
+          if ($init -notmatch '__version__\s*=\s*"([^"]+)"') {
+            throw "Could not read __version__ from $initPath"
+          }
+          $code = $Matches[1]
+          if ($code -ne $version) {
+            throw "__version__ is $code and the release version is $version. They must match."
+          }
+          [System.IO.File]::AppendAllText($env:GITHUB_OUTPUT, "version=$version`n")
+          Write-Host "Release version $version from $env:GITHUB_SHA"
+
+      - name: Install Python dependencies
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $PSNativeCommandUseErrorActionPreference = $false
+          python -c "import sys; print(sys.version); print(sys.executable)"
+          python -m pip install -r app/requirements.txt pyinstaller
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Install Inno Setup 6
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Continue"
+          $PSNativeCommandUseErrorActionPreference = $false
+          choco install innosetup --yes --no-progress
+          $code = $LASTEXITCODE
+          # 3010 and 1641 mean success plus a reboot request. The runner does not reboot.
+          if ($code -ne 0 -and $code -ne 3010 -and $code -ne 1641) { exit $code }
+          Write-Host "choco innosetup exit $code"
+
+      - name: Build installer
+        shell: pwsh
+        working-directory: app
+        env:
+          APP_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $PSNativeCommandUseErrorActionPreference = $false
+          # build_app.ps1 calls `py -3`. That flag belongs to the Windows launcher,
+          # so this function forwards those calls to the setup-python interpreter.
+          function global:py {
+            $rest = [System.Collections.Generic.List[string]]::new()
+            $index = 0
+            foreach ($arg in $args) {
+              if ($index -eq 0 -and "$arg" -match '^-3(\.\d+)?$') {
+                $index++
+                continue
+              }
+              $index++
+              $rest.Add([string]$arg)
+            }
+            & python @($rest.ToArray())
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+          & .\packaging\build_installer.ps1 -BuildApp -Version $env:APP_VERSION
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $setup = Join-Path (Get-Location) "dist\fpfa-setup-$env:APP_VERSION.exe"
+          if (-not (Test-Path -LiteralPath $setup)) { throw "Missing $setup" }
+          Write-Host "Built $setup"
+
+      - name: Zip portable folder
+        shell: pwsh
+        working-directory: app
+        env:
+          APP_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $folder = Join-Path (Get-Location) "dist\fpfa"
+          $zip = Join-Path (Get-Location) "dist\fpfa-windows-$env:APP_VERSION.zip"
+          if (-not (Test-Path -LiteralPath (Join-Path $folder "fpfa.exe"))) {
+            throw "Missing $folder\fpfa.exe"
+          }
+          if (Test-Path -LiteralPath $zip) { Remove-Item -LiteralPath $zip }
+          [System.IO.Compression.ZipFile]::CreateFromDirectory(
+            $folder,
+            $zip,
+            [System.IO.Compression.CompressionLevel]::Optimal,
+            $false)
+          $archive = [System.IO.Compression.ZipFile]::OpenRead($zip)
+          try {
+            $exe = $archive.Entries | Where-Object { ($_.FullName -replace '\\','/') -eq "fpfa.exe" }
+            if (-not $exe) { throw "fpfa.exe is not at the root of $zip" }
+          } finally {
+            $archive.Dispose()
+          }
+          Write-Host "Built $zip"
+
+      - name: Publish release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APP_VERSION: ${{ steps.version.outputs.version }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $PSNativeCommandUseErrorActionPreference = $false
+          $version = $env:APP_VERSION
+          $tag = "app-v$version"
+          $dist = Join-Path $env:GITHUB_WORKSPACE "app\dist"
+          $setup = Join-Path $dist "fpfa-setup-$version.exe"
+          $zip = Join-Path $dist "fpfa-windows-$version.zip"
+          foreach ($path in @($setup, $zip)) {
+            if (-not (Test-Path -LiteralPath $path)) { throw "Missing $path" }
+          }
+          $notes = @"
+          Windows app $version.
+
+          Built from $($env:GITHUB_SHA). The seed content pack inside the build is the tree at this commit.
+
+          Assets:
+          - fpfa-setup-$version.exe is the Inno Setup installer.
+          - fpfa-windows-$version.zip is the portable folder. Unpack it and run fpfa.exe.
+
+          No MSI.
+
+          Content updates ship separately as content-v* releases. This workflow does not build or tag a content pack.
+
+          Foam and clean-agent are out of scope.
+          "@
+          $notes = ($notes -split "`n" | ForEach-Object { $_.Trim() }) -join "`n"
+          $notes = $notes.Trim() + "`n"
+          $notesFile = Join-Path $env:RUNNER_TEMP "app-release-notes.md"
+          [System.IO.File]::WriteAllText($notesFile, $notes)
+          gh release view $tag --repo $env:GITHUB_REPOSITORY 1>$null 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $tag $setup $zip --clobber --repo $env:GITHUB_REPOSITORY
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            gh release edit $tag --notes-file $notesFile --title $tag --repo $env:GITHUB_REPOSITORY
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          } else {
+            $create = @("release", "create", $tag, $setup, $zip, "--title", $tag, "--notes-file", $notesFile, "--repo", $env:GITHUB_REPOSITORY)
+            if ($env:EVENT_NAME -eq "workflow_dispatch") {
+              $create += @("--target", $env:GITHUB_SHA)
+            }
+            & gh @create
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+          Write-Host "Published $tag"
