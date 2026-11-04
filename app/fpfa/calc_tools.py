@@ -7,6 +7,8 @@ import json
 import sys
 from pathlib import Path
 
+from fpfa.corpus_search import search_corpus
+from fpfa.fa_calc import run_fa_calc
 from fpfa.modes_loader import list_modes, read_mode
 from fpfa.roles_loader import list_roles, read_role
 from fpfa.skills_loader import list_skills, read_skill
@@ -213,6 +215,40 @@ SCHEMAS = [
             ["op", "inputs"],
         ),
     },
+    {
+        "name": "fa_calc",
+        "description": (
+            "Run an op from calcs/fa/lib by module and function. "
+            "Pass module (filename stem), op (function name), and inputs. "
+            "Do not compute the formula yourself. list_ops returns the allowlist."
+        ),
+        "input_schema": _obj(
+            {
+                "module": {"type": "string", "description": "Filename stem under calcs/fa/lib."},
+                "op": {"type": "string", "description": "Function name on that module."},
+                "inputs": {"type": "object", "description": "Keyword arguments for the op."},
+                "list_ops": {
+                    "type": "boolean",
+                    "description": "Return the allowlist instead of running an op.",
+                },
+            },
+            [],
+        ),
+    },
+    {
+        "name": "search_corpus",
+        "description": (
+            "Search edition pins and decision notes in corpus/. "
+            "Use before assuming an NFPA edition or AHJ pin."
+        ),
+        "input_schema": _obj(
+            {
+                "query": {"type": "string", "description": "Text to find. Match is case-insensitive."},
+                "limit": {"type": "integer", "description": "Maximum hits. Default 8."},
+            },
+            ["query"],
+        ),
+    },
 ]
 
 # The DI workflow refuses a narrative until these have run on the form.
@@ -317,6 +353,10 @@ class ToolSession:
             return _lfl_setpoints(self.root, args)
         if name == "fp_calc":
             return self.formulas.dispatch(str(args.get("op") or ""), dict(args.get("inputs") or {}))
+        if name == "fa_calc":
+            return run_fa_calc(self.root, args)
+        if name == "search_corpus":
+            return search_corpus(self.root, args)
         raise KeyError(f"unknown tool {name}")
 
 
