@@ -40,3 +40,11 @@ Room list: size, ceiling height, ACH, beam depth and spacing, girders, raised fl
 
 ## Output
 Room table: ACH row, area per detector, beam rule, grid, count, pass or fail per check, edition labels, delta vs 2025.
+
+## Concealed detectors
+
+A concealed detector has a remote indicator at an accessible location the authority accepts [CODE NFPA 72-2022 and 2025 §17.4.7.2]. The 2019 rule covered a concealed detector more than 10 ft above the floor (§17.4.6). Cite the enforced edition. Confirm any panel-and-drawing exemption in the adopted text before dropping the indicator (§17.4.7.3 in 2022 and 2025).
+
+Solid joists count as beams [CODE NFPA 72-2025 §17.7.4.2.4.1]. A girder whose top is within 4 in. of the ceiling is treated as a beam; more than 4 in. down, it is not a factor [CODE §17.7.4.2.4.2, 2025 only]. At or above 0.4 of the ceiling height between beams, put a detector in each pocket, and apply the 0.1 height depth test in step 4 [CODE §17.7.4.2.4.3]. A gap above the beam over 15 percent of the ceiling height permits smooth spacing [CODE §17.7.4.2.4.3(6), 2025 only]. On 2019 and 2022 jobs those girder and gap rules stay [PRACTICE], as the basis already says. Do not use the gap relief on those editions without an authority acceptance.
+
+The 2025 location labels stay §17.7.4.1.3, §17.7.4.2.1*, and §17.7.4.2.2*. In 2025, §17.7.3 is sensitivity. Do not cite it for location. Stratification beyond these beam rules stays open. Do not invent a second spacing number. On a Canada job, stop. CAN/ULC-S524 spacing is NEEDS HOLD.

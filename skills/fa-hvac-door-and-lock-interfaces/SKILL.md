@@ -17,7 +17,7 @@ description: >-
 ## Basis
 - [CODE NFPA 72-2025 21.2.4.1]: interface relay within 3 ft, or within 20 ft in metal raceway or armored cable; Class D exempt (21.2.4.2). 2019 and 2022: 3 ft only, no 20 ft option (72-20, 72-24). 21.2.8: monitored per 12.6.
 - [CODE NFPA 72 21.7.2]: detection devices that run HVAC, dampers, fans or doors are monitored for integrity when on the FA system.
-- [CODE NFPA 72 21.7.4]: duct smoke detectors initiate supervisory; alarm only per 21.7.4.1 or .2. Same 2019, 2022, 2025. IMC 2021/2024 606.4.1 where adopted: supervisory only where a supervising station is required.
+- [CODE NFPA 72-2019 §21.7.4]: duct smoke detectors initiate a supervisory signal. An alarm is permitted in that edition only where there is no constantly attended location and no supervising station, or where another code requires an alarm (§21.7.4.1 and §21.7.4.2). NFPA 72-2022 and 2025 §21.7.4 are NEEDS HOLD. Do not assume the same sentence. IMC 2021/2024 §606.4.1, where adopted, is a separate supervisory limit where a supervising station is required. Fire-alarm wiring to an emergency-control function is monitored for integrity under §12.6 [CODE NFPA 72-2019 §21.2.8]. The relay-distance rule above stays edition-specific.
 - [CODE IMC 2021/2024 606.2.1, 606.2.3, 606.4 where adopted; NFPA 90A 6.4.2.1]: return over 2,000 cfm, common returns over 15,000 cfm, fan shutdown on activation. Return cfm is project data; if missing ASSUME return = supply, Verify with the engineer of record.
 - [OWNER]/insurer FM DS 5-48 and 5-32: duct detectors with fan interlock; with complete room coverage, return detectors may drop. No automatic smoke exhaust in DP rooms; if code forces it, start from waterflow.
 - [CODE NFPA 75-2024 §11.4.5.1, where NFPA 75 is adopted or the owner elects it]: an approved means disconnects power to electronic equipment in the information-technology room or in designated zones. [CODE §11.4.5.3]: activating that HVAC disconnect closes all required fire and smoke dampers. §9.2.5 smoke detection runs dampers in plenum spaces. Automatic power-off on detection is co-owned with `power-isolation-disconnect-control`. This skill does not set that sequence. Do not map NFPA 75 as Canada code.
@@ -28,7 +28,7 @@ description: >-
 ## Company pins
 - FA-DI-CE = (Fire 1 OR the FACU manual station) AND same-zone low air. No cross-zone. Never cite §23.8.5.4.3 for that AND.
 - Dry and double-interlock low air: supervisory only [CODE NFPA 72 §17.19.2.2.2(A)]. Low air alone never unlocks a door and never releases a hold.
-- A duct detector is supervisory [CODE NFPA 72-2025 §21.7.4, same in 2019 and 2022]. It stops its own fan only. It never unlocks a door and never releases a hold.
+- A duct detector is supervisory [CODE NFPA 72-2019 §21.7.4]. NFPA 72-2022 and 2025 §21.7.4 are NEEDS HOLD. It stops its own fan only [PRACTICE]. It is not a releasing input for wet, dry, or double-interlock. It never unlocks a door and never releases a hold.
 - Pump house (EX-153): the duct detector is supervisory and stops its own non-engine fan only. It does not release a hold and it does not unlock. Do not stop diesel combustion air or engine cooling air on a fire-alarm signal. That stop is not resolved. It stays pending engineer-of-record confirmation. Non-engine HVAC fan stop on alarm stays [OWNER]/[PRACTICE] until that confirmation. IBC 716 hold-open release stays [PRACTICE].
 - Doors unlock and holds release on wet waterflow, double-interlock Fire 1, or the FACU manual station. Not on low air, valve tamper, or a duct detector.
 - Hold-open release and egress unlock are two outputs. They may share a trigger. They do not share a code basis.
@@ -52,7 +52,7 @@ description: >-
 | Double-interlock solenoid | Release | Already released | Already unlocked | n/a |
 | Lock power loss | Power | No | Yes [CODE IBC 2021 §1010.2.11] | n/a |
 | Magnet power loss | Power | Yes [PRACTICE] | No | n/a |
-| Duct detector | Supervisory [CODE §21.7.4] | No | No | Own unit off [PRACTICE where IMC is adopted] |
+| Duct detector | Supervisory [CODE NFPA 72-2019 §21.7.4; 2022/2025 NEEDS HOLD] | No | No | Own unit off [PRACTICE where IMC is adopted] |
 | Dry or double-interlock low air | Supervisory | No | No | No |
 | Valve tamper | Supervisory | No | No | No |
 

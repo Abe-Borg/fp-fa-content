@@ -777,3 +777,15 @@ Teaching point [SYN], envelope only, not a shop curve. Governing greater-of dema
 - Churn system maximum stays 173 psi on both sizes. It tracks rated pressure, not rated flow, and it is 2 psi under 175. That margin is thin.
 
 Where FM is the carrier, the FM cap governs. Options to verify with the engineer of record: the 1,000 gpm size, a carrier-accepted cut of demand to 1,050 gpm or less, or a written carrier variance. Failures: treating the NFPA 150 percent pass as enough under FM; sizing on standpipe flow when the greater-of is larger; assuming churn grows with rated flow; reading envelope net pressure as a shop curve; promoting 1,000 gpm onto a live job without that verification; applying the screen as a Canada basis. GAP-B31R1-2 stays open. No calc operation is added for it.
+
+## Rated-pressure floor from a net demand point
+
+When a net demand pressure is known and one or more candidate rated flows are in hand, screen the rated-pressure floor by hand. Show the arithmetic. `calcs/fp` screens a given rated flow and rated pressure. It does not select the rated pressure. Do not invent a catalog of listed pressures. Use only ratings the caller supplies.
+
+The envelope is the line from shutoff (zero flow, churn fraction times rated pressure) through rated flow at rated pressure to 150 percent of rated flow at the 150 percent fraction times rated pressure. NFPA 20-2025 §6.2.1 requires at least 150 percent of rated capacity at not less than 65 percent of rated head. §6.2.2 limits shutoff to 140 percent of rated head. Over-pressure stays the separate §4.7.7.1 check.
+
+The rated-pressure floor equals net demand pressure divided by the envelope factor at that flow. Above 150 percent of rated flow the point is infeasible. Pick the smallest listed candidate at or above the floor. A round trip through the envelope must meet the demand. Do not report the floor as a nameplate. Do not read or invent annex figure axis values. The screen uses none.
+
+Teaching point [SYN]: demand 1,200 gpm at 95 psi net, candidate rated flows 1,000 gpm and 1,500 gpm, churn fraction 1.0, 150 percent fraction 0.65, listed pressures 100, 110, and 125 psi. At 1,000 gpm the demand is 120 percent of rated flow. The factor is 1 + (0.65 - 1) x (200 / 500) = 0.860. The floor is 95 / 0.860 = 110.47 psi, so the listed pressure is 125 psi. At 1,500 gpm the demand is 80 percent of rated flow. The factor is 1.000. The floor is 95 psi, so the listed pressure is 100 psi. That is the lower selection.
+
+The result is a screen. Verify with the engineer of record. The listed shop curve governs. Do not freeze a model number. Run the FM flow cap beside this screen. An NFPA envelope pass does not close the FM cap. GAP-B31R1-2 stays open. Do not skip the FM cap because the NFPA envelope passed. This screen does not take a Hazen-Williams coefficient. Do not reopen that lock here.

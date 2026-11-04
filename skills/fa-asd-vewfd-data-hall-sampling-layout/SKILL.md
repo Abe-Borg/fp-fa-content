@@ -109,3 +109,11 @@ No automatically operated smoke exhaust on detection in the data-processing room
 
 ## Output
 Labeled basis table; ports per level, return (discrete section, not the mixed face), equipment (or TBD), below floor; heads per valve area and the summed head count; governing transport and whether it is a screen or the listed model; airflow-gate flag; ASSUMED list; open items; delta vs NFPA 72-2025.
+
+## Airflow trouble and the 0.2 %/ft trip
+
+Each sampling port is a spot detector for location and spacing, absent performance criteria [CODE NFPA 72-2025 §17.7.4.6.1.1; 2019 §17.7.3.6.1.1]. The layout steps above already use that rule. The detector signals trouble when airflow is outside the manufacturer's specified range [CODE NFPA 72-2025 §17.7.4.6.1.2]. Do not invent the range. It is the listing. On a 2019 job use the matching §17.7.3.6 subsection.
+
+Production sensitivity in the annex is a test benchmark [HB annex A.17.7.3.1]. It is not the sole basis for a setpoint. In 2025, §17.7.3 is sensitivity. It does not elect a trip level.
+
+Do not hand 0.2 %/ft as an NFPA 72 code trip. Where the second level is the detection leg, that obscuration stays ASSUMED (GAP-B33R8-1). NFPA 76 alert and alarm values stay the NFPA 76 cites above, and only when NFPA 76 is adopted or elected. On a Canada job, stop. CAN/ULC-S524 is NEEDS HOLD. Do not map NFPA 72 as Canada code. Foam and clean agent stay locked.

@@ -411,3 +411,15 @@ A margin that fits on the 30 psi or 50 psi row is not a failure. Only the 20 psi
 Factory 18 psi is a separate manufacturer setting. It is above every cap (10, 14, and 16 psi), so it has to be lowered in the field on all three rows. Citing factory 18 psi at 50 psi water or less is a failure of that setting, not of the margin. The switch tolerance is still not held. Do not invent it. A margin that fits the cap does not close the tolerance or the listing. Low air stays ASSUMED where either hold is open. Verify with the engineer of record and the maker.
 
 Stop if low air is placed inside the retired band, if high air exceeds 30 psi on a DDX-LP valve, if factory 18 psi is field-lowered at 225 psi or 275 psi water, if the §8.2.6.4 margin is called a pass at 225 psi water with factory 18 psi, if caps or trip points are cited to Bulletin 747, if factory 18 psi is left on water at 50 psi or less, if a low-air number other than that factory pair is presented as a maker value while the tolerance is open, or if a 2025 section number is cited on a Canada pin. Nitrogen stays on its own gate. Do not reopen it here. Foam, clean agent, and single-interlock stay locked.
+
+## Code margin inside the maker band
+
+Hand math only. This pack does not add a calc operation for the stack. A screen is not design approval. Do not fill a missing maker band from memory. Tag every unheld input ASSUMED. Maker bands are inputs. They are never defaults.
+
+On the Bulletin 505 row at 50 psi water (nominal trip 7 psi, tolerance 2 psi, so worst-case trip 9 psi; Table A minimum 12 psi; cap 16 psi), a stack of low air 12 psi, maintain 15 psi, and high air 16 psi gives a low-air margin of 3 psi and a high-air margin of 1 psi. Both sit inside the maker band and both fail the 5 psi code margins [CODE NFPA 13-2025 §8.2.6.4 and §8.2.6.5 on a US job]. Do not shave the 5 psi margin to force a pass. Do not move outside the maker cap to force a pass. Verify with the engineer of record and the maker.
+
+Hand-check pass [SYN], separate from that row: worst-case trip 13 psi, low air 18 psi, maintain 23 psi, high air 28 psi, Table A minimum 16 psi, cap 30 psi, compressor cut-in 26 psi and cut-out 32 psi. Margins are 5 psi and 5 psi. Headroom under the cap is 2 psi. Cut-in is 3 psi above maintain. Cut-out above the cap is upstream of the pressure-maintenance device only. Verify the device inlet with the engineer of record.
+
+Do not cite an unopened bulletin as the pairing basis. The pairing stays Bulletin 747. Caps and trip stay Bulletin 505. The Potter tolerance residual in GAP-B28R1-1 stays open. Do not reopen the nitrogen gate. On a Canada job, do not cite the 2025 margin sections as Canada code.
+
+Failures: calling the screen an approval; inventing a maker setpoint; lowering the low-air margin below 5 psi to clear the 50 psi water row.

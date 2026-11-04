@@ -39,7 +39,7 @@ A jockey running or trouble point is not named in §23.8.5.9. Add it only if the
 
 Per double-interlock valve:
 
-- Low air and high air, each supervisory (NFPA 72-2025 §17.19.2.2.2). The setpoint is the valve listing and NFPA 13, not this note.
+- Low air and high air, each supervisory (NFPA 72-2025 §17.19.2.2.2). The setpoint is the valve listing and NFPA 13, not this note. NFPA 72-2019 §17.17.2.2.2 is titled for dry pipe, and preaction on that edition stays practice. NFPA 72-2022 §17.17.2.2.2 covers dry pipe and preaction. Off-normal is a 10 psi rise or a 10 psi drop unless the manufacturer's instructions permit another value. Do not carry that 10 psi number onto a 2025 job. The 2025 section states no psi value. Citing 2025 §17.17.2.2 for this duty is NEEDS HOLD. The old number moved. Nitrogen used as that supervisory pressure is practice for the label. The psi stays with the trim skill.
 - Control-valve tamper, supervisory.
 - Waterflow, alarm, within 90 seconds (§17.15.2 in 2025; §17.13.2 in 2019 and 2022).
 - The low-air release input is logic, not a second supervisory label. Electric/pneumatic trim keeps the low-air switch supervisory and trips on the pneumatic actuator. Electric/electric trim uses an electric low-air input. Assume the trim the fire-protection design elected.

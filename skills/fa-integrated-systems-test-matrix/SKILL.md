@@ -72,3 +72,13 @@ Integrated testing is still required when a written plan is not required [CODE N
   - Maker response delay: use listed maker data [ASSUMED]. Do not invent a time.
 - Release only when both double-interlock conditions are present. Detection alone and low air alone never release.
 - Canada: stop. CAN/ULC-S1001 is NEEDS HOLD. Do not map NFPA 4 or NFPA 72 as Canada code. Do not invent Canadian integrated-test rows. Foam, clean agent, and single-interlock stay locked.
+
+## Commissioning plan rows
+
+These rows sit on the matrix header and on each scenario. They do not replace the NFPA 4 functional matrix. NFPA 4-2024 §4.5.1(6) stays closed.
+
+The commissioning plan includes testing procedures [CODE NFPA 3-2024 §5.2.3.2(8)], testing of integrated systems where that testing applies [CODE §5.2.3.2(9)], and the frequency set for periodic integrated systems testing where that testing applies [CODE §5.2.3.2(11)]. Put the frequency on the matrix header. Update the plan with the sequence of operation for fire protection and life safety systems [CODE §5.3.3(2)] and with an issues log [CODE §5.3.3(8)]. Add an issues-log column on each row.
+
+Map the sequence and the wet, dry, and double-interlock cause and effect under §5.3.3(2) [PRACTICE]. Map the integrated-test scenarios under §5.2.3.2(9) and (11). Map acceptance rows under §5.2.3.2(8) [PRACTICE]. Chapter 14 notes in this skill are pointers. The 2025 notification-appliance rows in Table 14.4.3.2 are NEEDS HOLD. Do not invent those frequencies as code. A speech-transmission-index field pass stays [OWNER]. Do not invent it.
+
+On a Canada job, stop. CAN/ULC-S1001 and CAN/ULC-S536 are NEEDS HOLD. Do not map NFPA 3, NFPA 4, or NFPA 72 as Canada code. Foam, clean agent, and single-interlock stay locked.

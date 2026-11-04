@@ -98,3 +98,11 @@ On a Canada job do not cite NFPA 13-2025 §8.2.6.4 or §8.2.6.5 as Canada code. 
 Do not place low air inside the retired band between trip-plus-2 and the table minimum. Do not set high air above 30 psi on a DDX-LP valve. The heat-trace and fire-department transmit rows above stay as written.
 
 Pump running may be supervisory or alarm [CODE NFPA 72-2025 §23.8.5.9.1]. Other pump signals are supervisory [CODE §23.8.5.9.2]. On a Canada job, do not map NFPA 72 or NFPA 20 rows as Canada code. Return NEEDS HOLD for CAN/ULC-S524, and for integrated testing return NEEDS HOLD for CAN/ULC-S1001. The NBC and provincial heat-trace rows already written above stay where they are marked [CODE]. Do not add new Canada rows. Do not invent clause text.
+
+## Dry-pipe and preaction pressure, by edition
+
+NFPA 72-2019 §17.17.2.2.2 is titled for dry pipe. Preaction low air on a 2019 job stays [PRACTICE]. NFPA 72-2022 §17.17.2.2.2 covers dry pipe and preaction. The device signals both high and low pressure. Off-normal is a 10 psi rise or a 10 psi drop, unless the manufacturer's published instructions permit another value [CODE NFPA 72-2022 §17.17.2.2.2(A) and (B)]. NFPA 72-2025 §17.19.2.2.2 requires both signals and sends the setpoint to NFPA 13. It states no psi number. Do not carry 10 psi onto a 2025 job as code. Citing 2025 §17.17.2.2 for this duty is NEEDS HOLD. The annex caution already in step 6 stays advisory. Do not expand it.
+
+The fire-alarm point for dry-pipe and double-interlock high and low air is supervisory on the edition tags above. A nitrogen supply used as that pressure keeps a [PRACTICE] label for the nitrogen wording. Pressure settings stay with `preaction-el-el-trim-election` and the nitrogen skill. This skill does not invent psi.
+
+On a Canada job, stop this US pressure section. CAN/ULC-S524 and CAN/ULC-S1001 are NEEDS HOLD. The NBC heat-trace rows above stay. Do not map NFPA 72 as Canada code.

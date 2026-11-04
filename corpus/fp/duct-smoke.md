@@ -8,7 +8,7 @@ IMC 2024 §606.2.1 requires a detector in a return over 2,000 cfm, upstream of t
 
 FM DS 5-48 §2.2.3.3.12 and §2.2.3.3.12.1 (January 2011 / interim April 2025) repeat the 2,000 cfm fan interlock, the 15,000 cfm multi-floor return, and the complete-coverage return waiver.
 
-The signal is supervisory where a constantly attended location or a supervising station exists (NFPA 72 §21.7.4). An alarm is allowed only without that attendance, or where another code requires an alarm. A local amendment can say the same thing and can also say the duct detector does not replace open-area detection. Confirm the amendment. Do not let a duct detector stand in for the hall sampling layout.
+The signal is supervisory in NFPA 72-2019 §21.7.4. An alarm is permitted in that edition only where there is no constantly attended location and no supervising station, or where another code requires an alarm (§21.7.4.1 and §21.7.4.2). NFPA 72-2022 and 2025 §21.7.4 are NEEDS HOLD. Do not assume the same sentence. A local amendment can also say the duct detector does not replace open-area detection. Confirm the amendment. Do not let a duct detector stand in for the hall sampling layout.
 
 An older NFPA 90A exemption for a fan whose only job is to exhaust outdoors must be confirmed in the current section before you omit a detector on a battery-room or generator exhaust fan. Gas exhaust for an energy-storage room is not shut down by a general HVAC shutdown (`../fa/bess-separation.md`).
 

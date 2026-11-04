@@ -93,6 +93,14 @@ Optional, and only where an energy-storage room is on the campus. The parts-per-
 - Maker response delay follows listed maker data [ASSUMED].
 - On a Canada job, stop. CAN/ULC-S1001 and CAN/ULC-S524 are NEEDS HOLD. Do not map NFPA 4 or NFPA 855 as Canada code.
 
+## Exhaust may stop when gas clears
+
+IFC 2024 §1207.6.1.2.4 keeps exhaust running until the concentration is under 25 percent of LFL, and then the exhaust may stop [CODE]. This skill's latched manual reset is [PRACTICE], stricter than that permission. Do not cite the latch as code.
+
+Exhaust supervision by a supervising station stays [CODE §1207.6.1.2.3]. A detector failure sent as trouble stays [PRACTICE], as in the integrated-test rows. Do not retag it as a §1207.6.1.2.4 code claim. The gas-start signal class, when NFPA 855 does not set it, is [PRACTICE].
+
+The 2021-to-2024 Chapter 1207 delta is not written. On a 2021 job, NEEDS HOLD. On a Canada job, stop. CAN/ULC-S524 is NEEDS HOLD. Do not map the IFC as Canada code. Foam and clean agent stay locked.
+
 ## Out of scope
 
 Foam, clean agent, water mist, and single-interlock as the sprinkler basis. Do not size the exhaust fan or the duct sprinklers here. See the country gate in this skill.
