@@ -15,7 +15,7 @@ NFPA 72 has no releasing-only duration. Using 24 hours plus 5 minutes on a relea
 - NFPA 72-2019 §10.6.7.2.1.1: include at least a 20 percent margin. Factor 1.20.
 - NFPA 72-2022 and 2025 §10.6.7.2.14: a correction factor of 1.25 for aging. Factor 1.25.
 
-Do not apply 1.20 on a 2022 or 2025 job, or 1.25 on a 2019 job. The annex describes that factor as the aging allowance. Do not stack a second manufacturer aging factor on it for the same effect. Use the larger of the two, and say which one governed.
+Do not apply 1.20 on a 2022 or 2025 job, or 1.25 on a 2019 job. Do not label the FM releasing case as 90 hours plus 5 minutes. A teaching screen at 1.25, not a job result: a 15.20 ampere-hour base becomes 19.0 ampere-hours (26 ampere-hour pick), and a 56.45 ampere-hour base at 90 hours plus 10 minutes becomes 70.6 ampere-hours (100 ampere-hour pick). Do not copy a 1.20 product of those bases. The annex describes that factor as the aging allowance. Do not stack a second manufacturer aging factor on it for the same effect. Use the larger of the two, and say which one governed.
 
 If fire-alarm secondary power holds egress doors locked, those doors unlock within 10 minutes of primary-power loss (NFPA 72 §21.10.3, same duty in 2019, 2022, and 2025), and the lock load is part of this calculation. Supplies that unlock on loss of power are outside that load (§21.10.4). Design practice uses those supplies. See `epo-and-disconnect.md`.
 

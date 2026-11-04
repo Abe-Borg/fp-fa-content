@@ -1646,17 +1646,34 @@ class UiSmokeTests(unittest.TestCase):
         finally:
             root.destroy()
 
-    def _button_labels(self, root) -> list[str]:
+    def _button_labels(self, root, *, visible_only: bool = False) -> list[str]:
         labels = []
 
         def walk(widget):
             for child in widget.winfo_children():
                 if child.winfo_class() in ("TButton", "Button"):
-                    labels.append(str(child.cget("text")))
+                    if not visible_only or child.winfo_viewable():
+                        labels.append(str(child.cget("text")))
                 walk(child)
 
         walk(root)
         return labels
+
+    def _menu_labels(self, menu) -> list[str]:
+        last = menu.index("end")
+        labels = []
+        for index in range(0 if last is None else last + 1):
+            if menu.type(index) in ("command", "checkbutton", "radiobutton", "cascade"):
+                labels.append(str(menu.entrycget(index, "label")))
+        return labels
+
+    def _invoke_menu(self, menu, label: str) -> None:
+        last = menu.index("end")
+        for index in range(0 if last is None else last + 1):
+            if menu.type(index) == "command" and menu.entrycget(index, "label") == label:
+                menu.invoke(index)
+                return
+        self.fail(f"menu entry {label!r} not found in {self._menu_labels(menu)}")
 
     def test_chat_is_the_primary_pane(self):
         if not os.environ.get("DISPLAY"):
@@ -1675,20 +1692,234 @@ class UiSmokeTests(unittest.TestCase):
             app._prefer_chat()
             root.update_idletasks()
             root.update()
+            # Zone details is a closed drawer until the designer opens it.
+            self.assertFalse(app.tabs.winfo_viewable())
             self.assertGreater(app.chat_view.winfo_height(), app.tabs.winfo_height())
-            self.assertIn("/sample-di", app.chat_view.get("1.0", "end"))
-            self.assertIn(THREAD_HINT.splitlines()[0], app.chat_view.get("1.0", "end"))
+            welcome = app.chat_view.get("1.0", "end")
+            self.assertIn("/sample-di", welcome)
+            self.assertIn(THREAD_HINT.splitlines()[0], welcome)
+            self.assertIn("Add your Anthropic API key", welcome)
+            self.assertTrue(app.chat_view.tag_ranges("link_sample_di"))
+            # Three plain buttons on screen. Everything else is a menu or the drawer.
+            visible = self._button_labels(root, visible_only=True)
+            self.assertEqual(sorted(visible), sorted(["+  New chat", "Settings", "Send"]))
             labels = self._button_labels(root)
-            self.assertIn("Settings", labels)
-            self.assertIn(f"Export {DRAFT_SECTION}", labels)
-            self.assertIn("Sample DI", labels)
-            self.assertEqual(app.mode_slug.get(), "mixed")
-            self.assertIn("calculator", app.mode_box["values"])
-            self.assertIn("brainstorm", app.mode_box["values"])
-            self.assertIn("synthesis", app.mode_box["values"])
             self.assertNotIn("Run DI zone", labels)
-            self.assertNotIn("Sample DI job", labels)
+            self.assertNotIn("Sample DI", labels)
+            self.assertNotIn("Sample BESS", labels)
+            more = self._menu_labels(app.more_menu)
+            self.assertIn("Sample DI zone", more)
+            self.assertIn("Sample BESS room", more)
+            self.assertIn(f"Export draft Section {DRAFT_SECTION}…", more)
+            self.assertIn("Settings…", more)
+            self.assertIn("Narrate zone runs with Claude", more)
+            self.assertEqual(app.mode_slug.get(), "mixed")
+            self.assertEqual(str(app.mode_button.cget("text")), "Mode: mixed")
+            for slug in ("calculator", "brainstorm", "synthesis", "mixed"):
+                self.assertIn(slug, app.mode_choices())
+            app.mode_slug.set("calculator")
+            self.assertEqual(str(app.mode_button.cget("text")), "Mode: calculator")
             self.assertEqual(app.chat_entry.focus_get(), app.chat_entry)
+            self.assertEqual(app.job_title.get(), "New chat")
+            self.assertFalse(app.activity.winfo_viewable())
+
+            app.show_details(True)
+            root.update()
+            self.assertTrue(app.tabs.winfo_viewable())
+            self.assertTrue(app.details_open.get())
+            app.toggle_details()
+            root.update()
+            self.assertFalse(app.tabs.winfo_viewable())
+            self.assertFalse(app.details_open.get())
+        finally:
+            root.destroy()
+
+    def test_first_chat_turn_needs_no_sample(self):
+        """With a key saved, open the app and ask. Sample DI never runs."""
+        if not os.environ.get("DISPLAY"):
+            self.skipTest("no display")
+        _isolate_data()
+        import tkinter as tk
+        from unittest.mock import patch
+
+        from fpfa.keystore import save_api_key
+        from fpfa.projects import list_projects, load_project
+        from fpfa.ui import THREAD_HINT, WELCOME_KEY_LINK, App
+
+        save_api_key("sk-ant-local-test")
+        seen = []
+
+        class Fast:
+            def __init__(self, _key):
+                pass
+
+            def create(self, **kwargs):
+                seen.append(kwargs)
+                return SimpleNamespace(
+                    stop_reason="end_turn",
+                    content=[SimpleNamespace(
+                        type="text",
+                        text="## Short answer\n- **Trim** is ASSUMED until a valve sheet is in hand.",
+                    )],
+                )
+
+        root = tk.Tk()
+        try:
+            app = App(root)
+            root.update()
+            welcome = app.chat_view.get("1.0", "end")
+            self.assertIn(THREAD_HINT.splitlines()[0], welcome)
+            self.assertNotIn(WELCOME_KEY_LINK, welcome)
+            self.assertIsNone(app.project)
+            self.assertEqual(list_projects(), [])
+            with patch("fpfa.ui.AnthropicMessages", Fast):
+                app.chat_entry.insert(0, "How should I split a 40,000 ft2 data hall into DI zones?")
+                app.send_chat()
+                self._wait_for(app, "Short answer")
+            thread = app.chat_view.get("1.0", "end")
+            self.assertNotIn(THREAD_HINT.splitlines()[0], thread)
+            self.assertIn("How should I split", thread)
+            self.assertIn("• Trim is ASSUMED", thread)
+            self.assertNotIn("**", thread)
+            self.assertEqual(len(seen), 1)
+            self.assertIn("How should I split", seen[0]["messages"][0]["content"])
+            projects = list_projects()
+            self.assertEqual(len(projects), 1)
+            self.assertNotIn("Sample", projects[0]["name"])
+            self.assertEqual(app.project["name"], "How should I split a 40,000 ft2 data hall into…")
+            self.assertEqual(app.job_title.get(), app.project["name"])
+            saved = load_project(app.project["id"])
+            self.assertIsNone(saved.get("last_run"))
+            self.assertIsNone(saved.get("bess_run"))
+            self.assertEqual([turn["role"] for turn in saved["chat"]], ["user", "assistant"])
+            kinds = [job.kind for job in app.jobs.snapshot()]
+            self.assertEqual(kinds, ["chat"])
+            self.assertTrue(app._activity_shown)
+        finally:
+            root.destroy()
+
+    def test_pending_line_shows_while_a_reply_is_out(self):
+        if not os.environ.get("DISPLAY"):
+            self.skipTest("no display")
+        _isolate_data()
+        import threading
+        import tkinter as tk
+        from unittest.mock import patch
+
+        from fpfa.keystore import save_api_key
+        from fpfa.ui import App
+
+        save_api_key("sk-ant-local-test")
+        release = threading.Event()
+
+        class Blocking:
+            def __init__(self, _key):
+                pass
+
+            def create(self, **_kwargs):
+                release.wait(3)
+                return SimpleNamespace(
+                    stop_reason="end_turn",
+                    content=[SimpleNamespace(type="text", text="pending reply")],
+                )
+
+        root = tk.Tk()
+        try:
+            app = App(root)
+            root.update()
+            with patch("fpfa.ui.AnthropicMessages", Blocking):
+                app.chat_entry.insert(0, "Which trim family?")
+                app.send_chat()
+                self.assertIn("Working on it…", app.chat_view.get("1.0", "end"))
+                self.assertEqual(app.chat_entry.get(), "")
+                release.set()
+                self._wait_for(app, "pending reply")
+                import time
+
+                deadline = time.time() + 2
+                while time.time() < deadline and "Working on it…" in app.chat_view.get("1.0", "end"):
+                    app._poll()
+                    time.sleep(0.02)
+            self.assertNotIn("Working on it…", app.chat_view.get("1.0", "end"))
+        finally:
+            release.set()
+            root.destroy()
+
+    def test_composer_keys_and_entry_calls(self):
+        if not os.environ.get("DISPLAY"):
+            self.skipTest("no display")
+        _isolate_data()
+        import tkinter as tk
+
+        from fpfa.ui import App
+
+        root = tk.Tk()
+        try:
+            app = App(root)
+            root.update()
+            entry = app.chat_entry
+            entry.insert(0, "first line")
+            self.assertEqual(entry.get(), "first line")
+            entry.focus_force()
+            root.update()
+            entry.mark_set("insert", "end")
+            entry.event_generate("<Shift-Return>")
+            entry.insert("end", "second line")
+            self.assertEqual(entry.get(), "first line\nsecond line")
+            entry.delete(0, "end")
+            self.assertEqual(entry.get(), "")
+            entry.insert(0, "/help")
+            entry.event_generate("<Return>")
+            root.update()
+            self.assertEqual(entry.get(), "")
+            self.assertIn("/sample-di —", app.chat_view.get("1.0", "end"))
+            self.assertNotIn("## Commands", app.chat_view.get("1.0", "end"))
+            # /help is a slash command, so the job keeps its default name.
+            self.assertEqual(app.project["name"], "Untitled job")
+        finally:
+            root.destroy()
+
+    def test_new_chat_rename_and_delete(self):
+        if not os.environ.get("DISPLAY"):
+            self.skipTest("no display")
+        _isolate_data()
+        import tkinter as tk
+        from unittest.mock import patch
+
+        from fpfa.projects import list_projects, load_project
+        from fpfa.ui import THREAD_HINT, App
+
+        root = tk.Tk()
+        try:
+            app = App(root)
+            root.update()
+            app.new_job()
+            first = app.project["id"]
+            self.assertEqual(app.project["name"], "Untitled job")
+            # A second New chat on an untouched job does not pile up empty jobs.
+            app.new_job()
+            self.assertEqual(app.project["id"], first)
+            self.assertEqual(len(list_projects()), 1)
+            app.chat_entry.insert(0, "hello there")
+            app.send_chat()
+            self.assertEqual(app.project["name"], "hello there")
+            with patch("fpfa.ui.simpledialog.askstring", return_value="  Hall 2  zoning "):
+                app.rename_job()
+            self.assertEqual(load_project(first)["name"], "Hall 2 zoning")
+            self.assertEqual(app.job_title.get(), "Hall 2 zoning")
+            self.assertIn("Hall 2 zoning", app.project_list.get(0, "end"))
+            app.new_job()
+            self.assertNotEqual(app.project["id"], first)
+            self.assertIn(THREAD_HINT.splitlines()[0], app.chat_view.get("1.0", "end"))
+            app.open_project(first)
+            self.assertIn("hello there", app.chat_view.get("1.0", "end"))
+            with patch("fpfa.ui.messagebox.askyesno", return_value=True):
+                app.delete_job(first)
+            self.assertIsNone(app.project)
+            self.assertEqual(app.chat_log, [])
+            self.assertNotIn("hello there", app.chat_view.get("1.0", "end"))
+            self.assertIn(THREAD_HINT.splitlines()[0], app.chat_view.get("1.0", "end"))
+            self.assertNotIn(first, [row["id"] for row in list_projects()])
         finally:
             root.destroy()
 
@@ -1863,7 +2094,7 @@ class UiSmokeTests(unittest.TestCase):
         finally:
             root.destroy()
 
-    def test_sample_di_chip_runs_the_same_path(self):
+    def test_sample_di_menu_runs_the_same_path(self):
         if not os.environ.get("DISPLAY"):
             self.skipTest("no display")
         _isolate_data()
@@ -1875,13 +2106,65 @@ class UiSmokeTests(unittest.TestCase):
         try:
             app = App(root)
             root.update()
-            app.sample_di_button.invoke()
+            self._invoke_menu(app.more_menu, "Sample DI zone")
             chat = app.chat_view.get("1.0", "end")
             self.assertIn("/sample-di", chat)
             self.assertIn("5.0 gal trim ASSUMED", chat)
             self.assertEqual(len(app.pipes.get_children()), 4)
             self.assertIsNotNone(app.project["last_run"])
             self.assertIn("Zone total is", app.results.get("1.0", "end"))
+        finally:
+            root.destroy()
+
+    def test_sample_di_seeds_its_own_thread_when_chosen(self):
+        """Sample DI is optional. When chosen it opens its own job and says what it loaded."""
+        if not os.environ.get("DISPLAY"):
+            self.skipTest("no display")
+        _isolate_data()
+        import tkinter as tk
+
+        from fpfa.projects import load_project
+        from fpfa.ui import App, sample_di_seed
+
+        root = tk.Tk()
+        try:
+            app = App(root)
+            root.update()
+            app.chat_entry.insert(0, "/help")
+            app.send_chat()
+            first = app.project["id"]
+            app.new_job()
+            self.assertNotEqual(app.project["id"], first)
+            root.update()
+            # Click the welcome link. It runs the same starter as /sample-di.
+            start = app.chat_view.tag_ranges("link_sample_di")[0]
+            box = app.chat_view.bbox(f"{start}+3c")
+            self.assertIsNotNone(box)
+            app.chat_view.event_generate("<Motion>", x=box[0] + 2, y=box[1] + 2)
+            app.chat_view.event_generate("<Button-1>", x=box[0] + 2, y=box[1] + 2)
+            root.update()
+            self.assertNotEqual(app.project["id"], first)
+            self.assertEqual(app.project["name"], "Sample data hall DI zone")
+            self.assertEqual(app.job_title.get(), "Sample data hall DI zone")
+            reply = app.chat_log[1]["text"]
+            self.assertTrue(reply.splitlines()[1].startswith("Sample loaded: data-hall double-interlock zone DH-1"))
+            self.assertIn(sample_di_seed(), reply)
+            self.assertIn("4 pipe segments", reply)
+            self.assertIn("not a real building", reply)
+            self.assertIn("Zone total is", reply)
+            self.assertIn("5.0 gal trim ASSUMED", reply)
+            self.assertEqual(app.zone_id.get(), "DH-1")
+            self.assertEqual(app._seed_notes, {})
+            # The earlier job keeps its own thread.
+            self.assertEqual(
+                [turn["text"] for turn in load_project(first)["chat"] if turn["role"] == "user"],
+                ["/help"],
+            )
+            # A second run of the same zone is not labeled as a fresh sample.
+            app.chat_entry.insert(0, "/run")
+            app.send_chat()
+            self.assertNotIn("Sample loaded", app.chat_log[-1]["text"])
+            self.assertIn("Zone total is", app.chat_log[-1]["text"])
         finally:
             root.destroy()
 
@@ -2417,14 +2700,14 @@ class UiSmokeTests(unittest.TestCase):
                 self._wait_for(app, "CHAT-WHILE-REPLY", timeout=3)
                 mid = app.chat_view.get("1.0", "end")
                 self.assertIn("CHAT-WHILE-REPLY", mid)
-                self.assertIn("| chat |", mid)
+                self.assertIn("| chat\n", mid)
                 self.assertNotIn("5.0 gal trim ASSUMED", mid)
                 self.assertEqual(str(app.chat_entry.cget("state")), "normal")
                 zone_release.set()
                 self._wait_for(app, "5.0 gal trim ASSUMED", timeout=3)
             thread = app.chat_view.get("1.0", "end")
             self.assertIn("| zone |", thread)
-            self.assertIn("| chat |", thread)
+            self.assertIn("| chat\n", thread)
             self.assertIn("CHAT-WHILE-REPLY", thread)
             self.assertIn("5.0 gal trim ASSUMED", thread)
             self.assertEqual(app.project["last_run"]["source"], "tool-plan")
@@ -2500,7 +2783,7 @@ class UiSmokeTests(unittest.TestCase):
                 self._wait_for(app, "FAST-REPLY", timeout=3)
                 early = app.chat_view.get("1.0", "end")
                 self.assertIn("FAST-REPLY", early)
-                self.assertIn("| chat |", early)
+                self.assertIn("| chat\n", early)
                 self.assertNotIn("SLOW-REPLY", early)
                 turns = [turn for turn in app.chat_log if turn.get("role") == "assistant"]
                 self.assertEqual(len(turns), 1)
@@ -3124,7 +3407,9 @@ class BessStarterTests(unittest.TestCase):
         try:
             app = App(root)
             root.update()
-            app.sample_bess_button.invoke()
+            last = app.more_menu.index("end")
+            labels = [app.more_menu.entrycget(i, "label") if app.more_menu.type(i) == "command" else "" for i in range(last + 1)]
+            app.more_menu.invoke(labels.index("Sample BESS room"))
             chat = app.chat_view.get("1.0", "end")
             self.assertIn("/sample-bess", chat)
             self.assertIn("4.11", chat)

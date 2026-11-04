@@ -3,7 +3,7 @@
 #
 #   packaging\build_installer.ps1
 #   packaging\build_installer.ps1 -BuildApp
-#   packaging\build_installer.ps1 -Version 0.1.1
+#   packaging\build_installer.ps1 -Version 0.1.2
 #
 # Uses app\dist\fpfa\fpfa.exe when that file is already there. If it is
 # missing, or if -BuildApp is set, runs build_app.ps1 first.

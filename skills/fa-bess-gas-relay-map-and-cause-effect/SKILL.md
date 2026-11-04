@@ -37,14 +37,14 @@ Rename the rows to the vendor's relay labels. Do not treat these names as a cata
 
 | Relay | Trips at | Lands at | Function |
 |---|---|---|---|
-| Low-start | Low (either gas, at or below 10 percent of LFL) | Exhaust fan starter or VFD, and makeup-air unit or damper | Start and open. Latched. Manual reset only after gas clears |
+| Low-start | Either gas, rising through a setpoint selected at no more than 10 percent of LFL | Exhaust fan starter or VFD, and makeup-air unit or damper | Start and open. Latched. Manual reset only after gas clears |
 | Low-alarm | Low (either gas) | FACP monitor module | Gas alarm to the FACP, own zone label. Alarm class, never supervisory: NFPA 855-2023 9.6.5.6.7(5)(b) |
 | High-notify | High (either gas, at or below 25 percent of LFL) | Gas horn and strobes on the gas panel, or their own circuit | Distinct gas notification. Also on low: verify with the engineer of record. Conservative assumption: yes |
 | High-facp | High | FACP monitor module | High gas to the FACP. If the panel lacks a contact, add an expansion module |
 | Fault | Panel fault or power loss | FACP monitor module | Trouble to the FACP and the station. Fail-safe (de-energize on fault) |
 
 - On the 9.6.5.6.7 path, 10 percent of LFL does two jobs. (1) sets the reduction-system start (Low-start). (5)(b) sets an alarm above 10 percent of LFL (Low-alarm). Write both rows. One does not replace the other [CODE NFPA 855-2023].
-- Low-start at 10 percent of LFL is [CODE] only on the 9.6.5.6.7 path. On the rate path the code trigger is 25 percent of LFL. The 10 percent start is design practice. Verify with the engineer of record. Conservative assumption: keep 10 percent. Tag each cause-and-effect row with its path.
+- Low-start at 10 percent of LFL is [CODE] only on the 9.6.5.6.7 path. The relay trips when measured concentration rises through a setpoint selected at no more than 10 percent of LFL. A clean-air or zero reading does not trip it. On the rate path the code trigger is 25 percent of LFL. The 10 percent start is design practice. Verify with the engineer of record. Conservative assumption: keep 10 percent. Tag each cause-and-effect row with its path.
 - Either gas (hydrogen or VOC) at a level trips that level. Repeat the rows per room.
 - Shared relays across several rooms: flag them. Per-room fans or dampers need per-room relays or expansion modules.
 
@@ -82,6 +82,16 @@ The 2 h versus 3 h fire-barrier election sets door ratings and damper ratings on
 ## Output
 
 Hard-fail table. Relay map with landings. FACP point list. Cause-and-effect matrix. Sequence notes. Notification schedule. RFI list.
+
+## Integrated-test setpoints
+
+Optional, and only where an energy-storage room is on the campus. The parts-per-million figures in a worked mixture are examples. Use the job mixture LFL. Do not invent maker times. The test rows live in `fa-integrated-systems-test-matrix`.
+
+- Name the path on the row. Concentration-reduction path (an NFPA 69 study): when measured concentration reaches a start setpoint selected at no more than 10 percent of LFL, start concentration reduction and send an alarm to the FACU [CODE NFPA 855-2023 §9.6.5.6.7(1) and (5)(b)]. A reading of zero does not start. That is the low-start relay and the low-alarm relay above. Exhaust-rate path: the code start is when concentration exceeds 25 percent of LFL [CODE §9.6.5.1.5.4(1)]. An earlier start, at a setpoint selected at no more than 10 percent of LFL, is [PRACTICE]. Verify with the engineer of record. Do not call that practice start a substitute for a §9.6.5.6.7 design, and do not fail a rate-path test for lacking a code 10 percent start.
+- When measured concentration exceeds 25 percent of LFL, start mechanical exhaust if it is not already running. On the exhaust-rate path that start is [CODE §9.6.5.1.5.4(1)].
+- A gas-detector fault or loss of power sends trouble to the FACU [PRACTICE].
+- Maker response delay follows listed maker data [ASSUMED].
+- On a Canada job, stop. CAN/ULC-S1001 and CAN/ULC-S524 are NEEDS HOLD. Do not map NFPA 4 or NFPA 855 as Canada code.
 
 ## Out of scope
 
