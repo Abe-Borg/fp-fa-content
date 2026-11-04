@@ -41,7 +41,42 @@ def write_seed(dest: Path) -> list[str]:
     return stripped
 
 
-def pyinstaller_command(seed: Path, dist: Path, work: Path, *, windowed: bool) -> list[str]:
+def keyring_bundle_flags(*, windows: bool) -> list[str]:
+    """PyInstaller flags that let the frozen app reach the OS keyring.
+
+    keyring finds its backends through importlib.metadata entry points, so the
+    bundle needs keyring's dist-info and the backend modules those entry points
+    name. On Windows the backend uses pywin32-ctypes, which loads its ctypes or
+    cffi submodules at run time, where static analysis cannot see them.
+    PyInstaller 6 ships hooks (hook-keyring, hook-win32ctypes.core) that already
+    do this. These flags keep the build correct if a PyInstaller release drops
+    or changes those hooks.
+    """
+    flags = [
+        "--copy-metadata",
+        "keyring",
+        "--collect-submodules",
+        "keyring.backends",
+    ]
+    if windows:
+        flags += [
+            "--hidden-import",
+            "keyring.backends.Windows",
+            "--hidden-import",
+            "win32ctypes.pywin32.win32cred",
+            "--hidden-import",
+            "win32ctypes.pywin32.pywintypes",
+            "--collect-submodules",
+            "win32ctypes",
+        ]
+    return flags
+
+
+def pyinstaller_command(
+    seed: Path, dist: Path, work: Path, *, windowed: bool, windows: bool | None = None
+) -> list[str]:
+    if windows is None:
+        windows = os.name == "nt"
     entry = APP_DIR / "fpfa" / "__main__.py"
     command = [
         sys.executable,
@@ -70,6 +105,7 @@ def pyinstaller_command(seed: Path, dist: Path, work: Path, *, windowed: bool) -
         "docx",
         "--hidden-import",
         "keyring",
+        *keyring_bundle_flags(windows=windows),
         "--windowed" if windowed else "--console",
         str(entry),
     ]

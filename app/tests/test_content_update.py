@@ -230,6 +230,35 @@ class ContentPackBuildTests(unittest.TestCase):
         self.assertFalse((dest / "anthropic-api-key").exists())
         self.assertFalse(any("_sources" in path.parts for path in dest.rglob("*")))
 
+    def test_pyinstaller_command_bundles_the_keyring_backend(self):
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location(
+            "fpfa_build_app_probe", APP_DIR / "packaging" / "build_app.py"
+        )
+        build_app = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(build_app)
+        work = Path(tempfile.mkdtemp(prefix="fpfa-build-"))
+
+        def pairs(command):
+            return list(zip(command, command[1:]))
+
+        windows = build_app.pyinstaller_command(work / "seed", work / "dist", work / "w", windowed=True, windows=True)
+        for pair in (
+            ("--copy-metadata", "keyring"),
+            ("--collect-submodules", "keyring.backends"),
+            ("--hidden-import", "keyring.backends.Windows"),
+            ("--hidden-import", "win32ctypes.pywin32.win32cred"),
+            ("--collect-submodules", "win32ctypes"),
+        ):
+            self.assertIn(pair, pairs(windows))
+        self.assertIn("--windowed", windows)
+
+        other = build_app.pyinstaller_command(work / "seed", work / "dist", work / "w", windowed=False, windows=False)
+        self.assertIn(("--copy-metadata", "keyring"), pairs(other))
+        self.assertFalse(any("win32ctypes" in part or part.endswith(".Windows") for part in other))
+        self.assertIn("--console", other)
+
     def test_workflow_publishes_on_a_content_tag(self):
         text = (REPO / ".github" / "workflows" / "content-pack.yml").read_text(encoding="utf-8")
         self.assertIn("content-v*", text)
