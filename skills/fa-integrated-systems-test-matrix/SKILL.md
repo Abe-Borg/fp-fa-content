@@ -56,7 +56,7 @@ IST matrix CSV, ITM row table by edition, judgment-call list, open items.
 
 ## Campus wet and double-interlock rows
 
-Integrated testing is still required when a written plan is not required [CODE NFPA 4-2024 §4.5.3.1]. The functional matrix is NFPA 4-2024 §4.5.1 item (6) [CODE]. Synthetic campus only. Do not copy the rows onto a hall.
+Integrated testing is still required when a written plan is not required [CODE NFPA 4-2024 §4.5.3.1]. The functional matrix is NFPA 4-2024 §4.5.1 item (6) [CODE]. That item is closed. Do not mark it unheld. Do not invent the other plan-item sentences. Air-sampling and smoke sensitivity test rows stay with the Chapter 14 table already used here. No new rows. Synthetic campus only. Do not copy the rows onto a hall.
 
 - Waterflow, wet building: fire alarm, supervising-station alarm, and voice in that building. No elevator recall. General waterflow is not a Phase I initiator [CODE NFPA 72 §21.3.3.1]. An owner add is [OWNER]. Verify with the engineer of record.
 - Double-interlock detection only: pre-alarm or alarm. No valve release.

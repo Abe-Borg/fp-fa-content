@@ -21,7 +21,8 @@ description: >-
 - [CODE] HVAC mechanical room used as return plenum: no ACH reduction (17.7.7.3.4) [2019 17.7.6.3.4].
 - [CODE] Beams: solid joists count as beams; depth vs 0.1H, spacing vs 0.4H (2025 17.7.4.2.4.3; 2022 17.7.4.2.4.2; 2019 17.7.3.2.4.2).
 - [CODE 2025 only] 40 ft ceiling scope on 17.7.4.2.3.1; girder within 4 in of ceiling is a beam (17.7.4.2.4.2); gap above beam over 0.15H permits smooth spacing (17.7.4.2.4.3(6)). On 2019/2022 jobs these are [PRACTICE].
-- [CODE] Smooth spacing 30 ft nominal; every ceiling point within 0.7S (17.7.4.2.3.1) [2019 17.7.3.2.3.1]. Sidewall 12 in max (17.7.4.2.1). Not in supply airstream (17.7.7.3.2).
+- [CODE] Smooth spacing 30 ft nominal; every ceiling point within 0.7S (17.7.4.2.3.1) [2019 17.7.3.2.3.1]. Sidewall 12 in max (17.7.4.2.1*). Not in supply airstream (17.7.7.3.2).
+- [CODE NFPA 72-2025] Location. A detector protecting a specific hazard may sit closer, where it can intercept the smoke (§17.7.4.1.3). Spot smoke is on the ceiling, or on a sidewall with the top within 12 in. of the ceiling (§17.7.4.2.1*). Under a raised floor, mount only in a listed orientation (§17.7.4.2.2*). In 2025, §17.7.3 is sensitivity. Do not cite §17.7.3 for location. The 2019 location numbers stay with the spacing cites above.
 - Containment is not addressed in Ch 17. Hot-aisle work goes to the ASD skills [PRACTICE].
 
 ## Inputs (ASSUME and flag any missing)
@@ -33,8 +34,9 @@ Room list: size, ceiling height, ACH, beam depth and spacing, girders, raised fl
 3. Return-plenum mech room: no reduction.
 4. Beams: below 0.1H use smooth spacing; at or above 0.1H and spacing at or above 0.4H, a detector in each pocket; apply 2025-only rules only on 2025 jobs.
 5. Grid check in a script: cell area at or under table area, spacing at or under 30 ft, farthest point within 0.7S. Over 40 ft on 2025: 17.7.4.2.3.3 other spacing [PARA].
-6. MV switchgear room: where NFPA 76 is adopted or owner-required, apply the 76 power area reading (example: 4 EWFD spots in a room where 72 spacing gives 2) [PARA; Verify with the engineer of record, provisional until 76-2024 6.1.3, 8.8.2, 8.8.3(1) are pulled]. Else 72 spacing is the floor [PRACTICE]. Keep detectors out of arc-flash vent paths and above the gear clear zone; prefer ASD with the detector outside the room; final spots need the arc-flash study [PRACTICE; Verify with the engineer of record] (Design practice design practice, , ).
-7. Print row-pick tests (for example 13 ACH uses the 15 ACH row).
+6. MV switchgear room: where NFPA 76 is adopted or owner-required, NFPA 76-2024 §6.10.5.1 (same section in 2020) requires an early-warning system in power areas, per Chapter 8 [CODE]. Whether the room is a power area is a scope call. Verify with the engineer of record. That section sets no spot count. A design value of 4 early-warning spots where Chapter 17 spacing gives 2 is [PARA]. Else Chapter 17 spacing is the floor [PRACTICE]. Keep detectors out of arc-flash vent paths and above the gear clear zone. Prefer air sampling with the detector outside the room. Final spots need the arc-flash study [PRACTICE]. Verify with the engineer of record.
+7. FM electrical rooms: on an FM job the sheet smoke minimum is photoelectric or combination smoke to a constantly attended location, with or without sprinklers or heat [OWNER FM DS 5-19 §2.2.4]. Space those detectors per FM DS 5-48 §2.2.3.3 (Table 4 by air changes; 900 ft² and 30 ft at or under about 6 air changes). Compare with the Chapter 17 counts from steps 1 to 5. The most stringent wins. Do not add heat from DS 5-19. Where the room is a high-ambient electrical wiring room, add spot fixed-temperature heat in addition to smoke, not instead of smoke [OWNER FM DS 5-48 §2.2.1.5]. The ambient call stays with the engineer of record. Arc-flash detectors are not the basis of design.
+8. Print row-pick tests (for example 13 ACH uses the 15 ACH row).
 
 ## Output
 Room table: ACH row, area per detector, beam rule, grid, count, pass or fail per check, edition labels, delta vs 2025.

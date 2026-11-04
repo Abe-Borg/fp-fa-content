@@ -10,7 +10,9 @@ Outgoing and return conductors of Class A, Class N, and Class X stay apart (NFPA
 
 A single open or ground, and the restoration, indicates within 200 seconds (§12.6.1 and §12.6.2). That 200 seconds is the same in 2019, 2022, and 2025. The restore cite is §12.2.3.4 in 2019 and §12.2.3.5 in 2022 and 2025.
 
-Integrity exemptions changed. In 2022, a shunt, a notification circuit in the same room, and a pneumatic rate-of-rise are exempt, and a 20 ft enclosure interconnection may be in conduit or equivalent protection. In 2025 those three exemptions are dropped, and the 20 ft interconnection needs metal raceway or metal armored cable. Cite the edition.
+Integrity exemptions changed. In 2022, a shunt, a notification circuit in the same room, and a pneumatic rate-of-rise are exempt, and a 20 ft enclosure interconnection may be in conduit or equivalent protection (§12.6.9 on that edition only). In 2025 those three exemptions are dropped, and the 20 ft interconnection needs metal raceway or metal armored cable (§12.6.7). Cite the edition. Two 2025 exemptions are separate from that 20 ft rule. Monitoring for integrity is not required for listed equipment interconnected inside one enclosure (§12.6.6*). It is not required for ground-fault detection conductors where one ground fault does not prevent required operation (§12.6.8). Do not cite §12.6.9 for the ground-fault exemption. In 2025, §12.6.9 is computer and keyboard cabling.
+
+Shared-pathway performance levels in Chapter 12 are not the Chapter 24 survivability levels. Level 3 pathways use equipment dedicated to the life safety system (§12.5.4*). Level 1 pathways prioritize life-safety data over other data (NFPA 72-2025 §12.5.2.2). A Level 3 default on an owner network is design practice. Level 2 is an owner sign-off. Do not invent Level 0 or Level 2 requirement text.
 
 ## Class N redundancy
 

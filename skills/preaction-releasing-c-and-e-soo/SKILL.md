@@ -493,6 +493,8 @@ Emit with Outputs. **Every controlling claim / matrix row / gate gets a Status-r
 
 **L1 vs L2 split:** FM grounds **two** effective per-port values — **0.2 %/ft** alert/pre-alarm and **1.0 %/ft** alarm (DS 5-32 §3.3.2.2/.3). The L1/L2 split *within* 0.2 %/ft is **configured ASD staging**, not a third grounded number.
 
+**L2 trip obscuration, open.** Where the pinned initiation level is L2, hold the trip at **0.2 %/ft (0.7 %/m) effective per port**. That figure is ASSUMED. It is not settled code and it is not a grounded insurer pin. FM DS 5-32 January 2026 body §2.4.3.2.1.3.1 (actuate the preaction valve on the pre-alarm) and §2.4.3.2.1.3.2 (do not cross-zone the detection) outrank the §3.3.2 rationale text that says an L3 alarm initiates suppression. Cite the obscuration numbers to the rationale. Cite the trip tier to the body. Do not cite the rationale as the trip requirement. Do not move the trip to 1.0 %/ft, and do not invent a 0.4 to 0.6 %/ft trip, without the engineer of record. The company Boolean stays `preaction_trip := VEWFD_prealarm AND low_air`. Status on this row is provisional, not grounded. The same hold goes on `fa-two-level-detection-stagger-and-fm-mapping` and on `fa-double-interlock-releasing-cause-and-effect`. On a Canada job, FM DS 5-32 still applies when that insurer is on the job. Do not assert an NBC or NFC detection overlay. Canadian detection clause text stays NEEDS HOLD. Verify with the engineer of record.
+
 ---
 
 ## 4. Output
