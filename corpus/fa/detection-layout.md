@@ -19,3 +19,7 @@ Very early warning sampling for a data hall follows NFPA 72-2025 §17.7.4.6 and 
 NFPA 76 §8.5.3.1 (2020 or 2024) applies only when that standard is adopted or elected. The stagger between high and low sampling ports is an NFPA 76 rule on that same condition. It is not an NFPA 72 default.
 
 Map owner sampling levels to FM signals with the engineer of record: Alert is supervisory and is not the double-interlock detection leg; Action or Fire 1 is the pre-alarm the company uses as leg 1. See `di-releasing.md`.
+
+Each sampling port is a spot detector for location and spacing (NFPA 72-2025 §17.7.4.6.1.1; 2019 §17.7.3.6.1.1). The detector signals trouble when airflow is outside the manufacturer's specified range (NFPA 72-2025 §17.7.4.6.1.2). Do not invent that range. A 0.2 percent per foot trip at the second level is not an NFPA 72 requirement. It stays assumed. In 2025, §17.7.3 is sensitivity. It does not elect the trip.
+
+A concealed spot detector has a remote indicator at an accessible location the authority accepts (NFPA 72-2022 and 2025 §17.4.7.2). The 2019 rule covered a concealed detector more than 10 ft above the floor (§17.4.6). Cite the enforced edition. Solid joists count as beams (NFPA 72-2025 §17.7.4.2.4.1). A girder whose top is within 4 in. of the ceiling is a beam; more than 4 in. down, it is not a factor (§17.7.4.2.4.2, 2025). Those 2025 girder and gap rules are practice on earlier editions, as the beam paragraph above already says. On a Canada job, CAN/ULC-S524 spacing is NEEDS HOLD.

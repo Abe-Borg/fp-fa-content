@@ -6,6 +6,8 @@ Layout areas already in `detection-layout.md` are not repeated here. This note i
 
 NFPA 72 maximum air-sample transport, from the farthest port to the detector, is 120 seconds. The cite is §17.7.3.6.2.1 in 2019 and §17.7.4.6.2.1 in 2022 and 2025. The words match. Sixty seconds is not an NFPA 72 limit.
 
+Each port is a spot detector for location and spacing (§17.7.4.6.1.1 in 2025; §17.7.3.6.1.1 in 2019). Airflow outside the manufacturer's specified range is a trouble signal (NFPA 72-2025 §17.7.4.6.1.2). The annex production-sensitivity benchmark is not the selection basis. A 0.2 percent per foot trip at the second detection level is assumed. It is not an NFPA 72 code value. NFPA 76 alert and alarm numbers below apply only when that standard is adopted or elected.
+
 NFPA 76-2024 §8.5.3.1.2.6 limits very-early-warning transport to 60 seconds from the most remote port, excluding test ports, to the detector. The 2020 edition uses the same number. Early-warning transport is 90 seconds (§8.5.3.2.1.4 in 2024). The 2020 early-warning sentence was not compared. When FM DS 5-32 or NFPA 76 governs, 60 seconds is the design limit. The 120 second code floor is the comparison.
 
 A UL open-area listing can cap the design-tool transport at 40 to 45 seconds, depending on air speed, which is tighter than both clocks. That cap is the listing. It is not a code amendment. A ULC open-area maximum of 120 seconds on the same family is a different mark. Use the mark on the submitted model.

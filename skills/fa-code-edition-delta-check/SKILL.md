@@ -133,3 +133,9 @@ These labels are edition-specific. Do not move them across editions.
 - NFPA 4-2024 §4.5.1(6), the functional matrix of inputs and outputs, stays closed. Do not mark it unheld. Do not invent the other plan-item sentences.
 - NEC 2026 Table 8 stays NEEDS HOLD. Do not state ohms for that edition.
 - Class N item (1), one endpoint versus two or more, stays open. Verify with the engineer of record.
+
+## Adopted I-Code and the NFPA 72 edition
+
+Unamended IBC 2021 and IFC 2021 reference NFPA 72-2019. Unamended IBC 2024 and IFC 2024 reference NFPA 72-2022 [CODE, the adopted code's referenced-standards chapter]. Neither references NFPA 72-2025. Use 2025 only when the authority or the owner elects it [PARA]. Confirm which instrument governs. A state adoption snapshot is practice. Do not copy it onto a job. One 2026 state-adoption gap stays open. Do not fill it.
+
+Duct-detector supervisory is NFPA 72-2019 §21.7.4 only. NFPA 72-2022 and 2025 §21.7.4 stay NEEDS HOLD. Do not assume the same sentence. The 2025 label hygiene above stays. NEC 2026 Table 8 stays NEEDS HOLD even where a state adopts that NEC edition. On a Canada job, stop. Do not map the I-Codes or NFPA 72 as Canada code. CAN/ULC-S524, S536, S537, S1001, and CEC Section 32 stay NEEDS HOLD.
