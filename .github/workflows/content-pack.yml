@@ -16,6 +16,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:
@@ -37,10 +39,12 @@ jobs:
           tag="$GITHUB_REF_NAME"
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release upload "$tag" dist/manifest.json dist/*.zip --clobber
+            gh release edit "$tag" --latest --notes-file dist/changelog.txt
           else
             gh release create "$tag" \
               dist/manifest.json \
               dist/*.zip \
               --title "$tag" \
+              --latest \
               --notes-file dist/changelog.txt
           fi

@@ -179,10 +179,10 @@ jobs:
           if ($LASTEXITCODE -eq 0) {
             gh release upload $tag $setup $zip --clobber --repo $env:GITHUB_REPOSITORY
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-            gh release edit $tag --notes-file $notesFile --title $tag --repo $env:GITHUB_REPOSITORY
+            gh release edit $tag --latest=false --notes-file $notesFile --title $tag --repo $env:GITHUB_REPOSITORY
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           } else {
-            $create = @("release", "create", $tag, $setup, $zip, "--title", $tag, "--notes-file", $notesFile, "--repo", $env:GITHUB_REPOSITORY)
+            $create = @("release", "create", $tag, $setup, $zip, "--latest=false", "--title", $tag, "--notes-file", $notesFile, "--repo", $env:GITHUB_REPOSITORY)
             if ($env:EVENT_NAME -eq "workflow_dispatch") {
               $create += @("--target", $env:GITHUB_SHA)
             }
