@@ -1,4 +1,8 @@
-"""Desktop shell. The chat thread is the main pane. The zone form is optional.
+"""Desktop shell. The chat thread is where work happens.
+
+The window is a sidebar of jobs, the thread with its composer, and a Zone
+details drawer that stays closed until it is wanted. Sample DI and Sample
+BESS are optional ways to seed a thread. A typed question never needs them.
 
 Long zone runs, chat turns, the blind claim check, and heavy jobs are on the
 inbox. Workers run them so the composer stays usable. A result is labeled
@@ -24,8 +28,10 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
 from fpfa import sample_data
+from fpfa import theme as palette
 from fpfa.bess import bess_chat_summary, bess_govern_note, run_bess_plan
 from fpfa.calc_tools import ToolSession
+from fpfa.chat_render import is_job_heading, markdown_segments
 from fpfa.claim_check import (
     PACKAGE_STATUS,
     build_packet,
@@ -58,6 +64,8 @@ from fpfa.modes_loader import DEFAULT_MODE, MODE_SLUGS, list_modes, normalize_mo
 from fpfa.paths import content_root, is_content_pack, read_config, write_config
 from fpfa.projects import delete_project, list_projects, load_project, new_project, save_project
 from fpfa.spec_docx import DRAFT_SECTION, write_docx
+from fpfa.theme import apply_theme, enable_windows_dpi_awareness
+from fpfa.widgets import Composer, ScrollFrame
 from fpfa.workflow import (
     form_assumption_lines,
     format_transcript,
@@ -144,34 +152,64 @@ _SLASH_ALIASES = {
     "samplebess": "sample-bess",
 }
 
+UNTITLED_JOB = "Untitled job"
+
+# Empty-thread welcome. The first line is the title. The links under it are
+# drawn by the window: an API-key link when no key is saved, and the optional
+# sample zone. Neither is required before a question.
 THREAD_HINT = (
-    "This thread is the main surface. Ask a question, or start from the sample zone.\n\n"
-    "Sample DI (the chip below, or /sample-di) loads the sample data-hall double-interlock "
-    "zone and runs the tool plan on this machine. That run does not need an API key.\n"
-    "Sample BESS (the chip below, or /sample-bess) loads a generic Li-ion BESS room and "
-    "runs the explosion-control starter in synthesis mode. That run does not need an API key. "
-    "The LFL tool owns vol% and ppm. An election or a duration the tool did not return stays ASSUMED.\n"
-    "/run uses the optional zone form. /new Job name opens a job. /help lists commands.\n"
-    "Ctrl+S saves the open job. Closing the window saves it too.\n"
-    "Settings holds your Anthropic key and Check for updates. "
-    "A content pack update leaves the API key and projects on this machine. "
-    "Export writes draft Section 21 13 19 after a run "
-    "and a blind claim check in this thread. That check is not the hosted runtime.\n"
-    "Blank trim and the screen-limit seconds stay labeled ASSUMED. "
-    "Pipe gallons and trip time come from the calc tools.\n"
-    "A typed question uses the everyday path. Specialist roles, modes, and skills are files "
-    "in the content pack, and numbers come from the calc tools.\n"
-    "The Mode menu points at modes/<slug>/MODE.md "
-    "(brainstorm, calculator, synthesis, mixed). "
-    "Calculated, ASSUMED, and use best judgment stay three different labels.\n"
-    "The inbox beside Projects lists zone runs, chat turns, claim checks, and heavy jobs. "
-    "A long job runs on a worker, so this composer stays usable. "
-    "A result is labeled with the job it belongs to and is saved on that project.\n"
-    "/heavy is the only path that uses the hosted runtime. "
-    "It is text-only reasoning on the already-computed zone packet. "
-    "It does not call read_role, read_skill, read_mode, or a calc tool. "
-    "Its reply is written back into this thread."
+    "What are we working on?\n"
+    "Ask about a wet, dry, or double-interlock zone, the detection and releasing that trip it, "
+    "a spec section, or a calc.\n"
+    "Numbers come from the calc tools in your content pack."
 )
+WELCOME_KEY_LINK = "Add your Anthropic API key in Settings to start chatting →"
+WELCOME_SAMPLE_LINK = "Try the sample double-interlock zone (/sample-di) →"
+WELCOME_FOOTNOTE = (
+    "The sample is optional. It opens its own job and runs the zone tool plan on this machine.\n"
+    "Type /help for commands."
+)
+EXPORT_NEEDS_RUN = (
+    f"Export of draft Section {DRAFT_SECTION} needs a zone run on this job first. "
+    "Fill in Zone details and press Run zone (or type /run). /sample-di loads a sample zone to try it."
+)
+COMPOSER_PLACEHOLDER = "Ask about a zone, a releasing sequence, a spec section, or a calc…"
+COMPOSER_HINT = "Enter to send  ·  Shift+Enter for a new line  ·  /help for commands"
+
+
+def chat_title(text: str, limit: int = 48) -> str:
+    """Job name taken from the first message: first line, trimmed at a word."""
+    first = next((line.strip() for line in (text or "").splitlines() if line.strip()), "")
+    first = " ".join(first.split())
+    if not first:
+        return UNTITLED_JOB
+    if len(first) <= limit:
+        return first
+    cut = first[: limit - 1]
+    if " " in cut[limit // 2:]:
+        cut = cut[: cut.rfind(" ")]
+    return cut.rstrip(" ,;:.-") + "…"
+
+
+def sample_di_seed() -> str:
+    """First lines of the Sample DI reply, so the thread says what was loaded."""
+    di = sample_data.EXAMPLE_DI
+    segments = len(di.get("segments") or [])
+    return (
+        f"Sample loaded: data-hall double-interlock zone {di.get('zone_id') or 'DH-1'} "
+        f"({segments} pipe segments, {di.get('delivery_basis') or 'FM'} time basis). "
+        "This is sample data, not a real building. "
+        "The inputs are under Zone details. Ask follow-up questions here and they use these figures."
+    )
+
+
+def sample_bess_seed() -> str:
+    room = sample_data.EXAMPLE_BESS
+    return (
+        f"Sample loaded: generic Li-ion BESS room {room.get('room_id') or 'BESS-1'}, "
+        "explosion-control starter in synthesis mode. "
+        "This is sample data, not a real building. Ask follow-up questions here."
+    )
 
 
 def parse_slash_command(text: str) -> tuple[str, str] | None:
@@ -193,35 +231,27 @@ def parse_slash_command(text: str) -> tuple[str, str] | None:
 
 def slash_help_text() -> str:
     return (
-        "The chat thread is the main surface. The zone form is optional.\n"
-        "/sample-di — load the sample data-hall double-interlock zone and run the tool plan\n"
-        "/sample-bess — load the sample Li-ion BESS room and run the explosion-control starter\n"
-        "/run — run the DI zone from the optional form\n"
-        "/heavy task — text-only hosted reasoning on the zone packet already in the message; "
-        "the reply comes back into this thread. "
-        "It does not call read_role, read_skill, read_mode, or a calc tool.\n"
-        "/new Job name — open a job\n"
-        "/help — show these commands\n"
-        "Ctrl+S saves the open job. Closing the window saves it too.\n"
-        "Settings holds your Anthropic key and Check for updates. "
-        "A content pack update leaves the API key and projects on this machine. "
-        "Export writes draft Section "
-        f"{DRAFT_SECTION} after a run and a blind claim check in this thread. "
-        "That check is not the hosted runtime.\n"
-        "/mode — show the active mode\n"
-        "/mode brainstorm — use that mode file (also calculator, synthesis, mixed)\n"
-        "Blank trim and the screen-limit seconds stay labeled ASSUMED. "
-        "Pipe gallons and trip time come from the calc tools.\n"
-        "A designer judgment the tools did not return is use best judgment. "
-        "That label is not ASSUMED and it is not a calculated figure.\n"
-        "A typed question uses the everyday path. Specialist roles, modes, and skills are files "
-        "in the content pack, and numbers come from the calc tools.\n"
-        "The inbox beside Projects lists zone runs, chat turns, claim checks, and heavy jobs. "
-        "A long job runs on a worker. The composer stays usable. "
-        "A finished result is labeled with the job it belongs to and is saved on that project.\n"
-        "/heavy is the only hosted path. It does not mount the content pack. "
-        "A typed question, /sample-di, /sample-bess, "
-        "and /run do not use it."
+        "Just type a question. These commands are optional.\n\n"
+        "## Commands\n"
+        "- /sample-di — load the sample data-hall double-interlock zone into its own job and run the tool plan\n"
+        "- /sample-bess — load the sample Li-ion BESS room and run the explosion-control starter\n"
+        "- /run — run the zone in Zone details\n"
+        "- /mode — show the active mode. /mode brainstorm switches (also calculator, synthesis, mixed)\n"
+        "- /new Job name — start a named job\n"
+        "- /heavy task — text-only hosted reasoning on the zone packet already in the message. "
+        "The reply comes back into this thread. It does not call read_role, read_skill, read_mode, "
+        "or a calc tool, and it is the only path that uses the hosted runtime.\n"
+        "- /help — this list\n\n"
+        "## Keys and menus\n"
+        "- Ctrl+S saves the open job. Closing the window saves it too. Ctrl+N starts a new chat.\n"
+        "- Right-click a job in the sidebar to rename or delete it.\n"
+        f"- ⋯ menu: the samples, Run zone, Export draft Section {DRAFT_SECTION} "
+        "(after a run and a blind claim check in this thread), and Settings.\n\n"
+        "## Labels\n"
+        "- Pipe gallons and trip time come from the calc tools. "
+        "Blank trim and the screen-limit seconds stay labeled ASSUMED.\n"
+        "- A designer judgment the tools did not return is use best judgment. "
+        "That label is not ASSUMED and it is not a calculated figure."
     )
 
 
@@ -278,6 +308,8 @@ BASES = ("FM", "NFPA-OH", "NFPA-LH", "NFPA-EH", "NFPA-HP", "NFPA-DU")
 MEDIA = ("nitrogen", "air", "unelected")
 PRIMES = ("nc_solenoid", "pneumatic_actuator", "unknown")
 LENGTHS = (("Center to center", "center_to_center"), ("Cut lengths", "cut"))
+_SAVE_KEYS = ("<Control-s>", "<Control-S>", "<Command-s>", "<Command-S>")
+_NEW_KEYS = ("<Control-n>", "<Control-N>", "<Command-n>", "<Command-N>")
 
 
 def _blank_to_none(text: str):
@@ -308,7 +340,16 @@ class App:
         # One entry per submitted zone job. Two /run commands on one project
         # each post their own labeled result or error.
         self._announce_jobs: set[str] = set()
+        # Sample runs put a short "what was loaded" note above their reply.
+        self._seed_notes: dict[str, str] = {}
         self.jobs: JobInbox | None = None
+        # Cached so drawing the welcome does not reread the key store.
+        self._key_saved = False
+        self._pending_shown = False
+        self._activity_shown = False
+        self._details_shown = False
+        self._thread_margin = -1
+        self._menu_project_id: str | None = None
         self._build()
         self.jobs = JobInbox(worker_count=2, on_change=self._on_jobs_changed)
         # Cached agent and cloud environment ids for later /heavy calls.
@@ -323,15 +364,17 @@ class App:
         self.refresh_projects()
         self.root.bind("<Destroy>", self._cancel_afters, add="+")
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
-        for sequence in ("<Control-s>", "<Control-S>", "<Command-s>", "<Command-S>"):
+        for sequence in _SAVE_KEYS:
             self.root.bind_all(sequence, self._on_save_key)
+        for sequence in _NEW_KEYS:
+            self.root.bind_all(sequence, self._on_new_key)
         self.root.after(100, self._poll)
         self.root.after(600, self._maybe_check_content_on_launch)
 
     def _cancel_afters(self, event=None) -> None:
         if event is not None and event.widget is not self.root:
             return
-        for sequence in ("<Control-s>", "<Control-S>", "<Command-s>", "<Command-S>"):
+        for sequence in _SAVE_KEYS + _NEW_KEYS:
             try:
                 self.root.unbind_all(sequence)
             except tk.TclError:
@@ -354,6 +397,15 @@ class App:
         except tk.TclError:
             return
         self.save_current()
+        return "break"
+
+    def _on_new_key(self, event=None):
+        try:
+            if event is not None and event.widget.winfo_toplevel() is not self.root:
+                return
+        except tk.TclError:
+            return
+        self.new_job()
         return "break"
 
     def _form_is_dirty(self) -> bool:
@@ -390,36 +442,9 @@ class App:
                 pass
 
     def _build(self) -> None:
-        default = tkfont.nametofont("TkDefaultFont")
-        default.configure(size=11)
-        text_font = tkfont.nametofont("TkTextFont")
-        text_font.configure(size=11)
-        style = ttk.Style()
-        if "clam" in style.theme_names():
-            style.theme_use("clam")
-
-        header = tk.Frame(self.root, bg="#1f3b4d")
-        header.pack(fill="x")
-        titles = tk.Frame(header, bg="#1f3b4d")
-        titles.pack(side="left", fill="x", expand=True)
-        tk.Label(
-            titles,
-            text="FP/FA Design Assistant",
-            bg="#1f3b4d",
-            fg="white",
-            font=("TkDefaultFont", 16, "bold"),
-        ).pack(anchor="w", padx=14, pady=(10, 0))
-        tk.Label(
-            titles,
-            text=f"Chat first    ·    wet, dry, and double-interlock    ·    {MODEL_ID}",
-            bg="#1f3b4d",
-            fg="#d6e2ea",
-            font=("TkDefaultFont", 10),
-        ).pack(anchor="w", padx=14, pady=(0, 10))
-        actions = tk.Frame(header, bg="#1f3b4d")
-        actions.pack(side="right", padx=12, pady=10)
-        ttk.Button(actions, text="Settings", command=self.open_settings).pack(side="left", padx=4)
-        ttk.Button(actions, text=f"Export {DRAFT_SECTION}", command=self.export_docx).pack(side="left", padx=4)
+        self.theme = apply_theme(self.root)
+        px = self.theme.px
+        fonts = self.theme.fonts
 
         self.content_banner = tk.StringVar(value="")
         self.banner = tk.Label(
@@ -427,76 +452,422 @@ class App:
             textvariable=self.content_banner,
             justify="left",
             anchor="w",
-            wraplength=1100,
-            bg="#e7f0f5",
-            fg="#1f3b4d",
-            padx=14,
-            pady=6,
+            wraplength=px(1100),
+            bg=palette.BANNER_BG,
+            fg=palette.ACCENT,
+            padx=px(18),
+            pady=px(8),
+            cursor="hand2",
         )
-        body = ttk.Panedwindow(self.root, orient="horizontal")
+        # A click dismisses the update note. The pack stays installed.
+        self.banner.bind("<Button-1>", lambda _event: self._set_content_banner(""))
+
+        self.ask_claude = tk.BooleanVar(value=False)
+        self.mode_slug = tk.StringVar(value=DEFAULT_MODE)
+        self.details_open = tk.BooleanVar(value=False)
+        self.job_title = tk.StringVar(value="New chat")
+        self.status = tk.StringVar(value=key_status())
+        self.content_status = tk.StringVar(value=content_status_line())
+
+        body = tk.PanedWindow(
+            self.root,
+            orient="horizontal",
+            sashwidth=px(3),
+            sashpad=0,
+            bd=0,
+            relief="flat",
+            bg=palette.BORDER,
+            showhandle=False,
+            opaqueresize=True,
+        )
         body.pack(fill="both", expand=True)
         self.main_body = body
 
-        left = ttk.Frame(body, padding=8)
-        body.add(left, weight=0)
-        ttk.Label(left, text="Projects").pack(anchor="w")
-        self.project_list = tk.Listbox(left, width=26, height=18, exportselection=False)
-        self.project_list.pack(fill="both", expand=True, pady=6)
+        sidebar = ttk.Frame(body, style="Surface.TFrame", padding=(px(12), px(14), px(12), px(12)))
+        body.add(sidebar, minsize=px(190), width=px(250), stretch="never")
+        self._build_sidebar(sidebar)
+
+        chat = ttk.Frame(body)
+        body.add(chat, minsize=px(420), stretch="always")
+        self.chat_column = chat
+        self._build_chat(chat)
+
+        # Zone details is added to the paned window only while it is open.
+        self.details = ttk.Frame(body, padding=(px(16), px(12), px(12), px(10)))
+        self._build_details(self.details)
+
+        self._sync_claude_default()
+        self._render_chat()
+        self.root.after(200, self._prefer_chat)
+
+    def _build_sidebar(self, parent) -> None:
+        px = self.theme.px
+        ttk.Button(parent, text="+  New chat", style="Accent.TButton", command=self.new_job).pack(fill="x")
+        ttk.Label(parent, text="JOBS", style="Section.TLabel").pack(anchor="w", pady=(px(18), px(4)))
+        self.settings_button = ttk.Button(
+            parent, text="Settings", style="Sidebar.TButton", command=self.open_settings
+        )
+        self.settings_button.pack(side="bottom", fill="x", pady=(px(8), 0))
+        # Activity (the job inbox) is packed only while it has something in it.
+        self.activity = ttk.Frame(parent, style="Surface.TFrame")
+        ttk.Label(self.activity, text="ACTIVITY", style="Section.TLabel").pack(anchor="w", pady=(px(10), px(4)))
+        self.inbox_list = tk.Listbox(
+            self.activity,
+            height=5,
+            exportselection=False,
+            activestyle="none",
+            bd=0,
+            highlightthickness=0,
+            relief="flat",
+            bg=palette.SURFACE,
+            fg=palette.MUTED,
+            selectbackground=palette.SURFACE,
+            selectforeground=palette.MUTED,
+            font=self.theme.fonts["small"],
+        )
+        self.inbox_list.pack(fill="x")
+        self.project_list = tk.Listbox(
+            parent,
+            width=24,
+            exportselection=False,
+            activestyle="none",
+            bd=px(2),
+            highlightthickness=0,
+            relief="flat",
+            bg=palette.SURFACE,
+            fg=palette.TEXT,
+            selectbackground=palette.ACCENT_SOFT,
+            selectforeground=palette.ACCENT,
+            font=self.theme.fonts["list"],
+        )
+        self.project_list.pack(fill="both", expand=True)
         self.project_list.bind("<<ListboxSelect>>", self._on_select)
-        buttons = ttk.Frame(left)
-        buttons.pack(fill="x")
-        ttk.Button(buttons, text="New", command=self.new_job).pack(side="left", padx=(0, 4))
-        ttk.Button(buttons, text="Delete", command=self.delete_job).pack(side="left", padx=4)
-        ttk.Label(left, text="Inbox").pack(anchor="w", pady=(10, 0))
-        self.inbox_list = tk.Listbox(left, width=26, height=7, exportselection=False)
-        self.inbox_list.pack(fill="x", pady=(4, 0))
-        ttk.Label(
-            left,
-            text="Workers run long jobs. /heavy is the hosted hatch. A result stays on the job that started it.",
-            wraplength=210,
-        ).pack(anchor="w", pady=(4, 0))
+        context = ("<Button-2>", "<Control-Button-1>") if sys.platform == "darwin" else ()
+        for sequence in ("<Button-3>",) + context:
+            self.project_list.bind(sequence, self._project_menu_popup)
+        self.project_list.bind("<Delete>", lambda _event: self.delete_job())
+        self.project_list.bind("<F2>", lambda _event: self.rename_job())
+        self.project_menu = tk.Menu(self.project_list, tearoff=0)
+        self.project_menu.add_command(label="Rename…", command=lambda: self.rename_job(self._menu_project_id))
+        self.project_menu.add_command(label="Delete", command=lambda: self.delete_job(self._menu_project_id))
 
-        right = ttk.Panedwindow(body, orient="vertical")
-        body.add(right, weight=1)
-        self.main_pane = right
+    def _build_chat(self, parent) -> None:
+        px = self.theme.px
+        fonts = self.theme.fonts
 
-        chat_wrap = ttk.Frame(right, padding=(4, 8, 8, 4))
-        right.add(chat_wrap, weight=4)
-        self._build_chat(chat_wrap)
+        top = ttk.Frame(parent, padding=(px(20), px(8), px(10), px(8)))
+        top.pack(side="top", fill="x")
+        self.more_button = ttk.Menubutton(top, text="⋯", style="Icon.TMenubutton")
+        self.more_menu = tk.Menu(self.more_button, tearoff=0)
+        self.more_button["menu"] = self.more_menu
+        self.more_button.pack(side="right")
+        self.details_toggle = ttk.Checkbutton(
+            top,
+            text="Zone details",
+            variable=self.details_open,
+            style="Toolbar.Toolbutton",
+            command=lambda: self.show_details(bool(self.details_open.get())),
+        )
+        self.details_toggle.pack(side="right", padx=(0, px(2)))
+        self.mode_button = ttk.Menubutton(top, style="Toolbar.TMenubutton")
+        self.mode_menu = tk.Menu(self.mode_button, tearoff=0)
+        self.mode_button["menu"] = self.mode_menu
+        self.mode_button.pack(side="right", padx=(0, px(2)))
+        # Packed last so a long job name is what gets shortened, not the controls.
+        self._title_shown = tk.StringVar(value=self.job_title.get())
+        self.title_label = ttk.Label(top, textvariable=self._title_shown, style="Job.TLabel")
+        self.title_label.pack(side="left", fill="x", expand=True)
+        self.title_label.bind("<Configure>", lambda _event: self._fit_title(), add="+")
+        self.job_title.trace_add("write", lambda *_args: self._fit_title())
+        self.mode_slug.trace_add("write", lambda *_args: self._sync_mode_label())
+        self._apply_mode(DEFAULT_MODE)
+        self._build_more_menu()
+        ttk.Separator(parent, orient="horizontal").pack(side="top", fill="x")
 
-        zone_wrap = ttk.Frame(right, padding=(4, 0, 8, 8))
-        right.add(zone_wrap, weight=1)
+        footer = ttk.Frame(parent, padding=(px(20), 0, px(14), px(6)))
+        footer.pack(side="bottom", fill="x")
+        ttk.Label(footer, textvariable=self.content_status, style="Footer.TLabel").pack(side="right")
+        # The footer shows the short note. The full status (with the job
+        # heading) stays on self.status for the inbox and the tests.
+        self._status_line = tk.StringVar(value=self.status.get())
+        self.status.trace_add("write", lambda *_args: self._sync_status_line())
+        ttk.Label(footer, textvariable=self._status_line, style="Footer.TLabel").pack(
+            side="left", fill="x", expand=True
+        )
+
+        self.composer_row = ttk.Frame(parent, padding=(px(24), px(6), px(24), px(2)))
+        self.composer_row.pack(side="bottom", fill="x")
+        self.composer_box = tk.Frame(
+            self.composer_row,
+            bg=palette.BG,
+            highlightthickness=1,
+            highlightbackground=palette.BORDER_STRONG,
+            highlightcolor=palette.BORDER_STRONG,
+            bd=0,
+        )
+        self.composer_box.pack(fill="x")
+        self.send_button = ttk.Button(self.composer_box, text="Send", style="Accent.TButton", command=self.send_chat)
+        self.send_button.pack(side="right", anchor="se", padx=px(8), pady=px(8))
+        self.chat_entry = Composer(
+            self.composer_box,
+            on_submit=self.send_chat,
+            placeholder=COMPOSER_PLACEHOLDER,
+            font=fonts["chat"],
+            bg=palette.BG,
+            fg=palette.TEXT,
+            insertbackground=palette.TEXT,
+            selectbackground=palette.ACCENT_SOFT,
+            padx=px(12),
+            pady=px(10),
+            min_lines=2,
+            max_lines=8,
+        )
+        self.chat_entry.pack(side="left", fill="both", expand=True)
+        self.chat_entry.bind("<FocusIn>", lambda _event: self._composer_focus(True), add="+")
+        self.chat_entry.bind("<FocusOut>", lambda _event: self._composer_focus(False), add="+")
+        ttk.Label(self.composer_row, text=COMPOSER_HINT, style="Footer.TLabel").pack(anchor="w", pady=(px(4), 0))
+
+        thread = ttk.Frame(parent)
+        thread.pack(side="top", fill="both", expand=True)
+        self.chat_view = tk.Text(
+            thread,
+            wrap="word",
+            state="disabled",
+            bd=0,
+            relief="flat",
+            highlightthickness=0,
+            bg=palette.BG,
+            fg=palette.TEXT,
+            font=fonts["chat"],
+            padx=0,
+            pady=px(10),
+            spacing2=px(2),
+            cursor="arrow",
+            insertwidth=0,
+            selectbackground=palette.ACCENT_SOFT,
+            inactiveselectbackground=palette.ACCENT_SOFT,
+            height=10,
+        )
+        scroll = ttk.Scrollbar(thread, command=self.chat_view.yview)
+        self.chat_view.configure(yscrollcommand=scroll.set)
+        scroll.pack(side="right", fill="y")
+        self.chat_view.pack(side="left", fill="both", expand=True)
+        self._thread_scrollbar = scroll
+        self._configure_thread_tags()
+        self.chat_view.bind("<Configure>", self._on_thread_resize, add="+")
+        self.chat_view.bind("<Button-1>", lambda _event: self.chat_view.focus_set(), add="+")
+        self.chat_view.bind("<Key>", self._thread_key)
+        self.thread_menu = tk.Menu(self.chat_view, tearoff=0)
+        self.thread_menu.add_command(label="Copy", command=self._copy_thread_selection)
+        self.thread_menu.add_command(label="Select all", command=self._select_thread)
+        for sequence in ("<Button-3>",) + (("<Button-2>",) if sys.platform == "darwin" else ()):
+            self.chat_view.bind(sequence, self._thread_menu_popup)
+
+    def _build_more_menu(self) -> None:
+        menu = self.more_menu
+        menu.add_command(label="Sample DI zone", accelerator="/sample-di", command=self.start_sample_di)
+        menu.add_command(label="Sample BESS room", accelerator="/sample-bess", command=self.start_sample_bess)
+        menu.add_separator()
+        menu.add_command(label="Run zone from Zone details", accelerator="/run", command=self.start_zone_run)
+        menu.add_command(label=f"Export draft Section {DRAFT_SECTION}…", command=self.export_docx)
+        menu.add_separator()
+        menu.add_checkbutton(label="Narrate zone runs with Claude", variable=self.ask_claude)
+        menu.add_separator()
+        menu.add_command(label="Rename job…", command=self.rename_job)
+        menu.add_command(label="Settings…", command=self.open_settings)
+        menu.add_command(label="Commands", accelerator="/help", command=self._show_help)
+
+    def _build_details(self, parent) -> None:
+        px = self.theme.px
+        ttk.Label(parent, text="Zone details", style="Job.TLabel").pack(anchor="w")
         ttk.Label(
-            zone_wrap,
-            text="Optional zone form. Chat, Sample DI, and /sample-di do not require filling this in.",
-        ).pack(anchor="w")
-        self.assumption_text = tk.StringVar()
-        ttk.Label(
-            zone_wrap,
-            textvariable=self.assumption_text,
-            wraplength=980,
+            parent,
+            text="Optional. Chat works without it. /run and Run zone use these inputs.",
+            style="Small.TLabel",
+            wraplength=px(420),
             justify="left",
-        ).pack(anchor="w", pady=(2, 4))
-        self.tabs = ttk.Notebook(zone_wrap)
+        ).pack(anchor="w", pady=(px(2), px(8)))
+        self.assumption_text = tk.StringVar()
+        self.tabs = ttk.Notebook(parent)
         self.tabs.pack(fill="both", expand=True)
         self._build_basis()
         self._build_zone()
         self._build_results()
         self.tabs.select(1)
 
-        bar = ttk.Frame(self.root, padding=(10, 4))
-        bar.pack(fill="x")
-        self.status = tk.StringVar(value=key_status())
-        ttk.Label(bar, textvariable=self.status).pack(anchor="w")
-        self.content_status = tk.StringVar(value=content_status_line())
-        ttk.Label(bar, textvariable=self.content_status).pack(anchor="w")
-        self._sync_claude_default()
-        self.root.after(200, self._prefer_chat)
+    def show_details(self, show: bool = True) -> None:
+        """Open or close the Zone details drawer. The form keeps its values either way."""
+        show = bool(show)
+        try:
+            if show and not self._details_shown:
+                self.main_body.add(
+                    self.details,
+                    minsize=self.theme.px(360),
+                    width=self.theme.px(470),
+                    stretch="never",
+                )
+            elif not show and self._details_shown:
+                self.main_body.forget(self.details)
+        except tk.TclError:
+            return
+        self._details_shown = show
+        if bool(self.details_open.get()) != show:
+            self.details_open.set(show)
+
+    def toggle_details(self) -> None:
+        self.show_details(not self._details_shown)
+
+    def _composer_focus(self, focused: bool) -> None:
+        color = palette.LINK if focused else palette.BORDER_STRONG
+        try:
+            self.composer_box.configure(highlightbackground=color, highlightcolor=color)
+        except tk.TclError:
+            pass
+
+    def _configure_thread_tags(self) -> None:
+        view = self.chat_view
+        fonts = self.theme.fonts
+        px = self.theme.px
+        # Creation order sets priority: later tags win, so margins on bullet
+        # and pre override the plain body margins.
+        view.tag_configure("body", font=fonts["chat"], foreground=palette.TEXT)
+        view.tag_configure("who_user", font=fonts["who"], foreground=palette.MUTED, spacing1=px(18), spacing3=px(3))
+        view.tag_configure("who_assistant", font=fonts["who"], foreground=palette.ACCENT, spacing1=px(18), spacing3=px(3))
+        view.tag_configure("meta", font=fonts["small"], foreground=palette.MUTED, spacing3=px(4))
+        view.tag_configure("heading", font=fonts["heading"], spacing1=px(10), spacing3=px(2))
+        view.tag_configure("bullet")
+        view.tag_configure("bullet2")
+        # Margin colors keep a shaded block inside the text column.
+        view.tag_configure(
+            "pre", font=fonts["mono"], background=palette.CODE_BG,
+            lmargincolor=palette.BG, rmargincolor=palette.BG,
+        )
+        view.tag_configure("pre_head", font=fonts["mono_bold"])
+        view.tag_configure("rule", foreground=palette.BORDER_STRONG)
+        view.tag_configure("bold", font=fonts["chat_bold"])
+        view.tag_configure("code", font=fonts["mono"], background=palette.CODE_BG)
+        view.tag_configure("pending", font=fonts["italic"], foreground=palette.MUTED, spacing1=px(16))
+        view.tag_configure(
+            "welcome_title", font=fonts["title"], foreground=palette.TEXT, justify="center",
+            spacing1=px(110), spacing3=px(10),
+        )
+        view.tag_configure("welcome_sub", font=fonts["subtitle"], foreground=palette.MUTED, justify="center", spacing3=px(2))
+        view.tag_configure("welcome_link", font=fonts["chat"], foreground=palette.LINK, justify="center", spacing1=px(22))
+        view.tag_configure(
+            "welcome_hint", font=fonts["small"], foreground=palette.MUTED, justify="center",
+            spacing1=px(16), spacing3=px(2),
+        )
+        view.tag_configure("link_sample_di", underline=True)
+        view.tag_configure("link_settings", underline=True)
+        view.tag_bind("link_sample_di", "<Button-1>", lambda _event: self._follow_link(self.start_sample_di))
+        view.tag_bind("link_settings", "<Button-1>", lambda _event: self._follow_link(self.open_settings))
+        for tag in ("link_sample_di", "link_settings"):
+            view.tag_bind(tag, "<Enter>", lambda _event: view.configure(cursor="hand2"))
+            view.tag_bind(tag, "<Leave>", lambda _event: view.configure(cursor="arrow"))
+        self._layout_thread(max(view.winfo_width(), px(900)))
+
+    def _layout_thread(self, width: int) -> None:
+        """Keep the thread in a readable centered column and line the composer up with it."""
+        px = self.theme.px
+        column = min(max(width - 2 * px(28), px(240)), px(780))
+        margin = max(px(28), (width - column) // 2)
+        if margin == self._thread_margin:
+            return
+        self._thread_margin = margin
+        view = self.chat_view
+        for tag in ("body", "who_user", "who_assistant", "meta", "heading", "pending",
+                    "welcome_title", "welcome_sub", "welcome_link", "welcome_hint"):
+            view.tag_configure(tag, lmargin1=margin, lmargin2=margin, rmargin=margin)
+        view.tag_configure("bullet", lmargin1=margin + px(6), lmargin2=margin + px(22), rmargin=margin)
+        view.tag_configure("bullet2", lmargin1=margin + px(26), lmargin2=margin + px(42), rmargin=margin)
+        view.tag_configure("pre", lmargin1=margin + px(8), lmargin2=margin + px(8), rmargin=margin)
+        try:
+            bar = self._thread_scrollbar.winfo_width() if self._thread_scrollbar.winfo_ismapped() else 0
+            self.composer_row.configure(padding=(margin, px(6), margin + bar, px(2)))
+        except (tk.TclError, AttributeError):
+            pass
+
+    def _on_thread_resize(self, event) -> None:
+        self._layout_thread(event.width)
+
+    def _follow_link(self, action) -> str:
+        # The link's own text is redrawn by the action, so run it after this click.
+        self.root.after_idle(action)
+        return "break"
+
+    def _thread_key(self, event):
+        """Typing while the thread has focus goes to the composer. Ctrl+C still copies."""
+        # Control is 0x4 everywhere. Alt is 0x20000 on Windows (where 0x8 is NumLock) and 0x8 on X11.
+        alt = 0x20000 if sys.platform == "win32" else 0x0008
+        if event.state & (0x0004 | alt):
+            return None
+        if event.char and event.char.isprintable():
+            self.chat_entry.focus_set()
+            self.chat_entry.insert("insert", event.char)
+            return "break"
+        return None
+
+    def _thread_menu_popup(self, event) -> str:
+        try:
+            self.thread_menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            self.thread_menu.grab_release()
+        return "break"
+
+    def _copy_thread_selection(self) -> None:
+        try:
+            text = self.chat_view.get("sel.first", "sel.last")
+        except tk.TclError:
+            return
+        self.root.clipboard_clear()
+        self.root.clipboard_append(text)
+
+    def _select_thread(self) -> None:
+        self.chat_view.tag_add("sel", "1.0", "end-1c")
+
+    def _show_help(self) -> None:
+        self._local_exchange("/help", slash_help_text())
+
+    def _fit_title(self) -> None:
+        """Show the job name, cut with an ellipsis when the top bar is narrow."""
+        try:
+            full = self.job_title.get()
+            width = self.title_label.winfo_width()
+            font = self.theme.fonts["job"]
+        except (tk.TclError, AttributeError):
+            return
+        shown = full
+        if width > 1 and font.measure(full) > width - self.theme.px(8):
+            room = width - self.theme.px(8) - font.measure("…")
+            cut = full
+            while cut and font.measure(cut) > room:
+                cut = cut[:-1]
+            shown = cut.rstrip() + "…" if cut else ""
+        if self._title_shown.get() != shown:
+            self._title_shown.set(shown)
+
+    def _sync_status_line(self) -> None:
+        lines = [line.strip() for line in (self.status.get() or "").splitlines() if line.strip()]
+        kept = [line for line in lines if not is_job_heading(line)] or lines
+        text = " ".join(kept)
+        if len(text) > 160:
+            text = text[:157] + "…"
+        try:
+            self._status_line.set(text)
+        except tk.TclError:
+            pass
+
+    def _sync_mode_label(self) -> None:
+        try:
+            self.mode_button.configure(text=f"Mode: {self.mode_slug.get() or DEFAULT_MODE}")
+        except (tk.TclError, AttributeError):
+            pass
 
     def _labeled(self, parent, text, variable, width=18, row=0, column=0):
-        ttk.Label(parent, text=text).grid(row=row, column=column, sticky="w", padx=4, pady=3)
+        px = self.theme.px
+        ttk.Label(parent, text=text).grid(row=row, column=column, sticky="w", padx=(px(2), px(6)), pady=px(3))
         entry = ttk.Entry(parent, textvariable=variable, width=width)
-        entry.grid(row=row, column=column + 1, sticky="ew", padx=4, pady=3)
+        entry.grid(row=row, column=column + 1, sticky="ew", padx=(0, px(10)), pady=px(3))
         return entry
 
     def _refresh_assumptions(self) -> None:
@@ -517,38 +888,68 @@ class App:
         self.assumption_text.set("\n".join(lines))
 
     def _combo(self, parent, text, variable, values, row, column, width=18):
-        ttk.Label(parent, text=text).grid(row=row, column=column, sticky="w", padx=4, pady=3)
+        px = self.theme.px
+        ttk.Label(parent, text=text).grid(row=row, column=column, sticky="w", padx=(px(2), px(6)), pady=px(3))
         box = ttk.Combobox(parent, textvariable=variable, values=values, width=width, state="readonly")
-        box.grid(row=row, column=column + 1, sticky="ew", padx=4, pady=3)
+        box.grid(row=row, column=column + 1, sticky="ew", padx=(0, px(10)), pady=px(3))
         return box
 
     def _build_basis(self) -> None:
-        tab = ttk.Frame(self.tabs, padding=12)
+        px = self.theme.px
+        tab = ttk.Frame(self.tabs, padding=px(12))
         self.tabs.add(tab, text="Basis")
         self.ahj = tk.StringVar()
         self.nfpa_13 = tk.StringVar(value="2025")
         self.nfpa_72 = tk.StringVar(value="2025")
         self.insurer = tk.StringVar(value="FM")
-        self._labeled(tab, "AHJ", self.ahj, width=42, row=0, column=0)
-        self._labeled(tab, "NFPA 13 edition", self.nfpa_13, row=1, column=0)
-        self._labeled(tab, "NFPA 72 edition", self.nfpa_72, row=2, column=0)
-        self._labeled(tab, "Insurer", self.insurer, row=3, column=0)
-        ttk.Label(tab, text="Hazard notes").grid(row=4, column=0, sticky="nw", padx=4, pady=3)
-        self.hazard_notes = tk.Text(tab, height=8, wrap="word")
-        self.hazard_notes.grid(row=4, column=1, sticky="nsew", padx=4, pady=3)
+        self._labeled(tab, "AHJ", self.ahj, width=28, row=0, column=0)
+        self._labeled(tab, "NFPA 13 edition", self.nfpa_13, width=10, row=1, column=0)
+        self._labeled(tab, "NFPA 72 edition", self.nfpa_72, width=10, row=2, column=0)
+        self._labeled(tab, "Insurer", self.insurer, width=10, row=3, column=0)
+        ttk.Label(tab, text="Hazard notes").grid(row=4, column=0, sticky="nw", padx=(px(2), px(6)), pady=px(3))
+        self.hazard_notes = tk.Text(
+            tab,
+            height=8,
+            wrap="word",
+            bd=0,
+            relief="flat",
+            highlightthickness=1,
+            highlightbackground=palette.BORDER_STRONG,
+            highlightcolor=palette.ACCENT,
+            padx=px(6),
+            pady=px(4),
+            font=self.theme.fonts["list"],
+        )
+        self.hazard_notes.grid(row=4, column=1, sticky="nsew", padx=(0, px(10)), pady=px(3))
         tab.columnconfigure(1, weight=1)
         tab.rowconfigure(4, weight=1)
         ttk.Label(
             tab,
-            text="Scope of this prototype: wet, dry, and double-interlock preaction, plus the detection and releasing that trip them.",
-        ).grid(row=5, column=0, columnspan=2, sticky="w", pady=(8, 0))
+            text=(
+                "Scope: wet, dry, and double-interlock preaction, plus the detection "
+                "and releasing that trip them."
+            ),
+            style="Small.TLabel",
+            wraplength=px(400),
+            justify="left",
+        ).grid(row=5, column=0, columnspan=2, sticky="w", pady=(px(8), 0))
 
     def _build_zone(self) -> None:
-        tab = ttk.Frame(self.tabs, padding=8)
-        self.tabs.add(tab, text="DI zone")
+        px = self.theme.px
+        scroller = ScrollFrame(self.tabs)
+        self.tabs.add(scroller, text="Zone")
+        tab = scroller.inner
+        tab.configure(padding=(px(10), px(10), px(4), px(10)))
+        ttk.Label(
+            tab,
+            textvariable=self.assumption_text,
+            style="Small.TLabel",
+            wraplength=px(400),
+            justify="left",
+        ).pack(anchor="w", pady=(0, px(8)))
         form = ttk.Frame(tab)
         form.pack(fill="x")
-        for column in (1, 3, 5):
+        for column in (1, 3):
             form.columnconfigure(column, weight=1)
         self.zone_id = tk.StringVar()
         self.system_label = tk.StringVar(value="Double-interlock")
@@ -575,40 +976,40 @@ class App:
         self.supervisory_psig = tk.StringVar(value="40")
         self.fill_minutes = tk.StringVar(value="30")
 
-        self._labeled(form, "Zone", self.zone_id, width=16, row=0, column=0)
-        self._combo(form, "System", self.system_label, [label for label, _ in SYSTEM_CHOICES], 0, 2, width=16)
-        self._combo(form, "Hazard", self.hazard, HAZARDS, 0, 4, width=12)
-        self._labeled(form, "Density", self.density, width=10, row=1, column=0)
-        self._labeled(form, "Base area ft2", self.base_area, width=10, row=1, column=2)
-        self._labeled(form, "Area increase", self.area_increase, width=8, row=1, column=4)
-        self._labeled(form, "Hose gpm", self.hose, width=10, row=2, column=0)
-        self._labeled(form, "Fill gpm", self.q_fill, width=10, row=2, column=2)
-        self._combo(form, "Time basis", self.delivery_basis, BASES, 2, 4, width=12)
-        self._labeled(form, "t detect s", self.t_detect, width=10, row=3, column=0)
-        self._labeled(form, "t release s", self.t_release, width=10, row=3, column=2)
-        self._labeled(form, "t exhaust s", self.t_exhaust, width=8, row=3, column=4)
-        self._combo(form, "Medium", self.medium, MEDIA, 4, 0, width=16)
-        self._combo(form, "Prime held by", self.prime, PRIMES, 4, 2, width=18)
-        self._labeled(form, "Low-air psi", self.supervisory_psi, width=8, row=4, column=4)
-        self._combo(form, "Lengths", self.length_label, [label for label, _ in LENGTHS], 5, 0, width=18)
-        self._labeled(form, "Fittings %", self.fittings, width=10, row=5, column=2)
-        self._labeled(form, "Trim gal", self.trim_gal, width=8, row=5, column=4)
+        self._labeled(form, "Zone", self.zone_id, width=10, row=0, column=0)
+        self._combo(form, "System", self.system_label, [label for label, _ in SYSTEM_CHOICES], 0, 2, width=14)
+        self._combo(form, "Hazard", self.hazard, HAZARDS, 1, 0, width=10)
+        self._combo(form, "Time basis", self.delivery_basis, BASES, 1, 2, width=10)
+        self._labeled(form, "Density", self.density, width=8, row=2, column=0)
+        self._labeled(form, "Base area ft²", self.base_area, width=8, row=2, column=2)
+        self._labeled(form, "Area increase", self.area_increase, width=8, row=3, column=0)
+        self._labeled(form, "Hose gpm", self.hose, width=8, row=3, column=2)
+        self._labeled(form, "Fill gpm", self.q_fill, width=8, row=4, column=0)
+        self._labeled(form, "Trim gal", self.trim_gal, width=8, row=4, column=2)
+        self._labeled(form, "t detect s", self.t_detect, width=8, row=5, column=0)
+        self._labeled(form, "t release s", self.t_release, width=8, row=5, column=2)
+        self._labeled(form, "t exhaust s", self.t_exhaust, width=8, row=6, column=0)
+        self._labeled(form, "Fittings %", self.fittings, width=8, row=6, column=2)
+        self._combo(form, "Medium", self.medium, MEDIA, 7, 0, width=10)
+        self._combo(form, "Prime held by", self.prime, PRIMES, 7, 2, width=14)
+        self._labeled(form, "Low-air psi", self.supervisory_psi, width=8, row=8, column=0)
+        self._labeled(form, "Supervisory psig", self.supervisory_psig, width=8, row=8, column=2)
+        self._combo(form, "Lengths", self.length_label, [label for label, _ in LENGTHS], 9, 0, width=14)
+        self._labeled(form, "Fill minutes", self.fill_minutes, width=8, row=9, column=2)
         self.trim_gal.trace_add("write", lambda *_args: self._refresh_assumptions())
         self.delivery_basis.trace_add("write", lambda *_args: self._refresh_assumptions())
         self._refresh_assumptions()
-        self._labeled(form, "Supervisory psig", self.supervisory_psig, width=10, row=6, column=0)
-        self._labeled(form, "Fill minutes", self.fill_minutes, width=10, row=6, column=2)
         checks = ttk.Frame(form)
-        checks.grid(row=7, column=0, columnspan=6, sticky="w", padx=4)
-        ttk.Checkbutton(checks, text="Supervised waterflow", variable=self.supervised).pack(side="left")
-        ttk.Checkbutton(checks, text="Quick-opening device", variable=self.qod).pack(side="left", padx=8)
-        ttk.Checkbutton(checks, text="Manual station", variable=self.manual_station).pack(side="left", padx=8)
-        ttk.Checkbutton(checks, text="Failsafe on total power loss", variable=self.failsafe).pack(side="left", padx=8)
+        checks.grid(row=10, column=0, columnspan=4, sticky="w", pady=(px(6), 0))
+        ttk.Checkbutton(checks, text="Supervised waterflow", variable=self.supervised).grid(row=0, column=0, sticky="w", padx=(0, px(14)), pady=px(2))
+        ttk.Checkbutton(checks, text="Quick-opening device", variable=self.qod).grid(row=0, column=1, sticky="w", pady=px(2))
+        ttk.Checkbutton(checks, text="Manual station", variable=self.manual_station).grid(row=1, column=0, sticky="w", padx=(0, px(14)), pady=px(2))
+        ttk.Checkbutton(checks, text="Failsafe on total power loss", variable=self.failsafe).grid(row=1, column=1, sticky="w", pady=px(2))
 
-        pipes = ttk.LabelFrame(tab, text="Pipe segments", padding=6)
-        pipes.pack(fill="both", expand=True, pady=(8, 0))
+        pipes = ttk.LabelFrame(tab, text="PIPE SEGMENTS", padding=px(8))
+        pipes.pack(fill="x", pady=(px(12), 0))
         columns = ("role", "nps", "schedule", "length_ft", "d_in")
-        self.pipes = ttk.Treeview(pipes, columns=columns, show="headings", height=8)
+        self.pipes = ttk.Treeview(pipes, columns=columns, show="headings", height=6)
         headings = {
             "role": "Role",
             "nps": "NPS",
@@ -616,108 +1017,82 @@ class App:
             "length_ft": "Length ft",
             "d_in": "ID in",
         }
-        widths = {"role": 90, "nps": 70, "schedule": 90, "length_ft": 90, "d_in": 80}
+        widths = {"role": 70, "nps": 50, "schedule": 72, "length_ft": 72, "d_in": 60}
         for key, title in headings.items():
             self.pipes.heading(key, text=title)
-            self.pipes.column(key, width=widths[key], minwidth=60, anchor="w", stretch=True)
-        self.pipes.pack(fill="both", expand=True)
+            self.pipes.column(key, width=px(widths[key]), minwidth=px(44), anchor="w", stretch=True)
+        self.pipes.pack(fill="x")
         add = ttk.Frame(pipes)
-        add.pack(fill="x", pady=6)
+        add.pack(fill="x", pady=(px(8), 0))
         self.seg_role = tk.StringVar(value="branch")
         self.seg_nps = tk.StringVar()
         self.seg_schedule = tk.StringVar()
         self.seg_length = tk.StringVar()
-        ttk.Label(add, text="Role").pack(side="left")
+        for column, title in enumerate(("Role", "NPS", "Schedule", "Length ft")):
+            ttk.Label(add, text=title, style="Small.TLabel").grid(row=0, column=column, sticky="w", padx=(0, px(6)))
+            add.columnconfigure(column, weight=1)
         ttk.Combobox(
-            add, textvariable=self.seg_role, width=10, state="readonly",
+            add, textvariable=self.seg_role, width=8, state="readonly",
             values=("branch", "drop", "cross", "main", "feed", "riser"),
-        ).pack(side="left", padx=4)
-        ttk.Label(add, text="NPS").pack(side="left")
-        ttk.Entry(add, textvariable=self.seg_nps, width=8).pack(side="left", padx=4)
-        ttk.Label(add, text="Schedule").pack(side="left")
-        ttk.Entry(add, textvariable=self.seg_schedule, width=8).pack(side="left", padx=4)
-        ttk.Label(add, text="Length ft").pack(side="left")
-        ttk.Entry(add, textvariable=self.seg_length, width=8).pack(side="left", padx=4)
-        ttk.Button(add, text="Add segment", command=self.add_segment).pack(side="left", padx=6)
-        ttk.Button(add, text="Remove", command=self.remove_segment).pack(side="left")
+        ).grid(row=1, column=0, sticky="ew", padx=(0, px(6)))
+        ttk.Entry(add, textvariable=self.seg_nps, width=6).grid(row=1, column=1, sticky="ew", padx=(0, px(6)))
+        ttk.Entry(add, textvariable=self.seg_schedule, width=7).grid(row=1, column=2, sticky="ew", padx=(0, px(6)))
+        ttk.Entry(add, textvariable=self.seg_length, width=7).grid(row=1, column=3, sticky="ew")
+        buttons = ttk.Frame(pipes)
+        buttons.pack(fill="x", pady=(px(8), 0))
+        ttk.Button(buttons, text="Add segment", command=self.add_segment).pack(side="left")
+        ttk.Button(buttons, text="Remove", command=self.remove_segment).pack(side="left", padx=px(6))
         ttk.Label(
             pipes,
             text=(
-                "Blank schedule uses the shop default (branch and under 2 in = sch 40, mains and cross 2 in and up = sch 10). "
-                "The ID comes from the calc pack. Blank fittings follow the length basis. "
-                "Blank trim is ASSUMED 5 gal (no valve data sheet), not calculated. "
-                "The screen-limit seconds are ASSUMED from the time basis lookup, not calculated. "
-                "A judgment the tools did not return is use best judgment, not ASSUMED and not calculated."
+                "Blank schedule uses the shop default (branch and under 2 in = sch 40, mains and cross "
+                "2 in and up = sch 10). The ID comes from the calc pack. Blank fittings follow the length "
+                "basis. Blank trim is ASSUMED 5 gal (no valve data sheet), not calculated."
             ),
-            wraplength=720,
-        ).pack(anchor="w")
+            style="Small.TLabel",
+            wraplength=px(400),
+            justify="left",
+        ).pack(anchor="w", pady=(px(8), 0))
+        ttk.Button(tab, text="Run zone", style="Accent.TButton", command=self.start_zone_run).pack(
+            anchor="e", pady=(px(12), px(4))
+        )
 
     def _build_results(self) -> None:
-        tab = ttk.Frame(self.tabs, padding=8)
+        px = self.theme.px
+        tab = ttk.Frame(self.tabs, padding=px(10))
         self.tabs.add(tab, text="Results")
         ttk.Label(
             tab,
             text=(
-                "Figures in this view come from the tool plan on the form. "
-                "Pipe gallons and t_total are calculated. "
+                "Tool-plan figures for export. Pipe gallons and t_total are calculated. "
                 "Blank trim and the screen-limit seconds are marked ASSUMED. "
-                "A judgment the tools did not return is use best judgment. "
                 "A delivery time here is an optimistic screen, not a listed water-delivery-time calculation."
             ),
-            wraplength=900,
-        ).pack(anchor="w", pady=(0, 6))
-        self.results = tk.Text(tab, wrap="word")
+            style="Small.TLabel",
+            wraplength=px(400),
+            justify="left",
+        ).pack(anchor="w", pady=(0, px(6)))
+        self.results = tk.Text(
+            tab,
+            wrap="word",
+            bd=0,
+            relief="flat",
+            highlightthickness=0,
+            bg=palette.SURFACE,
+            fg=palette.TEXT,
+            padx=px(10),
+            pady=px(8),
+            font=self.theme.fonts["mono"],
+        )
         scroll = ttk.Scrollbar(tab, command=self.results.yview)
         self.results.configure(yscrollcommand=scroll.set)
         scroll.pack(side="right", fill="y")
         self.results.pack(fill="both", expand=True)
 
-    def _build_chat(self, parent) -> None:
-        chips = ttk.Frame(parent)
-        chips.pack(side="bottom", fill="x", pady=(4, 0))
-        row = ttk.Frame(parent)
-        row.pack(side="bottom", fill="x", pady=(6, 0))
-        self.chat_entry = ttk.Entry(row)
-        self.chat_entry.pack(side="left", fill="x", expand=True)
-        self.chat_entry.bind("<Return>", lambda _event: self.send_chat())
-        self.send_button = ttk.Button(row, text="Send", command=self.send_chat)
-        self.send_button.pack(side="left", padx=6)
-        self.chat_view = tk.Text(parent, wrap="word", state="disabled", padx=8, pady=8, height=16)
-        self.chat_view.tag_configure("hint", foreground="#5c6b76")
-        scroll = ttk.Scrollbar(parent, command=self.chat_view.yview)
-        self.chat_view.configure(yscrollcommand=scroll.set)
-        scroll.pack(side="right", fill="y")
-        self.chat_view.pack(side="left", fill="both", expand=True)
-        self.sample_di_button = ttk.Button(chips, text="Sample DI", command=self.start_sample_di)
-        self.sample_di_button.pack(side="left")
-        self.sample_bess_button = ttk.Button(chips, text="Sample BESS", command=self.start_sample_bess)
-        self.sample_bess_button.pack(side="left", padx=(6, 0))
-        ttk.Label(chips, text="Mode").pack(side="left", padx=(12, 4))
-        self.mode_slug = tk.StringVar(value=DEFAULT_MODE)
-        self.mode_box = ttk.Combobox(
-            chips,
-            textvariable=self.mode_slug,
-            width=12,
-            state="readonly",
-        )
-        self.mode_box.pack(side="left")
-        self._apply_mode(DEFAULT_MODE)
-        ttk.Label(chips, text="/sample-di    /sample-bess    /run    /heavy    /mode    /help").pack(side="left", padx=8)
-        self.ask_claude = tk.BooleanVar(value=False)
-        ttk.Checkbutton(
-            chips,
-            text="Ask Claude after the tool plan (your key; numbers stay from the calcs)",
-            variable=self.ask_claude,
-        ).pack(side="right")
-        self._render_chat()
-
     def _prefer_chat(self) -> None:
-        """Keep the thread larger than the optional zone form and ready to type into."""
+        """Put the cursor in the composer. The thread is the main surface."""
         try:
             self.chat_entry.focus_set()
-            height = self.main_pane.winfo_height()
-            if height > 160:
-                self.main_pane.sashpos(0, int(height * 0.68))
         except tk.TclError:
             pass
 
@@ -751,7 +1126,10 @@ class App:
         if jobs is None or listing is None:
             return
         try:
+            if self._pending_here() != self._pending_shown:
+                self._render_chat()
             lines = [job.inbox_line() for job in jobs.snapshot()]
+            self._show_activity(bool(lines))
             if tuple(listing.get(0, "end")) == tuple(lines):
                 return
             listing.delete(0, "end")
@@ -761,6 +1139,30 @@ class App:
                 listing.see("end")
         except tk.TclError:
             return
+
+    def _show_activity(self, show: bool) -> None:
+        """The sidebar Activity list appears once there is a job to show."""
+        if show == self._activity_shown:
+            return
+        try:
+            if show:
+                self.activity.pack(side="bottom", fill="x", before=self.project_list)
+            else:
+                self.activity.pack_forget()
+        except tk.TclError:
+            return
+        self._activity_shown = show
+
+    def _pending_here(self) -> bool:
+        """True while a job for the open project is queued or running."""
+        jobs = getattr(self, "jobs", None)
+        if jobs is None or not self.project:
+            return False
+        project_id = self.project.get("id")
+        return any(
+            job.project_id == project_id and job.status in ("queued", "running")
+            for job in jobs.snapshot()
+        )
 
     def _keep_composer_open(self) -> None:
         """A running job must leave the composer usable."""
@@ -806,18 +1208,27 @@ class App:
         return turn
 
     def _sync_claude_default(self) -> None:
-        self.ask_claude.set(bool(load_api_key()))
+        self._key_saved = bool(load_api_key())
+        self.ask_claude.set(self._key_saved)
+
+    def _update_title(self) -> None:
+        name = (self.project or {}).get("name") if self.project else None
+        try:
+            self.job_title.set(name or "New chat")
+        except (tk.TclError, AttributeError):
+            pass
 
     def refresh_projects(self, select_id: str | None = None) -> None:
         self.project_list.delete(0, "end")
         self._ids = []
         for row in list_projects():
-            self.project_list.insert("end", row.get("name") or "Untitled job")
+            self.project_list.insert("end", row.get("name") or UNTITLED_JOB)
             self._ids.append(row["id"])
         if select_id and select_id in self._ids:
             index = self._ids.index(select_id)
             self.project_list.selection_set(index)
             self.project_list.see(index)
+        self._update_title()
 
     def _selected_id(self) -> str | None:
         selection = self.project_list.curselection()
@@ -864,11 +1275,21 @@ class App:
 
     def _apply_mode(self, slug: str | None) -> None:
         known = self._known_modes()
-        self.mode_box["values"] = known
+        self.mode_menu.delete(0, "end")
+        for item in known:
+            self.mode_menu.add_radiobutton(label=item.capitalize(), value=item, variable=self.mode_slug)
         chosen = normalize_mode(slug)
         if chosen not in known:
             chosen = DEFAULT_MODE if DEFAULT_MODE in known else known[0]
         self.mode_slug.set(chosen)
+        self._sync_mode_label()
+
+    def mode_choices(self) -> list[str]:
+        """Mode slugs listed on the Mode menu."""
+        last = self.mode_menu.index("end")
+        if last is None:
+            return []
+        return [str(self.mode_menu.entrycget(index, "value")) for index in range(last + 1)]
 
     def _apply_di(self, di: dict) -> None:
         self.zone_id.set(di.get("zone_id") or "")
@@ -1042,11 +1463,63 @@ class App:
         self.refresh_projects(project["id"])
         self.status.set(f"Opened {project.get('name')}. {key_status()}")
 
+    def _is_blank_job(self, project: dict | None) -> bool:
+        if not project:
+            return False
+        return (
+            (project.get("name") or UNTITLED_JOB) == UNTITLED_JOB
+            and not self.chat_log
+            and not project.get("last_run")
+            and not project.get("bess_run")
+        )
+
     def new_job(self) -> None:
-        name = simpledialog.askstring("New job", "Job name", parent=self.root)
-        if not name:
+        """Start an empty chat. It takes its name from the first question."""
+        if not self._is_blank_job(self.project):
+            self._start_named_job(UNTITLED_JOB)
+            self.chat_log = list((self.project or {}).get("chat") or [])
+            self._render_chat()
+        try:
+            self.chat_entry.focus_set()
+        except tk.TclError:
+            pass
+
+    def rename_job(self, project_id: str | None = None) -> None:
+        project_id = project_id or (self.project or {}).get("id") or self._selected_id()
+        if not project_id:
+            self.status.set("Start a chat first. A job is created with the first message.")
             return
-        self._start_named_job(name)
+        is_open = self.project is not None and self.project.get("id") == project_id
+        try:
+            target = self.project if is_open else load_project(project_id)
+        except (OSError, json.JSONDecodeError):
+            return
+        name = simpledialog.askstring(
+            "Rename job",
+            "Job name",
+            initialvalue=target.get("name") or UNTITLED_JOB,
+            parent=self.root,
+        )
+        if not name or not name.strip():
+            return
+        target["name"] = " ".join(name.split())
+        if is_open:
+            self._capture_form(target)
+        save_project(target)
+        self.refresh_projects((self.project or {}).get("id"))
+        self.status.set(f"Renamed to {target['name']}.")
+
+    def _project_menu_popup(self, event) -> str:
+        index = self.project_list.nearest(event.y)
+        box = self.project_list.bbox(index) if index >= 0 else None
+        if not box or index >= len(self._ids) or not (box[1] <= event.y <= box[1] + box[3]):
+            return "break"
+        self._menu_project_id = self._ids[index]
+        try:
+            self.project_menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            self.project_menu.grab_release()
+        return "break"
 
     def _ensure_project(self) -> None:
         """Create the first job without painting an empty form over what is already typed."""
@@ -1080,7 +1553,7 @@ class App:
         self._keep_composer_open()
         self._open_sample_project()
         self._append_chat("user", raw)
-        self.run_zone(announce=True)
+        self.run_zone(announce=True, seed=sample_di_seed())
 
     def _open_bess_project(self) -> None:
         if self.project:
@@ -1105,7 +1578,7 @@ class App:
         self._keep_composer_open()
         self._open_bess_project()
         self._append_chat("user", raw)
-        self.run_bess(announce=True)
+        self.run_bess(announce=True, seed=sample_bess_seed())
 
     def start_zone_run(self, typed: str | None = None) -> None:
         raw = (typed or "/run").strip() or "/run"
@@ -1204,7 +1677,7 @@ class App:
         self._append_chat("user", raw)
         self._append_chat(
             "assistant",
-            f"Opened {self.project['name']}. The zone form is optional. /sample-di loads the sample zone and runs it.",
+            f"Started {self.project['name']}. Ask away. Zone details is optional.",
         )
         self._capture_form(self.project)
         save_project(self.project)
@@ -1259,16 +1732,20 @@ class App:
             reply = str(exc)
         self._local_exchange(raw, reply)
 
-    def delete_job(self) -> None:
-        project_id = self._selected_id()
+    def delete_job(self, project_id: str | None = None) -> None:
+        project_id = project_id or self._selected_id()
         if not project_id:
             return
-        if not messagebox.askyesno("Delete", "Delete this project from this machine?"):
+        if not messagebox.askyesno("Delete", "Delete this job and its chat from this machine?"):
             return
         delete_project(project_id)
         if self.project and self.project.get("id") == project_id:
+            # Clear the thread too, so a deleted job's chat is not left on screen.
             self.project = None
-        self.refresh_projects()
+            self.chat_log = []
+            self._render_chat()
+            self._show_saved_run(None)
+        self.refresh_projects((self.project or {}).get("id"))
 
     def add_segment(self) -> None:
         nps = self.seg_nps.get().strip()
@@ -1303,7 +1780,7 @@ class App:
         for item in self.pipes.selection():
             self.pipes.delete(item)
 
-    def run_zone(self, *, announce: bool = False) -> None:
+    def run_zone(self, *, announce: bool = False, seed: str = "") -> None:
         self._keep_composer_open()
         if not self.project:
             self._report_run_problem(None, "Open a project, or use /sample-di.", announce=announce)
@@ -1326,12 +1803,14 @@ class App:
         use_claude = bool(self.ask_claude.get()) and bool(load_api_key())
         if use_claude:
             self._enqueue_zone(
-                origin_id, project_name, pack, di, basis, mode, load_api_key(), announce=announce
+                origin_id, project_name, pack, di, basis, mode, load_api_key(), announce=announce, seed=seed
             )
             return
-        self._run_zone_here(origin_id, project_name, pack, di, basis, mode, announce=announce)
+        self._run_zone_here(origin_id, project_name, pack, di, basis, mode, announce=announce, seed=seed)
 
-    def _run_zone_here(self, origin_id, project_name, pack, di, basis, mode, *, announce: bool = False) -> None:
+    def _run_zone_here(
+        self, origin_id, project_name, pack, di, basis, mode, *, announce: bool = False, seed: str = ""
+    ) -> None:
         """Tool plan with no model call. It finishes before the composer returns."""
         job = self.jobs.record(
             project_id=origin_id,
@@ -1342,6 +1821,7 @@ class App:
         )
         if announce:
             self._announce_jobs.add(job.id)
+            self._remember_seed(job.id, seed)
         try:
             result = run_di_zone(pack, di, basis, narrator=None, mode=mode)
         except Exception as exc:
@@ -1351,7 +1831,9 @@ class App:
         self.jobs.mark(job.id, "done")
         self._finish_run(origin_id, result, None, job_id=job.id)
 
-    def _enqueue_zone(self, origin_id, project_name, pack, di, basis, mode, key, *, announce: bool = False) -> None:
+    def _enqueue_zone(
+        self, origin_id, project_name, pack, di, basis, mode, key, *, announce: bool = False, seed: str = ""
+    ) -> None:
         """Queue a zone run that calls the model. The composer stays usable."""
 
         def work(job_id: str) -> None:
@@ -1398,6 +1880,7 @@ class App:
         # stays on the UI queue until this call returns to the event loop.
         if announce:
             self._announce_jobs.add(job.id)
+            self._remember_seed(job.id, seed)
         self._keep_composer_open()
         self.status.set(f"Asking {MODEL_ID}… {job.heading()}")
         try:
@@ -1405,7 +1888,7 @@ class App:
         except tk.TclError:
             pass
 
-    def run_bess(self, *, announce: bool = False) -> None:
+    def run_bess(self, *, announce: bool = False, seed: str = "") -> None:
         """Explosion-control starter. Does not read the optional zone form."""
         self._keep_composer_open()
         if not self.project:
@@ -1426,15 +1909,16 @@ class App:
         use_claude = bool(self.ask_claude.get()) and bool(load_api_key())
         if use_claude:
             self._enqueue_bess(
-                origin_id, project_name, pack, room, basis, zone_result, load_api_key(), announce=announce
+                origin_id, project_name, pack, room, basis, zone_result, load_api_key(),
+                announce=announce, seed=seed,
             )
             return
         self._run_bess_here(
-            origin_id, project_name, pack, room, basis, zone_result, announce=announce
+            origin_id, project_name, pack, room, basis, zone_result, announce=announce, seed=seed
         )
 
     def _run_bess_here(
-        self, origin_id, project_name, pack, room, basis, zone_result, *, announce: bool = False
+        self, origin_id, project_name, pack, room, basis, zone_result, *, announce: bool = False, seed: str = ""
     ) -> None:
         """LFL tool plan with no model call. It finishes before the composer returns."""
         job = self.jobs.record(
@@ -1446,6 +1930,7 @@ class App:
         )
         if announce:
             self._announce_jobs.add(job.id)
+            self._remember_seed(job.id, seed)
         try:
             result = run_bess_plan(
                 pack, room, basis, zone_result=zone_result, narrator=None, mode="synthesis"
@@ -1458,7 +1943,8 @@ class App:
         self._finish_bess(origin_id, result, None, job_id=job.id)
 
     def _enqueue_bess(
-        self, origin_id, project_name, pack, room, basis, zone_result, key, *, announce: bool = False
+        self, origin_id, project_name, pack, room, basis, zone_result, key, *, announce: bool = False,
+        seed: str = "",
     ) -> None:
         """Queue a starter that calls the model. The composer stays usable."""
 
@@ -1505,6 +1991,7 @@ class App:
         )
         if announce:
             self._announce_jobs.add(job.id)
+            self._remember_seed(job.id, seed)
         self._keep_composer_open()
         self.status.set(f"Asking {MODEL_ID}… {job.heading()}")
         try:
@@ -1528,7 +2015,7 @@ class App:
             announce = taken
         else:
             announce = bool(announce) or taken
-        message = self._with_job_label(job_id, message)
+        message = self._with_job_label(job_id, self._with_seed(job_id, message))
         still_here = self.project is not None and (origin_id is None or self.project.get("id") == origin_id)
         if announce and still_here:
             self.chat_log.append(self._assistant_turn(message, job_id))
@@ -1554,7 +2041,9 @@ class App:
         announce = self._take_announce(job_id)
         still_here = self.project is not None and self.project.get("id") == origin_id
         if error or result is None:
-            message = self._with_job_label(job_id, error or "The explosion-control starter did not run.")
+            message = self._with_job_label(
+                job_id, self._with_seed(job_id, error or "The explosion-control starter did not run.")
+            )
             if announce and still_here:
                 self.chat_log.append(self._assistant_turn(message, job_id))
                 self._render_chat()
@@ -1568,7 +2057,9 @@ class App:
             self.status.set("The explosion-control starter did not run.")
             return
         result = self._stamp_job(result, job_id)
-        summary = self._with_job_label(job_id, bess_chat_summary(result)) if announce else ""
+        summary = (
+            self._with_job_label(job_id, self._with_seed(job_id, bess_chat_summary(result))) if announce else ""
+        )
         if still_here:
             self.project["bess_run"] = result
             self.project["mode"] = "synthesis"
@@ -1624,7 +2115,7 @@ class App:
             announce = taken
         else:
             announce = bool(announce) or taken
-        message = self._with_job_label(job_id, message)
+        message = self._with_job_label(job_id, self._with_seed(job_id, message))
         still_here = self.project is not None and (origin_id is None or self.project.get("id") == origin_id)
         if announce and still_here:
             self.chat_log.append(self._assistant_turn(message, job_id))
@@ -1655,6 +2146,17 @@ class App:
         self._announce_jobs.discard(job_id)
         return announce
 
+    def _remember_seed(self, job_id: str, seed: str) -> None:
+        if seed:
+            self._seed_notes[job_id] = seed
+
+    def _with_seed(self, job_id: str | None, body: str) -> str:
+        """Put a sample's "what was loaded" note above its reply. The note is used once."""
+        seed = self._seed_notes.pop(job_id, "") if job_id else ""
+        if not seed:
+            return body
+        return f"{seed}\n\n{body}" if body else seed
+
     def _finish_run(
         self,
         origin_id: str,
@@ -1667,7 +2169,7 @@ class App:
         announce = self._take_announce(job_id)
         still_here = self.project is not None and self.project.get("id") == origin_id
         if error or result is None:
-            message = self._with_job_label(job_id, error or "The zone did not run.")
+            message = self._with_job_label(job_id, self._with_seed(job_id, error or "The zone did not run."))
             if announce and still_here:
                 self.chat_log.append(self._assistant_turn(message, job_id))
                 self._render_chat()
@@ -1680,7 +2182,9 @@ class App:
             self.status.set("The zone did not run.")
             return
         result = self._stamp_job(result, job_id)
-        summary = self._with_job_label(job_id, chat_run_summary(result)) if announce else ""
+        summary = (
+            self._with_job_label(job_id, self._with_seed(job_id, chat_run_summary(result))) if announce else ""
+        )
         if still_here:
             self.project["last_run"] = result
             if summary:
@@ -1730,8 +2234,9 @@ class App:
         else:
             self.results.insert(
                 "1.0",
-                "The thread is where a zone run shows up. "
-                "This panel keeps the tool-plan figures after /sample-di or /run, for export.",
+                "No zone run on this job yet.\n\n"
+                "Fill in the Zone tab and press Run zone (or type /run). "
+                "The run is posted in the thread, and the tool-plan figures stay here for export.",
             )
         self.results.configure(state="disabled")
 
@@ -1842,7 +2347,7 @@ class App:
 
     def export_docx(self) -> None:
         if not self.project or not self.project.get("last_run"):
-            messagebox.showinfo("Export", "Use /sample-di or /run before exporting.")
+            messagebox.showinfo("Export", EXPORT_NEEDS_RUN)
             return
         self.start_claim_check(offer_export=True)
 
@@ -1851,7 +2356,7 @@ class App:
         self._keep_composer_open()
         self._ensure_project()
         if not self.project or not self.project.get("last_run"):
-            messagebox.showinfo("Export", "Use /sample-di or /run before exporting.")
+            messagebox.showinfo("Export", EXPORT_NEEDS_RUN)
             return
         snapshot = copy.deepcopy(self.project["last_run"])
         packet = build_packet(snapshot)
@@ -1992,15 +2497,40 @@ class App:
         self.status.set(self._with_job_label(job_id, outcome["block_reason"]))
 
     def _render_chat(self) -> None:
-        self.chat_view.configure(state="normal")
-        self.chat_view.delete("1.0", "end")
+        view = self.chat_view
+        view.configure(state="normal")
+        view.delete("1.0", "end")
         if not self.chat_log:
-            self.chat_view.insert("end", THREAD_HINT + "\n", "hint")
+            self._render_welcome()
         for turn in self.chat_log:
-            who = "You" if turn.get("role") == "user" else "Assistant"
-            self.chat_view.insert("end", f"{who}\n{turn.get('text') or ''}\n\n")
-        self.chat_view.configure(state="disabled")
-        self.chat_view.see("end")
+            text = turn.get("text") or ""
+            if turn.get("role") == "user":
+                view.insert("end", "You\n", ("who_user",))
+                view.insert("end", text + "\n", ("body",))
+                continue
+            view.insert("end", "Assistant\n", ("who_assistant",))
+            for chunk, tags in markdown_segments(text):
+                view.insert("end", chunk, ("body",) + tags)
+            view.insert("end", "\n", ("body",))
+        pending = self._pending_here()
+        if pending and self.chat_log:
+            view.insert("end", "Working on it…\n", ("pending",))
+        self._pending_shown = pending
+        view.configure(state="disabled")
+        view.see("end")
+        self._update_title()
+
+    def _render_welcome(self) -> None:
+        """Empty-thread welcome. Asking a question needs nothing from this."""
+        view = self.chat_view
+        lines = THREAD_HINT.splitlines()
+        view.insert("end", lines[0] + "\n", ("welcome_title",))
+        for line in lines[1:]:
+            view.insert("end", line + "\n", ("welcome_sub",))
+        if not self._key_saved:
+            view.insert("end", WELCOME_KEY_LINK + "\n", ("welcome_link", "link_settings"))
+        view.insert("end", WELCOME_SAMPLE_LINK + "\n", ("welcome_link", "link_sample_di"))
+        view.insert("end", WELCOME_FOOTNOTE + "\n", ("welcome_hint",))
 
     def _append_chat(self, role: str, text: str) -> None:
         self.chat_log.append({"role": role, "text": text})
@@ -2022,25 +2552,36 @@ class App:
         """Ask Claude without blocking the window. The zone form is optional."""
         self._keep_composer_open()
         self._ensure_project()
+        if self._takes_name_from(text):
+            # A chat-first job is named after its first question.
+            self.project["name"] = chat_title(text)
         origin_id = self.project["id"]
-        project_name = self.project.get("name") or "Untitled job"
+        project_name = self.project.get("name") or UNTITLED_JOB
         self._append_chat("user", text)
         try:
             self.root.update_idletasks()
         except tk.TclError:
             pass
         key = load_api_key()
+        self._key_saved = bool(key)
         if not key:
             self._append_chat(
                 "assistant",
-                "Save an Anthropic API key in Settings to talk with Claude. "
-                "/sample-di still loads the sample zone and runs the tool plan on this machine without a key. "
-                "/sample-bess runs the explosion-control starter the same way.",
+                "I need an Anthropic API key before I can answer. Add it in Settings "
+                "(bottom of the sidebar). The key stays on this machine.\n\n"
+                "/sample-di still loads the sample zone and runs the tool plan here without a key, "
+                "and /sample-bess runs the explosion-control starter the same way.",
             )
             self._save_form_or_chat(self.project)
             save_project(self.project)
+            self.refresh_projects(origin_id)
             self.status.set(key_status())
             return
+        # Save the question now so the sidebar shows the job and its name
+        # while the reply is on its way.
+        self._save_form_or_chat(self.project)
+        save_project(self.project)
+        self.refresh_projects(origin_id)
         try:
             basis = self.collect_basis()
             di = self.collect_di()
@@ -2088,6 +2629,15 @@ class App:
         )
         self._keep_composer_open()
         self.status.set(f"Asking {MODEL_ID}… {job.heading()}")
+
+    def _takes_name_from(self, text: str) -> bool:
+        """True for the first typed question in a job that still has the default name."""
+        if not self.project or (self.project.get("name") or UNTITLED_JOB) != UNTITLED_JOB:
+            return False
+        return not any(
+            turn.get("role") == "user" and not str(turn.get("text") or "").startswith("/")
+            for turn in self.chat_log
+        ) and bool((text or "").strip())
 
     def _finish_chat(self, origin_id: str, reply: str, job_id: str | None = None) -> None:
         self._keep_composer_open()
@@ -2231,23 +2781,40 @@ class App:
         self._show_changelog(shown)
 
     def open_settings(self) -> None:
+        px = self.theme.px
         win = tk.Toplevel(self.root)
         win.title("Settings")
         win.transient(self.root)
-        win.geometry("720x640")
-        frame = ttk.Frame(win, padding=12)
+        win.configure(bg=palette.BG)
+        win.geometry(f"{px(640)}x{px(660)}")
+        win.minsize(px(520), px(480))
+        frame = ttk.Frame(win, padding=(px(22), px(18), px(22), px(16)))
         frame.pack(fill="both", expand=True)
-        ttk.Label(frame, text=f"Model  {MODEL_ID}").pack(anchor="w")
+        wrap = px(580)
+
+        ttk.Label(frame, text="Anthropic API key", style="Job.TLabel").pack(anchor="w")
         ttk.Label(
             frame,
-            text="Paste your own Anthropic API key. It stays on this machine and is not written into the project.",
-            wraplength=580,
-        ).pack(anchor="w", pady=(8, 4))
-        ttk.Label(frame, text=key_storage_help(), wraplength=580).pack(anchor="w", pady=(0, 4))
+            text=(
+                f"Your own key, used with {MODEL_ID}. It stays on this machine and is never written "
+                "into a job, the chat, or an export."
+            ),
+            style="Muted.TLabel",
+            wraplength=wrap,
+            justify="left",
+        ).pack(anchor="w", pady=(px(2), px(8)))
         key_var = tk.StringVar()
-        ttk.Entry(frame, textvariable=key_var, show="•", width=60).pack(anchor="w", fill="x")
+        key_row = ttk.Frame(frame)
+        key_row.pack(fill="x")
+        key_entry = ttk.Entry(key_row, textvariable=key_var, show="•")
+        key_entry.pack(side="left", fill="x", expand=True)
         status = tk.StringVar(value=key_status())
-        ttk.Label(frame, textvariable=status, wraplength=580).pack(anchor="w", pady=6)
+
+        def key_changed() -> None:
+            self._key_saved = bool(load_api_key())
+            self.status.set(key_status())
+            if not self.chat_log:
+                self._render_chat()
 
         def save():
             raw = key_var.get().strip()
@@ -2262,14 +2829,14 @@ class App:
             key_var.set("")
             status.set(key_status() if where else "Key was not stored.")
             self.ask_claude.set(True)
-            self.status.set(key_status())
+            key_changed()
 
         def clear():
             clear_api_key()
             key_var.set("")
             status.set(key_status())
             self.ask_claude.set(False)
-            self.status.set(key_status())
+            key_changed()
 
         def check():
             key = key_var.get().strip() or load_api_key()
@@ -2288,27 +2855,24 @@ class App:
 
             threading.Thread(target=work, daemon=True).start()
 
-        row = ttk.Frame(frame)
-        row.pack(anchor="w", pady=4)
-        ttk.Button(row, text="Save key", command=save).pack(side="left")
-        ttk.Button(row, text="Clear key", command=clear).pack(side="left", padx=6)
-        ttk.Button(row, text="Check key", command=check).pack(side="left")
+        ttk.Button(key_row, text="Save key", style="Accent.TButton", command=save).pack(side="left", padx=(px(8), 0))
+        key_entry.bind("<Return>", lambda _event: save())
+        ttk.Label(frame, textvariable=status, wraplength=wrap, justify="left").pack(anchor="w", pady=(px(8), px(4)))
+        key_tools = ttk.Frame(frame)
+        key_tools.pack(anchor="w")
+        ttk.Button(key_tools, text="Check key", command=check).pack(side="left")
+        ttk.Button(key_tools, text="Clear key", command=clear).pack(side="left", padx=px(6))
+        ttk.Label(frame, text=key_storage_help(), style="Small.TLabel", wraplength=wrap, justify="left").pack(
+            anchor="w", pady=(px(8), 0)
+        )
 
+        ttk.Separator(frame, orient="horizontal").pack(fill="x", pady=px(16))
+
+        ttk.Label(frame, text="Content pack", style="Job.TLabel").pack(anchor="w")
         self._settings_version = tk.StringVar(value=f"Content version: {content_version_text()}")
-        ttk.Label(frame, textvariable=self._settings_version).pack(anchor="w", pady=(16, 4))
-        ttk.Label(
-            frame,
-            text=(
-                "Check for updates downloads a newer content pack and switches to it "
-                "after sha256 matches. The API key and projects stay on this machine."
-            ),
-            wraplength=660,
-        ).pack(anchor="w")
+        ttk.Label(frame, textvariable=self._settings_version, style="Muted.TLabel").pack(anchor="w", pady=(px(2), px(6)))
         content_line = tk.StringVar(value="")
-        ttk.Label(frame, textvariable=content_line, wraplength=660).pack(anchor="w", pady=(4, 4))
         feed_var = tk.StringVar(value=resolved_feed_url())
-        ttk.Label(frame, text="Content feed URL").pack(anchor="w")
-        ttk.Entry(frame, textvariable=feed_var, width=78).pack(anchor="w", fill="x")
 
         def check_updates():
             typed = feed_var.get().strip()
@@ -2321,12 +2885,39 @@ class App:
             content_line.set("Checking for a content pack…")
             self._start_content_check(manual=True, url=used, status_var=content_line)
 
-        ttk.Button(frame, text="Check for updates", command=check_updates).pack(anchor="w", pady=(6, 4))
-        ttk.Label(frame, text="What's new").pack(anchor="w")
-        self._changelog_view = tk.Text(frame, height=5, wrap="word")
+        update_row = ttk.Frame(frame)
+        update_row.pack(fill="x")
+        ttk.Button(update_row, text="Check for updates", command=check_updates).pack(side="left")
+        ttk.Label(update_row, textvariable=content_line, style="Muted.TLabel", wraplength=px(400), justify="left").pack(
+            side="left", padx=(px(10), 0)
+        )
+        ttk.Label(
+            frame,
+            text=(
+                "A newer pack is used only after its sha256 matches. "
+                "Your API key and jobs stay on this machine."
+            ),
+            style="Small.TLabel",
+            wraplength=wrap,
+            justify="left",
+        ).pack(anchor="w", pady=(px(6), px(8)))
+        ttk.Label(frame, text="WHAT'S NEW", style="Small.TLabel", font=self.theme.fonts["section"]).pack(anchor="w")
+        self._changelog_view = tk.Text(
+            frame,
+            height=5,
+            wrap="word",
+            bd=0,
+            relief="flat",
+            highlightthickness=0,
+            bg=palette.SURFACE,
+            fg=palette.TEXT,
+            padx=px(10),
+            pady=px(6),
+            font=self.theme.fonts["list"],
+        )
         self._changelog_view.insert("1.0", format_changelog(current_changelog()))
         self._changelog_view.configure(state="disabled")
-        self._changelog_view.pack(anchor="w", fill="x", pady=(2, 8))
+        self._changelog_view.pack(fill="x", pady=(px(4), px(10)))
         changelog_widget = self._changelog_view
         version_var = self._settings_version
 
@@ -2338,17 +2929,38 @@ class App:
             win.destroy()
 
         win.protocol("WM_DELETE_WINDOW", close_settings)
+        win.bind("<Escape>", lambda _event: close_settings())
 
-        ttk.Label(
+        advanced_open = tk.BooleanVar(value=False)
+        advanced = ttk.Frame(frame)
+
+        def toggle_advanced():
+            if advanced_open.get():
+                advanced.pack(fill="x", pady=(px(6), 0))
+            else:
+                advanced.pack_forget()
+
+        ttk.Checkbutton(
             frame,
+            text="Advanced: content feed and content pack folder",
+            variable=advanced_open,
+            command=toggle_advanced,
+        ).pack(anchor="w")
+        ttk.Label(advanced, text="Content feed URL", style="Small.TLabel").pack(anchor="w", pady=(px(4), px(2)))
+        ttk.Entry(advanced, textvariable=feed_var).pack(fill="x")
+        ttk.Label(
+            advanced,
             text="Content pack folder (skills/, roles/, modes/, and calcs/ at the top level)",
-        ).pack(anchor="w", pady=(8, 4))
+            style="Small.TLabel",
+        ).pack(anchor="w", pady=(px(8), px(2)))
         try:
             current = str(content_root())
         except FileNotFoundError:
             current = read_config().get("content_root") or ""
         root_var = tk.StringVar(value=current)
-        ttk.Entry(frame, textvariable=root_var, width=78).pack(anchor="w", fill="x")
+        folder_row = ttk.Frame(advanced)
+        folder_row.pack(fill="x")
+        ttk.Entry(folder_row, textvariable=root_var).pack(side="left", fill="x", expand=True)
 
         def save_root():
             folder = root_var.get().strip()
@@ -2372,7 +2984,8 @@ class App:
             else:
                 content_line.set(f"Content pack: {resolved}")
 
-        ttk.Button(frame, text="Save content pack", command=save_root).pack(anchor="w", pady=8)
+        ttk.Button(folder_row, text="Save content pack", command=save_root).pack(side="left", padx=(px(8), 0))
+        key_entry.focus_set()
 
     def load_demo(self) -> None:
         """Create the sample job and run the local tool plan. Does not call Claude."""
@@ -2416,6 +3029,8 @@ def main(argv: list[str] | None = None) -> None:
     if args.demo:
         # Skip the OS keyring probe. The demo never calls Claude.
         write_config({"key_backend": "file"})
+    # Crisp text on a scaled Windows display. Must run before the first window.
+    enable_windows_dpi_awareness()
     root = tk.Tk()
     app = App(root)
     if args.demo:
@@ -2425,6 +3040,7 @@ def main(argv: list[str] | None = None) -> None:
             root.update()
             shot = Path(args.screenshot_dir) if args.screenshot_dir else None
             if shot:
+                app.show_details(True)
                 app.tabs.select(1)
                 root.update()
                 capture_window(root, shot / "di_zone_inputs.png")
