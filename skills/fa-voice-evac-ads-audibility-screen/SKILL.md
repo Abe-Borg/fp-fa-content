@@ -22,7 +22,7 @@ description: >-
 - [CODE] 18.3.7.2.1: speaker NAC electrical loss 1.0 dB max, include MIA (18.3.7.2.2). Run `fa-speaker-circuit-loss-check`.
 - [CODE] 10.19.1: amplifier failure gives trouble.
 - [CODE IBC 2021/2024 907.5.2.2]: where EVACS is code required, paging zones per that section. Where voice is owner choice, tag [OWNER].
-- Loud room over 110 dBA ambient: no held text resolves it. Verify with the engineer of record ( row 15). Conservative: visual per 18.5, AHJ reduce or eliminate path, owner hearing protection signs.
+- Loud room over 110 dBA ambient: no held text resolves it. Verify with the engineer of record. Conservative: visual per 18.5, AHJ reduce or eliminate path, owner hearing protection signs.
 
 ## Inputs (ASSUME and flag any missing)
 Spaces with average and 60 s max ambient (measure on real jobs), speaker data sheet output at 1 W and 10 ft, taps, ceiling heights, occupancy, evac strategy, owner voice standard.
@@ -46,4 +46,16 @@ Handbook screen [HB NFPA 72-2025 D.2.4.1]: at least 90 percent of points at or a
 
 Corridor visual appliances are rated not less than 15 cd [CODE NFPA 72-2025 §18.5.5.8.2], within 15 ft of each end, and not more than 100 ft apart [CODE §18.5.5.8.4]. More than two in one view flash in sync [CODE §18.5.5.7.2(3)]. A further corridor-only sync sentence is not pinned.
 
-US teaching shape only: six ceiling speakers, 25 ft on center, 0.25 W tap. A modeled average near 0.55 is not acceptance. Field-check intelligibility. Modeled speech stays [ASSUMED] until a field method is chosen. Annex D measurement is required only when the AHJ or the project basis elects it. Quantitative Annex D is permitted, not mandated. Do not copy the teaching taps onto a live corridor. On a Canada job, stop this screen. Do not treat the handbook targets or an Annex D election as Canada code, and do not invent a Canada intelligibility duration. Verify with the engineer of record.
+US teaching shape only: six ceiling speakers, 25 ft on center, 0.25 W tap. A modeled average near 0.55 is not acceptance. Do not copy the teaching taps onto a live corridor. Modeled STI is never a field pass. Tag a modeled result [ASSUMED].
+
+Annex D is handbook guidance, not [CODE]. The intelligibility requirement stays in Chapter 18 and Chapter 24. Quantitative Annex D measurement is used only when the AHJ or the project basis elects it. Quantitative Annex D is permitted, not mandated. When that field test is elected, follow this protocol [HB/PRACTICE]:
+
+1. Define each acoustically distinguishable space.
+2. Flag a space at 85 dBA or more for other means.
+3. Use the STI or STIPA method.
+4. Use the microphone path when the system has a microphone. That checks the path end to end. Otherwise use direct injection.
+5. Calibrate the talkbox.
+6. Measure the grid points and record each space.
+7. The pass value is set by the owner [OWNER]. Do not invent a pass value. On a fail, correct and retest [PRACTICE].
+
+Do not invent a test duration. No held text states one. On a Canada job, stop this screen. Do not map these Annex D rows as Canada code, and do not invent a Canada intelligibility duration. CAN/ULC-S524 voice stays NEEDS HOLD. Verify with the engineer of record.

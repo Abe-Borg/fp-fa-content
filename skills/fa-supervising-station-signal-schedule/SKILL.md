@@ -47,11 +47,11 @@ Alarm receipt within 90 s, and supervisory and trouble receipt, follow NFPA 72-2
 
 ## Service selection (all DC jobs, from a worked example)
 - Pick the service first: central, proprietary or remote station [CODE NFPA 72 Ch 26, enforced edition].
-- Owner security SOC as proprietary station: check the definition (NFPA 72-2025 3.3.306.2) and 26.4 location and staffing rules (same text 2019, 2022, 2025, 72-54). A single operator with security duties may not qualify. Verify with the engineer of record. Conservative: listed central station for all signals; SOC gets a secondary annunciator only ( row 5).
+- Owner security SOC as proprietary station: check the definition (NFPA 72-2025 3.3.306.2) and 26.4 location and staffing rules (same text 2019, 2022, 2025). A single operator with security duties may not qualify. Verify with the engineer of record. Conservative: listed central station for all signals; SOC gets a secondary annunciator only.
 - Duct smoke detectors report supervisory only where a supervising station is required [CODE NFPA 72 21.7.4; IMC 2021/2024 606.4.1 where adopted].
 - VEWFD Alert is supervisory, no building notification [CODE NFPA 76-2020/2024 8.4.2.2.x where adopted]. Action or Fire 1 on FM jobs is alarm [OWNER] (design practice).
 - Waterflow and FA alarm to station as alarm; valve tamper, low air or N2 and fire pump as supervisory [CODE IBC 2024 903.4.1, 903.4.2; 2021 903.4, 903.4.1].
-- Path supervision by edition (72-77, a worked example). 2019 and 2022 26.6.3.3: a single path is supervised at 60 min or less and its failure reaches the station within 60 min; 26.6.3.4 multipath: each path within 6 h. 2025 26.6.3.3.1 permits one pathway unless the AHJ or another code bars it; 26.6.3.3.2 keeps the 60 min end-to-end integrity check [CODE, enforced edition]. 2025 failure annunciation points to another section whose text is not held; do not cite it until pulled. On 2025 multipath jobs keep 6 h station annunciation as the design value (Design practice design practice) [PARA; Verify with the engineer of record, conservative: 6 h]. Do not carry the 2022 station annunciation wording onto a 2025 job.
+- Path supervision by edition. 2019 and 2022: 26.6.3.3 supervises a single path at 60 min or less and annunciates failure at the station within 60 min. 26.6.3.4 supervises each multipath pathway within 6 h and annunciates failure of any path at the station within 6 h (26.6.3.4(2)) [CODE, enforced edition]. 2025: 26.6.3.3.1 permits one pathway unless the AHJ or another code bars it. 26.6.3.3.2 supervises that path end to end at 60 min, with failure annunciated per Section 10.15. 26.6.3.4 supervises each pathway end to end at 6 h. The 2022 rule that annunciates multipath failure at the station within 6 h is not in the 2025 text. 26.6.3.4(3) covers only failure to complete a transmission, per 10.15 [CODE NFPA 72-2025]. Section 10.15 is general trouble (200 s at 10.15.1; locations 10.15.7 and 10.15.8) and sets no path timing. On a 2025 multipath job, keep 6 h station annunciation of path failure as owner practice [PARA; Verify with the engineer of record, conservative: 6 h]. Do not cite that 6 h station annunciation as a 2025 code rule.
 - Default: two paths even on a 2025 job, each supervised at 60 min or less [OWNER; PRACTICE; Verify with the engineer of record, conservative: two paths].
 - Record the pathway pair (for example cellular plus IP) and a signal time budget from vendor data, ASSUMED until confirmed.
 
@@ -87,3 +87,21 @@ On a US job, waterflow is a fire alarm. Except as §26.2.2 and §29.10.9.7 permi
 On a Canada job, keep the fire-department notify rows above. The 90 s verification has no held NBC equivalent. Do not tag it, or any other NFPA 72 Chapter 26 row, as Canada code. CAN/ULC-S561 stays NEEDS HOLD. Do not invent hours or retransmission times.
 
 Rejected: inventing CAN/ULC-S561 hours, tagging a US Chapter 26 row as Canada code, and treating foam or clean agent as a signal class. Foam and clean agent stay out of scope.
+
+## Campus proprietary account
+
+Country gate first. The rows in this section are US only. Pin the edition with `fa-code-edition-delta-check`.
+
+One proprietary supervising-station account may cover a multi-building campus under one ownership. The property may be contiguous or noncontiguous [CODE NFPA 72-2025 §26.4.2.2]. Keep each building and each system as its own subpoint. Fire retransmission indicates the building or group of buildings [CODE §26.4.6.1.5].
+
+Staffing is two qualified operators at all times, unless retransmission is automatic [CODE §26.4.5.1 and §26.4.5.2].
+
+A single point of failure on one pathway does not fail the other pathways [CODE §26.6.3.4(2)].
+
+Priority across buildings is alarm, then supervisory, then trouble [PRACTICE]. A multi-owner campus, or central-station service, uses one account per building [PRACTICE].
+
+An owner display with no constant attendance is not a supervising station [CODE §26.4.2.1]. That screen fails. Pass only with a listed proprietary station or a central-station account. The display may remain a secondary annunciator. This does not replace the engineer-of-record check in Service selection.
+
+Canada: stop. CAN/ULC-S561 is NEEDS HOLD. Do not invent CAN/ULC-S561 hours or retransmission times. NFPA 72 is never Canada code. The Canada gates above stay in force.
+
+Rejected: inventing CAN/ULC-S561 retransmission hours, tagging a US §26.4 row as Canada code, and foam or clean-agent subpoints. Foam and clean agent stay out of scope.

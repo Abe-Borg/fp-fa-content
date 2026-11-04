@@ -54,12 +54,25 @@ description: >-
 All rows [CODE] per edition shown, from 72-12, 72-13, 72-16 to 72-39, except the [HB] annex note. The 72-12 and 72-13 `` pages are summaries; 2025 VRLA/releasing/SOO/notification cells come from their same duties raw pulls ( 72-13-...).
 
 ## Inputs (ASSUME and flag any missing)
-1. Jurisdiction (US or Canada, per the country gate). On a US job pin the adopted IBC/IFC edition and the enforced NFPA 72 edition. On a Canada job pin the NBC adoption. S524, S536, S537, S1001, and CEC Section 32 stay NEEDS HOLD. Local amendments still apply.
+1. Jurisdiction (US or Canada, per the country gate). On a US job pin the adopted IBC/IFC edition and the enforced NFPA 72 edition. On a Canada job pin the NBC adoption. CAN/ULC-S524, S536, S537, S1001, CAN/ULC-S561, CEC Section 32, and CSA B44 stay NEEDS HOLD. Local amendments still apply.
 2. Design-to edition if different (company practice: design to 72-2025 [PRACTICE]).
 3. The deliverable or skill outputs to relabel.
 
 ## Steps
 1. Pin enforced edition with the AHJ. If unknown, ASSUME from the adopted IBC/IFC and flag it. Enforced is not the same as latest.
+1a. Canada pin. When Country is Canada, keep this skill and do not stop only because the job is in Canada.
+   - Pin the NBC edition. NBC 2025 Division B 3.2.4 is the held alarm overlay. Pin a provincial amendment when the job uses one. Flag verify when that amendment is not held.
+   - Pin the NFC edition when the question is fire prevention or inspection, testing, and maintenance. NFC body that is not held stays NEEDS HOLD.
+   - CAN/ULC-S524, S536, S537, S1001, CAN/ULC-S561, CEC Section 32, and CSA B44 stay NEEDS HOLD. Stop any claim that needs those texts. Do not invent clause text, battery hours, wiring class, path rules, voice rules, or elevator rules.
+   - Still pin any NFPA 72 edition the AHJ or owner layers on, and run the US edition table for those claims. Where a held NBC sentence conflicts with NFPA 72, the NBC sentence governs. Do not tag an NFPA 72 row as Canada code.
+   - Foam and clean agent stay locked.
+   - Annunciator. AE 3.2.4.8.(7): a fire alarm control unit at a building entrance that faces a street or a fire-department vehicle access route, with every indicator required for an annunciator or a trouble signal on that unit, meets the annunciator requirement [CODE AE]. That relief is AE only. Do not apply it on an OBC job or on an NBC job.
+   - On an OBC job, do not use the AE (7) relief. A separate annunciator beyond the entrance rule is not held in this pass. Do not tag it [CODE].
+   - Zoning: one storey per zone, and not more than the system area limit in NFPA 13 [CODE 3.2.4.8.(2)(b)]. The held text is that area clause. Treating wet and double-interlock as separate annunciator zones is not separately held. Do not tag that split [CODE]. The area figure 4,831 m2 is [ASSUMED]. The NFPA 13 edition body is not pulled. Do not upgrade 4,831 m2 to [CODE].
+   - Heat-trace power loss: OBC 3.2.4.9.(5)(c) only, egress ice-and-snow, indicated at the annunciator [CODE]. AE and NBC jobs stay on the riser and sprinkler line. Do not carry (c) onto an AE or NBC job.
+   - Sentences 3.2.4.8.(8) and (9) are outside this data-center scope.
+   - Voice and device layout on a Canada job: stop. CAN/ULC-S524 is NEEDS HOLD.
+   - If an overlay header and the held NBC or AE extract disagree on the edition year, keep the held extract and flag verify. Do not swap editions.
 2. If a topic was not compared for an edition, label it unconfirmed and do not assume the editions match. Keep the section number and the edition year. Paraphrase. Do not paste standard text.
 3. For each claim in the deliverable, apply the table:
    - Same rows: keep [CODE], cite both (or all three) editions with correct section numbers.
@@ -90,4 +103,6 @@ All rows [CODE] per edition shown, from 72-12, 72-13, 72-16 to 72-39, except the
 7. Hand relabeled results back to the calling skill (`fa-nac-voltage-drop-check`, `fa-speaker-circuit-loss-check`, `fa-secondary-power-battery-calc`, `fa-releasing-panel-standby-and-power-split`, `fa-double-interlock-releasing-cause-and-effect`, `fa-asd-vewfd-data-hall-sampling-layout`, `fa-two-level-detection-stagger-and-fm-mapping`).
 
 ## Output
-Edition pin (enforced, design-to, ASSUMED?), delta table for the job, relabel list (claim, old label, new label), gap list with edition text not confirmed
+Edition pin (enforced, design-to, ASSUMED?), delta table for the job, relabel list (claim, old label, new label), gap list with edition text not confirmed.
+
+On a Canada job, also report the NBC pin, the NEEDS HOLD status for CAN/ULC-S524, S536, S537, S1001, CAN/ULC-S561, CEC Section 32, and CSA B44, and any Canada claim that stopped.
