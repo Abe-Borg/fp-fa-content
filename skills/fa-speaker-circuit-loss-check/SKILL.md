@@ -62,5 +62,15 @@ DC NAC voltage drop: `fa-nac-voltage-drop-check`. Amplifier battery: `fa-seconda
 ## Worked screen
 Method only. Do not copy it as a job result. A 70.7 V circuit at 60 W and 1,900 ft on 14 AWG is about 1.163 dB of loss (signed form about -1.163 dB) and fails the 1.0 dB budget. The same run on 12 AWG is about 0.751 dB (about -0.751 dB) and passes. A battery calc that passes, for example 15.90 Ah against an 18 Ah pick at 24 h + 15 min, does not clear the failing circuit. Fix the wire, then rerun the loss. The battery-spare follow-on is training only [PRACTICE]. It is not [CODE] and it is not an approved live design. Verify with the engineer of record. The 1.0 dB limit stays [CODE] on NFPA 72-2025. EVACS duration stays 24 h + 15 min [CODE] and governs over FM 24 h + 5 min [OWNER].
 
+## Campus speaker feeders
+
+Method only. Do not copy the runs as a job result. Ohms come from NEC 2023 Chapter 9 Table 8 through `fa-nec-table-8-wire-sizing`. On a NEC 2026 job those ohms are an [ASSUMED] screen. NEC 2026 Table 8 is NEEDS HOLD. Do not invent 2026 ohms and do not tag the 2023 ohms as [CODE] for 2026.
+
+Limit remains 1.0 dB [CODE NFPA 72-2025 §18.3.7.2.1(1)]; [PRACTICE] on 2019 and 2022.
+
+- 70.7 V, 14 AWG, 500 ft one way, 60 W: 0.321 dB, PASS.
+- 70.7 V, 12 AWG, 900 ft one way, 120 W: 0.713 dB, PASS. The same run on 16 AWG is 1.696 dB and FAILS.
+- On a Canada job, stop. CAN/ULC-S524 and CEC Section 32 are NEEDS HOLD. Do not map NFPA 72 as Canada code. Foam and clean agent stay locked.
+
 ## Output
 Edition and label; input table with ASSUMED flags; per-gauge, per-voltage loss and PASS/FAIL; L_max; MIA used; fixes; open items.

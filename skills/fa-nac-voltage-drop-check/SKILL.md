@@ -88,3 +88,12 @@ KB: 60_power-battery-and-voltage-drop/nac-voltage-drop-calculations.md. Worked: 
 
 ## fold 29: Canada explicit STOP (fixture-166)
 - Intake CA STOP added after Country gate. Worked: EXERCISES/worked/fixture-166-canada-skill-gate-negative-stops.md, _calc/test_ex166_168_b29.py T166. Training value. Verify with the engineer of record.
+
+## Campus NAC voltage drop
+
+Method only. Do not copy the runs as a job result. Ohms are NEC 2023 Chapter 9 Table 8. On a NEC 2026 job those ohms are an [ASSUMED] screen and Table 8 is NEEDS HOLD. Where NEC 2026 is adopted, the non-power-limited fire alarm branch circuit is not a multiwire branch circuit [CODE §760.41(B)]. The end-of-line floor used below is 16.0 V [ASSUMED].
+
+- 14 AWG, 250 ft, 1.6 A: 2.512 V drop, 17.89 V at the end, PASS.
+- 12 AWG, 420 ft, 2.1 A: 3.493 V drop, 16.91 V at the end, PASS.
+- 12 AWG, 600 ft, 2.4 A: 5.702 V drop, 14.70 V at the end, FAIL. The recorded rerun is 10 AWG on that same length and load, 16.83 V at the end, PASS. Do not guess a gauge change that has not been rerun.
+- On a Canada job, stop. CAN/ULC-S524 and CEC Section 32 are NEEDS HOLD. Foam and clean agent stay locked.

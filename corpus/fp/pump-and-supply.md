@@ -14,7 +14,7 @@ Hose stream and duration ride with the demand. They are not added a second time 
 
 Screen a listed centrifugal pump at rated flow, at churn, and at 150 percent of rated flow through `calcs/fp` (`pump_envelope`). Pass or fail against the demand and the suction condition. Do not publish `rated gpm at rated psi` as the job's pump until those gates are closed.
 
-Where the demand is a combined standpipe and sprinkler greater-of, screen both caps on that flow. NFPA 20-2025 §4.10.1 wants rated flow at least demand divided by 1.5. When FM applies, FM DS 3-7 §2.4.6.4 wants rated flow at least demand divided by 1.4, and §2.4.6.5 uses 1.10 for multiple pumps. An NFPA pass with an FM fail is not a silent resize. Verify with the engineer of record and carry the next listed size as assumed.
+Where the demand is a combined standpipe and sprinkler greater-of, screen both caps on that flow. NFPA 20-2025 §4.10.1 wants rated flow at least demand divided by 1.5. When FM applies, FM DS 3-7 §2.4.6.4 (April 2012, interim revision April 2025) wants rated flow at least demand divided by 1.4, and §2.4.6.5 uses 1.10 for multiple pumps. A teaching point at 1,055.9 gpm needs 754.21 gpm on the FM cap and 703.93 gpm on the NFPA cap. A 750 gpm candidate passes NFPA and fails FM. A 1,000 gpm candidate passes both and stays assumed, not a scheduled pump. An NFPA pass with an FM fail is not a silent resize. Verify with the engineer of record and carry the next listed size as assumed. Do not apply the screen as a Canada basis.
 
 Relief: NFPA 20 §4.20. Compare net shutoff plus maximum static suction with the rating. The calc returns whether a relief valve is needed. Do not skip the check because a prior schedule omitted it.
 

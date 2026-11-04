@@ -764,8 +764,16 @@ Canada diesel pump-house "Open (no invent)" upgraded to NEG-CA-1..4. B26R2-NEG-3
 When the demand is a combined standpipe and sprinkler greater-of (`standpipe-class-i-election-and-demand`), screen both caps on that governing flow.
 
 - NFPA: rated flow at least demand divided by 1.5 (NFPA 20-2025 §4.10.1).
-- FM, when that sheet applies: rated flow at least demand divided by 1.4 (FM DS 3-7 §2.4.6.4). Multiple pumps use 1.10 (§2.4.6.5).
+- FM, when that sheet applies: rated flow at least demand divided by 1.4. FM DS 3-7 §2.4.6.4, April 2012 with the April 2025 interim revision, limits a single 100 percent centrifugal pump to 140 percent of rated flow for combined system demand plus hose. Multiple pumps use 110 percent (§2.4.6.5). The kernel factor 1.40 sits on that cite.
 
-An NFPA pass with an FM fail is not a closed selection. Carry the next listed size as ASSUMED. Verify with the engineer of record. Do not resize silently and do not freeze a model number.
+An NFPA pass with an FM fail is not a closed selection. Carry the next listed size as ASSUMED. Verify with the engineer of record. Do not resize silently and do not freeze a model number. Upsizing still leaves driver horsepower, suction size, the test header, 150 percent source capacity, and fuel open.
 
-Teaching point [SYN]: 1,055.9 gpm governing demand needs at least 754.2 gpm rated on the FM single-pump cap. A 750 gpm candidate fails that cap. 1,000 gpm is the ASSUMED next size, not a scheduled pump. The FM cap check stays open. No calc operation is added for it.
+Teaching point [SYN], envelope only, not a shop curve. Governing greater-of demand 1,055.9 gpm:
+
+- FM minimum rated flow = 1,055.9 / 1.40 = 754.21 gpm. Check: 1.40 × 754.21 = 1,055.9.
+- NFPA minimum rated flow = 1,055.9 / 1.50 = 703.93 gpm. Check: 1.50 × 703.93 = 1,055.9.
+- A 750 gpm candidate is 1,055.9 / 750 = 1.408. That is an NFPA pass and an FM fail, short about 4.2 gpm.
+- A 1,000 gpm candidate is 1,055.9 / 1,000 = 1.056. Both caps pass. 1,000 gpm is the ASSUMED next listed size. Availability of an 800 gpm or 850 gpm rating was not verified. It is not a scheduled pump.
+- Churn system maximum stays 173 psi on both sizes. It tracks rated pressure, not rated flow, and it is 2 psi under 175. That margin is thin.
+
+Where FM is the carrier, the FM cap governs. Options to verify with the engineer of record: the 1,000 gpm size, a carrier-accepted cut of demand to 1,050 gpm or less, or a written carrier variance. Failures: treating the NFPA 150 percent pass as enough under FM; sizing on standpipe flow when the greater-of is larger; assuming churn grows with rated flow; reading envelope net pressure as a shop curve; promoting 1,000 gpm onto a live job without that verification; applying the screen as a Canada basis. GAP-B31R1-2 stays open. No calc operation is added for it.
