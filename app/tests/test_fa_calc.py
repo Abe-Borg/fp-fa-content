@@ -46,6 +46,22 @@ class FaCalcTests(unittest.TestCase):
         self.assertTrue(result["pass"])
         self.assertAlmostEqual(result["Veol"], 16.1232, places=3)
 
+    def test_split_supplies_rejects_nonpositive_capacity(self):
+        from fpfa.calc_tools import ToolSession
+
+        with self.assertRaises(ValueError) as caught:
+            ToolSession(REPO).execute("fa_calc", {
+                "module": "battery",
+                "op": "split_supplies",
+                "inputs": {
+                    "i_standby_a": 1.0,
+                    "i_alarm_a": 0.5,
+                    "edition": 2025,
+                    "cap_ah": 0,
+                },
+            })
+        self.assertIn("cap_ah must be > 0", str(caught.exception))
+
     def test_unknown_module_or_op_raises(self):
         from fpfa.calc_tools import ToolSession
 

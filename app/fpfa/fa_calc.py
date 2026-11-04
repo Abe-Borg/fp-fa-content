@@ -7,6 +7,7 @@ content pack and calls the function. It does not evaluate a formula itself.
 from __future__ import annotations
 
 import inspect
+import math
 import sys
 from pathlib import Path
 
@@ -122,6 +123,8 @@ def run_fa_calc(content_root: Path, args: dict | None) -> dict:
     module = _fa_module(content_root, module_name)
     if op_name not in FA_OPS[module_name] or not _is_public_function(module, op_name):
         raise KeyError(f"unknown op {op_name!r} for module {module_name!r}")
+    if module_name == "battery" and op_name == "split_supplies":
+        _require_split_capacity(inputs)
     return _as_dict(getattr(module, op_name)(**inputs))
 
 
@@ -146,6 +149,18 @@ def _module_name(value) -> str:
     if not text or "/" in text or "\\" in text or ".." in text or text not in FA_OPS:
         raise KeyError(f"unknown fa module {value!r}")
     return text
+
+
+def _require_split_capacity(inputs: dict) -> None:
+    """Reject a cap that split_supplies can never reach.
+
+    The library loops while required amp-hours stay above cap_ah. Positive
+    loads approach 0 and never land on a nonpositive cap, so the call hangs.
+    Negative currents already raise inside ah_required and do not hang.
+    """
+    cap = inputs.get("cap_ah")
+    if isinstance(cap, bool) or not isinstance(cap, (int, float)) or not math.isfinite(cap) or cap <= 0:
+        raise ValueError("cap_ah must be > 0")
 
 
 def _op_name(value) -> str:
