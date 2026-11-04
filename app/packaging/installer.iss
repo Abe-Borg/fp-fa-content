@@ -1,7 +1,7 @@
 ; Windows setup for the FP/FA desktop app. Inno Setup 6.3 or newer
 ; (x64compatible). Compile with build_installer.ps1, or:
 ;
-;   ISCC /DMyAppVersion=0.1.1 installer.iss
+;   ISCC /DMyAppVersion=0.1.2 installer.iss
 ;
 ; Source is the PyInstaller folder next to this script, ..\dist\fpfa\,
 ; from build_app.ps1. Output is ..\dist\fpfa-setup-<version>.exe.
@@ -12,7 +12,7 @@
 ; AppId stays fixed so a later setup upgrades the published 0.1.0 install.
 
 #ifndef MyAppVersion
-  #define MyAppVersion "0.1.1"
+  #define MyAppVersion "0.1.2"
 #endif
 
 #define MyAppName "FP/FA App"
