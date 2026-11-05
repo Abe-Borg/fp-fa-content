@@ -423,3 +423,15 @@ Hand-check pass [SYN], separate from that row: worst-case trip 13 psi, low air 1
 Do not cite an unopened bulletin as the pairing basis. The pairing stays Bulletin 747. Caps and trip stay Bulletin 505. The Potter tolerance residual in GAP-B28R1-1 stays open. Do not reopen the nitrogen gate. On a Canada job, do not cite the 2025 margin sections as Canada code.
 
 Failures: calling the screen an approval; inventing a maker setpoint; lowering the low-air margin below 5 psi to clear the 50 psi water row.
+
+## Compressor floor on an NFPA 13-2019 Canada pin
+
+Performance only. Do not freeze a model number. On a Canada pin the code floor is NFPA 13-2019. A dedicated compressor delivers at least 3.5 scfm absolute and restores the largest system to normal pressure in not more than 30 minutes [CODE NFPA 13-2019 §8.2.6.3.2 and Annex A.8.2.6.3.2]. The reconcile lane, only when the job elects it, is NFPA 13-2025 §8.2.7.3. A heated valve room uses the 30 minute clock. Do not apply the below 5 °F allowance of 60 minutes to that room. Do not invent a ULC body.
+
+Teaching point [ASSUMED], not a nameplate: 211 gal at 40 psig needs about 3.50 scfm absolute (about 2.56 scfm gauge). Size at least 3.5 scfm absolute, or an OEM listing at or above that delivery at cut-out. Fill one system at a time through the air-maintenance bypass.
+
+Air-supply relief is at least system air plus 10 psi. At 40 psig assumed, relief is at least 50 psig [CODE NFPA 13-2019 §8.2.6.5; NFPA 13-2025 §8.2.9.4]. A factory setting of plus 5 psi is short. Do not leave it as-left on an NFPA 13-2019 or later job.
+
+High-air supervisory is at least system air plus 5 psi, so at least 45 psig at the assumed 40 psig maintain. Cite both lanes: the 5 psi practice with NFPA 13-2025 §8.2.6.4 and §8.2.6.5, and the 2019 family at §8.2.6.7.2 and §8.2.6.7.2.2. Do not mix a 3 psi shop default into this work. On a Canada pin cite the 2019 floor. Later 2025 numbers are a reconcile lane unless the job elects them.
+
+The 2025 annex restore text is not retrieved (GAP-B37R49-1). Carry the 2019 annex and mark it for verification. The double-interlock trip and low-air maker setpoint stay open (GAP-B37R49-2). GAP-B33R8-1 stays open. This pack does not add a setpoint calc. The screen above stays hand math. Verify with the engineer of record. Foam, clean agent, and single-interlock stay locked.

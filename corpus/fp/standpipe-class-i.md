@@ -21,3 +21,5 @@ Where the standpipe is manual-dry, NFPA 14-2024 §8.3.2.1.1 requires supervisory
 Size the compressor to the held dry volume. Do not freeze a compressor model number. The sprinkler nitrogen gate is a different system. Do not reuse its generator selection here.
 
 Hose may be omitted only where the adopted amendment says so and the fire code official approves it in writing. Valves and connections remain. Model IFC 2024 has no §905.1.1; a state amendment that adds that section is local, not model code.
+
+On a Canada job, NBC 2023 Alberta Edition Division B 3.2.5.15.(1) places a standpipe fire-department connection not more than 45 m from a hydrant, unobstructed. Sentence (2) is the automatic sprinkler connection, the same distance. When the standpipe is waived, site the sprinkler connection under sentence (2). Sentence (3), 3 m to 15 m from the principal entrance, is the Alberta Edition only. Do not carry it onto NBC 2025 or BCBC 2024. Do not invent a municipal curve. The design hose-valve loss stays 4.0 psi at 250 gpm. A 2.5 psi extrapolation is not a design value.

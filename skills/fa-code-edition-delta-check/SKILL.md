@@ -139,3 +139,9 @@ These labels are edition-specific. Do not move them across editions.
 Unamended IBC 2021 and IFC 2021 reference NFPA 72-2019. Unamended IBC 2024 and IFC 2024 reference NFPA 72-2022 [CODE, the adopted code's referenced-standards chapter]. Neither references NFPA 72-2025. Use 2025 only when the authority or the owner elects it [PARA]. Confirm which instrument governs. A state adoption snapshot is practice. Do not copy it onto a job. One 2026 state-adoption gap stays open. Do not fill it.
 
 Duct-detector supervisory is NFPA 72-2019 §21.7.4 only. NFPA 72-2022 and 2025 §21.7.4 stay NEEDS HOLD. Do not assume the same sentence. The 2025 label hygiene above stays. NEC 2026 Table 8 stays NEEDS HOLD even where a state adopts that NEC edition. On a Canada job, stop. Do not map the I-Codes or NFPA 72 as Canada code. CAN/ULC-S524, S536, S537, S1001, and CEC Section 32 stay NEEDS HOLD.
+
+## Canada integrated testing is not NFPA 4
+
+On a US job the integrated-test basis is NFPA 4-2024 §4.1.3 [CODE]. Chapter 5 is also held in 2027, and the compared sentences match. Chapters 6 and 7 stay 2024 only. Do not stamp 2027 on those chapters.
+
+On a Canada job the integrated-test basis is the CAN/ULC-S1001 pointer in NBC 3.2.9.1(1) and in OBC 9.10.18.10(1). NBC Table 1.3.1.2 names CAN/ULC-S1001-11. Those are pointer rows. Do not substitute NFPA 4. The S1001 body stays NEEDS HOLD. Canada integrated-test content stays stopped. Do not invent clause text. GAP-B33R8-1 stays open. Foam, clean agent, and single-interlock stay locked.

@@ -62,3 +62,13 @@ Annex D is handbook guidance, not [CODE]. The intelligibility requirement stays 
 7. The pass value is set by the owner [OWNER]. Do not invent a pass value. On a fail, correct and retest [PRACTICE].
 
 Do not invent a test duration. No held text states one. On a Canada job, stop this screen. Do not map these Annex D rows as Canada code, and do not invent a Canada intelligibility duration. CAN/ULC-S524 voice stays NEEDS HOLD. Verify with the engineer of record.
+
+## Tap against ambient before the voice zone
+
+Where the system has a microphone for live voice, post instructions for using it [CODE NFPA 72-2022 and 2025 §24.3.2]. The two editions match. The wording of the card is [PRACTICE].
+
+Public mode is 15 dB above average ambient [CODE NFPA 72 §18.4.4]. Do not use a 10 dB rule for that public-mode target.
+
+Teaching point [PRACTICE], not a job layout. Average ambient 78 dBA. The public-mode target is 78 + 15 = 93 dBA. A speaker at 94 dB SPL at 1 m on a 2 W tap is [ASSUMED] datasheet data. A 1 W tap meets 93 dBA only out to about 0.79 m. That distance is not a buildable spacing. A 1 W tap does not give intelligible public-mode voice in that white space. Check the tap against the ambient before electing voice. Galleries at a high ambient are tone plus visual. Voice stays in aisles and support spaces that can meet the target. Do not copy the 0.79 m figure onto a live zone.
+
+The speech-transmission-index field pass stays [OWNER]. Do not invent the number. Modeled STI is never a field pass. GAP-B33R8-1 stays open. 0.2 %/ft is not [CODE]. Foam, clean agent, and single-interlock stay locked. On a Canada job, stop. CAN/ULC-S524 voice stays NEEDS HOLD.
