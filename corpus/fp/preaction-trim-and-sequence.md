@@ -27,3 +27,9 @@ Wet pipe, when it is the elected system, is thermal operation of the sprinkler. 
 Clean-agent release is out of scope. Do not add an agent-discharge column to this matrix.
 
 Single-interlock cause-and-effect packages are comparison-only. Do not use their zone counts or program numbers as defaults.
+
+## Compressor on an NFPA 13-2019 Canada pin
+
+On a Canada pin the floor is NFPA 13-2019 §8.2.6.3.2: a dedicated compressor delivers at least 3.5 scfm absolute and restores the largest system in not more than 30 minutes. Annex A.8.2.6.3.2 is the 2019 annex. The 2025 annex restore text is not retrieved. NFPA 13-2025 §8.2.7.3 is a reconcile lane only when the job elects it. A heated valve room uses 30 minutes, not the below 5 °F allowance of 60 minutes. A teaching volume of 211 gal at 40 psig needs about 3.50 scfm absolute. Do not freeze a model number. Fill one system at a time.
+
+Relief is at least system air plus 10 psi (NFPA 13-2019 §8.2.6.5; NFPA 13-2025 §8.2.9.4). At 40 psig assumed, that is at least 50 psig. A factory plus 5 psi setting is short. High-air supervision is at least 5 psi above system air, so at least 45 psig at that assumed maintain. Cite the 2019 family at §8.2.6.7.2 and §8.2.6.7.2.2 on a Canada pin, and the 2025 §8.2.6.4 and §8.2.6.5 margins only when that edition is elected. Do not invent a ULC body. The maker trip setpoint stays open.

@@ -74,4 +74,8 @@ Device schedule (device, location, level, cite, basis label); trigger map to the
 - Double-interlock release does not recall. It is not a §21.3.3.1 initiator.
 - Waterflow on a separately valved sprinkler line that protects only the elevator pit may initiate Phase I [CODE §21.3.3.2].
 - Do not write elevator recall on ordinary waterflow as [CODE]. An owner add is [OWNER]. Verify with the engineer of record.
-- On a Canada job, stop. CSA B44 and NBC 3.2.6 are NEEDS HOLD. Do not map these NFPA 72 rows as Canada code. Foam and clean agent stay locked.
+- On a Canada job, do not map these NFPA 72 rows as Canada code. Use the recall-level lobby rule below. CSA B44 and NBC 3.2.6 stay NEEDS HOLD. Shunt trip and Phase I detail stay stopped until that text is held. Foam and clean agent stay locked.
+
+## Canada recall-level lobby
+
+Country gate. On a US job the §21.3 layout above stands. On a Canada job, smoke detectors are installed in the elevator lobbies on the recall level [CODE NBC 3.2.4.14(1)]. Those detectors are part of the building fire alarm system [CODE NBC 3.2.4.14(2)]. Alternate-floor recall is not required where the floor area that contains the recall level is sprinklered throughout [CODE NBC 3.2.4.14(3)]. Do not import the US every-lobby layout onto a Canada job, or the reverse. CSA B44 body text for shunt trip and Phase I detail is NEEDS HOLD. Canada shunt trip and Phase I detail stay stopped. Do not invent that text. Foam and clean agent stay locked.

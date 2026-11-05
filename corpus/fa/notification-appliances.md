@@ -34,4 +34,8 @@ Speaker circuits: 25 V or 70.7 V. The 1.0 dB electrical-loss limit is NFPA 72-20
 
 Voice is not required in a typical single-story hall by the occupancy list that drives emergency voice. If the owner adds voice, Chapter 18 still applies. Survivability of that voice path is `pathway-survivability.md`.
 
+Where the system has a microphone for live voice, post instructions for using it (NFPA 72-2022 and 2025 §24.3.2). The two editions match. The wording of the card is practice.
+
+Public mode stays 15 dB above average ambient. Do not use a 10 dB rule for that target. A teaching screen at 78 dBA average needs 93 dBA. A 1 W tap, from an assumed 94 dB at 1 m on a 2 W datasheet, meets 93 dBA only to about 0.79 m. That spacing is not buildable. Check the tap against the ambient before electing voice. A gallery at a high ambient is tone plus visual. Do not copy the teaching distance onto a live zone. The field intelligibility pass stays an owner election.
+
 FM does not set appliance spacing. It does require the alarm, including pre-alarm where the sheet says so, at a constantly attended location.

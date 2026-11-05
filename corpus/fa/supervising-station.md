@@ -20,7 +20,9 @@ Remote station signals may terminate at a communications center that meets NFPA 
 
 A single communications path is supervised at not more than 60 minutes, and failure annunciates within 60 minutes (§26.6.3.3). Each path of a multipath arrangement is supervised within 6 hours. In 2022, failure of any multipath leg annunciates at the station within 6 hours (§26.6.3.4(2)). The 2025 text drops that 6 hour station-annunciation item. Design practice keeps the 6 hour multipath indication until the engineer of record accepts the deletion. Intervals otherwise stay 60 minutes and 6 hours. The 2025 book renames "path" to "pathway" and points failure annunciation at §10.15.
 
-NFPA 72-2025 §10.15.1 is general trouble indication within 200 seconds. It is not the supervising-station path timer. Do not cite §10.15 for a 60 minute or 6 hour path.
+NFPA 72-2025 §10.15.1 is general trouble indication within 200 seconds. It is not the supervising-station path timer. Do not cite §10.15 for a 60 minute or 6 hour path. The 2025 multipath annunciation sentence is not claimed. An owner may set dual-path failure annunciation to not more than 60 minutes. That election is stricter than the 2022 6-hour multipath floor. It is not code. A schedule row that tags the 60-minute dual-path time as code is not the source.
+
+Where fire pumps are monitored and a building fire alarm system is installed, pump running may be supervisory or alarm (NFPA 72-2025 §23.8.5.9.1). The owner election in this pack transmits it as supervisory. Other pump signals stay supervisory (§23.8.5.9.2). Air-sampling alert and action stay local and are not transmitted. Air-sampling Fire 1 is transmitted as supervisory. Those three are owner elections. An off-gas point is owner or practice. It is not code.
 
 Model codes send alarm, supervisory, and trouble signals to an approved supervising station, or to a constantly attended location where the fire code official approves (IBC 2021 §903.4.1; IBC 2024 §903.4.2). Duct detectors are supervisory where a supervising station is required.
 

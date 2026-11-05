@@ -108,4 +108,18 @@ Synthetic teaching only. Do not copy the rows onto a live zone. Every cause-and-
 - Loss of primary power: the control unit is on secondary power within 10 s [CODE NFPA 72 §10.6.6.1].
 - The speech-transmission-index field pass, where a voice space requires intelligibility, is an owner election [OWNER]. Do not invent the number.
 
-On a Canada job, stop. CAN/ULC-S1001 and CAN/ULC-S536 stay NEEDS HOLD. Do not map NFPA 4 or the IFC as Canada code. Foam, clean agent, and single-interlock stay locked. A foam or clean-agent release row is a fail. Do not add one.
+On a Canada job, stop the NFPA 4 rows. Canada integrated testing is CAN/ULC-S1001 by the NBC 3.2.9.1 pointer, not NFPA 4. The S1001 body and CAN/ULC-S536 stay NEEDS HOLD. Do not map NFPA 4 or the IFC as Canada code. Foam, clean agent, and single-interlock stay locked. A foam or clean-agent release row is a fail. Do not add one.
+
+## Frequency, end-to-end method, and retest
+
+NFPA 4 Chapter 6 below is 2024 only. Do not stamp 2027 on Chapter 6 or Chapter 7. Chapter 5 is held in 2024 and 2027, and the compared sentences match.
+
+Periodic integrated systems testing follows the test plan [CODE NFPA 4-2024 §6.3.1]. Within 5 years of adoption, integrated systems testing is performed unless the test plan permits another frequency [CODE §6.3.2.2]. Systems commissioned at installation are retested at the interval in the commissioning plan [CODE §6.3.3]. The code floor is that 5-year period, or the commissioning-plan interval. An annual rolling partial, one hall a year, plus a full campus test every 3 years, is an owner election. It is stricter than the 5-year floor. It is not [CODE].
+
+After an interface fails in operation or during a test, retest the affected integrated functions once repairs are made [CODE §6.4.1.1]. After a change, also test 10 percent of the unaffected input devices of each changed system, up to 50 devices [CODE §6.4.3].
+
+End-to-end integrated system testing is required [CODE NFPA 4-2024 and 2027 §5.1.3]. Control-group relief under §5.1.4 requires all seven conditions, including one in-group end-to-end test, one out-of-group end-to-end test, and a check that the response matched the functional matrix. Do not invent the other condition texts. A failed individual system may be retested without a full integrated retest [CODE §5.1.4.1]. Switch connections to fire alarm systems are tested to NFPA 72 [CODE §5.2.9]. A data-sharing system documents acceptance of each system, the data transfer, the loss-of-communication signal, the degrade mode, and the integrated function [CODE §5.2.12]. The 2024 test report includes a narrative or a matrix of each test and of how the integrated system and the individual systems responded [CODE NFPA 4-2024 §7.2.2]. Do not stamp that report sentence on 2027.
+
+The functional matrix in §4.5.1(6) stays closed on 2024 and 2027. No releasing-specific NFPA 4 text is held. Do not cite NFPA 4 as a releasing or preaction standard. Releasing inspection routes to NFPA 72, NFPA 13, and NFPA 25. This pack does not add a matrix generator. Build the rows from the cause-and-effect inputs already in this skill. Every input still has a row. Labels stay [CODE], [PARA], [OWNER], or [ASSUMED]. The second-level trip setpoint stays [ASSUMED]. GAP-B33R8-1 stays open. Do not encode 0.2 %/ft as [CODE]. An in-rack battery off-gas point is not [CODE].
+
+On a Canada job, stop. Do not write these NFPA 4 frequencies as Canada code. Foam, clean agent, and single-interlock stay locked.

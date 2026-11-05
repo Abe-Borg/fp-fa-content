@@ -72,5 +72,11 @@ Limit remains 1.0 dB [CODE NFPA 72-2025 §18.3.7.2.1(1)]; [PRACTICE] on 2019 and
 - 70.7 V, 12 AWG, 900 ft one way, 120 W: 0.713 dB, PASS. The same run on 16 AWG is 1.696 dB and FAILS.
 - On a Canada job, stop. CAN/ULC-S524 and CEC Section 32 are NEEDS HOLD. Do not map NFPA 72 as Canada code. Foam and clean agent stay locked.
 
+## Distributed taps
+
+A lumped load at about half the route length is a fair hand check when equal taps are spread evenly. It is not the record when the loss is close to 1.0 dB. The record walks the circuit backward: each tap is a constant impedance of nominal voltage squared divided by tap watts, and the loop resistance counts both conductors. Ohms stay NEC Chapter 9 Table 8. NEC 2023 and 2020 are held. NEC 2026 Table 8 is NEEDS HOLD. The pass limit stays 1.0 dB [CODE NFPA 72-2025 §18.3.7.2.1(1)]; [PRACTICE] on 2019 and 2022. This pack does not add a ladder solver. When the hand check is within a few tenths of 1.0 dB, leave the result open and verify with the engineer of record. Do not invent ohms.
+
+On a Canada job, stop. CAN/ULC-S524 and CEC Section 32 stay NEEDS HOLD. GAP-B33R8-1 stays open. Foam, clean agent, and single-interlock stay locked.
+
 ## Output
 Edition and label; input table with ASSUMED flags; per-gauge, per-voltage loss and PASS/FAIL; L_max; MIA used; fixes; open items.

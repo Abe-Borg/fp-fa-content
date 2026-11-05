@@ -20,7 +20,7 @@ NFPA 72-2022 and 2025 §24.3.14.4 follow the building's fire-resistance rating. 
 
 NFPA 72-2019 §24.3.14.4 follows the evacuation strategy, not the building rating. Partial evacuation uses Level 2 or 3, with exceptions that allow Level 1, 2, or 3. Total evacuation uses Level 0 through 3. There is no Level 4.
 
-A tone-only total evacuation on a hyperscale hall is often Level 0 or Level 1 under the 2022 and 2025 total-evacuation permission. Confirm that the project is not partial evacuation before you drop the rating.
+A tone-only total evacuation on a hyperscale hall is often Level 0 or Level 1 under the 2022 and 2025 total-evacuation permission. Confirm that the project is not partial evacuation before you drop the rating. On a general-evacuation voice system, Level 0 is permitted. A Level 2 trunk is an owner or practice election. It is not the code floor. Do not teach that trunk as required. Relocation and partial evacuation keep the Level 2 and Level 3 rules above.
 
 Two-hour circuit-integrity cable is supported as its listing says. The annex states it does not have to be attached to a concrete assembly unless the listing requires that attachment. Listed 2-hour systems follow the listing, which may require a concrete assembly.
 

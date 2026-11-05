@@ -6,7 +6,7 @@ The cause-and-effect matrix is the sequence of operation required on the shop dr
 
 ## Both legs
 
-Water releases only when the detection leg and the low-air leg are both true.
+Water releases only when the detection leg and the low-air leg are both true. That pair is the code floor taught here. A third leg that also requires a second detection signal is an owner option. It is stricter. It is not code. Do not label it as code.
 
 On an FM job, FM DS 5-32 §2.4.1.1 is the double-interlock flag to the owner and the insurer, and §2.4.3.2.1.3 is the no-cross-zone flag. The detection leg is an alarm-level signal (owner Action, or Fire 1, as the engineer of record confirms). NFPA 76 Alert is supervisory: no notification appliances, and it is never leg 1. Fire 2 is not the detection leg. Do not require a cross-zone to trip the valve on an FM job. That insurer rule conflicts with a company habit of cross-zoning the first knock. The conflict is with the habit, not with double-interlock itself. Off an FM job, a cross-zoned first knock may still be the company default; two detectors then follow NFPA 72 §23.8.5.4.4 (2019, 2022, and 2025).
 

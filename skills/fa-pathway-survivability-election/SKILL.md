@@ -111,3 +111,7 @@ Chapter 12 shared-pathway performance levels are not the Chapter 24 survivabilit
 - It is not required for ground-fault detection conductors where one ground fault does not stop required operation [CODE §12.6.8]. Do not cite §12.6.9 for that exemption. In 2025, §12.6.9 is computer and keyboard cabling.
 - The 20 ft enclosure line above stays: 2022 §12.6.9 versus 2025 §12.6.7. That pair is the enclosure exemption, not the ground-fault exemption.
 - A modeled speech score stays [OWNER] or [ASSUMED]. It is never a field pass. NEC 2026 Table 8 stays NEEDS HOLD. Do not state ohms. Class N item (1) stays open. On a Canada job, stop. Do not map NFPA 72 as Canada code.
+
+## General evacuation and a Level 2 trunk
+
+On a general-evacuation voice system, Level 0 is permitted [CODE NFPA 72-2022 and 2025 §24.3.14.4.1]. A Level 2 trunk is an owner or practice election. It is not the code floor. Do not teach that trunk as required. Relocation, partial evacuation, and the Level 2 or Level 3 triggers above are unchanged. On a Canada job, stop. Do not invent a pathway rule. CAN/ULC-S524 stays NEEDS HOLD. GAP-B33R8-1 stays open. Foam, clean agent, and single-interlock stay locked.
