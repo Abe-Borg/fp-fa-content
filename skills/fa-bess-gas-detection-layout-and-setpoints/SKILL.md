@@ -64,7 +64,7 @@ Species table. Mixture LFL from the tool. Setpoint table (mixture percent LFL an
 
 The room has smoke detection or radiant-energy detection as the adopted fire code's detection section requires [CODE IFC 2024 §1207.5.4]. Read Table 1207.6 for the technology that fits the room. Do not infer a gas or a setpoint from the table title.
 
-The 2021-to-2024 delta for Chapter 1207 is not written. On a 2021 job, NEEDS HOLD. Do not cite the 2024 numbers as 2021 code.
+The lead sentence of IFC §1207.5.4 is the same in 2021 and 2024 [CODE]. The 2024 printing adds an exception for a small remote telecommunications structure with lead-acid or nickel-cadmium batteries. That exception is not a hall UPS room. §1207.5.4.1 differs by edition. Do not cite it until the edition row is split. Cite IFC §1207.6 and §1207.7 from the 2024 text only. The 2021 printing of those two sections is NEEDS HOLD. A gas setpoint past 25 percent of LFL is owner or maker, not this code row. The 25 percent alarm itself stays [CODE].
 
 §1207.6.1.2.4 is the 25 percent of LFL exhaust start and the run-until-clear rule already in the basis. It is not a detection-battery section. Exhaust standby stays §1207.6.1.2.1. Detection power-loss trouble stays §916.5. Do not add a code claim that a detector failure is a supervising-station trouble under §1207.6.1.2.4. That class stays [PRACTICE] until the engineer of record closes it. Where NFPA 855 does not set the gas-start class, the class is [PRACTICE]. On the explosion-control path the alarm above 10 percent of LFL stays [CODE NFPA 855-2023 §9.6.5.6.7(5)(b)].
 

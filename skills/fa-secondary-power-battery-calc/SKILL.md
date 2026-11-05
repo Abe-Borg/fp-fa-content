@@ -79,3 +79,11 @@ Load table (ASSUMED flags), Is, Ia, labeled durations, edition and factor F with
 ## Canada secondary power
 
 On a Canada job the US durations above are a comparison floor only. Do not cite them as CAN/ULC-S524. S524 standby and alarm duration are NEEDS HOLD. Do not invent S524 hours. Where FM is carried, 90 h + 10 min stays the FM owner figure for the releasing panel only, and the Canada duration for that panel is also NEEDS HOLD. Do not invent a Canada speaker-circuit loss value.
+
+## Transfer, separate supplies, and in-rack backup
+
+Transfer from primary to secondary power is within 10 seconds [CODE NFPA 72 §10.6.6.1, same duty in 2019, 2022, and 2025]. Size each supply alone. Do not add the ampere-hours of the building control unit, the voice supply, and the releasing supply into one battery.
+
+Synthetic teaching screen only, loads assumed, factor 1.25 on a 2025 basis: a building control unit at 24 h plus 5 min alarm is 15.21 Ah; a voice supply at 24 h plus 15 min is 25.88 Ah; a double-interlock releasing supply at 24 h plus 5 min alarm is 9.16 Ah. Releasing at 24 h plus 5 min stays [PARA]. It is not a code duration. Do not copy the ampere-hours onto a job.
+
+No held code section names in-rack backup power. None of these rows is [CODE]. In-rack backup is information-technology power, not fire-alarm secondary power [PRACTICE]. Fire-alarm secondary power stays a dedicated fire-alarm battery, or a generator plus that battery. Trouble or thermal contacts from that equipment may be monitor points. The signal class is an owner election [OWNER]. Those points do not release. Rack-row smoke stays on the hall air-sampling layout unless the owner adds a detector [PRACTICE]. Whether an aggregate of that equipment is energy storage under IFC 2024 Chapter 1207 is an authority call [ASSUMED]. On a Canada job, stop. CAN/ULC-S524, S536, S537, S561, S1001, and CEC Section 32 stay NEEDS HOLD. Do not invent those hours. Foam, clean agent, and single-interlock stay locked.

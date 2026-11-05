@@ -33,3 +33,7 @@ Do not use them for a sprinklered hall.
 ## Hydrant credit
 
 A rating method credits hydrants only inside the hose-lay distance, not the straight-line distance. The 2009 secondary paper reports 1,000 gpm within 300 ft or at a pumper outlet, and zero beyond 1,000 ft. The 2014 guide in hand does not contain that table. Confirm it in the current rating schedule before you count hydrants (`[V]`). Available flow for this purpose is computed at 20 psi residual. Local hydrant spacing is the adopted fire code. Do not paste another city's spacing onto the plans.
+
+## Canada capacity and the connection
+
+On a Canada job, NBC 2023 AE Division B 3.2.5.7.(4) exempts an NFPA 13 sprinklered building from the capacity in sentence (1). That exemption does not omit the fire department connection. NBC 2023 AE 3.2.5.15.(3) places that connection no closer than 3 m and no farther than 15 m from the principal entrance. The sentence is absent from NBC 2025 3.2.5.15 and from BCBC 2024. Do not carry the band onto those codes. Do not promote an assumed municipal curve, including a 750 gpm at 65 psi teaching point, as the final supply. Do not invent CAN/ULC-S524 or CAN/ULC-S561 hours. Hand siting to the Class I standpipe note.

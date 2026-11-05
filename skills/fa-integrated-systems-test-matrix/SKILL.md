@@ -82,3 +82,16 @@ The commissioning plan includes testing procedures [CODE NFPA 3-2024 §5.2.3.2(8
 Map the sequence and the wet, dry, and double-interlock cause and effect under §5.3.3(2) [PRACTICE]. Map the integrated-test scenarios under §5.2.3.2(9) and (11). Map acceptance rows under §5.2.3.2(8) [PRACTICE]. Chapter 14 notes in this skill are pointers. The 2025 notification-appliance rows in Table 14.4.3.2 are NEEDS HOLD. Do not invent those frequencies as code. A speech-transmission-index field pass stays [OWNER]. Do not invent it.
 
 On a Canada job, stop. CAN/ULC-S1001 and CAN/ULC-S536 are NEEDS HOLD. Do not map NFPA 3, NFPA 4, or NFPA 72 as Canada code. Foam, clean agent, and single-interlock stay locked.
+
+## Worked double-interlock rows
+
+Synthetic hall only. Do not copy the rows onto a live zone.
+
+- Second-level detection alone: alarm, no release. The trip setpoint stays [ASSUMED]. Verify with the engineer of record. Do not encode 0.2 %/ft as [CODE].
+- Low air alone: supervisory, no release [CODE NFPA 72-2019 and 2022 §17.17.2.2]. Citing 2025 §17.17.2.2 is NEEDS HOLD. The 2025 number is §17.19.2.2.2.
+- Second-level detection and same-zone low air: release [CODE §23.11].
+- Disconnect active: no release [CODE §23.11.5]. The disconnect is a physical switch [CODE §23.11.5.2]. Operating it is supervisory [CODE §23.11.5.1].
+- Every cause-and-effect row has a matrix row [CODE NFPA 4-2024 §4.5.1(6)]. That item stays closed.
+- Alarm verification on a releasing circuit stays [PRACTICE]. Do not cite §23.8.5.4.3(3) as a code ban.
+
+Foam, clean agent, and single-interlock stay locked.
