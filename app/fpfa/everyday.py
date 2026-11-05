@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from fpfa.calc_tools import SCHEMAS, ToolSession
-from fpfa.claude_client import run_tool_loop
+from fpfa.claude_client import incomplete_notice, run_tool_loop
 from fpfa.modes_loader import list_modes, normalize_mode, read_mode
 from fpfa.roles_loader import list_roles, read_role
 from fpfa.skills_loader import list_skills, spec_notes
@@ -65,6 +65,7 @@ def assemble_system(content_root: Path, mode: str | None = None) -> str:
     lines.append("Skills in this content pack:")
     for skill in list_skills(content_root):
         lines.append(f"- {skill['slug']}: {skill['description']}")
+    # Every spec file goes in whole. Nothing here shortens or summarizes it.
     notes = spec_notes(content_root)
     if notes:
         lines.append("")
@@ -73,6 +74,15 @@ def assemble_system(content_root: Path, mode: str | None = None) -> str:
             lines.append(f"## {note['name']}")
             lines.append(note["text"])
     return "\n".join(lines)
+
+
+def everyday_reply(out: dict) -> str:
+    """Thread text for one everyday turn. An unfinished reply is labeled first."""
+    text = out.get("text") or "(Claude returned no text.)"
+    notice = incomplete_notice(out.get("stop_reason"))
+    if notice:
+        return f"{notice}\n\n{text}"
+    return text
 
 
 def run_everyday(

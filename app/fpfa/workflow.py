@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from fpfa.calc_tools import REQUIRED_DI_TOOLS, SCHEMAS, ToolSession
-from fpfa.claude_client import MODEL_ID, safe_error
+from fpfa.claude_client import MODEL_ID, incomplete_notice, safe_error
 from fpfa.everyday import EVERYDAY_ROLE, SPECIALIST_ROLES, assemble_system
 from fpfa.modes_loader import MODE_SLUGS, list_modes, normalize_mode
 from fpfa.roles_loader import list_roles
@@ -509,10 +509,9 @@ def run_di_zone(
                 SCHEMAS,
                 session.execute,
             )
-            if drafted.get("stop_reason") == "max_tokens":
-                warnings.append(
-                    "Claude stopped because the reply hit the output limit. Tables stay on the tool plan."
-                )
+            unfinished = incomplete_notice(drafted.get("stop_reason"))
+            if unfinished:
+                warnings.append(unfinished + " Tables stay on the tool plan.")
             for call in drafted.get("tool_calls") or []:
                 transcript.append({
                     "name": call.get("name"),

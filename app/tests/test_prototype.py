@@ -1093,11 +1093,7 @@ class KeyAndSkillTests(unittest.TestCase):
         notes = spec_notes(REPO)
         self.assertEqual([note["name"] for note in notes], names)
         for note in notes:
-            self.assertLessEqual(len(note["text"]), 16000)
-            self.assertEqual(
-                len(note["text"]),
-                len((folder / note["name"]).read_text(encoding="utf-8")),
-            )
+            self.assertEqual(note["text"], (folder / note["name"]).read_text(encoding="utf-8"))
 
         di = (folder / "21-13-19-double-interlock-preaction.md").read_text(encoding="utf-8")
         dry = (folder / "21-13-16-dry-pipe.md").read_text(encoding="utf-8")

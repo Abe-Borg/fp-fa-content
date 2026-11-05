@@ -121,13 +121,14 @@ def read_skill(content_root: Path, slug: str) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def spec_notes(content_root: Path, limit: int = 12, chars: int = 16000) -> list[dict]:
-    """Master language from specs/*.md. README is the folder guide, not a spec.
+def spec_notes(content_root: Path) -> list[dict]:
+    """Master language from specs/*.md, every file in full, sorted by name.
 
-    The cap covers the in-scope section set. A cap of three dropped
-    Section 21 13 19 once the earlier section files sorted first.
-    16000 keeps a Division 21 pin and 28-31-00 intact when those files
-    grow past a few thousand characters.
+    README is the folder guide, not a spec. There is no file-count cap and
+    no character cap. A file cap once dropped Section 21 13 19, and a
+    character cap later cut 28-31-00 off before Sections 3.8 and 3.9.
+    The model's context window still applies to the whole request. The
+    client reports a request that is too large. It does not trim this text.
     """
     folder = content_root / "specs"
     notes = []
@@ -136,9 +137,7 @@ def spec_notes(content_root: Path, limit: int = 12, chars: int = 16000) -> list[
     for path in sorted(folder.glob("*.md")):
         if path.name.lower() == "readme.md":
             continue
-        notes.append({"name": path.name, "text": path.read_text(encoding="utf-8")[:chars]})
-        if len(notes) >= limit:
-            break
+        notes.append({"name": path.name, "text": path.read_text(encoding="utf-8")})
     return notes
 
 
