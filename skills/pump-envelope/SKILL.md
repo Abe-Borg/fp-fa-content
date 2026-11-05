@@ -789,3 +789,13 @@ The rated-pressure floor equals net demand pressure divided by the envelope fact
 Teaching point [SYN]: demand 1,200 gpm at 95 psi net, candidate rated flows 1,000 gpm and 1,500 gpm, churn fraction 1.0, 150 percent fraction 0.65, listed pressures 100, 110, and 125 psi. At 1,000 gpm the demand is 120 percent of rated flow. The factor is 1 + (0.65 - 1) x (200 / 500) = 0.860. The floor is 95 / 0.860 = 110.47 psi, so the listed pressure is 125 psi. At 1,500 gpm the demand is 80 percent of rated flow. The factor is 1.000. The floor is 95 psi, so the listed pressure is 100 psi. That is the lower selection.
 
 The result is a screen. Verify with the engineer of record. The listed shop curve governs. Do not freeze a model number. Run the FM flow cap beside this screen. An NFPA envelope pass does not close the FM cap. GAP-B31R1-2 stays open. Do not skip the FM cap because the NFPA envelope passed. This screen does not take a Hazen-Williams coefficient. Do not reopen that lock here.
+
+## Diesel relief on an NFPA 20-2016 pin, and hose-source verdicts
+
+On an NFPA 20-2016 basis the diesel or variable-speed relief section is §4.19.1.2. It is not §4.18. Do not copy that 2016 number onto a 2019, 2022, or 2025 job. Those editions keep §4.20.1.2, already in §7A. Annex A.4.19 is not held. Relief is required where 121 percent of net shutoff plus maximum static suction exceeds the component rating.
+
+Teaching check, inputs [ASSUMED], not a nameplate. At a rated pressure of 65 psi, 1.21 times 91 psi plus 75 psi static is 185.1 psi, which is above a 175 psi component rating. Relief is already required at 65 psi on that maximum-churn basis. It is not only required at 75 psi and above. When the inputs are assumed, relief at 65 psi stays with the engineer of record and the shop curve.
+
+Hose-source topologies are the fence in `hydrant-supply-curve` §21. Under the conservative assumed T2 path, 750 gpm at 65 psi fails. Net pressure needed is about 74.7 psi. Only T1a passes, and the margin is about 0.96 psi. That margin stays with the engineer of record. The 1,000 gpm alternate stays in play if hose is taken through the pump. Do not promote 750 gpm at 65 psi as the final supply under T2.
+
+Driver derate cites on a 2016 pin stay §11.2.2.4 and §11.2.2.5. Whether those two adjustments add stays with the engineer of record. Do not invent a municipal curve. GAP-B33R8-1 stays open. This is a fence, not a design. Synthetic teaching only. Foam and clean agent stay locked.

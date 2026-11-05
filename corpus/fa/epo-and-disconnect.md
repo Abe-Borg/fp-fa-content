@@ -22,7 +22,7 @@ NFPA 72-2025 §21.2.4.1: the interface is within 3 ft without metal raceway or a
 
 2019 and 2022 §21.2.4 allow 3 ft where the circuit is not Class D. They have no 20 ft raceway allowance. On those editions use 3 ft or Class D.
 
-Duct detectors initiate a supervisory signal [CODE NFPA 72-2019 §21.7.4]. An alarm is permitted in that edition only where there is no constantly attended location and no supervising station, or where another code requires an alarm (§21.7.4.1 and §21.7.4.2). NFPA 72-2022 and 2025 §21.7.4 are NEEDS HOLD. Do not assume the same sentence. Fire-alarm wiring to an emergency-control function is monitored for integrity under §12.6 [CODE NFPA 72-2019 §21.2.8]. Cite the enforced edition before using §21.2.8 on 2022 or 2025.
+Duct detectors initiate a supervisory signal [CODE NFPA 72-2019, 2022, and 2025 §21.7.4]. The sentence matches. An alarm is permitted only where there is no constantly attended location and no supervising station, or where another code requires an alarm (§21.7.4.1 and §21.7.4.2). Those alarm-permitted cases match across the same three editions. Annex A.21.7.4 is not held. Fire-alarm wiring to an emergency-control function is monitored for integrity under §12.6 [CODE NFPA 72-2019 §21.2.8]. Cite the enforced edition before using §21.2.8 on 2022 or 2025.
 
 ## Doors
 

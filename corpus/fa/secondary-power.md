@@ -35,4 +35,6 @@ If the 24-hour battery exceeds the largest battery the panel lists (a 100 ampere
 
 Li-ion energy-storage smoke and fire detection: NFPA 855-2023 §4.8.3, 24 hours standby and 2 hours alarm. Those alarm signals go to a supervising station (§4.8.4). Do not size that detection battery as 24 hours plus 5 minutes. Gas detection on the explosion-control path: §9.6.5.6.7(4), at least 24 hours standby and 2 hours alarm. The exhaust-rate path at §9.6.5.1.5.4(3) asks 2 hours of standby only. Design practice sizes the gas panel at 24 hours plus 2 hours on both paths and shows both results. Confirm that NFPA 855-2023 is adopted. IFC 2024 §916.5 requires standby power or a trouble signal on power loss and sets no hours, so a trouble-only path does not satisfy §4.8.3.
 
+On an IFC 2021 job, gas detection has at least 2 hours of standby power (IFC 2021 §1207.6.1.2.4). Do not copy that hour claim onto the 2024 section. The 2019 margin, the 2019 durations, and the generator-plus-4-hour battery are held. Do not apply the 2019 20 percent margin on a 2025 job.
+
 Documentation of the capacity and the margin is NFPA 72 §7.2.1(7) (2019, 2022, and 2025). The annual test in Table 14.4.3.2 item 8 runs a general alarm for 5 minutes (voice 15 minutes). Those are test durations, not the sizing inputs.
