@@ -99,7 +99,7 @@ IFC 2024 §1207.6.1.2.4 keeps exhaust running until the concentration is under 2
 
 Exhaust supervision by a supervising station stays [CODE §1207.6.1.2.3]. A detector failure sent as trouble stays [PRACTICE], as in the integrated-test rows. Do not retag it as a §1207.6.1.2.4 code claim. The gas-start signal class, when NFPA 855 does not set it, is [PRACTICE].
 
-The 2021-to-2024 Chapter 1207 delta is not written. On a 2021 job, NEEDS HOLD. On a Canada job, stop. CAN/ULC-S524 is NEEDS HOLD. Do not map the IFC as Canada code. Foam and clean agent stay locked.
+The lead sentence of IFC §1207.5.4 is the same in 2021 and 2024 [CODE]. The 2024 exception for a small remote telecommunications structure with lead-acid or nickel-cadmium batteries is not a hall UPS room. §1207.5.4.1 differs by edition. Do not cite it until the edition row is split. Cite §1207.6 and §1207.7 from the 2024 text only. The 2021 printing of those two sections is NEEDS HOLD. A gas setpoint past 25 percent of LFL is owner or maker. The 25 percent exhaust start stays [CODE §1207.6.1.2.4]. On a Canada job, stop. CAN/ULC-S524 is NEEDS HOLD. Do not map the IFC as Canada code. Foam and clean agent stay locked.
 
 ## Out of scope
 

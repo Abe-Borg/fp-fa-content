@@ -1,8 +1,9 @@
 ---
 name: Occupancy hazard fork
 description: >-
- use this when classifying each space in a US data-center program for IBC
- occupancy, the §903.2 sprinkler trigger, NFPA 13 occupancy/hazard, insurer
+ use this when classifying each space in a US or Canada data-center program
+ (country gate at intake) for IBC occupancy or NBC major occupancy, the §903.2
+ sprinkler trigger, NFPA 13 occupancy/hazard, insurer
  hazard category, mixed-occupancy greatest-hazard effects, and ESS/Li-ion
  overlays before density-area or pump work.
 ---
@@ -10,7 +11,7 @@ description: >-
 
 **Intake.** The input packet is optional. A missing input is not a stop: state the value used and why, and label it ASSUMED. Do not present an ASSUMED value as a cited code or table value, and do not freeze a vendor SKU. **Scope lock.** Wet pipe, dry pipe, and double-interlock preaction only. Foam, clean agent, water mist, and single-interlock or non-interlock preaction are out of scope. If one of those is requested as the basis of design, record it and stop. Do not substitute another system and do not size it here. Cite the section and the edition. Decide each parameter by the most stringent of the code floor, the insurer sheet, and the owner standard. Verify judgment calls with the engineer of record.
 
-Reusable US data-center classification recipe.
+Reusable data-center classification recipe. On a Canada job use the country gate in this skill.
 
 This Skill walks a program **space by space** and emits a hazard-classification schedule. It owns:
 
@@ -34,7 +35,13 @@ Consume the completed:
 
 Do not rebuild their jurisdiction register, carrier union, owner evidence, or permitted system election.
 
-Write output only to the caller-named path. Do not write to,,, or .
+Write output only to the caller-named path.
+
+## Edition label and country gate
+
+Do not cite an IBC 2025 edition. A capture serial such as IBC-25 is not a year. The next model cycle named in this pack is IBC 2027. An unamended model-text hold is labeled IBC 2024. The enforced edition stays the project pin from `most-stringent-basis-matrix`.
+
+Country gate (US | Canada). On a US job the IBC and IFC rows in this skill apply. On a Canada job, classify by major occupancy under NBC 2025 Division B Table 3.1.2.1. Do not use IBC §903.2 as the Canada sprinkler trigger. Part 3 building-size Articles 3.2.2 stay NEEDS HOLD. Do not invent CAN/ULC-S524, S536, S537, S1001, or CEC Section 32 text. A province whose article numbers differ from the NBC model stays NEEDS HOLD. Insurer hazard routes still run. Foam, clean agent, and single-interlock stay out of scope.
 
 ---
 
