@@ -1,4 +1,4 @@
-"""fa_calc, search_corpus, and the spec-note cap."""
+"""fa_calc and search_corpus. The spec loader tests are in test_spec_loading.py."""
 
 from __future__ import annotations
 
@@ -243,31 +243,6 @@ class SearchCorpusTests(unittest.TestCase):
         for hit in capped["hits"]:
             self.assertLessEqual(len(hit["lines"]), 2)
             self.assertTrue(all(len(line) <= 200 for line in hit["lines"]))
-
-
-class SpecNotesCapTests(unittest.TestCase):
-    def test_default_chars_keeps_a_long_pin(self):
-        import inspect
-
-        from fpfa.skills_loader import spec_notes
-
-        default = inspect.signature(spec_notes).parameters["chars"].default
-        self.assertGreaterEqual(default, 16000)
-        root = Path(tempfile.mkdtemp(prefix="fpfa-specs-"))
-        folder = root / "specs"
-        folder.mkdir()
-        (folder / "README.md").write_text("folder guide\n", encoding="utf-8")
-        (folder / "21-30-00-fire-pumps.md").write_text("y" * 9000, encoding="utf-8")
-        (folder / "28-31-00-fire-detection-and-alarm.md").write_text("x" * 12000, encoding="utf-8")
-        notes = spec_notes(root)
-        self.assertEqual(
-            [note["name"] for note in notes],
-            ["21-30-00-fire-pumps.md", "28-31-00-fire-detection-and-alarm.md"],
-        )
-        self.assertEqual(len(notes[0]["text"]), 9000)
-        self.assertEqual(len(notes[1]["text"]), 12000)
-        clipped = spec_notes(root, chars=100)
-        self.assertEqual(len(clipped[1]["text"]), 100)
 
 
 if __name__ == "__main__":

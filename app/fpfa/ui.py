@@ -56,7 +56,7 @@ from fpfa.content_update import (
     update_banner,
     updates_on_launch,
 )
-from fpfa.everyday import run_everyday
+from fpfa.everyday import everyday_reply, run_everyday
 from fpfa.jobs import JobInbox, label_result
 from fpfa.managed import anthropic_request, reply_with_delete_status, run_heavy_job, session_system
 from fpfa.keystore import clear_api_key, key_status, key_storage_help, load_api_key, save_api_key
@@ -2612,7 +2612,7 @@ class App:
                 pack = content_root()
                 client = AnthropicMessages(key)
                 out = run_everyday(pack, client.create, request, mode=mode)
-                reply = out.get("text") or "(Claude returned no text.)"
+                reply = everyday_reply(out)
             except Exception as exc:
                 reply = safe_error(exc)
                 self.jobs.mark(job_id, "error", reply)

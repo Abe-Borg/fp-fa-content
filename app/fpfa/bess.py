@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from fpfa.calc_tools import SCHEMAS, ToolSession
-from fpfa.claude_client import MODEL_ID, safe_error
+from fpfa.claude_client import MODEL_ID, incomplete_notice, safe_error
 from fpfa.modes_loader import normalize_mode
 from fpfa.skills_loader import read_starter_cites
 from fpfa.workflow import fmt1, judgment_label_line, system_prompt
@@ -295,10 +295,9 @@ def run_bess_plan(
                 SCHEMAS,
                 session.execute,
             )
-            if drafted.get("stop_reason") == "max_tokens":
-                warnings.append(
-                    "Claude stopped because the reply hit the output limit. The starter stays on the tool plan."
-                )
+            unfinished = incomplete_notice(drafted.get("stop_reason"))
+            if unfinished:
+                warnings.append(unfinished + " The starter stays on the tool plan.")
             for call in drafted.get("tool_calls") or []:
                 transcript.append({
                     "name": call.get("name"),

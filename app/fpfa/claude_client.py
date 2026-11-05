@@ -8,6 +8,11 @@ Verified against platform.claude.com on 2026-10-23:
   message when a required tool was skipped
 - adaptive thinking stays on; this client does not send thinking disabled,
   temperature, top_p, or top_k
+
+A size rejection (HTTP 413, or a 400 for a prompt over the context window)
+is raised as RequestTooLarge on the first attempt. The request is not trimmed
+and not resent. incomplete_notice labels a reply whose stop_reason says it
+did not finish.
 """
 
 from __future__ import annotations
@@ -20,12 +25,51 @@ from typing import Any, Callable
 MODEL_ID = "claude-opus-5-5"
 _TRANSIENT_STATUS = {408, 409, 429, 500, 502, 503, 504, 529}
 _TRANSIENT_TYPES = {"APIConnectionError", "APITimeoutError", "RateLimitError", "InternalServerError"}
+# A 400 for a prompt over the context window has no class of its own in the SDK.
+_TOO_LARGE_WORDS = ("too long", "too large", "context window", "context limit")
+# stop_reason values that mean the reply did not finish. tool_use is listed
+# because the loop only ends on it when the tool-round limit ran out.
+_INCOMPLETE = {
+    "max_tokens": "Claude stopped because the reply hit the output limit (stop_reason max_tokens)",
+    "model_context_window_exceeded": (
+        "Claude stopped because the request and reply filled the model's context window "
+        "(stop_reason model_context_window_exceeded)"
+    ),
+    "refusal": "Claude declined to finish this reply (stop_reason refusal)",
+    "pause_turn": "The API paused the turn before the reply finished (stop_reason pause_turn)",
+    "tool_use": (
+        "The turn ran out of tool rounds while Claude was still calling tools (stop_reason tool_use)"
+    ),
+}
+
+
+class RequestTooLarge(RuntimeError):
+    """The API rejected the complete request for its size. Nothing was trimmed or resent."""
 
 
 def safe_error(exc: BaseException) -> str:
     text = f"{type(exc).__name__}: {exc}"
     text = re.sub(r"sk-ant-[A-Za-z0-9_\-]+", "[key]", text)
     return text[:800]
+
+
+def request_too_large(exc: BaseException) -> bool:
+    """True for HTTP 413, or a 400 that says the prompt is over the context window."""
+    status = getattr(exc, "status_code", None)
+    if status == 413:
+        return True
+    if status != 400:
+        return False
+    text = str(exc).lower()
+    return any(word in text for word in _TOO_LARGE_WORDS)
+
+
+def incomplete_notice(stop_reason: str | None) -> str:
+    """A label for a reply the API reported as unfinished. Empty when it finished."""
+    reason = _INCOMPLETE.get(stop_reason or "")
+    if not reason:
+        return ""
+    return f"Incomplete reply. {reason}. The text is partial and is not a complete answer."
 
 
 def _transient_api_error(exc: BaseException) -> bool:
@@ -166,6 +210,16 @@ class AnthropicMessages:
             try:
                 return self._client.messages.create(**kwargs)
             except Exception as exc:
+                # Checked before the transient retry so a size rejection is never resent.
+                if request_too_large(exc):
+                    raise RequestTooLarge(
+                        "Claude rejected the request as too large for the model's context window "
+                        "or the API request size limit. The app did not trim the request or resend "
+                        "it with parts missing, and no file on disk was changed. Chat, zone, and "
+                        "starter requests carry every specs/*.md file in full. To send less, shorten "
+                        "the question or start a new job so fewer earlier turns are included. "
+                        "API response: " + safe_error(exc)
+                    ) from exc
                 if attempt == 2 or not _transient_api_error(exc):
                     raise
                 time.sleep(delay)
