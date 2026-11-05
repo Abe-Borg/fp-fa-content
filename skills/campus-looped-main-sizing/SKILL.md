@@ -495,7 +495,20 @@ Do **not** emit occupancy schedule, density×area re-calc, hydrant `P(Q)` table,
 | Listed pump envelope | pump-envelope |
 | Node-by-node tree / SprinkFDT | hydraulic-tree Skill (not written) |
 | Looped-main **network** model | **STOP** — not `calcs/fp hw` |
+| Single-loop two-path screen | Hand screen in §20. `calcs/fp` has no two-path operation |
 | Thrust-block / restrained-length catalog | *Thrust restraint and buried pipe anchorage* |
 | Hydro / flush / valve ITM schedule | itm-design-for-testability / commissioning |
+
+---
+
+## 20. Single-loop two-path screen
+
+Hand screen only. `calcs/fp` does not expose a two-path operation. Do not add one. Verify with the engineer of record. Do not treat the screen as a network solver.
+
+Inputs are total demand, each leg's inside diameter and length, and C. C stays 100 unless the engineer of record documents another value. Hazen-Williams is NFPA 13-2025 §28.2.2.1. The private main is NFPA 24-2025. One loop only. No elevation. Not a network model.
+
+Balance the two paths so the friction loss matches. Flow on a leg then follows C times (d^4.87 / L) to the power 1/1.85. An equal split (half the flow on each leg) is a shortcut. On unequal legs that shortcut overstates the governing loss, so it is conservative. The balanced reduction on unequal legs is sensitivity only. It is not a design credit.
+
+The result is a screen. A second leg whose length or diameter is not on the survey stays [ASSUMED]. Do not invent a municipal static, residual, or test flow. Loop credit does not seal a fire-flow letter that is not in hand. Synthetic teaching only. GAP-B33R8-1 stays open. Foam and clean agent stay locked.
 
 ---

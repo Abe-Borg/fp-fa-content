@@ -117,3 +117,7 @@ Each sampling port is a spot detector for location and spacing, absent performan
 Production sensitivity in the annex is a test benchmark [HB annex A.17.7.3.1]. It is not the sole basis for a setpoint. In 2025, §17.7.3 is sensitivity. It does not elect a trip level.
 
 Do not hand 0.2 %/ft as an NFPA 72 code trip. Where the second level is the detection leg, that obscuration stays ASSUMED (GAP-B33R8-1). NFPA 76 alert and alarm values stay the NFPA 76 cites above, and only when NFPA 76 is adopted or elected. On a Canada job, stop. CAN/ULC-S524 is NEEDS HOLD. Do not map NFPA 72 as Canada code. Foam and clean agent stay locked.
+
+## Telecom and cable-entrance election
+
+Where the owner or the authority elects NFPA 76 for a meet-me room, a telecommunications room, or a cable entrance, the very-early-warning and early-warning spacing and transport caps in the basis apply to that election. Applicability is an owner or authority call [PARA]. Verify with the engineer of record. Do not apply those caps to a hyperscale hall that has not made the election. GAP-B33R8-1 stays open. Do not encode 0.2 %/ft as [CODE].

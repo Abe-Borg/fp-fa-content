@@ -690,3 +690,18 @@ Read the trigger and the supervision basis together. Do not pair the 760 gpm flo
 Do not take 60 min without the supervision basis on the basis of design. The code floor can beat the insurer on both flow and volume.
 
 These gallons are a duration statement. They are not a tank size and not a local on-site storage clause. Do not sum halls. Hand the governing flow and volume through this curve. Verify the supervision election with the engineer of record.
+
+## 21. Hose-source topology fence
+
+Fence, not a design. Synthetic teaching only. Do not invent a municipal curve. An assumed city test is not a city value.
+
+| Id | Hose-source topology | Effect at the suction node |
+|---|---|---|
+| T1a | Municipal hydrant on an independent municipal main. The hose draw does not lower tap pressure. | Least penalty |
+| T1b | Municipal hydrant on the same municipal main as the service tap. Demand is taken at the tap. | Municipal P(Q) at the full demand |
+| T2 | Private-main hydrant upstream of pump suction, concurrent, single path | Municipal P(demand) minus private-main Hazen-Williams loss at that demand, C = 100 |
+| T3 | Hose through the fire pump | The pump carries the full demand. Worst case is the larger hose allowance |
+
+The conservative [ASSUMED] basis is T2 until the engineer of record decides the hose source. A looped-main credit on that path is sensitivity only. The hand screen is `campus-looped-main-sizing` §20. Where T1a and T1b differ, the hydrant's location relative to the tap needs the purveyor and the engineer of record.
+
+Do not promote 750 gpm at 65 psi as the final supply under T2. Under that conservative path the point fails. Only an independent municipal hydrant (T1a) can show a thin pass, and that margin stays with the engineer of record. A 1,000 gpm alternate stays in play when hose is taken through the pump (T3). Pump verdicts and the diesel relief check are `pump-envelope`. A municipal fire-flow letter that is not in hand stays unsealed. GAP-B33R8-1 stays open. Foam and clean agent stay locked.

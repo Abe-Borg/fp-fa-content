@@ -95,3 +95,17 @@ Synthetic hall only. Do not copy the rows onto a live zone.
 - Alarm verification on a releasing circuit stays [PRACTICE]. Do not cite §23.8.5.4.3(3) as a code ban.
 
 Foam, clean agent, and single-interlock stay locked.
+
+## Campus power and energy-storage rows
+
+Synthetic teaching only. Do not copy the rows onto a live zone. Every cause-and-effect row still has a matrix row [CODE NFPA 4-2024 §4.5.1(6)]. That item stays closed.
+
+- Hall waterflow: alarm and supervising station. No elevator Phase I recall from general waterflow [CODE NFPA 72 §21.3.3.1].
+- Second-level detection alone: alarm, no release. The trip setpoint stays [ASSUMED] (GAP-B33R8-1). Do not encode 0.2 %/ft as [CODE].
+- Second-level detection and same-zone low air: release. Listing stays [CODE NFPA 72 §23.11]. That section does not prescribe the Boolean.
+- Energy-storage gas above 25 percent of LFL: start exhaust and hold it until the concentration is below that level [CODE IFC 2021 §1207.6.1.2.4]. The 2024 start at that threshold is the same duty [CODE IFC 2024 §1207.6.1.2.4].
+- Exhaust fan off, where the exhaust is required: supervisory to a supervising station or a constantly attended location [CODE IFC 2021 §1207.6.1.2.3]. The 2024 supervision section is the same duty.
+- Loss of primary power: the control unit is on secondary power within 10 s [CODE NFPA 72 §10.6.6.1].
+- The speech-transmission-index field pass, where a voice space requires intelligibility, is an owner election [OWNER]. Do not invent the number.
+
+On a Canada job, stop. CAN/ULC-S1001 and CAN/ULC-S536 stay NEEDS HOLD. Do not map NFPA 4 or the IFC as Canada code. Foam, clean agent, and single-interlock stay locked. A foam or clean-agent release row is a fail. Do not add one.
