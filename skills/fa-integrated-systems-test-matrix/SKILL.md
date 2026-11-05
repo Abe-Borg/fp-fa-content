@@ -102,9 +102,9 @@ Synthetic teaching only. Do not copy the rows onto a live zone. Every cause-and-
 
 - Hall waterflow: alarm and supervising station. No elevator Phase I recall from general waterflow [CODE NFPA 72 §21.3.3.1].
 - Second-level detection alone: alarm, no release. The trip setpoint stays [ASSUMED] (GAP-B33R8-1). Do not encode 0.2 %/ft as [CODE].
-- Second-level detection and same-zone low air: release. Listing stays [CODE NFPA 72 §23.11]. That section does not prescribe the Boolean.
-- Energy-storage gas above 25 percent of LFL: start exhaust and hold it until the concentration is below that level [CODE IFC 2021 §1207.6.1.2.4]. The 2024 start at that threshold is the same duty [CODE IFC 2024 §1207.6.1.2.4].
-- Exhaust fan off, where the exhaust is required: supervisory to a supervising station or a constantly attended location [CODE IFC 2021 §1207.6.1.2.3]. The 2024 supervision section is the same duty.
+- Second-level detection and same-zone low air: release [OWNER]/insurer. Releasing-service listing and the §23.11 framework stay [CODE]. That section does not prescribe this Boolean.
+- Energy-storage gas above 25 percent of LFL: start exhaust and hold it until the concentration is below that level [CODE IFC 2021 §1207.6.1.2.4]. The 2024 start at that threshold is the same duty [CODE IFC 2024 §1207.6.1.2.4]. After the concentration is under 25 percent of LFL, the exhaust may stop [CODE IFC 2021 and 2024 §1207.6.1.2.4]. A fan that is off before gas reaches the start threshold, or after gas clears, is normal standby on a demand-controlled exhaust. Do not treat that idle state as a supervisory fail.
+- Required exhaust, loss of proof: the supervisory case is failure to prove airflow after a run command (command active and no airflow). Wait out the command delay set at commissioning, ASSUMED 30 s to 60 s, before calling the loss of proof. That delay and the supervisory class of the loss of proof are [PRACTICE], the same screen as `fa-bess-gas-relay-map-and-cause-effect`. Required exhaust is supervised by a supervising station or a constantly attended location [CODE IFC 2021 §1207.6.1.2.3]. The 2024 supervision section is the same duty.
 - Loss of primary power: the control unit is on secondary power within 10 s [CODE NFPA 72 §10.6.6.1].
 - The speech-transmission-index field pass, where a voice space requires intelligibility, is an owner election [OWNER]. Do not invent the number.
 
