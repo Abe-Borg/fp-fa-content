@@ -88,8 +88,8 @@ On a Canada job, stop. CAN/ULC-S1001 and CAN/ULC-S536 are NEEDS HOLD. Do not map
 Synthetic hall only. Do not copy the rows onto a live zone.
 
 - Second-level detection alone: alarm, no release. The trip setpoint stays [ASSUMED]. Verify with the engineer of record. Do not encode 0.2 %/ft as [CODE].
-- Low air alone: supervisory, no release [CODE NFPA 72-2019 and 2022 §17.17.2.2]. Citing 2025 §17.17.2.2 is NEEDS HOLD. The 2025 number is §17.19.2.2.2.
-- Second-level detection and same-zone low air: release [CODE §23.11].
+- Low air alone: supervisory, no release. On a double-interlock or preaction job, 2019 preaction low-air supervisory is [PRACTICE]. 2022 §17.17.2.2 is [CODE]. Citing 2025 §17.17.2.2 is NEEDS HOLD. The 2025 number is §17.19.2.2.2.
+- Second-level detection and same-zone low air: release [OWNER]/insurer. Releasing-service listing and the §23.11 framework stay [CODE]. That section does not prescribe this Boolean.
 - Disconnect active: no release [CODE §23.11.5]. The disconnect is a physical switch [CODE §23.11.5.2]. Operating it is supervisory [CODE §23.11.5.1].
 - Every cause-and-effect row has a matrix row [CODE NFPA 4-2024 §4.5.1(6)]. That item stays closed.
 - Alarm verification on a releasing circuit stays [PRACTICE]. Do not cite §23.8.5.4.3(3) as a code ban.
