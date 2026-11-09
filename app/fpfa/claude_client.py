@@ -257,6 +257,12 @@ def run_tool_loop(
                     output = execute(name, tool_input)
                     is_error = False
                     payload = json.dumps(output, default=str)
+                except TurnCancelled as exc:
+                    # A cancel inside a tool (a delegated specialist) ends this turn too.
+                    # The caller merged the nested usage; this carries the loop's own.
+                    cancelled = TurnCancelled(str(exc))
+                    cancelled.usage = dict(usage)
+                    raise cancelled from exc
                 except Exception as exc:
                     is_error = True
                     output = {"error": safe_error(exc)}

@@ -986,6 +986,24 @@ class Record:
         row["payload"] = json.loads(row["payload"] or "{}")
         return row
 
+    def events_by_kind(self, project_id: str, kinds: tuple[str, ...] | list[str]) -> list[dict]:
+        """Every event of these kinds on the project, oldest first, with no row limit.
+
+        events() is a recent window for a screen. A total, such as the job's cost,
+        has to read the whole history, so it comes here.
+        """
+        names = [str(kind) for kind in kinds if str(kind)]
+        if not names:
+            return []
+        marks = ", ".join("?" for _ in names)
+        rows = self._read(
+            f"SELECT * FROM events WHERE project_id = ? AND kind IN ({marks}) ORDER BY seq",
+            (project_id, *names),
+        )
+        for row in rows:
+            row["payload"] = json.loads(row["payload"] or "{}")
+        return rows
+
     def events(self, project_id: str, limit: int = 500) -> list[dict]:
         rows = self._read(
             "SELECT * FROM events WHERE project_id = ? ORDER BY seq DESC LIMIT ?", (project_id, int(limit))

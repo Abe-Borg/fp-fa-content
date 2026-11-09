@@ -99,6 +99,28 @@ class CostMathTests(unittest.TestCase):
         self.assertIn("Rates per million tokens as of", text)
         self.assertIn("70% of input tokens were read from the cache", text)
 
+    def test_job_totals_read_the_whole_history_not_a_recent_window(self):
+        from fpfa.usage_report import job_totals, report_text, usage_events
+
+        record = _record()
+        record.ensure_project("p1", "Long job")
+        record.log_event("p1", "turn", {"usage": {"rounds": 1, "input_tokens": 1000, "output_tokens": 100}}, agent="lead")
+
+        def flood(conn):
+            conn.executemany(
+                "INSERT INTO events (project_id, ts, kind, agent, payload) VALUES ('p1', '2026-11-09T00:00:00Z', 'wake', '', '{}')",
+                [()] * 6000,
+            )
+
+        record._write(flood)
+        recent = record.events("p1", limit=5000)
+        self.assertFalse(any(event["kind"] == "turn" for event in recent), "the window has lost the turn")
+        rows = usage_events(record, "p1")
+        self.assertEqual([row["kind"] for row in rows], ["turn"])
+        self.assertEqual(job_totals(rows)["input_tokens"], 1000)
+        self.assertIn("Job total over 1 model context", report_text(record, "p1"))
+        self.assertEqual(record.events_by_kind("p1", ()), [])
+
     def test_cli_prints_text_or_json_for_a_database(self):
         from fpfa.usage_report import main
 
@@ -160,6 +182,46 @@ class UsageEventTests(unittest.TestCase):
         self.assertEqual(event["payload"]["usage"]["input_tokens"], 900)
         self.assertEqual(event["payload"]["usage"]["rounds"], 1)
         self.assertEqual({row["name"]: row["status"] for row in record.agents("p1")}["Lead"], "interrupted")
+
+    def test_a_cancel_inside_a_specialist_keeps_the_specialists_spend(self):
+        from fpfa.claude_client import TurnCancelled
+        from fpfa.everyday import run_everyday
+
+        record = _record()
+        record.ensure_project("p1", "Job one")
+        cancel = threading.Event()
+
+        def create(**kwargs):
+            system = kwargs.get("system")
+            text = system if isinstance(system, str) else "".join(block.get("text", "") for block in system or [])
+            if "# Sprinkler specialist" in text:
+                # The specialist runs one round, then the designer cancels.
+                cancel.set()
+                return _turn("tool_use", Block(type="tool_use", id="s1", name="hose_duration",
+                                               input={"hazard": "ordinary", "supervised": True}),
+                             usage=_usage(900, 90))
+            return _turn("tool_use", Block(type="tool_use", id="l1", name="delegate",
+                                           input={"specialist": "fp-sprinkler", "brief": "Check the hose duration."}),
+                         usage=_usage(100, 10))
+
+        with self.assertRaises(TurnCancelled):
+            run_everyday(REPO, create, "Design basis?", record=record, project_id="p1", cancel=cancel)
+        turn = record.latest_event("p1", "turn")["payload"]
+        self.assertTrue(turn["cancelled"])
+        self.assertEqual(turn["usage"]["input_tokens"], 1000, "lead 100 plus the interrupted specialist's 900")
+        self.assertEqual(turn["usage"]["output_tokens"], 100)
+        self.assertEqual(turn["lead_usage"]["input_tokens"], 100)
+        delegation = record.latest_event("p1", "delegation")["payload"]
+        self.assertTrue(delegation["cancelled"])
+        self.assertEqual(delegation["specialist"], "fp-sprinkler")
+        self.assertEqual(delegation["usage"]["input_tokens"], 900)
+        agents = {row["role_slug"]: row["status"] for row in record.agents("p1")}
+        self.assertEqual(agents, {"lead": "interrupted", "fp-sprinkler": "interrupted"})
+        from fpfa.usage_report import report_text
+
+        text = report_text(record, "p1")
+        self.assertIn("within the turn: fp-sprinkler, cancelled", text)
+        self.assertIn("lead turn, cancelled", text)
 
     def test_narrations_and_checks_record_their_usage(self):
         from fpfa.bess import run_bess_plan

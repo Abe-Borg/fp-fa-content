@@ -74,9 +74,8 @@ def cost(usage: Any, rates: dict | None = None) -> dict:
 def usage_events(record: Any, project_id: str) -> list[dict]:
     """Events on the job that carry usage, oldest first, with normalized usage attached."""
     rows = []
-    for event in record.events(project_id, limit=5000):
-        if event.get("kind") not in USAGE_KINDS:
-            continue
+    # The whole history, not a recent window: a total has to see every billed context.
+    for event in record.events_by_kind(project_id, USAGE_KINDS):
         payload = event.get("payload") or {}
         usage = payload.get("usage")
         if not isinstance(usage, dict):
@@ -115,7 +114,8 @@ def _label(row: dict) -> str:
             bits.append("cancelled")
         return ", ".join(bits)
     if kind == "delegation":
-        return f"  within the turn: {row.get('specialist') or 'specialist'}"
+        note = ", cancelled" if row.get("cancelled") else ""
+        return f"  within the turn: {row.get('specialist') or 'specialist'}{note}"
     if kind == "narration":
         note = "cancelled" if row.get("cancelled") else (row.get("source") or "")
         return f"narration ({row.get('agent') or 'narrator'}{', ' + note if note else ''})"

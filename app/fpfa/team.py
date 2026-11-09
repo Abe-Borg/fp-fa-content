@@ -250,9 +250,14 @@ def delegate(
             max_tokens=max_tokens,
             cancel=cancel,
         )
-    except TurnCancelled:
+    except TurnCancelled as exc:
         record.set_agent(project_id, name=name, role_slug=slug, status="interrupted")
         record.set_handoff(project_id, lead_handoff["id"], status="cancelled", result="Cancelled by the designer.", by=LEAD)
+        # The rounds the specialist ran were billed. They close on the record like a finished delegation.
+        record.log_event(project_id, "delegation", {
+            "specialist": slug, "handoff": lead_handoff["id"], "findings": 0, "questions": 0, "handoffs": 0,
+            "usage": dict(getattr(exc, "usage", None) or empty_usage()), "stop_reason": "cancelled", "cancelled": True,
+        }, agent=LEAD)
         raise
     except Exception:
         record.set_agent(project_id, name=name, role_slug=slug, status="error")
@@ -485,12 +490,17 @@ class TeamSession:
         if name == "list_specialists":
             return {"specialists": list_specialists(self.root)}
         if name == "delegate":
-            contribution = delegate(
-                self.root, self.record, self.project_id, self.create,
-                specialist=str(args.get("specialist") or ""), brief=str(args.get("brief") or ""),
-                inputs=args.get("inputs"), max_rounds=self.max_rounds, max_tokens=self.max_tokens,
-                cancel=self.cancel,
-            )
+            try:
+                contribution = delegate(
+                    self.root, self.record, self.project_id, self.create,
+                    specialist=str(args.get("specialist") or ""), brief=str(args.get("brief") or ""),
+                    inputs=args.get("inputs"), max_rounds=self.max_rounds, max_tokens=self.max_tokens,
+                    cancel=self.cancel,
+                )
+            except TurnCancelled as exc:
+                # The interrupted specialist's rounds count toward the task.
+                _merge_usage(self.usage, getattr(exc, "usage", None))
+                raise
             self.delegations.append(contribution)
             _merge_usage(self.usage, contribution.get("usage"))
             return contribution
