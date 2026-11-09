@@ -281,6 +281,8 @@ def run_bess_plan(
     tool = session.execute("lfl_setpoints", tool_input)
     if tool.get("election") is not None or tool.get("duration") is not None:
         raise ValueError("lfl_setpoints returned an election or a duration")
+    if session.recording:
+        record.set_agent(project_id, name="Tool plan", role_slug="tool-plan", status="done")
     template, texts = template_narrative(room, tool, cites, basis, zone)
     governing = {"texts": texts}
     if zone:

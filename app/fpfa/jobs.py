@@ -24,7 +24,7 @@ from dataclasses import dataclass
 from typing import Callable
 
 KINDS = ("zone", "chat", "bess", "heavy", "claim")
-STATUSES = ("queued", "running", "done", "error")
+STATUSES = ("queued", "running", "done", "error", "cancelled")
 _KEY_RE = re.compile(r"sk-ant-[A-Za-z0-9_\-]+")
 _log = logging.getLogger("fpfa.jobs")
 _hooks_lock = threading.Lock()

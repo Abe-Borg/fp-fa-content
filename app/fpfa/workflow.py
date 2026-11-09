@@ -491,6 +491,8 @@ def run_di_zone(
     session = ToolSession(content_root, record=record, project_id=project_id, agent="tool-plan")
     narrator_session = ToolSession(content_root, record=record, project_id=project_id, agent="narrator")
     tools, sent = run_tool_plan(session, di, basis)
+    if session.recording:
+        record.set_agent(project_id, name="Tool plan", role_slug="tool-plan", status="done")
     template = template_narrative(di, tools, basis)
     transcript = _plan_transcript(tools, sent)
     warnings: list[str] = []

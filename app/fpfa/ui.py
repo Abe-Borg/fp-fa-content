@@ -41,9 +41,10 @@ from fpfa.claim_check import (
     unanswered,
     write_packet_files,
 )
-from fpfa.claude_client import MODEL_ID, AnthropicMessages, run_tool_loop, safe_error, usage_summary
+from fpfa.claude_client import MODEL_ID, AnthropicMessages, TurnCancelled, run_tool_loop, safe_error, usage_summary
 from fpfa.design_basis_docx import DESIGN_BASIS_TITLE, write_design_basis
-from fpfa.team import export_gate, latest_check
+from fpfa.team import check_record, export_gate, latest_check, team_summary
+from fpfa.team_panel import TeamPanel
 from fpfa.content_update import (
     ContentUpdateError,
     UpdateResult,
@@ -358,6 +359,8 @@ class App:
         self.jobs = JobInbox(worker_count=2, on_change=self._on_jobs_changed)
         # The project record. Calc tools and record tools write to it by job id.
         self.record = Record()
+        # Cancel flags for running jobs, by job id. Set from the Team tab.
+        self._cancel_events: dict[str, threading.Event] = {}
         # Cached agent and cloud environment ids for later /heavy calls.
         # Not a session. Session cleanup does not delete these.
         self._managed_resources: dict = {}
@@ -532,6 +535,26 @@ class App:
             font=self.theme.fonts["small"],
         )
         self.inbox_list.pack(fill="x")
+        # Team roster for the open job. Packed only while the job has agents.
+        self.team_box = ttk.Frame(parent, style="Surface.TFrame")
+        ttk.Label(self.team_box, text="TEAM", style="Section.TLabel").pack(anchor="w", pady=(px(10), px(4)))
+        self.team_list = tk.Listbox(
+            self.team_box,
+            height=4,
+            exportselection=False,
+            activestyle="none",
+            bd=0,
+            highlightthickness=0,
+            relief="flat",
+            bg=palette.SURFACE,
+            fg=palette.MUTED,
+            selectbackground=palette.SURFACE,
+            selectforeground=palette.MUTED,
+            font=self.theme.fonts["small"],
+        )
+        self.team_list.pack(fill="x")
+        self.team_list.bind("<Button-1>", lambda _event: self.show_team(), add="+")
+        self._team_shown = False
         self.project_list = tk.Listbox(
             parent,
             width=24,
@@ -677,6 +700,7 @@ class App:
         menu.add_command(label="Run zone from Zone details", accelerator="/run", command=self.start_zone_run)
         menu.add_command(label=f"Export draft Section {DRAFT_SECTION}…", command=self.export_docx)
         menu.add_command(label="Export Design Basis and Open Questions…", command=self.export_design_basis)
+        menu.add_command(label="Team panel", command=self.show_team)
         menu.add_separator()
         menu.add_checkbutton(label="Narrate zone runs with Claude", variable=self.ask_claude)
         menu.add_separator()
@@ -700,6 +724,7 @@ class App:
         self._build_basis()
         self._build_zone()
         self._build_results()
+        self._build_team()
         self.tabs.select(1)
 
     def show_details(self, show: bool = True) -> None:
@@ -1096,6 +1121,133 @@ class App:
         scroll.pack(side="right", fill="y")
         self.results.pack(fill="both", expand=True)
 
+    def _build_team(self) -> None:
+        self.team_panel = TeamPanel(
+            self.tabs,
+            self.theme,
+            on_cancel=self.cancel_running_jobs,
+            on_check=self.start_record_check,
+            on_export=self.export_design_basis,
+        )
+        self.tabs.add(self.team_panel, text="Team")
+        self.team_panel.render(None)
+
+    def show_team(self) -> None:
+        """Open the drawer on the Team tab."""
+        self.show_details(True)
+        try:
+            self.tabs.select(self.team_panel)
+        except tk.TclError:
+            return
+        self._refresh_team()
+
+    def _project_running(self, project_id: str | None) -> bool:
+        if not project_id:
+            return False
+        return any(
+            job.project_id == project_id and job.status in ("queued", "running")
+            for job in self.jobs.snapshot()
+        )
+
+    def _refresh_team(self) -> None:
+        """Redraw the Team tab and the sidebar roster from the record. Cheap; called after every job."""
+        panel = getattr(self, "team_panel", None)
+        if panel is None:
+            return
+        project_id = (self.project or {}).get("id") if self.project else None
+        snapshot = None
+        if project_id:
+            try:
+                snapshot = self.record.snapshot(project_id)
+            except Exception as exc:
+                self.status.set("Project record is not available. " + safe_error(exc))
+                snapshot = None
+        try:
+            panel.render(snapshot, running=self._project_running(project_id))
+            from fpfa.team_panel import roster_lines
+
+            lines = roster_lines(snapshot)
+            self._show_team_box(bool(lines))
+            if tuple(self.team_list.get(0, "end")) != tuple(lines):
+                self.team_list.delete(0, "end")
+                for line in lines:
+                    self.team_list.insert("end", line)
+        except tk.TclError:
+            return
+
+    def _show_team_box(self, show: bool) -> None:
+        if show == self._team_shown:
+            return
+        try:
+            if show:
+                before = self.activity if self._activity_shown else self.project_list
+                self.team_box.pack(side="bottom", fill="x", before=before)
+            else:
+                self.team_box.pack_forget()
+        except tk.TclError:
+            return
+        self._team_shown = show
+
+    def cancel_running_jobs(self) -> None:
+        """Ask every queued or running job on the open job to stop at its next model round."""
+        if not self.project:
+            return
+        project_id = self.project["id"]
+        flagged = 0
+        for job in self.jobs.snapshot():
+            if job.project_id == project_id and job.status in ("queued", "running"):
+                event = self._cancel_events.setdefault(job.id, threading.Event())
+                event.set()
+                flagged += 1
+        if flagged:
+            self.status.set(
+                f"Cancel requested for {flagged} job{'s' if flagged != 1 else ''}. "
+                "A turn stops before its next model round; a tool already running finishes."
+            )
+        else:
+            self.status.set("No job is running on this project.")
+
+    def _cancel_event(self, job_id: str) -> threading.Event:
+        return self._cancel_events.setdefault(job_id, threading.Event())
+
+    def start_record_check(self) -> None:
+        """Run the blind checker over this job's findings as a claim job, without a chat turn."""
+        self._keep_composer_open()
+        if not self.project:
+            messagebox.showinfo("Blind check", "Open a job first.")
+            return
+        self._open_record(self.project)
+        origin_id = self.project["id"]
+        project_name = self.project.get("name") or UNTITLED_JOB
+        if not self.record.findings(origin_id):
+            self._local_exchange("Run blind check", "The record has no findings to check yet.")
+            self._refresh_team()
+            return
+        key = load_api_key()
+        if not key:
+            self._local_exchange("Run blind check", "Save an Anthropic API key in Settings before running the blind check.")
+            return
+
+        def work(job_id: str) -> None:
+            try:
+                outcome = check_record(content_root(), self.record, origin_id, AnthropicMessages(key).create)
+                text = outcome.get("status_line") or "Blind check ran."
+                if outcome.get("verdict"):
+                    text += "\n" + outcome["verdict"]
+            except Exception as exc:
+                text = safe_error(exc)
+                self.jobs.mark(job_id, "error", text)
+            self.queue.put(lambda oid=origin_id, body=text, jid=job_id: self._finish_chat(oid, body, job_id=jid))
+
+        job = self.jobs.submit(
+            project_id=origin_id,
+            project_name=project_name,
+            kind="claim",
+            title="Blind check of the record",
+            work=work,
+        )
+        self.status.set(f"Blind check… {job.heading()}")
+
     def _prefer_chat(self) -> None:
         """Put the cursor in the composer. The thread is the main surface."""
         try:
@@ -1135,6 +1287,11 @@ class App:
         try:
             if self._pending_here() != self._pending_shown:
                 self._render_chat()
+            panel = getattr(self, "team_panel", None)
+            if panel is not None:
+                panel.cancel_button.configure(
+                    state="normal" if self._project_running((self.project or {}).get("id")) else "disabled"
+                )
             lines = [job.inbox_line() for job in jobs.snapshot()]
             self._show_activity(bool(lines))
             if tuple(listing.get(0, "end")) == tuple(lines):
@@ -1273,6 +1430,7 @@ class App:
         self._show_saved_run(project.get("last_run") or project.get("bess_run"))
         self._apply_mode(project.get("mode"))
         self._open_record(project)
+        self._refresh_team()
 
     def _open_record(self, project: dict | None) -> None:
         """Make sure the job is in the project record. An older JSON job is imported once."""
@@ -1499,6 +1657,7 @@ class App:
             self._start_named_job(UNTITLED_JOB)
             self.chat_log = list((self.project or {}).get("chat") or [])
             self._render_chat()
+            self._refresh_team()
         try:
             self.chat_entry.focus_set()
         except tk.TclError:
@@ -1769,6 +1928,7 @@ class App:
             self.chat_log = []
             self._render_chat()
             self._show_saved_run(None)
+            self._refresh_team()
         self.refresh_projects((self.project or {}).get("id"))
 
     def add_segment(self) -> None:
@@ -1864,6 +2024,8 @@ class App:
         """Queue a zone run that calls the model. The composer stays usable."""
 
         def work(job_id: str) -> None:
+            cancel = self._cancel_event(job_id)
+
             def narrator(system, user_text, tools, execute):
                 client = AnthropicMessages(key)
                 return run_tool_loop(
@@ -1872,6 +2034,7 @@ class App:
                     user_text=user_text,
                     tools=tools,
                     execute=execute,
+                    cancel=cancel,
                     required=[
                         "zone_trapped_volume",
                         "dry_delivery_screen",
@@ -1979,6 +2142,8 @@ class App:
         """Queue a starter that calls the model. The composer stays usable."""
 
         def work(job_id: str) -> None:
+            cancel = self._cancel_event(job_id)
+
             def narrator(system, user_text, tools, execute):
                 client = AnthropicMessages(key)
                 return run_tool_loop(
@@ -1987,6 +2152,7 @@ class App:
                     user_text=user_text,
                     tools=tools,
                     execute=execute,
+                    cancel=cancel,
                     required=["lfl_setpoints", "read_skill"],
                     max_rounds=16,
                     max_tokens=16000,
@@ -2101,6 +2267,7 @@ class App:
             self._save_form_or_chat(self.project)
             save_project(self.project)
             self._show_bess_result(result)
+            self._refresh_team()
         else:
             try:
                 project = load_project(origin_id)
@@ -2228,6 +2395,7 @@ class App:
             form_error = self._save_form_or_chat(self.project)
             save_project(self.project)
             self._show_result(result)
+            self._refresh_team()
         else:
             try:
                 project = load_project(origin_id)
@@ -2695,19 +2863,29 @@ class App:
             request = form_note + "\n\n" + request
 
         def work(job_id: str) -> None:
+            cancel = self._cancel_event(job_id)
             try:
                 pack = content_root()
                 client = AnthropicMessages(key)
                 out = run_everyday(
                     pack, client.create, request, mode=mode,
-                    record=self.record, project_id=origin_id, agent="lead",
+                    record=self.record, project_id=origin_id, agent="lead", cancel=cancel,
                 )
                 reply = everyday_reply(out)
+                summary = team_summary(out)
+                if summary:
+                    reply = reply + "\n\n" + summary
                 used = usage_summary(out.get("usage"))
+            except TurnCancelled as exc:
+                reply = "Cancelled. " + str(exc) + " Nothing after that point was written."
+                used = ""
+                self.jobs.mark(job_id, "cancelled", str(exc))
             except Exception as exc:
                 reply = safe_error(exc)
                 used = ""
                 self.jobs.mark(job_id, "error", reply)
+            finally:
+                self._cancel_events.pop(job_id, None)
             self.queue.put(
                 lambda oid=origin_id, answer=reply, jid=job_id, tokens=used: self._finish_chat(
                     oid, answer, job_id=jid, usage=tokens
@@ -2756,6 +2934,7 @@ class App:
             if usage:
                 note = f"{note} {usage}"
             self.status.set(form_error or self._with_job_label(job_id, note))
+            self._refresh_team()
             return
         try:
             project = load_project(origin_id)

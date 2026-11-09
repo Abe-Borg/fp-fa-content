@@ -113,6 +113,7 @@ def run_everyday(
     record: Record | None = None,
     project_id: str | None = None,
     agent: str = "lead",
+    cancel: Any = None,
 ) -> dict:
     """One everyday turn. create() is Messages.create. Tools run in calcs/.
 
@@ -125,17 +126,27 @@ def run_everyday(
     if record is not None and project_id:
         from fpfa.team import TEAM_SCHEMAS, TeamSession
 
-        team = TeamSession(content_root, record, project_id, create, max_rounds=max_rounds, max_tokens=max_tokens)
-        out = run_tool_loop(
-            create,
-            system=assemble_system(content_root, mode, team=True),
-            user_text=user_text,
-            tools=TEAM_SCHEMAS,
-            execute=team.execute,
-            required=list(required or []),
-            max_rounds=max_rounds,
-            max_tokens=max_tokens,
+        team = TeamSession(
+            content_root, record, project_id, create,
+            max_rounds=max_rounds, max_tokens=max_tokens, cancel=cancel,
         )
+        record.set_agent(project_id, name="Lead", role_slug=agent, status="working")
+        try:
+            out = run_tool_loop(
+                create,
+                system=assemble_system(content_root, mode, team=True),
+                user_text=user_text,
+                tools=TEAM_SCHEMAS,
+                execute=team.execute,
+                required=list(required or []),
+                max_rounds=max_rounds,
+                max_tokens=max_tokens,
+                cancel=cancel,
+            )
+        except Exception:
+            record.set_agent(project_id, name="Lead", role_slug=agent, status="error")
+            raise
+        record.set_agent(project_id, name="Lead", role_slug=agent, status="done")
         lead_usage = dict(out.get("usage") or {})
         total = dict(lead_usage)
         for key, value in team.usage.items():
@@ -157,4 +168,5 @@ def run_everyday(
         required=list(required or []),
         max_rounds=max_rounds,
         max_tokens=max_tokens,
+        cancel=cancel,
     )

@@ -70,6 +70,10 @@ class RequestTooLarge(RuntimeError):
     """The API rejected the complete request for its size. Nothing was trimmed or resent."""
 
 
+class TurnCancelled(RuntimeError):
+    """The designer cancelled the job. The loop stopped before its next model round."""
+
+
 def safe_error(exc: BaseException) -> str:
     text = f"{type(exc).__name__}: {exc}"
     text = re.sub(r"sk-ant-[A-Za-z0-9_\-]+", "[key]", text)
@@ -195,8 +199,14 @@ def run_tool_loop(
     max_rounds: int = 8,
     max_nudges: int = 3,
     max_tokens: int = 8192,
+    cancel: Any = None,
 ) -> dict:
-    """Call create() the way Messages.create is called. execute() runs a client tool."""
+    """Call create() the way Messages.create is called. execute() runs a client tool.
+
+    cancel is an optional threading.Event. When it is set, the loop raises
+    TurnCancelled before its next model round. A round already in flight
+    finishes; a tool already running finishes.
+    """
     required = list(required or [])
     messages: list[dict] = [{"role": "user", "content": user_text}]
     called: list[dict] = []
@@ -205,6 +215,8 @@ def run_tool_loop(
     stop_reason = ""
     usage = empty_usage()
     for _ in range(max_rounds):
+        if cancel is not None and cancel.is_set():
+            raise TurnCancelled("Cancelled by the designer before the next model round.")
         response = create(
             model=MODEL_ID,
             max_tokens=max_tokens,

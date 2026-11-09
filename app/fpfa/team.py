@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from fpfa.calc_tools import SCHEMAS, ToolSession
-from fpfa.claude_client import add_usage, empty_usage, run_tool_loop
+from fpfa.claude_client import TurnCancelled, add_usage, empty_usage, run_tool_loop
 from fpfa.record import Record, RecordError
 from fpfa.roles_loader import list_roles, read_role
 from fpfa.skills_loader import list_skills, spec_notes
@@ -191,6 +191,7 @@ def delegate(
     inputs: dict | None = None,
     max_rounds: int = 12,
     max_tokens: int = 16000,
+    cancel: Any = None,
 ) -> dict:
     """Run one specialist and return its structured contribution.
 
@@ -230,7 +231,12 @@ def delegate(
             execute=session.execute,
             max_rounds=max_rounds,
             max_tokens=max_tokens,
+            cancel=cancel,
         )
+    except TurnCancelled:
+        record.set_agent(project_id, name=name, role_slug=slug, status="interrupted")
+        record.set_handoff(project_id, lead_handoff["id"], status="cancelled", result="Cancelled by the designer.", by=LEAD)
+        raise
     except Exception:
         record.set_agent(project_id, name=name, role_slug=slug, status="error")
         record.set_handoff(project_id, lead_handoff["id"], status="cancelled", result="The specialist did not finish.", by=LEAD)
@@ -437,6 +443,7 @@ class TeamSession:
         *,
         max_rounds: int = 12,
         max_tokens: int = 16000,
+        cancel: Any = None,
     ):
         self.root = Path(content_root)
         self.record = record
@@ -444,6 +451,7 @@ class TeamSession:
         self.create = create
         self.max_rounds = max_rounds
         self.max_tokens = max_tokens
+        self.cancel = cancel
         self.tools = ToolSession(content_root, record=record, project_id=project_id, agent=LEAD)
         self.delegations: list[dict] = []
         self.checks: list[dict] = []
@@ -452,6 +460,8 @@ class TeamSession:
 
     def execute(self, name: str, arguments: dict | None) -> dict:
         args = dict(arguments or {})
+        if name in TEAM_TOOL_NAMES and self.cancel is not None and self.cancel.is_set():
+            raise TurnCancelled("Cancelled by the designer before the team tool ran.")
         if name == "list_specialists":
             return {"specialists": list_specialists(self.root)}
         if name == "delegate":
@@ -459,6 +469,7 @@ class TeamSession:
                 self.root, self.record, self.project_id, self.create,
                 specialist=str(args.get("specialist") or ""), brief=str(args.get("brief") or ""),
                 inputs=args.get("inputs"), max_rounds=self.max_rounds, max_tokens=self.max_tokens,
+                cancel=self.cancel,
             )
             self.delegations.append(contribution)
             _merge_usage(self.usage, contribution.get("usage"))
@@ -468,6 +479,36 @@ class TeamSession:
             self.checks.append(outcome)
             return {key: value for key, value in outcome.items() if key != "verdict"} | {"verdict": outcome.get("verdict", "")}
         return self.tools.execute(name, args)
+
+
+def team_summary(out: dict | None) -> str:
+    """Markdown the window appends under a lead reply: who contributed what, and the check.
+
+    Written by the app from the turn's result, not by the model. Empty when
+    the turn delegated nothing and ran no check.
+    """
+    if not isinstance(out, dict):
+        return ""
+    delegations = out.get("delegations") or []
+    checks = out.get("checks") or []
+    if not delegations and not checks:
+        return ""
+    lines = ["**Team**"]
+    for item in delegations:
+        counts = []
+        for key, word in (("findings", "finding"), ("questions", "question"), ("handoffs", "handoff"), ("calc_records", "calc record")):
+            number = len(item.get(key) or [])
+            if number:
+                counts.append(f"{number} {word}{'s' if number != 1 else ''}")
+        detail = ", ".join(counts) if counts else "no rows written"
+        lines.append(f"- {item.get('specialist')}: {detail}")
+    if checks:
+        last = checks[-1]
+        rows = last.get("rows") or []
+        supported = sum(1 for row in rows if row.get("verdict") == "Supported")
+        lines.append(f"- checker: {supported} of {len(rows)} findings Supported" if rows else "- checker: nothing to check")
+    lines.append("Details are on the Team tab under Zone details.")
+    return "\n".join(lines)
 
 
 def _merge_usage(total: dict, usage: dict | None) -> None:
