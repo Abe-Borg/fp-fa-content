@@ -13,16 +13,39 @@ A size rejection (HTTP 413, or a 400 for a prompt over the context window)
 is raised as RequestTooLarge on the first attempt. The request is not trimmed
 and not resent. incomplete_notice labels a reply whose stop_reason says it
 did not finish.
+
+Prompt caching. The system text and the tool list are byte-identical on
+every round of a turn, and on every turn in the same mode on the same
+content pack. AnthropicMessages.create sends the system text as one text
+block with a cache breakpoint, so later rounds and later turns read tools
+plus system from the cache instead of paying for them again. On a request
+that carries tools (the tool loop), it also asks for automatic caching on
+the growing message tail, so a skill body or a tool result read on one
+round is cached for the rounds after it. Nothing is trimmed, reordered, or
+shortened. run_tool_loop sums the usage the API reports on each round so a
+caller can show how much was read from the cache.
 """
 
 from __future__ import annotations
 
 import json
+import logging
 import re
 import time
 from typing import Any, Callable
 
 MODEL_ID = "claude-opus-5-5"
+# One breakpoint on the system block caches tools plus system. The same
+# value as a top-level request field asks the API to cache the last block of
+# the message list automatically, so each tool round reads the rounds before it.
+CACHE_CONTROL = {"type": "ephemeral"}
+_USAGE_FIELDS = (
+    "input_tokens",
+    "output_tokens",
+    "cache_creation_input_tokens",
+    "cache_read_input_tokens",
+)
+_log = logging.getLogger("fpfa.claude")
 _TRANSIENT_STATUS = {408, 409, 429, 500, 502, 503, 504, 529}
 _TRANSIENT_TYPES = {"APIConnectionError", "APITimeoutError", "RateLimitError", "InternalServerError"}
 # A 400 for a prompt over the context window has no class of its own in the SDK.
@@ -62,6 +85,72 @@ def request_too_large(exc: BaseException) -> bool:
         return False
     text = str(exc).lower()
     return any(word in text for word in _TOO_LARGE_WORDS)
+
+
+def cached_system(system: Any) -> Any:
+    """System text as content blocks, with a cache breakpoint on the last text block.
+
+    A string becomes one text block that holds the whole string. A list is
+    copied block by block, and the last text block gets the breakpoint unless
+    a block already carries one. The text is not changed. None and an empty
+    value pass through unchanged.
+    """
+    if system is None or system == "" or system == []:
+        return system
+    if isinstance(system, str):
+        return [{"type": "text", "text": system, "cache_control": dict(CACHE_CONTROL)}]
+    blocks = [dict(block) if isinstance(block, dict) else block for block in system]
+    if any(isinstance(block, dict) and block.get("cache_control") for block in blocks):
+        return blocks
+    for block in reversed(blocks):
+        if isinstance(block, dict) and block.get("type") == "text":
+            block["cache_control"] = dict(CACHE_CONTROL)
+            break
+    return blocks
+
+
+def empty_usage() -> dict:
+    """Running totals for one turn. rounds counts the API calls that were made."""
+    totals = {field: 0 for field in _USAGE_FIELDS}
+    totals["rounds"] = 0
+    return totals
+
+
+def add_usage(totals: dict, usage: Any) -> dict:
+    """Add one response's usage to the totals. A missing block or field counts as 0."""
+    totals["rounds"] = int(totals.get("rounds", 0)) + 1
+    if usage is None:
+        return totals
+    for field in _USAGE_FIELDS:
+        if isinstance(usage, dict):
+            value = usage.get(field)
+        else:
+            value = getattr(usage, field, None)
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            continue
+        totals[field] = int(totals.get(field, 0)) + int(value)
+    return totals
+
+
+def usage_summary(usage: dict | None) -> str:
+    """One status-line sentence on token use. Empty when no round was counted.
+
+    Input tokens are the uncached tokens plus the tokens written to the cache
+    plus the tokens read from it. The percent is the share read from the cache.
+    """
+    if not isinstance(usage, dict) or not usage.get("rounds"):
+        return ""
+    rounds = int(usage["rounds"])
+    fresh = int(usage.get("input_tokens") or 0)
+    written = int(usage.get("cache_creation_input_tokens") or 0)
+    read = int(usage.get("cache_read_input_tokens") or 0)
+    output = int(usage.get("output_tokens") or 0)
+    total_in = fresh + written + read
+    word = "round" if rounds == 1 else "rounds"
+    text = f"{rounds} {word}, {total_in:,} input tokens"
+    if total_in:
+        text += f" ({read * 100 // total_in}% read from cache)"
+    return text + f", {output:,} output tokens."
 
 
 def incomplete_notice(stop_reason: str | None) -> str:
@@ -114,6 +203,7 @@ def run_tool_loop(
     nudges = 0
     final_text = ""
     stop_reason = ""
+    usage = empty_usage()
     for _ in range(max_rounds):
         response = create(
             model=MODEL_ID,
@@ -121,6 +211,15 @@ def run_tool_loop(
             system=system,
             tools=tools,
             messages=messages,
+        )
+        add_usage(usage, getattr(response, "usage", None))
+        _log.info(
+            "totals after round %d: input %d, cache write %d, cache read %d, output %d",
+            usage["rounds"],
+            usage["input_tokens"],
+            usage["cache_creation_input_tokens"],
+            usage["cache_read_input_tokens"],
+            usage["output_tokens"],
         )
         stop_reason = getattr(response, "stop_reason", None) or ""
         wire = [_wire_block(block) for block in response.content]
@@ -180,6 +279,7 @@ def run_tool_loop(
         "tool_calls": called,
         "nudges": nudges,
         "stop_reason": stop_reason,
+        "usage": usage,
     }
 
 
@@ -205,6 +305,16 @@ class AnthropicMessages:
         if isinstance(choice, dict) and choice.get("type") in ("any", "tool"):
             raise ValueError("claude-opus-5-5 rejects forced tool_choice; leave it on auto")
         kwargs.setdefault("model", self.model)
+        # Cache breakpoint on the system text. Tools render before it, so one
+        # marker caches both. The text is sent whole; only its shape changes.
+        if kwargs.get("system"):
+            kwargs["system"] = cached_system(kwargs["system"])
+        # A tool loop resends the growing message list every round. Automatic
+        # caching puts a moving breakpoint on its last block. A single call
+        # with no tools (the blind claim check) has no later round to read
+        # that entry, so it is left off there.
+        if kwargs.get("tools"):
+            kwargs.setdefault("cache_control", dict(CACHE_CONTROL))
         delay = 1.0
         for attempt in range(3):
             try:

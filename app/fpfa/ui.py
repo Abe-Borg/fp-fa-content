@@ -41,7 +41,7 @@ from fpfa.claim_check import (
     unanswered,
     write_packet_files,
 )
-from fpfa.claude_client import MODEL_ID, AnthropicMessages, run_tool_loop, safe_error
+from fpfa.claude_client import MODEL_ID, AnthropicMessages, run_tool_loop, safe_error, usage_summary
 from fpfa.content_update import (
     ContentUpdateError,
     UpdateResult,
@@ -2090,6 +2090,9 @@ class App:
             note = f"LFL tool plan plus {MODEL_ID}. The starter uses the tool plan when the draft disagrees."
             if result.get("warnings"):
                 note = note + " " + result["warnings"][0]
+            used = usage_summary(result.get("usage"))
+            if used:
+                note = note + " " + used
             self.status.set(self._with_job_label(job_id, note))
         else:
             note = "LFL tool plan only."
@@ -2215,6 +2218,9 @@ class App:
             note = f"Tool plan plus {MODEL_ID}. Tables and Section {DRAFT_SECTION} use the tool plan."
             if result.get("warnings"):
                 note = note + " " + result["warnings"][0]
+            used = usage_summary(result.get("usage"))
+            if used:
+                note = note + " " + used
             self.status.set(self._with_job_label(job_id, note))
         else:
             note = "Tool plan only."
@@ -2613,11 +2619,15 @@ class App:
                 client = AnthropicMessages(key)
                 out = run_everyday(pack, client.create, request, mode=mode)
                 reply = everyday_reply(out)
+                used = usage_summary(out.get("usage"))
             except Exception as exc:
                 reply = safe_error(exc)
+                used = ""
                 self.jobs.mark(job_id, "error", reply)
             self.queue.put(
-                lambda oid=origin_id, answer=reply, jid=job_id: self._finish_chat(oid, answer, job_id=jid)
+                lambda oid=origin_id, answer=reply, jid=job_id, tokens=used: self._finish_chat(
+                    oid, answer, job_id=jid, usage=tokens
+                )
             )
 
         job = self.jobs.submit(
@@ -2639,7 +2649,14 @@ class App:
             for turn in self.chat_log
         ) and bool((text or "").strip())
 
-    def _finish_chat(self, origin_id: str, reply: str, job_id: str | None = None) -> None:
+    def _finish_chat(
+        self,
+        origin_id: str,
+        reply: str,
+        job_id: str | None = None,
+        usage: str = "",
+    ) -> None:
+        """Post the reply. usage is the token line from usage_summary, shown on the status bar."""
         self._keep_composer_open()
         origin_id = self._destination_id(origin_id, job_id)
         reply = self._with_job_label(job_id, reply)
@@ -2652,6 +2669,8 @@ class App:
                 note = f"Chat updated. Tables and Section {DRAFT_SECTION} stay on the tool plan."
             else:
                 note = "Chat updated."
+            if usage:
+                note = f"{note} {usage}"
             self.status.set(form_error or self._with_job_label(job_id, note))
             return
         try:

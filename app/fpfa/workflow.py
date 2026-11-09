@@ -486,6 +486,7 @@ def run_di_zone(
     narrative = template
     source = "tool-plan"
     model = None
+    usage = None
     known = {item["slug"] for item in list_skills(content_root)}
     missing = [slug for slug in DI_SKILL_SLUGS if slug not in known]
     if missing:
@@ -509,6 +510,7 @@ def run_di_zone(
                 SCHEMAS,
                 session.execute,
             )
+            usage = drafted.get("usage")
             unfinished = incomplete_notice(drafted.get("stop_reason"))
             if unfinished:
                 warnings.append(unfinished + " Tables stay on the tool plan.")
@@ -554,6 +556,7 @@ def run_di_zone(
         "inputs": di,
         "basis": basis,
         "mode": selected,
+        "usage": usage,
     }
 
 

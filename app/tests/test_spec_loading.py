@@ -119,6 +119,14 @@ def _client(inner: _Inner):
     return client
 
 
+def _system_text(call: dict) -> str:
+    """The system text the wrapper sent. It goes out as one cached text block."""
+    system = call["system"]
+    if isinstance(system, str):
+        return system
+    return "".join(block["text"] for block in system if block.get("type") == "text")
+
+
 class SpecNotesFullTextTests(unittest.TestCase):
     def test_loader_takes_no_cap_parameters(self):
         from fpfa.skills_loader import spec_notes
@@ -285,9 +293,11 @@ class FullSpecRequestTests(unittest.TestCase):
         expected = assemble_system(REPO)
         for call in inner.calls:
             # Exactly what the SDK client was handed, round after round.
-            self.assertEqual(call["system"], expected)
-            self.assertIn(self.fa, call["system"])
-            self.assert_every_spec_in_full(call["system"])
+            # The wrapper sends the text as one cached block. The text itself is unchanged.
+            self.assertEqual(_system_text(call), expected)
+            self.assertEqual(call["system"], [{"type": "text", "text": expected, "cache_control": {"type": "ephemeral"}}])
+            self.assertIn(self.fa, _system_text(call))
+            self.assert_every_spec_in_full(_system_text(call))
             # The output setting is separate from spec loading and stays where it was.
             self.assertEqual(call["max_tokens"], 16000)
 
@@ -309,7 +319,7 @@ class FullSpecRequestTests(unittest.TestCase):
                         run_everyday(REPO, _client(inner).create, "Summarize 28 31 00.")
                 self.assertEqual(len(inner.calls), 1)
                 clock.sleep.assert_not_called()
-                self.assertIn(self.fa, inner.calls[0]["system"])
+                self.assertIn(self.fa, _system_text(inner.calls[0]))
                 self.assertIs(caught.exception.__cause__, error)
                 shown = safe_error(caught.exception)
                 self.assertTrue(shown.startswith(
@@ -501,7 +511,7 @@ class ChatWindowTests(unittest.TestCase):
             self._wait_for(app, "Claude rejected the request as too large")
         clock.sleep.assert_not_called()
         self.assertEqual(len(inner.calls), 1)
-        self.assertIn((REPO / "specs" / FA_SPEC).read_text(encoding="utf-8"), inner.calls[0]["system"])
+        self.assertIn((REPO / "specs" / FA_SPEC).read_text(encoding="utf-8"), _system_text(inner.calls[0]))
         thread = app.chat_view.get("1.0", "end")
         self.assertIn("did not trim the request or resend it with parts missing", thread)
         self.assertEqual([job.status for job in app.jobs.snapshot()], ["error"])
