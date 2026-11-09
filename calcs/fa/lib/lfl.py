@@ -2,7 +2,7 @@
 
 Formula [PARA source]: USBM Bulletin 627 (Zabetakis 1965), eq. 46/47:
   L_mix = 100 / sum(C_i / L_i), C_i = vol% of combustible i on a fuel-only basis (sum C_i = 100).
-  Bulletin text (grep -F, _scout/sources-2026-10-23-r7/usbm-bulletin-627.raw.txt): "calculated by Le Chatelier's law (40, 129, 235) :"
+  Bulletin text (grep -F): "calculated by Le Chatelier's law (40, 129, 235) :"
   Worked example in the Bulletin: 80/15/5 methane/ethane/propane at LFL 5.0/3.0/2.1 -> "=4.3 vol pct."
 Limits [PRACTICE]: rule is reliable for paraffins; check with test data for other mixes. Use the lower of
 calc and test-report LFL. Verify with the engineer of record for any design setpoint.
@@ -32,7 +32,7 @@ def setpoint(lfl_vol_pct, pct):
     v = lfl_vol_pct * pct / 100.0
     return v, v * 1e4
 
-# r9: two NFPA 855-2023 gas detection paths, both held in 855-08 [CODE].
+# two NFPA 855-2023 gas detection paths, both held in 855-08 [CODE].
 # 9.6.5.1.5.4 normal-operation exhaust: activate exhaust when gas "exceeds 25 percent of the LFL".
 # 9.6.5.6.7(1) explosion control (CCR): activate "at no more than 10 percent of the LFL".
 PATH_PCT = {"9.6.5.1.5.4 exhaust": 25.0, "9.6.5.6.7 CCR and alarm": 10.0}

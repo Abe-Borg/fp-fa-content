@@ -397,7 +397,7 @@ def _alias_inputs(op_canon: str, raw: dict[str, Any]) -> dict[str, Any]:
 
 
 def _resolve_refs(step: dict[str, Any], done: dict[str, dict[str, Any]]) -> dict[str, Any]:
-    """Step references (batch9): a string value "@<step_id>.<key>[.<key>...]" is
+    """Step references: a string value "@<step_id>.<key>[.<key>...]" is
     replaced by that earlier step's output. Only earlier steps can be referenced."""
     out: dict[str, Any] = {}
     for k, v in step.items():

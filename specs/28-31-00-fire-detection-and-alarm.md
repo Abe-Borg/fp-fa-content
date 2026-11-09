@@ -92,7 +92,7 @@ NFPA 72-2025 §17.17.2.2 stays NEEDS HOLD. On 2019 and 2022 the pressure-supervi
 
 ### 3.9 Integrated-test frequency, signal schedule, and microphone instructions
 
-Claimcheck qa2 PASS 19/19 Supported. The claims are owner elections or the held sentences below. Wet, dry, and double-interlock only.
+Claims in this section are owner elections or the held sentences below. Wet, dry, and double-interlock only.
 
 Integrated testing of new or existing fire protection and life safety systems is performed where the design documents, the commissioning plan, or a governing law requires it [CODE NFPA 4-2024 §4.1.3]. The owner design documents for this section require that test for the campus wet-pipe and double-interlock systems [OWNER]. End-to-end testing is required [CODE NFPA 4-2024 §5.1.3 and NFPA 4-2027 §5.1.3]. The two Chapter 5 sentences match. Do not stamp 2027 on Chapter 6 or Chapter 7.
 

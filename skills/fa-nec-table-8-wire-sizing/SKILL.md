@@ -12,7 +12,7 @@ description: >-
 ## Intake and scope (all FA skills)
 - The input packet is optional. Any missing input gets a stated value, labeled **ASSUMED** (value used + why). ASSUMED is never shown as a code value. Keep going.
 - Scope locks are hard Stops: wet, dry, or double-interlock (DI) preaction only. No clean agent. No foam. Single- or non-interlock as basis of design: record, Stop, RFI-variance.
-- Country gate (US | Canada). Canada in scope (the engineer 2026-10-29). NBC 2025 Div. B 3.2.4 held (fold26). CAN/ULC-S524, S536, S537, S1001, and CEC Sec. 32 are NEEDS HOLD. Foam and clean agent still locked. On a Canada job, stop any claim that needs S524/S536/S537/S1001/CEC 32 until held. Do not invent S524 battery hours.
+- Country gate (US | Canada). Canada in scope (the engineer 2026-10-29). NBC 2025 Div. B 3.2.4 held. CAN/ULC-S524, S536, S537, S1001, and CEC Sec. 32 are NEEDS HOLD. Foam and clean agent still locked. On a Canada job, stop any claim that needs S524/S536/S537/S1001/CEC 32 until held. Do not invent S524 battery hours.
 - On FM DI jobs carry the standing flag: "[OWNER]/insurer conflict: FM DS 5-32 (Jan 2026) s2.4.1.1 ranks DI preaction last. Company decision (the engineer, standing): keep DI. Flag to owner and FM on this job."
 - Label every claim [CODE] [HB] [PARA] [PRACTICE] [OWNER] (or [OWNER]/insurer). Cite section AND edition. Mark approximations with ~. Never invent code text; gaps get "needs LiNK: <id>".
 - Pin the enforced NFPA 72 edition first. A label can change by edition (run `fa-code-edition-delta-check`). Pin the enforced **NEC** edition for Table 8 separately (not the same as 72).

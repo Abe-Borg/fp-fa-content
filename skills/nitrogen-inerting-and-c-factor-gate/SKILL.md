@@ -190,9 +190,9 @@ Consume the assignment packet if present (optional). Do not rebuild it. Do not r
 
 **Combined op (2026-10-23b):** `compressor_n2_sizing` (`systems:[{id,v_gal,p_psig}]`, `t_min`=30). It returns the compressor on the largest single system [CODE NFPA 13-2025 §8.2.7.3] and the N2 generator on the campus connected total [Lead C4, PRACTICE, Verify with engineer of record]. It matches the two-number rule. Report both the gauge and abs scfm.
 
-**Owner restore target shorter than 30 min (batch10 R29, open item G4).** Code floor is 30 min [CODE NFPA 13-2025 §8.2.7.3]. An owner standard of e.g. 20 min is **more stringent** → size the compressor for the owner time (rerun with `t_min:20`); never relax below 30 min unless code permits. Practice case: 20 min needs 5.45 scfm, so a 5 scfm compressor that passes 30 min fails the owner target. Owner value is an owner ruling, not code; if the owner target is unconfirmed, keep 30 min and flag Verify with engineer of record / RFI.
+**Owner restore target shorter than 30 min (open item G4).** Code floor is 30 min [CODE NFPA 13-2025 §8.2.7.3]. An owner standard of e.g. 20 min is **more stringent** → size the compressor for the owner time (rerun with `t_min:20`); never relax below 30 min unless code permits. Practice case: 20 min needs 5.45 scfm, so a 5 scfm compressor that passes 30 min fails the owner target. Owner value is an owner ruling, not code; if the owner target is unconfirmed, keep 30 min and flag Verify with engineer of record / RFI.
 
-**30-minute fill op (2026-10-23, `_calc` inc4 R1):** step `{"op":"air_fill_scfm","v_gal":<largest single system gal>,"p_psig":<supervisory psig>,"t_min":30}` [restore rule CODE NFPA 13-2025 §8.2.7.3; 2019/2022 §8.2.6.3.2]. Outputs `scfm_gauge_basis` = V·P/(7.48·14.7·T) and `scfm_abs_basis` = V·(P+14.7)/(7.48·14.7·T). **Size on `scfm_abs_basis`** (≈37 % higher at 40 psig) — `Verify with engineer of record` (conservative; KB/Viking basis is gauge; listed compressor/CTA fill table governs when held). Run it on the **largest single system** only; Σ gallons stays the **generator maintenance** check — do **not** follow corpus core-r4c2's "generator sized on the single largest system" wording; the two-number rule here governs. Do not run SprinkFDT.
+**30-minute fill op (2026-10-23, `_calc`):** step `{"op":"air_fill_scfm","v_gal":<largest single system gal>,"p_psig":<supervisory psig>,"t_min":30}` [restore rule CODE NFPA 13-2025 §8.2.7.3; 2019/2022 §8.2.6.3.2]. Outputs `scfm_gauge_basis` = V·P/(7.48·14.7·T) and `scfm_abs_basis` = V·(P+14.7)/(7.48·14.7·T). **Size on `scfm_abs_basis`** (≈37 % higher at 40 psig) — `Verify with engineer of record` (conservative; KB/Viking basis is gauge; listed compressor/CTA fill table governs when held). Run it on the **largest single system** only; Σ gallons stays the **generator maintenance** check — do **not** follow corpus core-r4c2's "generator sized on the single largest system" wording; the two-number rule here governs. Do not run SprinkFDT.
 
 **Overlay traps:** (1) NFPA 13 C=120 is pinned at 13-2025 §28.2.4.8.1(14) / 13-2022 §28.2.4.8.1(13) and Table 28.2.4.8.1 (pull 13-16); the 98 % link stays `[V]`; TIA effect unconfirmed, `[V]`. (2) Galvanized dry/preaction C=120 is a **live dispute** (FM Table 2.2.1.3.3 = 120; Potter citing NFPA 13-2013 = 100). **Both sources stay visible. Emitted C = 100 regardless** (the engineer dial). (3) **FM DS 2-1 corrosion success ≠ C=120 grant** — coupon 20×/14× and 98 % chemistry are corrosion results; they do not move the emitted C.
 
@@ -450,12 +450,12 @@ Nitrogen = `n` on a dry/DI hall is **not** a Stop — it is a lever **not taken*
 
 1. Hard-scope gate: dry|DI only; wet → N/A; SI/NI-as-BOD → Stop `RFI-variance`; foam/mist Stop. Emit status on gate. 2. Check packet (optional) + STS `dry`|`double-interlock` + matrix nitrogen/C/inert rows; missing → `ASSUMED` (flagged), not a Stop. 3. Confirm other inputs; Stop tests. 4. Pin editions; name the holes (13 C-table, 1035 WHOLE/2024, NFPA 25, Hopkins raw per-port). 5. Union five parameters separately; status on each. 6. Elect inert vs air (AXA SI = comparison-only; AXA DI mandates N₂). 7. Elect generator vs cylinders. Liquid = Stop. Specify by duty + listed function (FM 1035 where claimed / certified); **ECS = default family**, UFS NGM+CTA = FM-certificate alternate, Potter IntelliGen = cited example; OEM values confirm at submittal. Two-number check (Σ gal vs maintenance; largest single vs 30-min fill); no Viking 0.01213 sizing from CFM @ max pressure. Draw compressor + generator. 8. Purge vent family-gated (ECS AdvancedIQ at risers; non-ECS OEM remote-purge). Branch-end (+ dead-end) sample ports. Reject purge-valve / generator / AutoPurge / riser-vent / cabinet-SP readings as inerting evidence. Print the 8-week table + thin OEM sampling pointer. 9. Emit **C=100 always** (the engineer dial). C=120 = `comparison-only` line with ≈29 % shown. DS 2-1 does not grant 120. 10. ITM-lever eligibility; hand off to itm-design-for-testability (dry/DI + FM only). 11. Reciprocal hand-offs: water-delivery (fill ≠ delivery) / El-El / C&E / STS / matrix / density consumers. 12. Δ vs 13-2025 and vs NFPA 25. 13. Honesty: worked packages are method (Adapt, don't copy); no PLACEHOLDER; no invent purity/scfm/SKU/14-day. 14. Write **only** to the caller-named path.
 
-## 2026-10-29 PDT — fold 23 Lead25: fold23-R4 ECS-on-Reliable ≤30 psi ladder + NEGs
-Source: `EXERCISES/worked/batch23-r4__n2-compressor-onoff-lowair-GAP.md`. Teaching ASSUMED until the Reliable IOM is held.
+## 2026-10-29 PDT — ECS-on-Reliable ≤30 psi ladder + NEGs
+Source: worked example. Teaching ASSUMED until the Reliable IOM is held.
 | Rung | Worst-case trip basis | Rule |
 |---|---|---|
 | LP trip | 13 ± 2 → 11–15 | Reliable TB 751 |
-| Low-air alarm | ≥ 20 | ≥5 psi above trip (pinned in fold24 below) |
+| Low-air alarm | ≥ 20 | ≥5 psi above trip (pinned below) |
 | Generator cut-in | ≥ 23 | ECS IOM: ≥3 above low-air |
 | AMD maintain | 26–28 → **unresolved (not a PASS) — GAP-B28N2-1 CLOSED**; controlling maintain **P ≤ 25** | ECS: cut-in + 3–5 (superseded; H = P+5 = 31–33 > 30) |
 | Reliable cap | ≤ 30 | TB 751 note 6 → cap holds; 26–28 maintain fails H ≤ 30 (GAP-B28N2-1) |
@@ -463,8 +463,8 @@ Source: `EXERCISES/worked/batch23-r4__n2-compressor-onoff-lowair-GAP.md`. Teachi
 - **B23R4-NEG-1:** copying Viking F_070889 values (40/30/25) onto Reliable LP is wrong because maker tables do not transfer and 40 exceeds the 30 cap. **B23R4-NEG-2:** low-air at 15 sits inside the trip band, so there is no warning before trip.
 - AMD 26–28 is 8–10 psi above Reliable min 18 (TB 751 note 2 delay) → **L54 re-screen OPEN/GAP; no seconds invented.** N₂ 40 stays ASSUMED.
 
-## 2026-10-29 PDT — fold 24 Lead26: fold24-R2 close (§8.2.6.4 pinned, RRMA 20/26, NEG-3/4)
-Source: `EXERCISES/worked/batch24-r2__n2-compressor-onoff-lowair-CLOSE.md`; Reliable Bulletin 258 (2026-02).
+## 2026-10-29 PDT — Close-out (§8.2.6.4 pinned, RRMA 20/26, NEG-3/4)
+Source: worked example; Reliable Bulletin 258 (2026-02).
 - NFPA 13-2025 pins: §8.2.6.1 system pressure per valve instruction (default trip + 20 only without maker data); §8.2.6.3 low/high switch; **§8.2.6.4 low ≥5 psi above trip or per manufacturer**; §8.2.6.5 high ≥5 above system or per manufacturer; §8.3.2.5 preaction follows §8.2.6, DI floor ≥7 psi.
 - Reliable RRMA-2026 DDX/LP preset **cut-in 20 / cut-out 26**. Raising the preset keeps the differential. Above 5.5 cfm a receiver + PMD is required (NFPA 13 § [V]).
 - B24R2-1 **superseded / unresolved per GAP-B28N2-1 CLOSED (not a design PASS)**: ECS-fed ladder above (26–28 maintain ⇒ H 31–33 > 30). Consistent PASS = B28R4-1 / B25R2-1 Model A 23 / H 28 / cap 30. B24R2-2 CONDITIONAL: RRMA raised to 23/29 with low-air 20 → worst-trip margin 5 PASS, but needs the L54 re-screen.
@@ -472,30 +472,30 @@ Source: `EXERCISES/worked/batch24-r2__n2-compressor-onoff-lowair-CLOSE.md`; Reli
 - **B24R2-NEG-3:** RRMA 20/26 run as shipped with low-air 20 means cut-in equals low-air, so the alarm chatters on every cycle. **B24R2-NEG-4:** one RRMA on several DI zones with no PMD, an 80/100 tank unit with no Model A PMD, or a >5.5 cfm compressor with no receiver + PMD.
 - Nominal-vs-tolerance trip reading of §8.2.6.4 = **Verify with the engineer of record and the authority having jurisdiction**. Still GAP: Reliable low/high-air doc (Bulletins 252/719/251/IOM). **L54 seconds: Verify with the engineer of record (mandatory).** Fill 3.63 scfm pin unchanged.
 
-## fold 25 / Lead27 fold (2026-10-29) — AMD rule, Reliable PMD and SI low-air, NEG-5..8
-Source: EXERCISES/worked/batch25-r2__n2-compressor-lowair-amd-CLOSE.md (Lead27 ACCEPT PARTIAL); LiNK 13-64 paraphrased, no verbatim.
+## 2026-10-29 — AMD rule, Reliable PMD and SI low-air, NEG-5..8
+Source: worked example; LiNK 13-64 paraphrased, no verbatim.
 - **NFPA 13-2025 §8.2.8.1 (13-64):** every dry pipe system needs its own listed air maintenance device that controls both system pressure and maximum air inflow. **§8.2.8.2:** the AMD can be omitted only when the compressor serves a **single** dry system and is rated under 5.5 cfm at 10 psi. This clears B24R2-NEG-4's verify. For DI preaction, require an AMD as the conservative default. Whether §8.2.8 carries to preaction through §8.3.2.5 is still [verify] (A.8.2.8.1 not pulled), so EOR/AHJ confirm.
 - **SI ≠ DI:** the Reliable Bulletin 719 low-air ≈4 psi and min 7 psi belong to the Model H **single-interlock** valve only. 719 labels the 4 psi value "0.48 bar", which is the 7 psi conversion, so it is a source defect. Reliable PMD data: Model A is fixed at 10 or 23 psi. Model B ships at 29/35 ±2 and adjusts over 14–60.
 - Against the DI LP stack (trip 11–15, min 18, cap 30): Model A 23 is the teaching maintain (B25R2-1), with low-air 20 ASSUMED — this (23 / H 28 / cap 30, = B28R4-1) is the Skill's **consistent PASS**, not 26–28. Model B readjusted to 23/29 is CONDITIONAL because +2 tolerance gives 31 > 30, so it needs field verification at the system gauge and engineer review (B25R2-2).
 - **NEG-5:** SI 4/7 copied onto DDX-LP DI. 4 psi sits below the trip band, so no low-air warning fires before trip, which violates §8.2.6.4. **NEG-6:** Model A 10 psi used on LP DI (below min 18). **NEG-7:** Model B left at training role 29/35 (above cap 30). **NEG-8:** §8.2.8.2 exemption claimed for a multi-zone compressor or one ≥5.5 cfm. B24R2-NEG-1..4 carried.
 - **Still GAP:** DI/LP low-air from the maker (Bulletin 252/254/256 / RRMA IOM). High-air for all paths (Potter PS15-2/PS25-2). **L54** must be re-screened at the elected 23–29 maintain; engineer review, no seconds stated. N₂ 40 ASSUMED; no the site restamp; no SKU/P/N freeze.
 
-## fold 28 / Lead30 fold (2026-11-02) — N₂ 40 psi maintain vs DDX-LP 30 psi cap flag
-Source: `EXERCISES/worked/batch28-r4__di-compressor-pmd-margin-NEG3-reclose.md` (Lead30 ACCEPT PARTIAL); R5 the site `03b` note flagged, not restamped. `[SYN]`.
+## 2026-11-02 — N₂ 40 psi maintain vs DDX-LP 30 psi cap flag
+Source: worked example; the site `03b` note flagged, not restamped. `[SYN]`.
 - **Country/edition gate at intake** stays as folded earlier (Canada gates above are kept). Reliable cap data is maker data; Canada listing **[verify]**. On a Canada pin, do not cite 13-2025 § numbers (13-2019 equivalents NEEDS HOLD).
-- **B28R4-NEG-3 flag:** the lineage N₂ maintain **40 psi** (ASSUMED; e.g. ECS 40 psig fill basis in held packages) **exceeds the Reliable DDX-LP absolute 30 psi cap** (Bulletin 505 caps / TB 751 note 6). On a DDX-LP DI system, a 40 psi N₂ maintain is invalid — do not carry it; re-derive maintain from the trim stack in `preaction-el-el-trim-election` (P ≥ Table A min, H = P+5 ≤ 30). Status: `unresolved` / Verify with engineer of record / shop (Lead30 STAYS: "N₂ 40 vs 30 cap").
+- **B28R4-NEG-3 flag:** the lineage N₂ maintain **40 psi** (ASSUMED; e.g. ECS 40 psig fill basis in held packages) **exceeds the Reliable DDX-LP absolute 30 psi cap** (Bulletin 505 caps / TB 751 note 6). On a DDX-LP DI system, a 40 psi N₂ maintain is invalid — do not carry it; re-derive maintain from the trim stack in `preaction-el-el-trim-election` (P ≥ Table A min, H = P+5 ≤ 30). Status: `unresolved` / Verify with engineer of record / shop (STAYS: "N₂ 40 vs 30 cap").
 - **Fill math consequence:** generator/CTA fill tables quoted @ 40 psig are not the DDX-LP operating point; rerun `air_fill_scfm` at the elected maintain psig (≤30). Do not rescale a printed 40 psig listing table by ratio — use the maker's 20 psig row or `[V]` with maker.
 - Do not rename case ids (B24R2-NEG-3 ≠ B28R4-NEG-3). `_calc` unchanged.
 
 ## 2026-11-03 — GAP-B28N2-1 CLOSED (the engineer): 26–28 maintain vs H≤30
-- **GAP id: GAP-B28N2-1 — CLOSED** (Lead 2026-11-03). Demotion + P ≤ 25 teaching retained.
-- **Pin (Lead):** Nitrogen skill fold23/fold24 fold marks AMD maintain **26–28** + TB 751 ≤30 as **PASS** while maker high-air instruction is unheld; system+5 at that maintain ⇒ H 31–33 > 30. Controlling Batch28 stack (`preaction-el-el-trim-election` L374–400 / FA handoff): **H ≥ P+5 and H ≤ 30** → without held maker H exception, **maintain P ≤ 25**. Treat **26–28 as unresolved (not a PASS)** until maker high-air is held or this GAP closes. B28R4-1 teaching (**23 / 28 / 30**) stays the consistent PASS.
+- **GAP id: GAP-B28N2-1 — CLOSED** (2026-11-03). Demotion + P ≤ 25 teaching retained.
+- **Pin:** The earlier nitrogen skill text marked AMD maintain **26–28** + TB 751 ≤30 as **PASS** while maker high-air instruction is unheld; system+5 at that maintain ⇒ H 31–33 > 30. Controlling stack (`preaction-el-el-trim-election` L374–400 / FA handoff): **H ≥ P+5 and H ≤ 30** → without held maker H exception, **maintain P ≤ 25**. Treat **26–28 as unresolved (not a PASS)** until maker high-air is held or this GAP closes. B28R4-1 teaching (**23 / 28 / 30**) stays the consistent PASS.
 - **Math:** P=26 → H ≥ 31 > 30; P=28 → H ≥ 33 > 30 [CODE NFPA 13-2025 §8.2.6.5 high ≥5 above system or per manufacturer; Reliable cap 30 = TB 751 note 6 maker data].
-- **Demotion:** B24R2-1 (and fold23-R4 AMD 26–28 row) = superseded / `unresolved`, not a design PASS. Superseding rule for DDX-LP DI (and any path capped at 30): **P ≤ 25**, H = P+5 ≤ 30, with L ≥ T_worst+5 and P ≥ Table A min, P > L per trim stack.
+- **Demotion:** B24R2-1 (and the earlier AMD 26–28 row) = superseded / `unresolved`, not a design PASS. Superseding rule for DDX-LP DI (and any path capped at 30): **P ≤ 25**, H = P+5 ≤ 30, with L ≥ T_worst+5 and P ≥ Table A min, P > L per trim stack.
 - **No invented maker exception.** A Reliable/Potter high-air sheet is the only path that could re-open 26–28; no training role unless the engineer names that sheet.
 - Cross-ref **B28R4-NEG-3** (N₂ 40 vs 30 cap) above — same stack, separate flag.
 - **Distinct from GAP-B28R1-1 (switch) and GAP-B28R4-2 (`_calc`).**
-- training role dark; no Batch29; no live-job setpoint restamp from this GAP alone. `_calc` unchanged.
+- training role dark; no new teaching case; no live-job setpoint restamp from this GAP alone. `_calc` unchanged.
 
 ## 2026-11-04 — Chunk17 ECS AdvancedIQ purge vent at riser (LIVE)
 

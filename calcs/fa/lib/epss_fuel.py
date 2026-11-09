@@ -1,4 +1,4 @@
-"""EPSS fuel-hour check library (r11 R22). Synthetic training use. Not PE-approved. Where adopted; AHJ to confirm.
+"""EPSS fuel-hour check library. Verify with engineer of record. Where adopted; AHJ to confirm.
 NFPA 110-2025 fuel screen:
 - 5.5.2: the low-fuel switch marks the class fuel quantity.
 - 5.5.3.1: class at or under 24 h uses a 133 percent tank factor on that quantity.

@@ -5,7 +5,7 @@ Basis [CODE NFPA 72-2022 12.3.8.1, held 72-19]:
  (3) single room "not exceeding 1000 ft2 (93 m2)", drop with no emergency control function devices
  (2025 item (3) reads "emergency control function interface devices"; same test.)
 Annex A.12.3.8 advisory spacing: 12 in. vertical, 48 in. horizontal [PARA annex, not mandatory].
-Synthetic training tool. RESOLVED (training value, strictest defensible; not PE-approved): a shared
+RESOLVED (strictest defensible; verify with engineer of record): a shared
 segment must fit one item fully; items are not added together.
 """
 ENTRY_MAX_FT = 10.0

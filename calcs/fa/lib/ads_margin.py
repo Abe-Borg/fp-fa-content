@@ -1,4 +1,4 @@
-"""ADS dBA margin library (r11 R21). Synthetic training use. Not PE-approved. Where adopted; AHJ to confirm.
+"""ADS dBA margin library. Verify with engineer of record. Where adopted; AHJ to confirm.
 Formula [PARA physics, annex-backed]: free-field point source, L(d) = L_ref - 20 log10(d / d_ref).
   Free-field point source: halving the distance raises level by 6 dB (NFPA 72 Annex D, informative).
 Sum of n sources (incoherent): L = 10 log10(sum 10^(L_i/10)).
