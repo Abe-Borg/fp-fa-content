@@ -76,7 +76,10 @@ class _Window(unittest.TestCase):
 
     def _wheel(self, widget, *, up: bool) -> None:
         """One turn of the wheel over widget, as this display sends it."""
-        if str(widget.tk.call("tk", "windowingsystem")) == "x11":
+        # Tk 9 uses MouseWheel on X11 too; generating Button-4 there reaches
+        # the handler as button 8 instead of a wheel turn.
+        tk_major = int(str(widget.tk.call("package", "provide", "Tk")).split(".")[0])
+        if str(widget.tk.call("tk", "windowingsystem")) == "x11" and tk_major < 9:
             widget.event_generate("<Button-4>" if up else "<Button-5>")
         else:
             widget.event_generate("<MouseWheel>", delta=120 if up else -120)
