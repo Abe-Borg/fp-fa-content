@@ -96,7 +96,7 @@ class CancelTests(unittest.TestCase):
             run_everyday(REPO, create, "Design basis?", record=record, project_id="job1", cancel=cancel)
         agents = {row["role_slug"]: row["status"] for row in record.agents("job1")}
         self.assertEqual(agents["fp-sprinkler"], "interrupted")
-        self.assertEqual(agents["lead"], "error")
+        self.assertEqual(agents["lead"], "interrupted")
         self.assertEqual(record.handoffs("job1")[0]["status"], "cancelled")
         self.assertEqual(record.handoffs("job1")[0]["result"], "Cancelled by the designer.")
 

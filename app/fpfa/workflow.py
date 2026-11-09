@@ -557,9 +557,10 @@ def run_di_zone(
                 warnings.append(
                     "Claude did not successfully call: " + ", ".join(skipped) + ". The tool plan still ran them."
                 )
-        except TurnCancelled:
+        except TurnCancelled as exc:
             # The designer stopped the narration. The tool plan already ran and stands.
             cancelled = True
+            usage = getattr(exc, "usage", None)
             warnings.append(NARRATION_CANCELLED)
             source = "tool-plan"
             narrative = template
@@ -567,6 +568,11 @@ def run_di_zone(
             warnings.append("Claude was not used. " + safe_error(exc))
             source = "tool-plan"
             narrative = template
+        if narrator_session.recording:
+            # The narration's usage closes on the record, so the job's cost can be read back.
+            record.log_event(project_id, "narration", {
+                "usage": dict(usage or {}), "source": source, "cancelled": cancelled, "kind": "zone",
+            }, agent="narrator")
     checks = narrative_checks(narrative, tools)
     return {
         "source": source,

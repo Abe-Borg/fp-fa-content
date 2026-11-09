@@ -375,7 +375,9 @@ def check_record(content_root: Path, record: Record, project_id: str, create: Ca
         record.log_event(project_id, CHECK_EVENT, outcome, agent=CHECKER_ROLE)
         return outcome
     system = claim_check.checker_system(content_root)
-    model_text = claim_check._ask(create, system, claim_check.checker_request(packet["claims"], packet["sources"]))
+    model_text, usage = claim_check._ask_usage(
+        create, system, claim_check.checker_request(packet["claims"], packet["sources"])
+    )
     words = claim_check._verdict_words(model_text)
     rows: list[dict] = []
     for item in packet["meta"]:
@@ -408,6 +410,7 @@ def check_record(content_root: Path, record: Record, project_id: str, create: Ca
         status_line = f"Blind check: findings not Supported: {open_rows}. The design basis is not cleared for issue."
         block_reason = status_line
     outcome = {
+        "usage": usage,
         "rows": rows,
         "all_supported": supported,
         "claim_count": len(rows),

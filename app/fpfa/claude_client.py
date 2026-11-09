@@ -216,7 +216,10 @@ def run_tool_loop(
     usage = empty_usage()
     for _ in range(max_rounds):
         if cancel is not None and cancel.is_set():
-            raise TurnCancelled("Cancelled by the designer before the next model round.")
+            cancelled = TurnCancelled("Cancelled by the designer before the next model round.")
+            # The rounds that ran were billed. The caller can still record them.
+            cancelled.usage = dict(usage)
+            raise cancelled
         response = create(
             model=MODEL_ID,
             max_tokens=max_tokens,

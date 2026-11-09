@@ -23,7 +23,7 @@ A Windows desktop assistant for hyperscale data-center fire sprinkler and fire-a
 
 | Path | Role |
 | --- | --- |
-| `app/fpfa/` | Desktop app. `ui.py` window, `claude_client.py` tool loop, `calc_tools.py` tool schemas and the tool session, `record.py` project record (SQLite), `workflow.py` DI tool plan, `claim_check.py` blind checker, `spec_docx.py` Section 21 13 19 export, `design_basis_docx.py` Design Basis and Open Questions export, `team.py` lead, specialists, handoffs, and the record-fed checker, `team_panel.py` the Team tab, `jobs.py` inbox, `content_update.py` pack updater |
+| `app/fpfa/` | Desktop app. `ui.py` window, `claude_client.py` tool loop, `calc_tools.py` tool schemas and the tool session, `record.py` project record (SQLite), `workflow.py` DI tool plan, `claim_check.py` blind checker, `spec_docx.py` Section 21 13 19 export, `design_basis_docx.py` Design Basis and Open Questions export, `team.py` lead, specialists, handoffs, and the record-fed checker, `team_panel.py` the Team tab, `jobs.py` inbox, `instance_lock.py` one window per data directory, `usage_report.py` tokens and cost from the record, `about.py` versions, `content_update.py` pack updater |
 | `app/tests/` | App suite. Window tests need a display |
 | `calcs/fp`, `calcs/fa` | Deterministic kernels and their tests |
 | `skills/<slug>/SKILL.md`, `roles/<slug>/ROLE.md`, `modes/<slug>/MODE.md` | Content with `name` and `description` frontmatter |
@@ -37,6 +37,7 @@ A Windows desktop assistant for hyperscale data-center fire sprinkler and fire-a
 - Tests, from the folders named: `calcs/fp`: `python -m unittest discover -s . -p 'test_*.py'`. `calcs/fa`: `python -m unittest discover -s tests`. `app`: `python -m unittest discover -s tests`. Run all three before a push and put the counts in the pull request body.
 - Run the app from `app/` with `python -m fpfa`. `--demo --quit --screenshot-dir <dir>` runs the sample and writes two PNGs under a display.
 - `FPFA_DATA_DIR` moves the data directory. `FPFA_CONTENT_UPDATES=0` skips the launch feed check. `FPFA_CONTENT_ROOT` pins the pack.
+- Model prices live only in `usage_report.py` as a dated snapshot (`RATES_PER_MILLION`, `RATES_DATE`). Change both together; never spread a price elsewhere.
 - When behavior changes, update `README.md` in the same change. Do not shorten it to make room; add what is necessary. When dependencies change, update `app/requirements.txt`. When a phase, gate, or decision changes, update `docs/prototype-plan.md`. Keep this file current.
 - One pull request per phase where practical. No release tags from a pull request. Content releases are `content-v*` tags; app releases are `app-v*` tags and need `app/fpfa/__init__.py` to carry the same version.
 - The model id is `claude-opus-5-5`. Prompt caching is on the system block and, with tools present, on the message tail. Keep the system text byte-identical across rounds; put anything that varies per turn in the user message.

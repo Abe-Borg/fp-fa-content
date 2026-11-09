@@ -1,6 +1,11 @@
 # Build the Windows app when an app-v* tag is pushed.
 # Assets: fpfa-setup-<version>.exe and fpfa-windows-<version>.zip.
 # Does not build or tag a content pack. Content stays on content-v*.
+#
+# Run it by hand with publish=false to get a build without a release: the
+# installer and the portable zip are uploaded as workflow artifacts, the
+# version is read from app/fpfa/__init__.py, and no tag is made. That is
+# how acceptance test A gets an installer from a branch.
 
 name: Windows app
 
@@ -11,9 +16,15 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "App version (major.minor.patch), for example 0.1.1. Publishes tag app-v<version>."
-        required: true
+        description: "App version (major.minor.patch), for example 0.1.1. Must equal __version__. Empty reads it from app/fpfa/__init__.py."
+        required: false
+        default: ""
         type: string
+      publish:
+        description: "Publish a GitHub release tagged app-v<version>. Off builds only and uploads artifacts."
+        required: false
+        default: true
+        type: boolean
 
 permissions:
   contents: write
@@ -37,8 +48,15 @@ jobs:
           REF_NAME: ${{ github.ref_name }}
         run: |
           $ErrorActionPreference = "Stop"
+          $initPath = Join-Path $env:GITHUB_WORKSPACE "app\fpfa\__init__.py"
+          $init = Get-Content -Raw -LiteralPath $initPath
+          if ($init -notmatch '__version__\s*=\s*"([^"]+)"') {
+            throw "Could not read __version__ from $initPath"
+          }
+          $code = $Matches[1]
           if ($env:EVENT_NAME -eq "workflow_dispatch") {
             $version = "$env:INPUT_VERSION".Trim()
+            if (-not $version) { $version = $code }
           } else {
             $tag = "$env:REF_NAME".Trim()
             if ($tag -notmatch '^app-v(\d+\.\d+\.\d+)$') {
@@ -49,12 +67,6 @@ jobs:
           if ($version -notmatch '^\d+\.\d+\.\d+$') {
             throw "Version must look like 0.1.1. Got: $version"
           }
-          $initPath = Join-Path $env:GITHUB_WORKSPACE "app\fpfa\__init__.py"
-          $init = Get-Content -Raw -LiteralPath $initPath
-          if ($init -notmatch '__version__\s*=\s*"([^"]+)"') {
-            throw "Could not read __version__ from $initPath"
-          }
-          $code = $Matches[1]
           if ($code -ne $version) {
             throw "__version__ is $code and the release version is $version. They must match."
           }
@@ -139,7 +151,19 @@ jobs:
           }
           Write-Host "Built $zip"
 
+      - name: Upload build artifacts
+        if: github.event_name == 'workflow_dispatch' && inputs.publish == false
+        uses: actions/upload-artifact@v4
+        with:
+          name: fpfa-windows-${{ steps.version.outputs.version }}-${{ github.sha }}
+          path: |
+            app/dist/fpfa-setup-${{ steps.version.outputs.version }}.exe
+            app/dist/fpfa-windows-${{ steps.version.outputs.version }}.zip
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Publish release
+        if: github.event_name != 'workflow_dispatch' || inputs.publish == true
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}

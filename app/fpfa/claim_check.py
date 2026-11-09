@@ -311,13 +311,22 @@ def _verdict_words(text: str) -> dict[int, str]:
 
 def _ask(create: Callable[..., Any], system: str, user_text: str) -> str:
     """One Messages call. No tools, so the checker cannot fetch the draft."""
+    return _ask_usage(create, system, user_text)[0]
+
+
+def _ask_usage(create: Callable[..., Any], system: str, user_text: str) -> tuple[str, dict]:
+    """The same call, returning the text and the call's usage totals."""
+    from fpfa.claude_client import add_usage, empty_usage
+
     response = create(
         model=MODEL_ID,
         max_tokens=4000,
         system=system,
         messages=[{"role": "user", "content": user_text}],
     )
-    return _scrub(_response_text(response))
+    usage = empty_usage()
+    add_usage(usage, getattr(response, "usage", None))
+    return _scrub(_response_text(response)), usage
 
 
 def _response_text(response: Any) -> str:
