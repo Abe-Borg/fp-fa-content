@@ -134,10 +134,38 @@ class RecoverTests(unittest.TestCase):
         self.assertEqual(rows[pending["id"]]["result"], "")
         self.assertEqual(rows[returned["id"]]["status"], "returned")
         self.assertEqual([row["id"] for row in record.pending_handoffs("p1", to_agent="fp-sprinkler")], [delivered["id"]])
-        self.assertEqual(record.latest_event("p1", "recovered")["payload"], {"jobs": 2, "agents": 2, "handoffs": 1})
+        recovered = record.latest_event("p1", "recovered")["payload"]
+        self.assertEqual(sorted(row["id"] for row in recovered["jobs"]), ["q1", "run1"])
+        self.assertEqual(recovered["jobs"][0].keys(), {"id", "kind", "title"})
+        self.assertEqual(sorted(recovered["agents"]), ["Lead", "Sprinkler specialist"])
+        self.assertEqual([row["id"] for row in recovered["handoffs"]], [delivered["id"]])
         self.assertIsNone(record.latest_event("p2", "recovered"))
         self.assertEqual(record.recover(), {}, "a second pass finds nothing")
         self.assertEqual(len(record.handoffs("p1")), 3)
+
+    def test_recovery_notices_wait_until_the_note_is_posted(self):
+        record = _record()
+        self.assertEqual(record.unnoted_recoveries(), {})
+        delivered, _pending, _returned = _seed_in_flight(record)
+        first = record.recover()
+        owed = record.unnoted_recoveries()
+        self.assertEqual(sorted(owed), ["p1"])
+        self.assertEqual(owed["p1"]["name"], "Job one")
+        self.assertEqual(sorted(row["id"] for row in owed["p1"]["jobs"]), ["q1", "run1"])
+        self.assertEqual(owed["p1"]["agents"], first["p1"]["agents"])
+        self.assertEqual([row["id"] for row in owed["p1"]["handoffs"]], [delivered["id"]])
+        # A second launch recovers nothing new but still owes the note.
+        self.assertEqual(record.recover(), {})
+        self.assertEqual(sorted(row["id"] for row in record.unnoted_recoveries()["p1"]["jobs"]), ["q1", "run1"])
+        record.note_recovery("p1")
+        self.assertEqual(record.unnoted_recoveries(), {})
+        # A later kill owes a new note that holds only the new work.
+        record.set_job("p1", job_id="run2", kind="zone", title="Zone run again", status="running")
+        record.recover()
+        owed = record.unnoted_recoveries()
+        self.assertEqual([row["id"] for row in owed["p1"]["jobs"]], ["run2"])
+        self.assertEqual(owed["p1"]["agents"], [])
+        self.assertEqual(owed["p1"]["handoffs"], [])
 
     def test_a_requeued_handoff_is_delivered_once_by_the_next_delegation(self):
         from fpfa.team import delegate
@@ -201,6 +229,66 @@ class RecoverTests(unittest.TestCase):
         self.assertIn("… handoff waiting for fa-releasing: Confirm the releasing sequence", blockers)
         self.assertIn("! chat job interrupted by a relaunch: Size the DH-1 zone. Run it again; recorded calcs replay.", blockers)
         self.assertFalse(any("Zone run" in line for line in blockers))
+
+
+HOLDER = textwrap.dedent(
+    """
+    import sys, time
+    app_dir, path = sys.argv[1:3]
+    sys.path.insert(0, app_dir)
+    from fpfa.instance_lock import InstanceLock
+    lock = InstanceLock(path)
+    print("held" if lock.acquire() else "refused", flush=True)
+    time.sleep(60)
+    """
+)
+
+
+class InstanceLockTests(unittest.TestCase):
+    def test_one_holder_per_file_in_one_process(self):
+        from fpfa.instance_lock import InstanceLock
+
+        folder = Path(tempfile.mkdtemp(prefix="fpfa-lock-"))
+        first = InstanceLock(folder / "fpfa.lock")
+        second = InstanceLock(folder / "fpfa.lock")
+        other = InstanceLock(folder / "other.lock")
+        self.assertTrue(first.acquire())
+        self.assertTrue(first.acquire(), "acquiring again is a no-op for the holder")
+        self.assertFalse(second.acquire())
+        self.assertTrue(other.acquire(), "a different file is a different lock")
+        self.assertTrue(first.held)
+        self.assertFalse(second.held)
+        first.release()
+        first.release()
+        self.assertFalse(first.held)
+        self.assertTrue(second.acquire())
+        self.assertEqual((folder / "fpfa.lock").read_text(encoding="ascii").strip(), str(os.getpid()))
+        second.release()
+        other.release()
+
+    def test_the_lock_follows_the_process_that_holds_it(self):
+        from fpfa.instance_lock import InstanceLock
+
+        folder = Path(tempfile.mkdtemp(prefix="fpfa-lock-proc-"))
+        script = folder / "holder.py"
+        script.write_text(HOLDER, encoding="utf-8")
+        path = folder / "fpfa.lock"
+        proc = subprocess.Popen(
+            [sys.executable, str(script), str(APP_DIR), str(path)],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        )
+        try:
+            self.assertEqual(proc.stdout.readline().strip(), "held")
+            mine = InstanceLock(path)
+            self.assertFalse(mine.acquire(), "a live process holds the data directory")
+        finally:
+            proc.kill()
+            proc.wait(timeout=10)
+            proc.stdout.close()
+            proc.stderr.close()
+        # Killed, not closed: the operating system released it, so a relaunch can go ahead.
+        self.assertTrue(mine.acquire())
+        mine.release()
 
 
 CHILD = textwrap.dedent(
@@ -363,6 +451,13 @@ class RecoveryWindowTests(unittest.TestCase):
         first._persist_open_work()
         first.root.destroy()
 
+        # A launch that never opens the job still owes its note to the next one.
+        middle = self._app()
+        self.assertIn("Recovered after a relaunch: 1 job interrupted, 1 handoff re-queued", middle.status.get())
+        self.assertEqual(middle.jobs.get("chat9").status, "interrupted")
+        self.assertEqual(middle.record.recover(), {})
+        middle.root.destroy()
+
         app = self._app()
         self.assertIn("Recovered after a relaunch: 1 job interrupted, 1 handoff re-queued", app.status.get())
         lines = tuple(app.inbox_list.get(0, "end"))
@@ -397,6 +492,52 @@ class RecoveryWindowTests(unittest.TestCase):
         self._settle(app)
         self.assertEqual(app.chat_view.get("1.0", "end").count("Recovered after a relaunch."), 1)
         self.assertEqual(sum(1 for turn in saved["chat"] if "Recovered after a relaunch" in turn.get("text", "")), 1)
+        self.assertEqual(app.record.unnoted_recoveries(), {})
+        app._persist_open_work()
+        app.root.destroy()
+
+        # Once the note has been read, a later launch owes nothing and lists nothing.
+        fourth = self._app()
+        self.assertNotIn("Recovered", fourth.status.get())
+        self.assertEqual(tuple(fourth.inbox_list.get(0, "end")), ())
+        fourth.open_project(project_id)
+        self._settle(fourth)
+        self.assertEqual(fourth.chat_view.get("1.0", "end").count("Recovered after a relaunch."), 1)
+        self.assertEqual(fourth.record.jobs(project_id, status="interrupted")[0]["id"], "chat9")
+
+    def test_a_second_window_on_the_same_data_directory_is_refused_and_recovers_nothing(self):
+        import tkinter as tk
+
+        from fpfa.instance_lock import LOCK_NAME, InstanceLock, InstanceLockError
+        from fpfa.record import Record
+        from fpfa.ui import App
+
+        data = self._data_dir()
+        if not os.environ.get("DISPLAY"):
+            self.skipTest("no display")
+        # The first window's live work, as its record shows it while it runs.
+        record = Record(data / "fpfa.db")
+        record.ensure_project("p1", "Live job")
+        record.set_job("p1", job_id="live1", kind="chat", title="Still running", status="running")
+        record.set_agent("p1", name="Lead", role_slug="lead", status="working")
+        holder = InstanceLock(data / LOCK_NAME)
+        self.assertTrue(holder.acquire())
+        root = tk.Tk()
+        self.addCleanup(self._destroy, root)
+        with self.assertRaises(InstanceLockError) as caught:
+            App(root)
+        self.assertIn("already open on this data directory", str(caught.exception))
+        self.assertEqual(record.jobs("p1")[0]["status"], "running", "the live job was not touched")
+        self.assertEqual(record.agents("p1")[0]["status"], "working")
+        self.assertEqual(record.unnoted_recoveries(), {})
+        holder.release()
+        # With the first window gone, the next launch owns the directory and recovers.
+        app = self._app()
+        self.assertTrue(app.instance_lock.held)
+        self.assertIn("Recovered after a relaunch: 1 job interrupted", app.status.get())
+        self.assertEqual(app.record.jobs("p1")[0]["status"], "interrupted")
+        app.root.destroy()
+        self.assertFalse(app.instance_lock.held, "destroying the window releases the directory")
 
     def test_a_long_gap_between_polls_is_reported_as_a_resume(self):
         self._data_dir()

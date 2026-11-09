@@ -17,7 +17,7 @@ A Windows desktop assistant for hyperscale data-center fire sprinkler and fire-a
 - The Messages client sends no `temperature`, `top_p`, `top_k`, or forced `tool_choice`, and never disables thinking. The system text goes out as one cached block. Do not add a second model vendor.
 - The content pack is replaceable. Nothing in `app/` hardcodes a method, a role, or a mode. Loaders read them from disk.
 - Agents never open the project record directly. A calc tool records itself; a model writes facts, findings, questions, and decisions through the record tools. A `ToolSession` without a record writes nothing, and tests rely on that.
-- The inbox is in memory; the record is all that survives a relaunch. Window jobs are `jobs` rows there, and `Record.recover()` runs once at launch and only marks: in-flight jobs and agents become `interrupted`, delivered handoffs go back to `pending`. Nothing is re-run on its own. `docs/recovery-protocol.md` is the Test C and D protocol.
+- The inbox is in memory; the record is all that survives a relaunch. Window jobs are `jobs` rows there, and `Record.recover()` runs once at launch and only marks: in-flight jobs and agents become `interrupted`, delivered handoffs go back to `pending`. Nothing is re-run on its own. One window per data directory: `App` takes the OS file lock on `fpfa.lock` first and a second window is refused. `docs/recovery-protocol.md` is the Test C and D protocol.
 
 ## Layout
 

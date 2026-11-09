@@ -882,12 +882,49 @@ class Record:
                     {"id": row["id"], "from_agent": row["from_agent"], "to_agent": row["to_agent"], "brief": row["brief"]}
                 )
             for project_id, item in report.items():
+                # The whole item goes on the event, so a later launch can still say what
+                # was in flight if the designer never opened the job this time.
                 self._event(conn, project_id, "recovered", "", {
-                    "jobs": len(item["jobs"]), "agents": len(item["agents"]), "handoffs": len(item["handoffs"]),
+                    "jobs": [{"id": row["id"], "kind": row["kind"], "title": row["title"]} for row in item["jobs"]],
+                    "agents": list(item["agents"]),
+                    "handoffs": list(item["handoffs"]),
                 })
             return report
 
         return self._write(work)
+
+    def unnoted_recoveries(self) -> dict[str, dict]:
+        """Recoveries whose note the designer has not seen, merged per project.
+
+        A `recovered` event stays owed until a `recovery_noted` event follows it on
+        that project. Items look like recover()'s report. Empty when nothing is owed.
+        """
+        rows = self._read(
+            "SELECT project_id, kind, payload FROM events WHERE kind IN ('recovered', 'recovery_noted') ORDER BY seq"
+        )
+        owed: dict[str, dict] = {}
+        for row in rows:
+            project_id = row["project_id"]
+            if row["kind"] == "recovery_noted":
+                owed.pop(project_id, None)
+                continue
+            payload = json.loads(row["payload"] or "{}")
+            item = owed.setdefault(project_id, {"name": "", "jobs": [], "agents": [], "handoffs": []})
+            for key in ("jobs", "agents", "handoffs"):
+                values = payload.get(key)
+                if not isinstance(values, list):
+                    continue
+                for value in values:
+                    if value not in item[key]:
+                        item[key].append(value)
+        for project_id, item in owed.items():
+            project = self.project_row(project_id) or {}
+            item["name"] = project.get("name") or "Untitled job"
+        return owed
+
+    def note_recovery(self, project_id: str) -> None:
+        """The recovery note for this project reached its thread. Later launches owe nothing for it."""
+        self.log_event(project_id, "recovery_noted", {})
 
     # -- reads --------------------------------------------------------------
 

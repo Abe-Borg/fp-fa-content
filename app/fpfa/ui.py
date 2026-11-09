@@ -61,13 +61,14 @@ from fpfa.content_update import (
     updates_on_launch,
 )
 from fpfa.everyday import everyday_reply, run_everyday
+from fpfa.instance_lock import LOCK_NAME, ANOTHER_WINDOW_TEXT, InstanceLock, InstanceLockError
 from fpfa.jobs import KINDS as JOB_KINDS, JobInbox, label_result
 from fpfa.managed import anthropic_request, reply_with_delete_status, run_heavy_job, session_system
 from fpfa.keystore import clear_api_key, key_status, key_storage_help, load_api_key, save_api_key
 from fpfa.modes_loader import DEFAULT_MODE, MODE_SLUGS, list_modes, normalize_mode
-from fpfa.paths import content_root, is_content_pack, read_config, write_config
+from fpfa.paths import content_root, data_dir, is_content_pack, read_config, write_config
 from fpfa.projects import delete_project, list_projects, load_project, new_project, save_project
-from fpfa.record import Record
+from fpfa.record import INTERRUPTED_NOTE, Record
 from fpfa.spec_docx import DRAFT_SECTION, write_docx
 from fpfa.theme import apply_theme, enable_windows_dpi_awareness
 from fpfa.widgets import Composer, ScrollFrame
@@ -334,6 +335,10 @@ def _blank_to_none(text: str):
 class App:
     def __init__(self, root: tk.Tk):
         self.root = root
+        # One window per data directory. A second one would recover this one's live work.
+        self.instance_lock = InstanceLock(data_dir() / LOCK_NAME)
+        if not self.instance_lock.acquire():
+            raise InstanceLockError(ANOTHER_WINDOW_TEXT)
         self.root.title("FP/FA Design Assistant")
         self.root.geometry("1280x800+40+40")
         self.root.minsize(1020, 680)
@@ -414,6 +419,9 @@ class App:
             # close() deletes a hosted session that is still polling.
             # The delete runs off this thread and is joined for a short bound.
             jobs.close()
+        lock = getattr(self, "instance_lock", None)
+        if lock is not None:
+            lock.release()
 
     def _on_save_key(self, event=None):
         try:
@@ -1234,7 +1242,9 @@ class App:
         interrupted and delivered handoffs go back to pending. Nothing is re-run.
         """
         try:
-            report = self.record.recover()
+            self.record.recover()
+            # Owed notes carry over launches until the job is opened and the note is read.
+            report = self.record.unnoted_recoveries()
         except Exception as exc:
             self.status.set("Project record recovery did not run. " + safe_error(exc))
             return
@@ -1243,17 +1253,17 @@ class App:
         jobs = handoffs = 0
         for project_id, item in report.items():
             for row in item.get("jobs") or []:
-                if row.get("kind") not in JOB_KINDS:
+                if row.get("kind") not in JOB_KINDS or self.jobs.get(row["id"]) is not None:
                     continue
                 try:
                     self.jobs.record(
                         project_id=project_id, project_name=item.get("name") or UNTITLED_JOB,
                         kind=row["kind"], title=row.get("title") or "", status="interrupted",
-                        error=row.get("error") or "", job_id=row["id"],
+                        error=INTERRUPTED_NOTE, job_id=row["id"],
                     )
                 except (ValueError, RuntimeError):
                     continue
-                self._job_sync_seen[row["id"]] = ("interrupted", row.get("error") or "")
+                self._job_sync_seen[row["id"]] = ("interrupted", INTERRUPTED_NOTE)
                 jobs += 1
             handoffs += len(item.get("handoffs") or [])
             note = recovery_text(item)
@@ -1277,6 +1287,10 @@ class App:
         self._append_chat("assistant", note)
         self._save_form_or_chat(self.project)
         save_project(self.project)
+        try:
+            self.record.note_recovery(project_id)
+        except Exception as exc:
+            self.status.set("Project record is not available. " + safe_error(exc))
 
     def _sync_jobs_to_record(self) -> None:
         """Write each job's status to the record once per change. Main thread, from the inbox refresh."""
@@ -3459,7 +3473,13 @@ def main(argv: list[str] | None = None) -> None:
     # Crisp text on a scaled Windows display. Must run before the first window.
     enable_windows_dpi_awareness()
     root = tk.Tk()
-    app = App(root)
+    try:
+        app = App(root)
+    except InstanceLockError as exc:
+        root.withdraw()
+        messagebox.showerror("FP/FA Design Assistant", str(exc))
+        root.destroy()
+        sys.exit(1)
     if args.demo:
         def finish_demo():
             app.load_demo()
