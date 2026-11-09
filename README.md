@@ -2,6 +2,8 @@
 
 Desktop prototype for hyperscale data-center fire protection and fire alarm designers. The scope is wet pipe, dry pipe, and double-interlock preaction sprinklers, plus the detection and releasing that trip them, and outdoor oil-filled transformer apparatus water spray (NFPA 15-style) in `skills/power-block-transformer-water-spray/SKILL.md`. Foam, clean agent, water mist, a building deluge system, and single-interlock preaction are out of scope. Canada ships only through a Country gate (US | Canada) on the skill. CAN/ULC-S524, S536, S537, S1001, and CEC Section 32 stay NEEDS HOLD. Apparatus water spray is not water mist and it is not a building deluge system.
 
+The v0 agent-team prototype plan, its decisions, and its acceptance tests are in `docs/prototype-plan.md`. The known answer for the sample zone is `docs/known-answer-dh1.md`. Coding agents start from `CLAUDE.md`.
+
 The app reads methods from `skills/`, calculations from `calcs/`, and optional draft language from `specs/`. It does not hardcode those methods. Point it at another folder with the same layout (`FPFA_CONTENT_ROOT`, or Settings). Settings can also check the release feed and install a newer pack. `corpus/` holds edition pins and decision notes. The everyday path searches them with `search_corpus`.
 
 ## Why this stack
@@ -145,6 +147,7 @@ Window tests need a display and the `tkinter` module (`python3-tk` on Debian or 
 | `calcs/fa` | Fire-alarm calculation libraries |
 | `specs/` | Draft CSI sections, one file each, sent to the model in full. README is not a spec. Double-interlock draft language is 21 13 19 |
 | `corpus/` | Paraphrased reference notes (edition pins and decision logs). `search_corpus` searches this folder |
+| `docs/` | Plan of record and known answers for the prototype. Not part of the content pack |
 
 ## Not in this prototype
 
