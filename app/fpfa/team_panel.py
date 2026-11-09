@@ -132,7 +132,7 @@ class TeamPanel(ttk.Frame):
         self.cancel_button.pack(side="left")
         self.check_button = ttk.Button(buttons, text="Run blind check", command=on_check)
         self.check_button.pack(side="left", padx=(px(6), 0))
-        ttk.Button(buttons, text="Export design basis…", command=on_export).pack(side="left", padx=(px(6), 0))
+        ttk.Button(buttons, text="Export basis…", command=on_export).pack(side="left", padx=(px(6), 0))
 
         ttk.Label(self, text="TEAM", style="Section.TLabel").pack(anchor="w")
         self.roster_text = self._text(height=4)
