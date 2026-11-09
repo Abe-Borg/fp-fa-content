@@ -42,6 +42,8 @@ from fpfa.claim_check import (
     write_packet_files,
 )
 from fpfa.claude_client import MODEL_ID, AnthropicMessages, run_tool_loop, safe_error, usage_summary
+from fpfa.design_basis_docx import DESIGN_BASIS_TITLE, write_design_basis
+from fpfa.team import export_gate, latest_check
 from fpfa.content_update import (
     ContentUpdateError,
     UpdateResult,
@@ -63,6 +65,7 @@ from fpfa.keystore import clear_api_key, key_status, key_storage_help, load_api_
 from fpfa.modes_loader import DEFAULT_MODE, MODE_SLUGS, list_modes, normalize_mode
 from fpfa.paths import content_root, is_content_pack, read_config, write_config
 from fpfa.projects import delete_project, list_projects, load_project, new_project, save_project
+from fpfa.record import Record
 from fpfa.spec_docx import DRAFT_SECTION, write_docx
 from fpfa.theme import apply_theme, enable_windows_dpi_awareness
 from fpfa.widgets import Composer, ScrollFrame
@@ -246,7 +249,8 @@ def slash_help_text() -> str:
         "- Ctrl+S saves the open job. Closing the window saves it too. Ctrl+N starts a new chat.\n"
         "- Right-click a job in the sidebar to rename or delete it.\n"
         f"- ⋯ menu: the samples, Run zone, Export draft Section {DRAFT_SECTION} "
-        "(after a run and a blind claim check in this thread), and Settings.\n\n"
+        "(after a run and a blind claim check in this thread), Export Design Basis and Open Questions "
+        "(from this job's project record), and Settings.\n\n"
         "## Labels\n"
         "- Pipe gallons and trip time come from the calc tools. "
         "Blank trim and the screen-limit seconds stay labeled ASSUMED.\n"
@@ -352,6 +356,8 @@ class App:
         self._menu_project_id: str | None = None
         self._build()
         self.jobs = JobInbox(worker_count=2, on_change=self._on_jobs_changed)
+        # The project record. Calc tools and record tools write to it by job id.
+        self.record = Record()
         # Cached agent and cloud environment ids for later /heavy calls.
         # Not a session. Session cleanup does not delete these.
         self._managed_resources: dict = {}
@@ -670,6 +676,7 @@ class App:
         menu.add_separator()
         menu.add_command(label="Run zone from Zone details", accelerator="/run", command=self.start_zone_run)
         menu.add_command(label=f"Export draft Section {DRAFT_SECTION}…", command=self.export_docx)
+        menu.add_command(label="Export Design Basis and Open Questions…", command=self.export_design_basis)
         menu.add_separator()
         menu.add_checkbutton(label="Narrate zone runs with Claude", variable=self.ask_claude)
         menu.add_separator()
@@ -1265,6 +1272,18 @@ class App:
         self._render_chat()
         self._show_saved_run(project.get("last_run") or project.get("bess_run"))
         self._apply_mode(project.get("mode"))
+        self._open_record(project)
+
+    def _open_record(self, project: dict | None) -> None:
+        """Make sure the job is in the project record. An older JSON job is imported once."""
+        if not project or not project.get("id"):
+            return
+        try:
+            self.record.import_project(project)
+            # Form-owned basis fields follow the form. A changed value supersedes the old row.
+            self.record.sync_basis(project["id"], project.get("basis"))
+        except Exception as exc:
+            self.status.set("Project record is not available. " + safe_error(exc))
 
     def _known_modes(self) -> list[str]:
         try:
@@ -1439,6 +1458,7 @@ class App:
         error = self._capture_form(self.project)
         save_project(self.project)
         self.refresh_projects(self.project["id"])
+        self._open_record(self.project)
         if error:
             messagebox.showerror("Save", error)
             self.status.set(error)
@@ -1739,6 +1759,10 @@ class App:
         if not messagebox.askyesno("Delete", "Delete this job and its chat from this machine?"):
             return
         delete_project(project_id)
+        try:
+            self.record.delete_project(project_id)
+        except Exception as exc:
+            self.status.set("The job file was deleted. Its record rows were not. " + safe_error(exc))
         if self.project and self.project.get("id") == project_id:
             # Clear the thread too, so a deleted job's chat is not left on screen.
             self.project = None
@@ -1800,6 +1824,7 @@ class App:
         except FileNotFoundError as exc:
             self._report_run_problem(origin_id, str(exc), announce=announce)
             return
+        self._open_record(self.project)
         use_claude = bool(self.ask_claude.get()) and bool(load_api_key())
         if use_claude:
             self._enqueue_zone(
@@ -1823,7 +1848,9 @@ class App:
             self._announce_jobs.add(job.id)
             self._remember_seed(job.id, seed)
         try:
-            result = run_di_zone(pack, di, basis, narrator=None, mode=mode)
+            result = run_di_zone(
+                pack, di, basis, narrator=None, mode=mode, record=self.record, project_id=origin_id
+            )
         except Exception as exc:
             self.jobs.mark(job.id, "error", safe_error(exc))
             self._report_run_problem(origin_id, safe_error(exc), job_id=job.id)
@@ -1857,7 +1884,9 @@ class App:
                 )
 
             try:
-                result = run_di_zone(pack, di, basis, narrator=narrator, mode=mode)
+                result = run_di_zone(
+                    pack, di, basis, narrator=narrator, mode=mode, record=self.record, project_id=origin_id
+                )
                 error = None
             except Exception as exc:
                 result = None
@@ -1933,7 +1962,8 @@ class App:
             self._remember_seed(job.id, seed)
         try:
             result = run_bess_plan(
-                pack, room, basis, zone_result=zone_result, narrator=None, mode="synthesis"
+                pack, room, basis, zone_result=zone_result, narrator=None, mode="synthesis",
+                record=self.record, project_id=origin_id,
             )
         except Exception as exc:
             self.jobs.mark(job.id, "error", safe_error(exc))
@@ -1970,6 +2000,8 @@ class App:
                     zone_result=zone_result,
                     narrator=narrator,
                     mode="synthesis",
+                    record=self.record,
+                    project_id=origin_id,
                 )
                 error = None
             except Exception as exc:
@@ -2357,6 +2389,54 @@ class App:
             return
         self.start_claim_check(offer_export=True)
 
+    def design_basis_ready(self) -> str:
+        """Empty when the job has a record to export. Otherwise the reason it does not."""
+        if not self.project:
+            return "Open a job first."
+        self._open_record(self.project)
+        snapshot = self.record.snapshot(self.project["id"])
+        # Basis facts alone come from the form defaults. A design basis needs
+        # at least one recorded calculation, finding, or decision.
+        if not snapshot["calcs"] and not snapshot["findings"] and not snapshot["decisions"]:
+            return (
+                "Nothing is on this job's record yet. Run /sample-di or /run, or ask a question, "
+                "then export the design basis."
+            )
+        # Findings are model claims. They need a current blind check that supports every one.
+        return export_gate(self.record, self.project["id"])
+
+    def export_design_basis_to(self, path: Path) -> Path:
+        """Write the Design Basis and Open Questions document for the open job."""
+        reason = self.design_basis_ready()
+        if reason:
+            raise RuntimeError(reason)
+        snapshot = self.record.snapshot(self.project["id"])
+        return write_design_basis(
+            Path(path), self.project, snapshot, claim_check=latest_check(self.record, self.project["id"])
+        )
+
+    def export_design_basis(self) -> None:
+        reason = self.design_basis_ready()
+        if reason:
+            messagebox.showinfo(DESIGN_BASIS_TITLE, reason)
+            return
+        path = filedialog.asksaveasfilename(
+            parent=self.root,
+            title=f"Export {DESIGN_BASIS_TITLE}",
+            defaultextension=".docx",
+            filetypes=[("Word document", "*.docx")],
+            initialfile=f"{self.project.get('name', 'job')}-design-basis.docx",
+        )
+        if not path:
+            self.status.set("Design basis export was not written.")
+            return
+        try:
+            written = self.export_design_basis_to(Path(path))
+        except Exception as exc:
+            messagebox.showerror(DESIGN_BASIS_TITLE, safe_error(exc))
+            return
+        self.status.set(f"Exported {written}")
+
     def start_claim_check(self, offer_export: bool = False) -> None:
         """Queue the blind claim check on this project. The composer stays usable."""
         self._keep_composer_open()
@@ -2588,6 +2668,7 @@ class App:
         self._save_form_or_chat(self.project)
         save_project(self.project)
         self.refresh_projects(origin_id)
+        self._open_record(self.project)
         try:
             basis = self.collect_basis()
             di = self.collect_di()
@@ -2617,7 +2698,10 @@ class App:
             try:
                 pack = content_root()
                 client = AnthropicMessages(key)
-                out = run_everyday(pack, client.create, request, mode=mode)
+                out = run_everyday(
+                    pack, client.create, request, mode=mode,
+                    record=self.record, project_id=origin_id, agent="lead",
+                )
                 reply = everyday_reply(out)
                 used = usage_summary(out.get("usage"))
             except Exception as exc:

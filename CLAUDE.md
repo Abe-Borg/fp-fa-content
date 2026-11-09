@@ -16,12 +16,13 @@ A Windows desktop assistant for hyperscale data-center fire sprinkler and fire-a
 - The double-interlock draft section is 21 13 19. Dry pipe is 21 13 16. Never cross them.
 - The Messages client sends no `temperature`, `top_p`, `top_k`, or forced `tool_choice`, and never disables thinking. The system text goes out as one cached block. Do not add a second model vendor.
 - The content pack is replaceable. Nothing in `app/` hardcodes a method, a role, or a mode. Loaders read them from disk.
+- Agents never open the project record directly. A calc tool records itself; a model writes facts, findings, questions, and decisions through the record tools. A `ToolSession` without a record writes nothing, and tests rely on that.
 
 ## Layout
 
 | Path | Role |
 | --- | --- |
-| `app/fpfa/` | Desktop app. `ui.py` window, `claude_client.py` tool loop, `calc_tools.py` tool schemas, `workflow.py` DI tool plan, `claim_check.py` blind checker, `spec_docx.py` export, `jobs.py` inbox, `content_update.py` pack updater |
+| `app/fpfa/` | Desktop app. `ui.py` window, `claude_client.py` tool loop, `calc_tools.py` tool schemas and the tool session, `record.py` project record (SQLite), `workflow.py` DI tool plan, `claim_check.py` blind checker, `spec_docx.py` Section 21 13 19 export, `design_basis_docx.py` Design Basis and Open Questions export, `team.py` lead, specialists, handoffs, and the record-fed checker, `jobs.py` inbox, `content_update.py` pack updater |
 | `app/tests/` | App suite. Window tests need a display |
 | `calcs/fp`, `calcs/fa` | Deterministic kernels and their tests |
 | `skills/<slug>/SKILL.md`, `roles/<slug>/ROLE.md`, `modes/<slug>/MODE.md` | Content with `name` and `description` frontmatter |

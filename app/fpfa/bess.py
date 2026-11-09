@@ -13,6 +13,7 @@ from typing import Any, Callable
 from fpfa.calc_tools import SCHEMAS, ToolSession
 from fpfa.claude_client import MODEL_ID, incomplete_notice, safe_error
 from fpfa.modes_loader import normalize_mode
+from fpfa.record import Record
 from fpfa.skills_loader import read_starter_cites
 from fpfa.workflow import fmt1, judgment_label_line, system_prompt
 
@@ -247,14 +248,22 @@ def run_bess_plan(
     zone_result: dict | None = None,
     narrator: Narrator | None = None,
     mode: str | None = None,
+    *,
+    record: Record | None = None,
+    project_id: str | None = None,
 ) -> dict[str, Any]:
-    """Run the LFL tool, then draft. A model draft is kept only when it quotes the plan."""
+    """Run the LFL tool, then draft. A model draft is kept only when it quotes the plan.
+
+    With record and project_id, the LFL call is recorded as tool-plan and the
+    narrator's calls as narrator.
+    """
     basis = dict(basis or {})
     room = dict(room or {})
     selected = normalize_mode(mode or BESS_MODE)
     if selected != BESS_MODE:
         selected = BESS_MODE
-    session = ToolSession(content_root)
+    session = ToolSession(content_root, record=record, project_id=project_id, agent="tool-plan")
+    narrator_session = ToolSession(content_root, record=record, project_id=project_id, agent="narrator")
     warnings: list[str] = []
     zone = zone_governing(zone_result)
     try:
@@ -294,7 +303,7 @@ def run_bess_plan(
                 system_prompt(content_root, selected),
                 _user_message(room, basis, tool_input, governing, zone, selected),
                 SCHEMAS,
-                session.execute,
+                narrator_session.execute,
             )
             usage = drafted.get("usage")
             unfinished = incomplete_notice(drafted.get("stop_reason"))

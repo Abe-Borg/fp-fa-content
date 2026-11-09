@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import sys
@@ -10,6 +11,7 @@ from pathlib import Path
 from fpfa.corpus_search import search_corpus
 from fpfa.fa_calc import run_fa_calc
 from fpfa.modes_loader import list_modes, read_mode
+from fpfa.record import CALC_TOOLS, LABELS, Record, RecordError
 from fpfa.roles_loader import list_roles, read_role
 from fpfa.skills_loader import list_skills, read_skill
 
@@ -249,7 +251,122 @@ SCHEMAS = [
             ["query"],
         ),
     },
+    {
+        "name": "record_fact",
+        "description": (
+            "Write one basis-of-design fact to this job's project record: AHJ, adopted code and edition, "
+            "insurer, owner standard, or an assumption. label is calculated, ASSUMED, use best judgment, "
+            "or a cite class (CODE, OWNER, PRACTICE, PARA, HB). The record is the source for the export."
+        ),
+        "input_schema": _obj(
+            {
+                "kind": {"type": "string", "description": "basis, assumption, edition, owner, or another short group name"},
+                "key": {"type": "string", "description": "Short name, such as nfpa_13_enforced"},
+                "value": {"type": "string"},
+                "label": {"type": "string", "description": "One of: " + ", ".join(LABELS)},
+                "source": {"type": "string", "description": "Where the value came from. Optional."},
+            },
+            ["kind", "key", "value", "label"],
+        ),
+    },
+    {
+        "name": "record_evidence",
+        "description": (
+            "Write one cite to the project record: document, edition, section, a short paraphrase, "
+            "and where it applies. status is held, NOT PULLED, NEEDS HOLD, or PACKAGE ASSERTION. "
+            "Do not paste the standard's text."
+        ),
+        "input_schema": _obj(
+            {
+                "document": {"type": "string", "description": "Such as NFPA 13 or FM DS 5-32"},
+                "edition": {"type": "string"},
+                "section": {"type": "string"},
+                "note": {"type": "string", "description": "Short paraphrase, one or two sentences."},
+                "applicability": {"type": "string"},
+                "status": {"type": "string", "description": "held, NOT PULLED, NEEDS HOLD, or PACKAGE ASSERTION. Default held."},
+            },
+            ["document"],
+        ),
+    },
+    {
+        "name": "record_finding",
+        "description": (
+            "Write one finding to the project record with its label and the ids of the calc records or "
+            "evidence rows that support it. A figure with no calc record id is not calculated."
+        ),
+        "input_schema": _obj(
+            {
+                "text": {"type": "string"},
+                "label": {"type": "string", "description": "One of: " + ", ".join(LABELS)},
+                "supports": {"type": "array", "description": "Record ids this finding rests on.", "items": {"type": "string"}},
+            },
+            ["text", "label"],
+        ),
+    },
+    {
+        "name": "open_question",
+        "description": "Write an open question or RFI for the engineer of record to the project record.",
+        "input_schema": _obj({"text": {"type": "string"}}, ["text"]),
+    },
+    {
+        "name": "record_decision",
+        "description": (
+            "Write an election or a judgment to the project record, with its basis and label. "
+            "A decision the tools did not return is use best judgment."
+        ),
+        "input_schema": _obj(
+            {
+                "text": {"type": "string"},
+                "label": {"type": "string", "description": "One of: " + ", ".join(LABELS)},
+                "basis": {"type": "string", "description": "Cites or calc record ids behind the decision. Optional."},
+            },
+            ["text", "label"],
+        ),
+    },
+    {
+        "name": "read_record",
+        "description": (
+            "Show this job's project record with row ids: facts, calc records with inputs and outputs, "
+            "evidence, findings, decisions, open questions, and pending handoffs. Pass kind for the full "
+            "rows of one table (calcs, evidence, facts, findings, questions, decisions, handoffs, tasks, agents), "
+            "and id for one row."
+        ),
+        "input_schema": _obj(
+            {
+                "kind": {"type": "string", "description": "A table name. Omit for the summary."},
+                "id": {"type": "string", "description": "One row id. Needs kind."},
+            },
+            [],
+        ),
+    },
+    {
+        "name": "handoff",
+        "description": (
+            "Hand work to another agent on this job. The handoff is written to the project record as "
+            "pending and is delivered when the lead next activates that agent. Name the specialist by its "
+            "role slug (fp-sprinkler, fa-releasing, spec-draft) or the lead as lead."
+        ),
+        "input_schema": _obj(
+            {
+                "to": {"type": "string", "description": "Role slug of the receiving agent, or lead."},
+                "brief": {"type": "string", "description": "What the receiver should do, in a few sentences."},
+                "payload": {"type": "object", "description": "Figures, ids, or elections the receiver needs. Optional."},
+            },
+            ["to", "brief"],
+        ),
+    },
 ]
+
+# Tools that write to or read the project record. They need an open record on the turn.
+RECORD_TOOLS = frozenset({
+    "record_fact",
+    "record_evidence",
+    "record_finding",
+    "open_question",
+    "record_decision",
+    "read_record",
+    "handoff",
+})
 
 # The DI workflow refuses a narrative until these have run on the form.
 REQUIRED_DI_TOOLS = [
@@ -262,16 +379,126 @@ REQUIRED_DI_TOOLS = [
 
 
 class ToolSession:
-    def __init__(self, content_root: Path):
+    """Runs one tool call. With a record and a project id, calc calls record themselves.
+
+    agent names who is calling (lead, tool-plan, a specialist) on the rows it writes.
+    Without a record, nothing is written and every tool behaves as before.
+    """
+
+    def __init__(
+        self,
+        content_root: Path,
+        record: Record | None = None,
+        project_id: str | None = None,
+        agent: str = "",
+    ):
         self.root = Path(content_root)
         di_path = self.root / "calcs" / "fp" / "di_zone.py"
         if not di_path.is_file():
             raise FileNotFoundError(di_path)
         self.di = _load(di_path)
         self.formulas = self.di.formulas
+        self.record = record
+        self.project_id = (project_id or "").strip() or None
+        self.agent = (agent or "").strip()
+        self.pack_version = _pack_version() if self.record is not None else ""
+        # Identity of the calc code in this pack. A changed kernel file changes it,
+        # so a recorded result is never replayed by different code.
+        self.calc_identity = calc_identity(self.root) if self.record is not None else ""
+
+    @property
+    def recording(self) -> bool:
+        return self.record is not None and self.project_id is not None
 
     def execute(self, name: str, arguments: dict | None) -> dict:
         args = dict(arguments or {})
+        if name in RECORD_TOOLS:
+            return self._record_tool(name, args)
+        if name in CALC_TOOLS and self.recording:
+            found = self.record.find_calc(self.project_id, name, args, self.calc_identity)
+            if found is not None:
+                # Same tool, inputs, calc code, and project: count the replay and return the recorded output.
+                row = self.record.record_calc(
+                    self.project_id, tool=name, inputs=args, outputs=found["outputs"],
+                    agent=self.agent, calc_identity=self.calc_identity,
+                )
+                return self._with_record_id(found["outputs"], row["id"])
+            output = self._run(name, args)
+            row = self.record.record_calc(
+                self.project_id, tool=name, inputs=args, outputs=output,
+                agent=self.agent, pack_version=self.pack_version, calc_identity=self.calc_identity,
+            )
+            return self._with_record_id(output, row["id"])
+        return self._run(name, args)
+
+    def _with_record_id(self, output: dict, record_id: str) -> dict:
+        """A model-facing result carries the calc record id so a finding can cite it.
+
+        The fixed tool plan (agent tool-plan) gets the bare output, so its
+        tables and export stay byte-identical to a run with no record.
+        """
+        if self.agent in ("", "tool-plan") or not isinstance(output, dict):
+            return output
+        shown = dict(output)
+        shown["record_id"] = record_id
+        return shown
+
+    def _record_tool(self, name: str, args: dict) -> dict:
+        if not self.recording:
+            raise RecordError("The project record is not open on this turn, so nothing was written.")
+        record = self.record
+        project_id = self.project_id
+        if name == "read_record":
+            kind = str(args.get("kind") or "").strip()
+            if kind:
+                rows = record.detail(project_id, kind, str(args.get("id") or "").strip() or None)
+                return {"kind": kind, "rows": rows}
+            snap = record.snapshot(project_id)
+            return {
+                "summary": record.summary_text(project_id),
+                "counts": {key: len(value) for key, value in snap.items() if isinstance(value, list)},
+            }
+        if name == "record_fact":
+            row = record.record_fact(
+                project_id, kind=args.get("kind"), key=args.get("key"), value=args.get("value"),
+                label=args.get("label"), source=args.get("source") or "", agent=self.agent,
+            )
+            return {"id": row["id"], "kind": row["kind"], "key": row["key"], "label": row["label"]}
+        if name == "record_evidence":
+            row = record.record_evidence(
+                project_id, document=args.get("document"), edition=args.get("edition") or "",
+                section=args.get("section") or "", note=args.get("note") or "",
+                applicability=args.get("applicability") or "", status=args.get("status") or "held",
+                agent=self.agent,
+            )
+            return {"id": row["id"], "document": row["document"], "section": row["section"], "status": row["status"]}
+        if name == "record_finding":
+            row = record.record_finding(
+                project_id, agent=self.agent or "lead", text=args.get("text"), label=args.get("label"),
+                supports=args.get("supports"),
+            )
+            return {"id": row["id"], "label": row["label"]}
+        if name == "open_question":
+            row = record.open_question(project_id, raised_by=self.agent or "lead", text=args.get("text"))
+            return {"id": row["id"], "status": row["status"]}
+        if name == "record_decision":
+            row = record.record_decision(
+                project_id, text=args.get("text"), decided_by=self.agent or "lead",
+                label=args.get("label"), basis=args.get("basis") or "",
+            )
+            return {"id": row["id"], "label": row["label"]}
+        if name == "handoff":
+            payload = args.get("payload")
+            if payload is not None and not isinstance(payload, dict):
+                raise RecordError("payload must be an object")
+            row = record.create_handoff(
+                project_id, from_agent=self.agent or "lead", to_agent=args.get("to"),
+                brief=args.get("brief"), payload=payload,
+            )
+            return {"id": row["id"], "to": row["to_agent"], "status": row["status"]}
+        raise KeyError(f"unknown tool {name}")
+
+    def _run(self, name: str, args: dict) -> dict:
         if name == "list_skills":
             return {"skills": list_skills(self.root)}
         if name == "read_skill":
@@ -430,3 +657,43 @@ def _govern_delivery_exemption(formulas, screen: dict, args: dict) -> dict:
     from fpfa.workflow import govern_nfpa_exemption
 
     return govern_nfpa_exemption(screen, zone_gal)
+
+
+_IDENTITY_CACHE: dict[str, str] = {}
+
+
+def calc_identity(content_root: Path) -> str:
+    """Short hash of the calc kernel files under the content root.
+
+    calcs/fp/*.py and calcs/fa/lib/*.py, by path and bytes. Any change to the
+    code that produces a figure changes this value, and with it the replay
+    key, so a pack update computes fresh instead of replaying.
+    """
+    root = Path(content_root).resolve()
+    key = str(root)
+    if key in _IDENTITY_CACHE:
+        return _IDENTITY_CACHE[key]
+    digest = hashlib.sha256()
+    files: list[Path] = []
+    for folder in (root / "calcs" / "fp", root / "calcs" / "fa" / "lib"):
+        if folder.is_dir():
+            files.extend(sorted(path for path in folder.glob("*.py") if not path.name.startswith("test_")))
+    for path in files:
+        try:
+            digest.update(path.relative_to(root).as_posix().encode("utf-8"))
+            digest.update(path.read_bytes())
+        except OSError:
+            continue
+    value = digest.hexdigest()[:16]
+    _IDENTITY_CACHE[key] = value
+    return value
+
+
+def _pack_version() -> str:
+    """Content version label for calc records. Empty when it cannot be read."""
+    try:
+        from fpfa.content_update import content_version_text
+
+        return content_version_text()
+    except Exception:
+        return ""

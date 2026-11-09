@@ -2953,7 +2953,8 @@ class UiSmokeTests(unittest.TestCase):
         state = {"n": 0}
         lock = threading.Lock()
 
-        def fake_zone(_pack, _di, _basis, narrator=None, mode=None):
+        def fake_zone(_pack, _di, _basis, narrator=None, mode=None, **_kwargs):
+            # The window also passes record= and project_id=. This stand-in ignores them.
             with lock:
                 index = state["n"]
                 state["n"] += 1
