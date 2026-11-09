@@ -1,12 +1,14 @@
-# FP/FA agent-team prototype: plan of record
+# +Cynosure agent-team prototype: plan of record
+
+The app was named FP/FA Design Assistant until 2026-11-09. It is +Cynosure from that date. The Python package, the data directory, and the environment variables keep the `fpfa` name.
 
 This file is the single source of truth for the v0 prototype. Every agent working on this repository reads it before starting and updates the status columns when a phase or a gate changes. Email threads, chat transcripts, and earlier planning notes are history, not the plan.
 
-Updated: 2026-11-09. Phases 1 through 5 complete. Phase 6 in progress: everything that runs without a Windows machine or a key is done; the Windows runs wait for the owner. Implementation of v0 is authorized as of 2026-11-09 along the path in this file.
+Updated: 2026-11-09. Phases 1 through 5 complete. Phase 6 in progress: everything that runs without a Windows machine or a key is done; the Windows runs wait for the owner. The window was restyled, the app renamed, and a license added on the same date (section 2); none of that changes a phase or a gate. Implementation of v0 is authorized as of 2026-11-09 along the path in this file.
 
 ## 1. Definition of done for v0
 
-A coworker installs `fpfa-setup.exe` on their own Windows machine, saves their own Anthropic API key, opens the sample double-interlock data hall, and asks: "Give me the design basis for zone DH-1."
+A coworker installs `Cynosure-Setup-<version>.exe` on their own Windows machine, accepts the license it shows, saves their own Anthropic API key, opens the sample double-interlock data hall, and asks: "Give me the design basis for zone DH-1."
 
 Within a few minutes they get all four of these:
 
@@ -26,6 +28,10 @@ The known answer for that task is `docs/known-answer-dh1.md`. The exported docum
 | 2026-11-09 | Durable project record is SQLite, one database in the data directory, every row keyed by project id. Agents write to it only through app tools. Documents are exports of it. | Conversation history is not a transaction log. Duplicate prevention, roster restoration, and pending work need a store the app owns. |
 | 2026-11-09 | No Managed Agents cloud runtime in v0. The `/heavy` hatch stays dormant and is removed or parked in v0.1. | Agreed in the November 5 planning. Nothing in v0 needs a hosted container. |
 | 2026-11-09 | The window stays tkinter. No UI technology change for v0. | The roster, collapsed activity, and inbox already have a home in the current window. |
+| 2026-11-09 | The window is restyled inside tkinter to match the practice's other desktop apps: their five colour schemes, rounded controls, message bubbles, paper-toned blocks, and replies that stream and ease in. No web view, no new dependency. | The owner asked for the look and feel of Build-a-Spec and Spec Surgeon. The decision above stands, so the look is built with generated pictures as ttk image elements (`app/fpfa/shapes.py`, `theme.py`) rather than a second UI stack, and every window test keeps running. A move to the web stack those apps use would be a separate decision. |
+| 2026-11-09 | A chat turn streams. The lead's reply is drawn in the thread as it is written; a specialist's and the checker's words stay out of it. The request body, the cache markers, and the retry rule are the same as the unstreamed call. | A long reply used to appear all at once after a silent wait. Streaming also keeps a long request clear of HTTP timeouts. Cancel is unchanged: a round in flight still finishes. |
+| 2026-11-09 | The app is named +Cynosure. The exe is `Cynosure.exe` and the installer `Cynosure-Setup-<version>.exe`. The installer's AppId, the `fpfa` package, the `FPFA_*` variables, the data directory, and the keyring service name do not change. | The owner's name for it. Keeping the identifiers means an existing install upgrades in place and keeps its jobs, record, and saved key. |
+| 2026-11-09 | The app is licensed under the PolyForm Shield License 1.0.0, copyright Abraham Borg. The installer shows the license and installs only after it is accepted; LICENSE.txt and THIRD-PARTY-NOTICES.txt are installed beside the exe. | The repository had no license. This is the license Build-a-Spec carries: use for any purpose except a competing product, with the software provided as is. The publisher field of the installer was left as it was; the owner decides whether it should match the copyright holder. |
 | 2026-11-09 | Model stays `claude-opus-5-5` for the lead, the specialists, and the checker. Cost is measured before any model split is considered. | Engineering judgment first. A cheaper specialist model is a measured decision, not a default. |
 | 2026-11-09 | Numbers come from `calcs/`. The three labels stay: calculated, ASSUMED, use best judgment. Delivery times are an optimistic screen, not a listed water-delivery-time calculation. | Unchanged from the current app. The team does not loosen this. |
 
@@ -132,9 +138,9 @@ Checked against the current docs on 2026-11-09.
 
 - Agent Teams, the feature that lets agents message each other, is experimental and does not run in non-interactive mode. In `-p` mode, "including Agent SDK sessions, Claude doesn't spawn teammates, and a subagent that Claude names runs as an ordinary subagent." Subagent-to-subagent messaging inside the SDK is not documented.
 - What the SDK does give: isolated subagents with their own prompt, tools, and model; resume of a completed subagent with its history by a second `query(resume=...)`; skills through a plugin root; custom tools through an in-process MCP server; `tools: []` to remove every built-in; automatic caching; `total_cost_usd` and `max_budget_usd`.
-- What it costs here: a bundled CLI subprocess per session that a frozen `fpfa.exe` would have to ship and point at with `cli_path` (undocumented for PyInstaller); a 32 KB Windows command-line cap that forces the system text into a file; `setting_sources=[]`, `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1`, and `CLAUDE_CONFIG_DIR` to keep a coworker's own Claude Code setup out of the app.
+- What it costs here: a bundled CLI subprocess per session that a frozen `Cynosure.exe` would have to ship and point at with `cli_path` (undocumented for PyInstaller); a 32 KB Windows command-line cap that forces the system text into a file; `setting_sources=[]`, `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1`, and `CLAUDE_CONFIG_DIR` to keep a coworker's own Claude Code setup out of the app.
 
-If the SDK is revisited, the spike runs after Phase 1 on a Windows machine with one exit question: does a frozen `fpfa.exe` start the bundled CLI from `cli_path`, run two subagents with the calc tools as an in-process MCP server and `tools: []`, load the pack's skills through `plugins`, and return structured results, with settings isolated? Yes on all five means the SDK can sit behind the same `delegate` interface. Any no means this plan stands.
+If the SDK is revisited, the spike runs after Phase 1 on a Windows machine with one exit question: does a frozen `Cynosure.exe` start the bundled CLI from `cli_path`, run two subagents with the calc tools as an in-process MCP server and `tools: []`, load the pack's skills through `plugins`, and return structured results, with settings isolated? Yes on all five means the SDK can sit behind the same `delegate` interface. Any no means this plan stands.
 
 ## 10. Out of v0
 
@@ -155,3 +161,5 @@ Shared hosting. Managed Agents. Real-time peer chat. Wet and dry verticals beyon
 2. Provide a clean Windows machine or VM for test A at Phase 6, with an API key for tests B and E.
 3. Run the manual halves of tests A through E per `docs/acceptance-tests.md` and `docs/recovery-protocol.md`, and fill their result tables.
 4. Decide when to publish `app-v0.1.3`: push the tag, or run the Windows app workflow with `publish` on.
+5. Confirm who the installer names as publisher. The license names Abraham Borg as the copyright holder; `MyAppPublisher` in `app/packaging/installer.iss` still reads as it did before the rename.
+6. On the Windows machine, look at the restyled window once in each colour scheme (Settings, Appearance) and say whether the title bar, the menus, and the fonts read as intended. The look was built and checked under Linux; Windows draws the title bar and the fonts itself.

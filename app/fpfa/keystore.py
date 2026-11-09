@@ -6,7 +6,7 @@ missing system keyring can open a blocking password dialog. The key is never
 written into a project.
 
 A source run calls keyring in a short-lived child Python process. A packaged
-(PyInstaller) app cannot do that, because sys.executable is fpfa.exe, not
+(PyInstaller) app cannot do that, because sys.executable is Cynosure.exe, not
 Python. It calls keyring in-process on one worker thread with the same
 timeout. That thread runs calls in the order they were made, so a call that
 timed out cannot land after a later save.

@@ -817,7 +817,7 @@ class KeyAndSkillTests(unittest.TestCase):
             keystore.clear_api_key()
 
     def test_frozen_app_calls_keyring_in_process(self):
-        """A PyInstaller build must not relaunch sys.executable (fpfa.exe) to reach keyring."""
+        """A PyInstaller build must not relaunch sys.executable (Cynosure.exe) to reach keyring."""
         import importlib.util
         import threading
         from unittest.mock import patch
@@ -848,7 +848,7 @@ class KeyAndSkillTests(unittest.TestCase):
             launched.append(args)
             raise AssertionError("the frozen app relaunched sys.executable")
 
-        frozen_exe = str(Path(tempfile.gettempdir()) / "fpfa" / "fpfa.exe")
+        frozen_exe = str(Path(tempfile.gettempdir()) / "Cynosure" / "Cynosure.exe")
         with patch.object(sys, "frozen", True, create=True), \
                 patch.object(sys, "executable", frozen_exe), \
                 patch.dict(sys.modules, {"keyring": fake_keyring}), \

@@ -103,6 +103,30 @@ class _Inner:
             raise self._error
         return self._reply(len(self.calls)) if callable(self._reply) else self._reply
 
+    def stream(self, **kwargs):
+        """The window's chat turn streams. The stand-in answers a stream as it answers create().
+
+        The SDK sends the request when the stream is entered, so that is where
+        the call is recorded and a scripted error is raised.
+        """
+        inner = self
+
+        class _Stream:
+            def __enter__(self):
+                self.reply = inner.create(**kwargs)
+                return self
+
+            def __exit__(self, *_exc):
+                return False
+
+            def __iter__(self):
+                return iter(())
+
+            def get_final_message(self):
+                return self.reply
+
+        return _Stream()
+
 
 def _no_sleep():
     """Stands in for the time module inside claude_client only. A retry would call sleep."""

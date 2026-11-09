@@ -284,7 +284,7 @@ class AboutTests(unittest.TestCase):
         from fpfa.about import version_lines
 
         lines = version_lines(REPO, Path("/data"))
-        self.assertTrue(lines[0].startswith(f"FP/FA Design Assistant {__version__} ("))
+        self.assertTrue(lines[0].startswith(f"+Cynosure {__version__} ("))
         self.assertEqual(lines[1], "Model claude-opus-5-5")
         self.assertTrue(lines[2].startswith("Python 3."))
         self.assertTrue(any(line.startswith("anthropic ") for line in lines))
@@ -301,7 +301,7 @@ class AboutTests(unittest.TestCase):
         with patch("fpfa.ui.tk.Tk") as tk_root, redirect_stdout(out):
             main(["--versions"])
         tk_root.assert_not_called()
-        self.assertIn("FP/FA Design Assistant", out.getvalue())
+        self.assertIn("+Cynosure", out.getvalue())
         self.assertIn("Record schema", out.getvalue())
 
 
@@ -344,10 +344,15 @@ class UsageWindowTests(unittest.TestCase):
         self.assertIn("lead turn, 1 delegation, 1 check", thread)
         self.assertIn("Estimated cost $", thread)
         self.assertIn("/usage", app.project["chat"][-2]["text"])
-        with patch("fpfa.ui.messagebox.showinfo") as shown:
+        with patch("fpfa.ui.dialogs.showtext") as shown:
             app.show_about()
-        self.assertIn("FP/FA Design Assistant", shown.call_args.args[1])
-        self.assertIn("Record schema 3", shown.call_args.args[1])
+        self.assertEqual(shown.call_args.args[0], "About +Cynosure")
+        about = shown.call_args.args[1]
+        self.assertIn("+Cynosure", about)
+        self.assertIn("Record schema 3", about)
+        # The About box says what the license allows and that the output is a draft.
+        self.assertIn("PolyForm Shield License 1.0.0", about)
+        self.assertIn("engineer of record", about)
 
 
 if __name__ == "__main__":

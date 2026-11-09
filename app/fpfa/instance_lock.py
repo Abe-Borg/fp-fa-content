@@ -16,7 +16,7 @@ from pathlib import Path
 
 LOCK_NAME = "fpfa.lock"
 ANOTHER_WINDOW_TEXT = (
-    "FP/FA Design Assistant is already open on this data directory. "
+    "+Cynosure is already open on this data directory. "
     "Use that window, or close it and start again. Two windows on one record "
     "would each treat the other's running work as interrupted."
 )

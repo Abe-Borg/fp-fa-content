@@ -124,8 +124,13 @@ def run_everyday(
     project_id: str | None = None,
     agent: str = "lead",
     cancel: Any = None,
+    observe: Callable[[dict], Any] | None = None,
 ) -> dict:
     """One everyday turn. create() is Messages.create. Tools run in calcs/.
+
+    observe is the window's progress listener (claude_client.run_tool_loop).
+    It hears the lead's rounds and tools, and each specialist's with the
+    specialist's slug on the event.
 
     With record and project_id, calc calls and record tools write to that
     job's record as agent, and the turn is the lead of a team: it gets
@@ -138,7 +143,7 @@ def run_everyday(
 
         team = TeamSession(
             content_root, record, project_id, create,
-            max_rounds=max_rounds, max_tokens=max_tokens, cancel=cancel,
+            max_rounds=max_rounds, max_tokens=max_tokens, cancel=cancel, observe=observe,
         )
         # Pending handoffs ride in the user message, so the lead sees them without a tool call.
         waiting = pending_handoff_note(record, project_id)
@@ -156,6 +161,7 @@ def run_everyday(
                 max_rounds=max_rounds,
                 max_tokens=max_tokens,
                 cancel=cancel,
+                observe=observe,
             )
         except TurnCancelled as exc:
             # The rounds that ran were billed. Close the task on the record with what they cost.
@@ -195,4 +201,5 @@ def run_everyday(
         max_rounds=max_rounds,
         max_tokens=max_tokens,
         cancel=cancel,
+        observe=observe,
     )
