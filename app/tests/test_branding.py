@@ -184,6 +184,24 @@ class LicenseTests(unittest.TestCase):
         workflow = (REPO / ".github" / "workflows" / "windows-app.yml").read_text(encoding="utf-8")
         self.assertIn("PolyForm Shield License 1.0.0", workflow)
 
+    def test_the_installer_names_the_author_as_publisher(self):
+        # The app is its author's own. The publisher Windows shows under Apps is the name on
+        # the license, and no file outside the content pack names anyone else.
+        from fpfa import about
+
+        script = (APP_DIR / "packaging" / "installer.iss").read_text(encoding="utf-8")
+        self.assertIn(f'#define MyAppPublisher "{about.APP_AUTHOR}"', script)
+        self.assertIn(about.APP_AUTHOR, about.COPYRIGHT)
+        root = APP_DIR.parent
+        for path in [root / "README.md", root / "CLAUDE.md", root / "LICENSE",
+                     *sorted((root / "docs").glob("*.md")),
+                     *sorted((APP_DIR / "packaging").glob("*.*")),
+                     *sorted((APP_DIR / "fpfa").glob("*.py")),
+                     *sorted((root / ".github" / "workflows").glob("*.yml"))]:
+            if path.suffix in (".ico", ".png"):
+                continue
+            self.assertNotIn("ehvert", path.read_text(encoding="utf-8", errors="replace").lower(), path.name)
+
     def test_the_installer_shows_the_license_and_waits_for_acceptance(self):
         values = _iss_value("LicenseFile")
         self.assertEqual(len(values), 1, "installer.iss needs one LicenseFile, or Setup shows no license page")

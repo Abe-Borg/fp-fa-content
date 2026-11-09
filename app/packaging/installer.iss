@@ -29,7 +29,7 @@
 #define MyAppName "+Cynosure"
 ; The name without the plus sign, for the exe and the install folder.
 #define MyAppFileName "Cynosure"
-#define MyAppPublisher "Ehvert"
+#define MyAppPublisher "Abraham Borg"
 #define MyAppCopyright "Copyright (c) 2026 Abraham Borg"
 #define MyAppExeName "Cynosure.exe"
 #define MyAppURL "https://github.com/Abe-Borg/fp-fa-content"

@@ -161,5 +161,4 @@ Shared hosting. Managed Agents. Real-time peer chat. Wet and dry verticals beyon
 2. Provide a clean Windows machine or VM for test A at Phase 6, with an API key for tests B and E.
 3. Run the manual halves of tests A through E per `docs/acceptance-tests.md` and `docs/recovery-protocol.md`, and fill their result tables.
 4. Decide when to publish `app-v0.1.3`: push the tag, or run the Windows app workflow with `publish` on.
-5. Confirm who the installer names as publisher. The license names Abraham Borg as the copyright holder; `MyAppPublisher` in `app/packaging/installer.iss` still reads as it did before the rename.
-6. On the Windows machine, look at the restyled window once in each colour scheme (Settings, Appearance) and say whether the title bar, the menus, and the fonts read as intended. The look was built and checked under Linux; Windows draws the title bar and the fonts itself.
+5. On the Windows machine, look at the restyled window once in each colour scheme (Settings, Appearance) and say whether the title bar, the menus, and the fonts read as intended. The look was built and checked under Linux; Windows draws the title bar and the fonts itself.
