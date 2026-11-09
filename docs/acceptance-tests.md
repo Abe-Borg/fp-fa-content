@@ -1,5 +1,7 @@
 # Acceptance tests A through E: protocol and results
 
+The app is named +Cynosure. Its installer is `Cynosure-Setup-<version>.exe` and its exe is `Cynosure.exe`.
+
 The plan of record (`docs/prototype-plan.md`, section 4) names five acceptance tests. This file is how to run each one, what passes, and where the results go. Tests C and D have their own protocol in `docs/recovery-protocol.md`; this file points there and keeps their results in one place with the others.
 
 Everything that can run without a Windows machine or an API key has run and is marked below. Everything else needs the project owner on a Windows machine with a saved key, and is marked **Not run** until then.
@@ -7,7 +9,7 @@ Everything that can run without a Windows machine or an API key has run and is m
 ## Before you start
 
 1. **Get the installer.** Two ways:
-   - **Build without a release.** On GitHub, Actions, "Windows app", Run workflow, pick the branch, leave `version` empty, turn `publish` off, Run. When it finishes, open the run and download the artifact `fpfa-windows-<version>-<sha>`. It holds `fpfa-setup-<version>.exe` and `fpfa-windows-<version>.zip`. Nothing is tagged or released.
+   - **Build without a release.** On GitHub, Actions, "Windows app", Run workflow, pick the branch, leave `version` empty, turn `publish` off, Run. When it finishes, open the run and download the artifact `Cynosure-windows-<version>-<sha>`. It holds `Cynosure-Setup-<version>.exe` and `Cynosure-windows-<version>.zip`. Nothing is tagged or released.
    - **Release.** Push the tag `app-v<version>` where `<version>` equals `__version__` in `app/fpfa/__init__.py`, or run the same workflow with `publish` on. The release carries both files.
 2. **A clean Windows machine or VM.** No Python installed, no earlier copy of the app, no saved key. Windows 10 or 11, 64-bit. Note its edition and build (Settings, System, About).
 3. **An Anthropic API key** for the owner's account. It is typed into Settings on the machine and nowhere else.
@@ -17,14 +19,14 @@ Everything that can run without a Windows machine or an API key has run and is m
 
 What passes: install on a clean machine, open the sample, load the skills, run the DH-1 tool plan, export. Figures match `docs/known-answer-dh1.md` section 2. Runtime and dependency versions recorded.
 
-1. Run `fpfa-setup-<version>.exe`. Accept the defaults. Note the install time and the install folder.
-2. Start the app from the Start menu. Expected: the chat-first window opens, no error, the status line shows the key is not saved.
-3. ⋯ menu, **About and versions**. Copy the box's text into the versions table below. It lists the app version and whether it is frozen, the model id, Python, Windows, each dependency's version, the content pack version and folder, the data directory, and the record schema.
+1. Run `Cynosure-Setup-<version>.exe`. Expected: the second page shows the license (PolyForm Shield License 1.0.0) under a short summary, and Next stays disabled until **I accept the agreement** is selected. Accept it, then accept the defaults. Note the install time and the install folder. Expected in the install folder: `Cynosure.exe`, `LICENSE.txt`, and `THIRD-PARTY-NOTICES.txt`.
+2. Start +Cynosure from the Start menu. Expected: the chat-first window opens in the Warm Clay colour scheme with a dark title bar, no error, and the status line shows the key is not saved.
+3. ⋯ menu, **About and versions**. Copy the version lines into the versions table below (the Copy button takes the whole box). The box opens with the name, the copyright line, and the license in brief, then lists the app version and whether it is frozen, the model id, Python, Windows, each dependency's version, the content pack version and folder, the data directory, and the record schema. A packaged app reports `anthropic`, `python-docx`, `keyring`, and `pywin32-ctypes` by version; `pyinstaller` reads "not installed" there, because the build tool is not bundled.
 4. Type `/sample-di` and press Enter. Expected: a new job named for the sample, the tool plan runs without a key, and the thread shows the zone figures. Open Zone details, Results tab: the tables.
 5. Compare the figures with `docs/known-answer-dh1.md` section 2: pipe volume, fittings allowance, trim, zone total, delivery time, screen limit, releasing rows, density and area, hose, duration, nitrogen. Every figure and every label must match.
 6. ⋯ menu, **Export draft Section 21 13 19…**. Expected: a .docx is written and opens in Word. Then **Export Design Basis and Open Questions…**. Expected: with no findings yet the export is allowed and section 3 lists the eight calculation records with the same figures.
 7. Settings, paste the key, save. Expected: the status line says the key is saved. Note which key store the Settings dialog reports (Credential Manager on Windows).
-8. Ask: "Give me the design basis for zone DH-1." Expected: a reply with a **Team** block under it, the Team tab roster showing the lead and at least one specialist, and findings on the record. Compare the reply's content against sections 3 and later of the known answer. Note what differs.
+8. Ask: "Give me the design basis for zone DH-1." (the **Design basis** chip above the composer sends the same question). Expected: three pulsing dots and a line that says what the app is doing while it works, then the reply arriving in the thread as it is written, with a **Team** block under it, the Team tab roster showing the lead and at least one specialist, and findings on the record. Compare the reply's content against sections 3 and later of the known answer. Note what differs.
 9. ⋯ menu, **Usage and cost**. Copy the job total and the estimated cost into the cost table below.
 
 Pass: steps 2, 4, 5, 6, and 8 as expected, and the versions table filled.

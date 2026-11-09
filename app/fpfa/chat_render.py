@@ -125,11 +125,15 @@ def _table_lines(rows: list[str]) -> list[list[Segment]]:
     return out
 
 
-def markdown_segments(text: str) -> list[Segment]:
+def markdown_segments(text: str, *, caption: bool = True) -> list[Segment]:
     """Turn a reply into runs for a Text widget. Lines are joined with newlines.
 
     The newline after a code or table line carries the "pre" tag too, so the
     shaded block spans the text column instead of stopping at the last word.
+
+    caption=False draws the first line as ordinary text. The thread uses it
+    for a later part of a reply it is drawing piece by piece, where the first
+    line of the piece is not the first line of the reply.
     """
     lines = (text or "").split("\n")
     rendered: list[list[Segment]] = []
@@ -145,14 +149,14 @@ def markdown_segments(text: str) -> list[Segment]:
             rendered.append([(line, ("pre",))])
             index += 1
             continue
-        if line.strip().startswith("|") and not (index == 0 and is_job_heading(line)):
+        if line.strip().startswith("|") and not (caption and index == 0 and is_job_heading(line)):
             group = []
             while index < len(lines) and lines[index].strip().startswith("|"):
                 group.append(lines[index])
                 index += 1
             rendered.extend(_table_lines(group))
             continue
-        segments = _line_segments(line, first=index == 0)
+        segments = _line_segments(line, first=caption and index == 0)
         rendered.append([] if segments is None else segments)
         index += 1
     out: list[Segment] = []

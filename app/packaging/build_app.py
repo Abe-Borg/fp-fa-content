@@ -1,11 +1,17 @@
 #!/usr/bin/env python3
-"""Build a distributable folder with a seed content pack.
+"""Build a distributable +Cynosure folder with a seed content pack.
 
 PyInstaller builds for the OS it is running on. A Windows run writes
-fpfa.exe. A Linux run writes a Linux folder. The packaged app checks the
-release feed on launch. On Windows, packaging/build_installer.ps1 compiles
-the setup exe after this script. Upload fpfa-setup-<version>.exe to a
-GitHub Release.
+dist/Cynosure/Cynosure.exe. A Linux run writes a Linux folder. The packaged
+app checks the release feed on launch. On Windows,
+packaging/build_installer.ps1 compiles the setup exe after this script.
+Upload Cynosure-Setup-<version>.exe to a GitHub Release.
+
+The folder carries its license terms. After PyInstaller finishes, this
+script copies the repository's LICENSE into the folder as LICENSE.txt and
+writes THIRD-PARTY-NOTICES.txt beside it (third_party_notices.py), so the
+installer and the portable zip both ship them. A license text that cannot be
+found fails the build.
 
 From the app directory:
 
@@ -29,6 +35,13 @@ sys.path.insert(0, str(APP_DIR))
 
 from fpfa.content_pack import copy_pack  # noqa: E402
 from fpfa.paths import is_content_pack  # noqa: E402
+
+# The exe and its folder. The app's name is "+Cynosure"; a file name leaves the plus off.
+BUNDLE_NAME = "Cynosure"
+ICON = APP_DIR / "packaging" / "assets" / "Cynosure.ico"
+LICENSE_SOURCE = REPO / "LICENSE"
+LICENSE_NAME = "LICENSE.txt"
+NOTICES_NAME = "THIRD-PARTY-NOTICES.txt"
 
 
 def write_seed(dest: Path) -> list[str]:
@@ -72,6 +85,22 @@ def keyring_bundle_flags(*, windows: bool) -> list[str]:
     return flags
 
 
+def version_metadata_flags(*, windows: bool) -> list[str]:
+    """Package metadata the About box reads, so a packaged app reports its dependency versions.
+
+    Without it, importlib.metadata finds nothing in the bundle and About
+    says "not installed" for a package that is in fact bundled. keyring's
+    metadata is already copied for its backends.
+    """
+    names = ["anthropic", "python-docx"]
+    if windows:
+        names.append("pywin32-ctypes")
+    flags: list[str] = []
+    for name in names:
+        flags += ["--copy-metadata", name]
+    return flags
+
+
 def pyinstaller_command(
     seed: Path, dist: Path, work: Path, *, windowed: bool, windows: bool | None = None
 ) -> list[str]:
@@ -86,7 +115,7 @@ def pyinstaller_command(
         "--clean",
         "--onedir",
         "--name",
-        "fpfa",
+        BUNDLE_NAME,
         "--paths",
         str(APP_DIR),
         "--distpath",
@@ -106,19 +135,50 @@ def pyinstaller_command(
         "--hidden-import",
         "keyring",
         *keyring_bundle_flags(windows=windows),
+        *version_metadata_flags(windows=windows),
         "--windowed" if windowed else "--console",
-        str(entry),
     ]
+    if windows:
+        # The icon of the exe, the taskbar, and the shortcuts. Other systems have no exe icon.
+        command += ["--icon", str(ICON)]
+    command.append(str(entry))
     return command
 
 
+def finish_bundle(folder: Path, *, notices: bool = True) -> list[str]:
+    """Put the license terms in the built folder. Returns the names written.
+
+    LICENSE.txt is the repository's LICENSE, byte for byte.
+    THIRD-PARTY-NOTICES.txt holds the license of everything bundled; a text
+    that cannot be found raises NoticesError and nothing is written for it.
+    """
+    written = []
+    folder.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(LICENSE_SOURCE, folder / LICENSE_NAME)
+    written.append(LICENSE_NAME)
+    if notices:
+        sys.path.insert(0, str(APP_DIR / "packaging"))
+        try:
+            import third_party_notices
+        finally:
+            sys.path.pop(0)
+        third_party_notices.write_notices(folder / NOTICES_NAME)
+        written.append(NOTICES_NAME)
+    return written
+
+
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Build a distributable FP/FA app folder")
+    parser = argparse.ArgumentParser(description="Build a distributable +Cynosure app folder")
     parser.add_argument("--seed-only", action="store_true", help="Write the seed folder and stop")
     parser.add_argument("--seed", default=str(APP_DIR / "build" / "seed"), help="Seed output directory")
     parser.add_argument("--dist", default=str(APP_DIR / "dist"), help="PyInstaller dist directory")
     parser.add_argument("--console", action="store_true", help="Keep a console window")
     parser.add_argument("--windowed", action="store_true", help="Hide the console")
+    parser.add_argument(
+        "--skip-notices",
+        action="store_true",
+        help="Leave out THIRD-PARTY-NOTICES.txt. For a local trial only: do not distribute the folder.",
+    )
     args = parser.parse_args(argv)
     if args.console and args.windowed:
         parser.error("choose one of --console or --windowed")
@@ -145,8 +205,17 @@ def main(argv: list[str] | None = None) -> int:
     proc = subprocess.run(command, check=False)
     if proc.returncode != 0:
         return proc.returncode
-    folder = dist / "fpfa"
-    exe = folder / ("fpfa.exe" if os.name == "nt" else "fpfa")
+    folder = dist / BUNDLE_NAME
+    exe = folder / (f"{BUNDLE_NAME}.exe" if os.name == "nt" else BUNDLE_NAME)
+    try:
+        written = finish_bundle(folder, notices=not args.skip_notices)
+    except Exception as exc:
+        sys.stderr.write(f"The folder was built, but its license terms could not be written.\n{exc}\n")
+        return 1
+    for name in written:
+        sys.stdout.write(f"wrote {folder / name}\n")
+    if args.skip_notices:
+        sys.stderr.write(f"{NOTICES_NAME} was skipped. Do not distribute this folder.\n")
     sys.stdout.write(f"built {exe}\n")
     return 0
 

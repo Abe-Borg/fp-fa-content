@@ -1,6 +1,10 @@
-# Build the Windows app when an app-v* tag is pushed.
-# Assets: fpfa-setup-<version>.exe and fpfa-windows-<version>.zip.
+# Build the +Cynosure Windows app when an app-v* tag is pushed.
+# Assets: Cynosure-Setup-<version>.exe and Cynosure-windows-<version>.zip.
 # Does not build or tag a content pack. Content stays on content-v*.
+#
+# The installer shows the license (the repository's LICENSE) and installs only
+# after the reader accepts it. Both assets carry LICENSE.txt and
+# THIRD-PARTY-NOTICES.txt; a missing license text fails the build.
 #
 # Run it by hand with publish=false to get a build without a release: the
 # installer and the portable zip are uploaded as workflow artifacts, the
@@ -82,6 +86,15 @@ jobs:
           python -m pip install -r app/requirements.txt pyinstaller
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: Check third-party license texts
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $PSNativeCommandUseErrorActionPreference = $false
+          # Before the long build: every bundled package, the interpreter, and Tcl/Tk must have a license text.
+          python app/packaging/third_party_notices.py --check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Install Inno Setup 6
         shell: pwsh
         run: |
@@ -119,7 +132,7 @@ jobs:
           }
           & .\packaging\build_installer.ps1 -BuildApp -Version $env:APP_VERSION
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $setup = Join-Path (Get-Location) "dist\fpfa-setup-$env:APP_VERSION.exe"
+          $setup = Join-Path (Get-Location) "dist\Cynosure-Setup-$env:APP_VERSION.exe"
           if (-not (Test-Path -LiteralPath $setup)) { throw "Missing $setup" }
           Write-Host "Built $setup"
 
@@ -131,10 +144,13 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           Add-Type -AssemblyName System.IO.Compression.FileSystem
-          $folder = Join-Path (Get-Location) "dist\fpfa"
-          $zip = Join-Path (Get-Location) "dist\fpfa-windows-$env:APP_VERSION.zip"
-          if (-not (Test-Path -LiteralPath (Join-Path $folder "fpfa.exe"))) {
-            throw "Missing $folder\fpfa.exe"
+          $folder = Join-Path (Get-Location) "dist\Cynosure"
+          $zip = Join-Path (Get-Location) "dist\Cynosure-windows-$env:APP_VERSION.zip"
+          # The portable folder carries its license terms, as the installer does.
+          foreach ($name in @("Cynosure.exe", "LICENSE.txt", "THIRD-PARTY-NOTICES.txt")) {
+            if (-not (Test-Path -LiteralPath (Join-Path $folder $name))) {
+              throw "Missing $folder\$name"
+            }
           }
           if (Test-Path -LiteralPath $zip) { Remove-Item -LiteralPath $zip }
           [System.IO.Compression.ZipFile]::CreateFromDirectory(
@@ -144,8 +160,10 @@ jobs:
             $false)
           $archive = [System.IO.Compression.ZipFile]::OpenRead($zip)
           try {
-            $exe = $archive.Entries | Where-Object { ($_.FullName -replace '\\','/') -eq "fpfa.exe" }
-            if (-not $exe) { throw "fpfa.exe is not at the root of $zip" }
+            foreach ($name in @("Cynosure.exe", "LICENSE.txt", "THIRD-PARTY-NOTICES.txt")) {
+              $entry = $archive.Entries | Where-Object { ($_.FullName -replace '\\','/') -eq $name }
+              if (-not $entry) { throw "$name is not at the root of $zip" }
+            }
           } finally {
             $archive.Dispose()
           }
@@ -155,10 +173,10 @@ jobs:
         if: github.event_name == 'workflow_dispatch' && inputs.publish == false
         uses: actions/upload-artifact@v4
         with:
-          name: fpfa-windows-${{ steps.version.outputs.version }}-${{ github.sha }}
+          name: Cynosure-windows-${{ steps.version.outputs.version }}-${{ github.sha }}
           path: |
-            app/dist/fpfa-setup-${{ steps.version.outputs.version }}.exe
-            app/dist/fpfa-windows-${{ steps.version.outputs.version }}.zip
+            app/dist/Cynosure-Setup-${{ steps.version.outputs.version }}.exe
+            app/dist/Cynosure-windows-${{ steps.version.outputs.version }}.zip
           if-no-files-found: error
           retention-days: 14
 
@@ -175,19 +193,21 @@ jobs:
           $version = $env:APP_VERSION
           $tag = "app-v$version"
           $dist = Join-Path $env:GITHUB_WORKSPACE "app\dist"
-          $setup = Join-Path $dist "fpfa-setup-$version.exe"
-          $zip = Join-Path $dist "fpfa-windows-$version.zip"
+          $setup = Join-Path $dist "Cynosure-Setup-$version.exe"
+          $zip = Join-Path $dist "Cynosure-windows-$version.zip"
           foreach ($path in @($setup, $zip)) {
             if (-not (Test-Path -LiteralPath $path)) { throw "Missing $path" }
           }
           $notes = @"
-          Windows app $version.
+          +Cynosure for Windows, $version.
 
           Built from $($env:GITHUB_SHA). The seed content pack inside the build is the tree at this commit.
 
           Assets:
-          - fpfa-setup-$version.exe is the Inno Setup installer.
-          - fpfa-windows-$version.zip is the portable folder. Unpack it and run fpfa.exe.
+          - Cynosure-Setup-$version.exe is the Inno Setup installer. It shows the license and installs after you accept it.
+          - Cynosure-windows-$version.zip is the portable folder. Unpack it and run Cynosure.exe.
+
+          License: PolyForm Shield License 1.0.0. Both assets carry LICENSE.txt and THIRD-PARTY-NOTICES.txt.
 
           No MSI.
 

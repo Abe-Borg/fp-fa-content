@@ -1,12 +1,15 @@
-# Build fpfa-setup-<version>.exe with Inno Setup 6.
+# Build Cynosure-Setup-<version>.exe, the +Cynosure installer, with Inno Setup 6.
 # Run from any directory on Windows.
 #
 #   packaging\build_installer.ps1
 #   packaging\build_installer.ps1 -BuildApp
 #   packaging\build_installer.ps1 -Version 0.1.2
 #
-# Uses app\dist\fpfa\fpfa.exe when that file is already there. If it is
+# Uses app\dist\Cynosure\Cynosure.exe when that file is already there. If it is
 # missing, or if -BuildApp is set, runs build_app.ps1 first.
+# The installer shows the license (the repository's LICENSE) and installs only
+# after the reader accepts it. LICENSE.txt and THIRD-PARTY-NOTICES.txt must be
+# in the app folder; build_app.py puts them there.
 # ISCC.exe is taken from %LOCALAPPDATA%\Programs\Inno Setup 6, then
 # Program Files. Prints the setup exe path. Upload that file to a GitHub Release.
 
@@ -19,12 +22,13 @@ $ErrorActionPreference = "Stop"
 $Packaging = $PSScriptRoot
 $App = Split-Path -Parent $Packaging
 $DistDir = Join-Path $App "dist"
-$Exe = Join-Path $DistDir "fpfa\fpfa.exe"
+$Bundle = Join-Path $DistDir "Cynosure"
+$Exe = Join-Path $Bundle "Cynosure.exe"
 $Iss = Join-Path $Packaging "installer.iss"
 
 if ($BuildApp -or -not (Test-Path -LiteralPath $Exe)) {
     if (-not (Test-Path -LiteralPath $Exe)) {
-        Write-Host "fpfa.exe is not in $DistDir\fpfa. Running build_app.ps1."
+        Write-Host "Cynosure.exe is not in $Bundle. Running build_app.ps1."
     }
     & (Join-Path $Packaging "build_app.ps1")
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -33,6 +37,13 @@ if ($BuildApp -or -not (Test-Path -LiteralPath $Exe)) {
 if (-not (Test-Path -LiteralPath $Exe)) {
     Write-Host "Missing $Exe"
     exit 1
+}
+foreach ($terms in @("LICENSE.txt", "THIRD-PARTY-NOTICES.txt")) {
+    $termsPath = Join-Path $Bundle $terms
+    if (-not (Test-Path -LiteralPath $termsPath)) {
+        Write-Host "Missing $termsPath. Run build_app.ps1 so the folder carries its license terms."
+        exit 1
+    }
 }
 
 if (-not $Version) {
@@ -79,7 +90,7 @@ if (-not $Iscc) {
     exit 1
 }
 
-$OutName = "fpfa-setup-$Version"
+$OutName = "Cynosure-Setup-$Version"
 & $Iscc "/DMyAppVersion=$Version" "/O$DistDir" "/F$OutName" $Iss
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 

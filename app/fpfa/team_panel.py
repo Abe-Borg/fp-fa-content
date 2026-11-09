@@ -14,7 +14,6 @@ import tkinter as tk
 from tkinter import ttk
 from typing import Any, Callable
 
-from fpfa import theme as palette
 from fpfa.team import check_token
 
 STATUS_GLYPH = {
@@ -150,7 +149,7 @@ class TeamPanel(ttk.Frame):
         on_export: Callable[[], None],
     ):
         px = theme.px
-        super().__init__(master, padding=px(10))
+        super().__init__(master, style="OnSide.TFrame", padding=(px(4), px(10), px(4), px(6)))
         self.theme = theme
         self.snapshot: dict | None = None
         self._rows: dict[str, dict] = {}
@@ -162,57 +161,68 @@ class TeamPanel(ttk.Frame):
                 "Select a row for its brief, payload, and result. Findings and questions live on the record, "
                 "not in the thread."
             ),
-            style="Small.TLabel",
-            wraplength=px(400),
+            style="OnSide.Small.TLabel",
+            wraplength=px(410),
             justify="left",
-        ).pack(anchor="w", pady=(0, px(6)))
+        ).pack(anchor="w", pady=(0, px(10)))
 
-        buttons = ttk.Frame(self)
-        buttons.pack(fill="x", pady=(0, px(6)))
-        self.cancel_button = ttk.Button(buttons, text="Cancel running job", command=on_cancel, state="disabled")
+        buttons = ttk.Frame(self, style="OnSide.TFrame")
+        buttons.pack(fill="x", pady=(0, px(12)))
+        self.cancel_button = ttk.Button(
+            buttons, text="Cancel running job", command=on_cancel, state="disabled", style="OnSide.Danger.TButton"
+        )
         self.cancel_button.pack(side="left")
-        self.check_button = ttk.Button(buttons, text="Run blind check", command=on_check)
-        self.check_button.pack(side="left", padx=(px(6), 0))
-        ttk.Button(buttons, text="Export basis…", command=on_export).pack(side="left", padx=(px(6), 0))
+        self.check_button = ttk.Button(buttons, text="Run blind check", command=on_check, style="OnSide.TButton")
+        self.check_button.pack(side="left", padx=(px(8), 0))
+        ttk.Button(buttons, text="Export basis…", command=on_export, style="OnSide.TButton").pack(
+            side="left", padx=(px(8), 0)
+        )
 
-        ttk.Label(self, text="TEAM", style="Section.TLabel").pack(anchor="w")
-        self.roster_text = self._text(height=4)
-        self.roster_text.pack(fill="x", pady=(px(2), px(6)))
+        self.roster_text = self._section("TEAM", height=4)
+        self.blockers_text = self._section("BLOCKERS AND OPEN QUESTIONS", height=4)
 
-        ttk.Label(self, text="BLOCKERS AND OPEN QUESTIONS", style="Section.TLabel").pack(anchor="w")
-        self.blockers_text = self._text(height=4)
-        self.blockers_text.pack(fill="x", pady=(px(2), px(6)))
-
-        ttk.Label(self, text="HANDOFFS", style="Section.TLabel").pack(anchor="w")
+        ttk.Label(self, text="HANDOFFS", style="OnSide.Section.TLabel").pack(anchor="w", pady=(0, px(5)))
+        table = ttk.Frame(self, style="OnSide.Card.TFrame", padding=(px(8), px(6), px(8), px(8)))
+        table.pack(fill="x", pady=(0, px(12)))
         columns = ("when", "from", "to", "status", "brief")
-        self.tree = ttk.Treeview(self, columns=columns, show="headings", height=6, selectmode="browse")
+        self.tree = ttk.Treeview(
+            table, columns=columns, show="headings", height=5, selectmode="browse", style="OnCard.Treeview"
+        )
         for name, title, width in (
-            ("when", "When", 52), ("from", "From", 92), ("to", "To", 92), ("status", "Status", 70), ("brief", "Brief", 220),
+            ("when", "WHEN", 52), ("from", "FROM", 92), ("to", "TO", 92), ("status", "STATUS", 78), ("brief", "BRIEF", 200),
         ):
-            self.tree.heading(name, text=title)
+            self.tree.heading(name, text=title, anchor="w")
             self.tree.column(name, width=px(width), anchor="w", stretch=(name == "brief"))
-        self.tree.pack(fill="x", pady=(px(2), px(4)))
+        self.tree.pack(fill="x")
         self.tree.bind("<<TreeviewSelect>>", self._on_select)
 
-        ttk.Label(self, text="DETAIL", style="Section.TLabel").pack(anchor="w")
-        self.detail = self._text(height=8)
-        self.detail.pack(fill="both", expand=True, pady=(px(2), 0))
+        self.detail = self._section("DETAIL", height=8, expand=True)
 
-    def _text(self, *, height: int) -> tk.Text:
+    def _section(self, title: str, *, height: int, expand: bool = False) -> tk.Text:
+        """A small heading and a rounded card that holds a read-only text."""
         px = self.theme.px
+        ttk.Label(self, text=title, style="OnSide.Section.TLabel").pack(anchor="w", pady=(0, px(5)))
+        card = ttk.Frame(self, style="OnSide.Card.TFrame", padding=(px(4), px(4)))
+        card.pack(fill="both" if expand else "x", expand=expand, pady=(0, 0 if expand else px(12)))
         widget = tk.Text(
-            self,
+            card,
             wrap="word",
             height=height,
+            width=20,
             bd=0,
             relief="flat",
             highlightthickness=0,
-            bg=palette.SURFACE,
-            fg=palette.TEXT,
-            padx=px(8),
-            pady=px(6),
+            padx=px(10),
+            pady=px(7),
+            spacing2=px(2),
             font=self.theme.fonts["small"],
+            cursor="arrow",
         )
+        self.theme.paint(
+            widget, bg="raised", fg="ink", selectbackground="select", selectforeground="ink",
+            insertbackground="raised",
+        )
+        widget.pack(fill="both", expand=True)
         widget.configure(state="disabled")
         return widget
 

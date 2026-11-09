@@ -209,8 +209,12 @@ def delegate(
     max_rounds: int = 12,
     max_tokens: int = 16000,
     cancel: Any = None,
+    observe: Callable[[dict], Any] | None = None,
 ) -> dict:
     """Run one specialist and return its structured contribution.
+
+    observe hears the specialist's rounds and tools, each event carrying
+    "agent": the specialist's slug.
 
     The lead's handoff to the specialist is written first and marked returned
     when the specialist finishes. Pending handoffs addressed to the specialist
@@ -239,6 +243,7 @@ def delegate(
     }
     session = ToolSession(content_root, record=record, project_id=project_id, agent=slug)
     request = specialist_request(record, project_id, slug, text, inputs, pending)
+    heard = None if observe is None else (lambda event: observe({**event, "agent": slug}))
     try:
         out = run_tool_loop(
             create,
@@ -249,6 +254,7 @@ def delegate(
             max_rounds=max_rounds,
             max_tokens=max_tokens,
             cancel=cancel,
+            observe=heard,
         )
     except TurnCancelled as exc:
         record.set_agent(project_id, name=name, role_slug=slug, status="interrupted")
@@ -469,7 +475,9 @@ class TeamSession:
         max_rounds: int = 12,
         max_tokens: int = 16000,
         cancel: Any = None,
+        observe: Callable[[dict], Any] | None = None,
     ):
+        self.observe = observe
         self.root = Path(content_root)
         self.record = record
         self.project_id = project_id
@@ -495,7 +503,7 @@ class TeamSession:
                     self.root, self.record, self.project_id, self.create,
                     specialist=str(args.get("specialist") or ""), brief=str(args.get("brief") or ""),
                     inputs=args.get("inputs"), max_rounds=self.max_rounds, max_tokens=self.max_tokens,
-                    cancel=self.cancel,
+                    cancel=self.cancel, observe=self.observe,
                 )
             except TurnCancelled as exc:
                 # The interrupted specialist's rounds count toward the task.

@@ -37,7 +37,7 @@ The plan of record (`docs/prototype-plan.md`, section 4) names two acceptance te
 | `test_a_second_window_on_the_same_data_directory_is_refused_and_recovers_nothing` | While another holder has the directory, the window refuses to start and the live job and agent rows are untouched; once the holder lets go, the next launch owns the directory, recovers, and releases it when it closes. |
 | `test_a_long_gap_between_polls_is_reported_as_a_resume` | Sleep and wake as a clock gap: the status line, the `wake` event with the gap and the running job ids, and the wording with and without a running job. |
 
-The automated tests prove the record behavior and the window behavior in one process. They do not prove what Windows does to a frozen `fpfa.exe`, a sleeping network connection, or a database on a drive that was asleep. The manual steps do.
+The automated tests prove the record behavior and the window behavior in one process. They do not prove what Windows does to a frozen `Cynosure.exe`, a sleeping network connection, or a database on a drive that was asleep. The manual steps do.
 
 ## Manual protocol on Windows
 

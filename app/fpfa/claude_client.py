@@ -24,6 +24,17 @@ the growing message tail, so a skill body or a tool result read on one
 round is cached for the rounds after it. Nothing is trimmed, reordered, or
 shortened. run_tool_loop sums the usage the API reports on each round so a
 caller can show how much was read from the cache.
+
+Streaming. AnthropicMessages.streaming(on_event) returns a callable with the
+signature of create() that sends the same request through messages.stream
+and reports the reply as it is written: {"type": "text", "text": ...} for
+each piece of reply text, {"type": "thinking"} when a thinking block opens,
+and {"type": "reset"} when a failed attempt is about to be sent again, so a
+listener drops the words of the attempt that failed. The request body, the
+cache markers, the retries, and the returned message are the same as
+create()'s, so the tool loop does not know which one it was given. Tool
+definitions are not marked for eager input streaming: every tool here takes
+a few scalars, and the API keeps validating them.
 """
 
 from __future__ import annotations
@@ -188,6 +199,16 @@ def _wire_block(block: Any) -> dict:
     return data
 
 
+def _tell(observe: Callable[[dict], Any] | None, event: dict) -> None:
+    """Report progress to a listener. A listener that fails never fails the turn."""
+    if observe is None:
+        return
+    try:
+        observe(event)
+    except Exception:
+        _log.exception("progress listener failed")
+
+
 def run_tool_loop(
     create: Callable[..., Any],
     *,
@@ -200,12 +221,18 @@ def run_tool_loop(
     max_nudges: int = 3,
     max_tokens: int = 8192,
     cancel: Any = None,
+    observe: Callable[[dict], Any] | None = None,
 ) -> dict:
     """Call create() the way Messages.create is called. execute() runs a client tool.
 
     cancel is an optional threading.Event. When it is set, the loop raises
     TurnCancelled before its next model round. A round already in flight
     finishes; a tool already running finishes.
+
+    observe is an optional listener for the window's working line. It is
+    told {"type": "round", "round": n} before each model round and
+    {"type": "tool_start" | "tool_end", "name": ..., "input": ...} around
+    each tool. It changes nothing the loop sends or returns.
     """
     required = list(required or [])
     messages: list[dict] = [{"role": "user", "content": user_text}]
@@ -220,6 +247,7 @@ def run_tool_loop(
             # The rounds that ran were billed. The caller can still record them.
             cancelled.usage = dict(usage)
             raise cancelled
+        _tell(observe, {"type": "round", "round": int(usage["rounds"]) + 1})
         response = create(
             model=MODEL_ID,
             max_tokens=max_tokens,
@@ -253,6 +281,7 @@ def run_tool_loop(
                 tool_input = use.get("input") or {}
                 if not isinstance(tool_input, dict):
                     tool_input = {}
+                _tell(observe, {"type": "tool_start", "name": name, "input": tool_input})
                 try:
                     output = execute(name, tool_input)
                     is_error = False
@@ -260,6 +289,7 @@ def run_tool_loop(
                 except TurnCancelled as exc:
                     # A cancel inside a tool (a delegated specialist) ends this turn too.
                     # The caller merged the nested usage; this carries the loop's own.
+                    _tell(observe, {"type": "tool_end", "name": name, "is_error": True})
                     cancelled = TurnCancelled(str(exc))
                     cancelled.usage = dict(usage)
                     raise cancelled from exc
@@ -267,6 +297,7 @@ def run_tool_loop(
                     is_error = True
                     output = {"error": safe_error(exc)}
                     payload = output["error"]
+                _tell(observe, {"type": "tool_end", "name": name, "is_error": is_error})
                 called.append({
                     "name": name,
                     "input": tool_input,
@@ -314,7 +345,8 @@ class AnthropicMessages:
         # Retries live in create() so a 429 or 529 is visible and bounded.
         self._client = anthropic.Anthropic(api_key=api_key, timeout=300.0, max_retries=0)
 
-    def create(self, **kwargs):
+    def _prepare(self, kwargs: dict) -> dict:
+        """The request as it is sent. Shared by create() and the streaming path."""
         kwargs.pop("temperature", None)
         kwargs.pop("top_p", None)
         kwargs.pop("top_k", None)
@@ -336,10 +368,16 @@ class AnthropicMessages:
         # that entry, so it is left off there.
         if kwargs.get("tools"):
             kwargs.setdefault("cache_control", dict(CACHE_CONTROL))
+        return kwargs
+
+    def _send(self, kwargs: dict, on_event: Callable[[dict], Any] | None = None):
+        """Send one request, with the bounded retry. on_event turns the call into a stream."""
         delay = 1.0
         for attempt in range(3):
             try:
-                return self._client.messages.create(**kwargs)
+                if on_event is None:
+                    return self._client.messages.create(**kwargs)
+                return self._stream(kwargs, on_event)
             except Exception as exc:
                 # Checked before the transient retry so a size rejection is never resent.
                 if request_too_large(exc):
@@ -353,9 +391,44 @@ class AnthropicMessages:
                     ) from exc
                 if attempt == 2 or not _transient_api_error(exc):
                     raise
+                # The words of the failed attempt are not the reply. The listener drops them.
+                _tell(on_event, {"type": "reset"})
                 time.sleep(delay)
                 delay *= 2
         raise RuntimeError("Claude request was not sent")
+
+    def _stream(self, kwargs: dict, on_event: Callable[[dict], Any]):
+        """One streamed request. Returns the same Message that create() returns."""
+        with self._client.messages.stream(**kwargs) as stream:
+            for event in stream:
+                kind = getattr(event, "type", "")
+                if kind == "content_block_start":
+                    block = getattr(getattr(event, "content_block", None), "type", "")
+                    if block in ("thinking", "redacted_thinking"):
+                        _tell(on_event, {"type": "thinking"})
+                    elif block == "tool_use":
+                        _tell(on_event, {"type": "tool_use", "name": getattr(event.content_block, "name", "")})
+                elif kind == "content_block_delta":
+                    delta = getattr(event, "delta", None)
+                    if getattr(delta, "type", "") == "text_delta":
+                        text = getattr(delta, "text", "") or ""
+                        if text:
+                            _tell(on_event, {"type": "text", "text": text})
+            return stream.get_final_message()
+
+    def create(self, **kwargs):
+        return self._send(self._prepare(kwargs))
+
+    def streaming(self, on_event: Callable[[dict], Any]) -> Callable[..., Any]:
+        """A create() that streams and reports the reply as it is written.
+
+        The returned callable takes what create() takes and returns what it
+        returns. on_event runs on the calling thread, once per event.
+        """
+        def create(**kwargs):
+            return self._send(self._prepare(kwargs), on_event)
+
+        return create
 
     def check_model(self) -> str:
         info = self._client.models.retrieve(self.model)

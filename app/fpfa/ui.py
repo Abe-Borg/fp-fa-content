@@ -1,8 +1,13 @@
-"""Desktop shell. The chat thread is where work happens.
+"""Desktop shell of +Cynosure. The chat thread is where work happens.
 
 The window is a sidebar of jobs, the thread with its composer, and a Zone
 details drawer that stays closed until it is wanted. Sample DI and Sample
 BESS are optional ways to seed a thread. A typed question never needs them.
+
+The look comes from theme.py: five colour schemes, rounded controls drawn
+from generated pictures, and the fonts. A reply streams into the thread and
+its words ease in (reveal.py, thread_view.py). App(root, motion=False), the
+default the tests use, draws every reply at once.
 
 Long zone runs, chat turns, the blind claim check, and heavy jobs are on the
 inbox. Workers run them so the composer stays usable. A result is labeled
@@ -24,15 +29,18 @@ import sys
 import threading
 import time
 import tkinter as tk
-import tkinter.font as tkfont
 from pathlib import Path
-from tkinter import filedialog, messagebox, simpledialog, ttk
+from tkinter import filedialog, ttk
 
+# The themed dialogs answer to the names of the stock tkinter modules they stand in for.
+from fpfa import dialogs
+from fpfa import dialogs as messagebox
+from fpfa import dialogs as simpledialog
 from fpfa import sample_data
 from fpfa import theme as palette
 from fpfa.bess import bess_chat_summary, bess_govern_note, run_bess_plan
 from fpfa.calc_tools import ToolSession
-from fpfa.chat_render import is_job_heading, markdown_segments
+from fpfa.chat_render import is_job_heading
 from fpfa.claim_check import (
     PACKAGE_STATUS,
     build_packet,
@@ -47,7 +55,20 @@ from fpfa.design_basis_docx import DESIGN_BASIS_TITLE, write_design_basis
 from fpfa.team import check_record, export_gate, latest_check, team_summary
 from fpfa.team_panel import TeamPanel, recovery_text
 from fpfa.usage_report import report_text
-from fpfa.about import version_text
+from fpfa import __version__
+from fpfa.about import (
+    APP_NAME,
+    APP_STRAPLINE,
+    APP_TAGLINE,
+    COPYRIGHT,
+    LICENSE_NAME,
+    LICENSE_SUMMARY,
+    USE_NOTICE,
+    about_text,
+    license_text,
+    notices_text,
+    version_text,
+)
 from fpfa.content_update import (
     ContentUpdateError,
     UpdateResult,
@@ -72,8 +93,21 @@ from fpfa.paths import content_root, data_dir, is_content_pack, read_config, wri
 from fpfa.projects import delete_project, list_projects, load_project, new_project, save_project
 from fpfa.record import INTERRUPTED_NOTE, Record
 from fpfa.spec_docx import DRAFT_SECTION, write_docx
-from fpfa.theme import apply_theme, enable_windows_dpi_awareness
-from fpfa.widgets import Composer, ScrollFrame
+from fpfa.reveal import Reveal
+from fpfa.theme import SCHEME_ORDER, SCHEMES, apply_theme, enable_windows_dpi_awareness, style_title_bar
+from fpfa.thread_view import COLUMN_WIDTH, ThreadView
+from fpfa.widgets import (
+    Chip,
+    Composer,
+    ListView,
+    PopupMenu,
+    ScrollFrame,
+    Tooltip,
+    Wordmark,
+    hoverable,
+    on,
+    wheel_steps,
+)
 from fpfa.workflow import (
     NARRATION_CANCELLED,
     form_assumption_lines,
@@ -191,6 +225,20 @@ CANCELLED_RUN_LINE = (
     "The tool plan had already run, so its figures stand below and in the tables."
 )
 COMPOSER_HINT = "Enter to send  ·  Shift+Enter for a new line  ·  /help for commands"
+PENDING_LABEL = "Working on it…"
+# How often the window draws a frame while a reply is arriving or easing in, in milliseconds.
+FRAME_MS = 16
+# How often it looks for stream events while a job is running and nothing is on screen yet.
+IDLE_FRAME_MS = 60
+# Status glyph and row colour for a job in the Activity list.
+ACTIVITY_MARKS = {
+    "queued": ("○", ()),
+    "running": ("●", ("accent",)),
+    "done": ("✓", ("ok",)),
+    "error": ("!", ("err",)),
+    "cancelled": ("✕", ("warn",)),
+    "interrupted": ("!", ("warn",)),
+}
 
 
 def chat_title(text: str, limit: int = 48) -> str:
@@ -330,19 +378,129 @@ _SAVE_KEYS = ("<Control-s>", "<Control-S>", "<Command-s>", "<Command-S>")
 _NEW_KEYS = ("<Control-n>", "<Control-N>", "<Command-n>", "<Command-N>")
 
 
+_INLINE_HEADING = re.compile(r"\s*Job [0-9a-f]{6,} \| .*$")
+# What the working line says for a job that is not a chat turn.
+KIND_ACTIVITY = {
+    "zone": "narrating the zone run",
+    "bess": "writing the explosion-control starter",
+    "claim": "running the blind claim check",
+    "heavy": "waiting on the hosted session",
+}
+_RECORD_TOOLS = frozenset({
+    "record_fact", "record_evidence", "record_finding", "open_question", "record_decision", "handoff",
+})
+_LISTING_TOOLS = frozenset({"list_skills", "list_roles", "list_modes"})
+
+
+def describe_activity(event: dict) -> str | None:
+    """A few plain words for the working line, from one tool-loop event. None leaves the line as it is.
+
+    The words name the tool or the file being read. Nothing here reads the
+    tool's result, and no figure is shown before the reply states it.
+    """
+    kind = event.get("type")
+    agent = str(event.get("agent") or "")
+    prefix = f"{agent}: " if agent else ""
+    if kind == "round":
+        return prefix + "thinking"
+    if kind == "tool_end":
+        return prefix + "thinking"
+    if kind != "tool_start":
+        return None
+    name = str(event.get("name") or "")
+    args = event.get("input") if isinstance(event.get("input"), dict) else {}
+    slug = str(args.get("slug") or "").strip()
+    if name == "read_skill":
+        return prefix + (f"reading the {slug} skill" if slug else "reading a skill")
+    if name == "read_role":
+        return prefix + (f"reading the {slug} role" if slug else "reading a role")
+    if name == "read_mode":
+        return prefix + (f"reading the {slug} mode" if slug else "reading a mode")
+    if name in _LISTING_TOOLS:
+        return prefix + "looking through the content pack"
+    if name == "search_corpus":
+        return prefix + "searching the corpus"
+    if name == "read_record":
+        return prefix + "reading the project record"
+    if name in _RECORD_TOOLS:
+        return prefix + "writing to the project record"
+    if name == "list_specialists":
+        return prefix + "looking at the team"
+    if name == "delegate":
+        who = str(args.get("specialist") or "").strip()
+        return prefix + (f"handing off to {who}" if who else "handing off to a specialist")
+    if name == "request_check":
+        return prefix + "running the blind check"
+    if name:
+        return prefix + f"running {name}"
+    return None
+
+
+def suggested_prompts(
+    project: dict | None,
+    chat_log: list[dict],
+    *,
+    key_saved: bool,
+    busy: bool = False,
+) -> list[tuple[str, str]]:
+    """One-tap suggestions for the composer: (label, the message it sends).
+
+    An empty thread offers the sample zone, and a question once a key is
+    saved. A thread whose zone has run and has no typed question yet offers
+    follow-ups on that zone. A typed question, or a job in flight, clears them.
+    """
+    if busy:
+        return []
+    asked = any(
+        turn.get("role") == "user" and not str(turn.get("text") or "").lstrip().startswith("/")
+        for turn in chat_log
+    )
+    if asked:
+        return []
+    if not chat_log:
+        chips = [("Load the sample zone", "/sample-di")]
+        if key_saved:
+            chips.append((
+                "What trips a double-interlock valve?",
+                "Walk me through what has to happen, in order, for a double-interlock preaction valve to trip.",
+            ))
+        chips.append(("Show the commands", "/help"))
+        return chips
+    run = (project or {}).get("last_run") if project else None
+    if not isinstance(run, dict) or not key_saved:
+        return []
+    zone = str(((project or {}).get("di") or {}).get("zone_id") or "").strip()
+    name = f"zone {zone}" if zone else "this zone"
+    return [
+        ("Design basis", f"Give me the design basis for {name}."),
+        ("Explain the screen", f"Explain the delivery-time screen result for {name} and what would change it."),
+        ("Questions for the engineer", f"What should I ask the engineer of record about {name}?"),
+    ]
+
+
+def reduce_motion() -> bool:
+    """True when replies should appear at once: the Settings choice, or FPFA_REDUCE_MOTION=1."""
+    if os.environ.get("FPFA_REDUCE_MOTION", "").strip() in ("1", "true", "yes"):
+        return True
+    return bool(read_config().get("reduce_motion"))
+
+
 def _blank_to_none(text: str):
     text = text.strip()
     return None if text == "" else text
 
 
 class App:
-    def __init__(self, root: tk.Tk):
+    def __init__(self, root: tk.Tk, *, motion: bool = False):
         self.root = root
+        # Replies ease into the thread and the working line moves. main() turns it on;
+        # a window built without it, as the tests build theirs, draws every reply at once.
+        self.motion = bool(motion)
         # One window per data directory. A second one would recover this one's live work.
         self.instance_lock = InstanceLock(data_dir() / LOCK_NAME)
         if not self.instance_lock.acquire():
             raise InstanceLockError(ANOTHER_WINDOW_TEXT)
-        self.root.title("FP/FA Design Assistant")
+        self.root.title(APP_NAME)
         self.root.geometry("1280x800+40+40")
         self.root.minsize(1020, 680)
         try:
@@ -371,7 +529,19 @@ class App:
         self._activity_shown = False
         self._details_shown = False
         self._thread_margin = -1
+        self._thread_column = -1
         self._menu_project_id: str | None = None
+        # Replies in flight. Workers put stream events on the queue; the window's frame reads it.
+        self._stream_events: queue.SimpleQueue = queue.SimpleQueue()
+        self._stream_closed: set[str] = set()
+        self._lives: dict[str, dict] = {}
+        self._activity: dict[str, str] = {}
+        # The reply that just landed and is still easing in, and the thread it belongs to.
+        self._closing: dict | None = None
+        self._handoff: Reveal | None = None
+        self._rendered: tuple[str, int] = ("", 0)
+        self._frame_after: str | None = None
+        self._stop_shown = False
         self._build()
         self.jobs = JobInbox(worker_count=2, on_change=self._on_jobs_changed)
         # The project record. Calc tools and record tools write to it by job id.
@@ -480,23 +650,34 @@ class App:
     def _build(self) -> None:
         self.theme = apply_theme(self.root)
         px = self.theme.px
-        fonts = self.theme.fonts
+        self.popup = PopupMenu(self.theme)
 
         self.content_banner = tk.StringVar(value="")
-        self.banner = tk.Label(
-            self.root,
+        # The update note: a rounded card above the window body. A click dismisses it.
+        self.banner = ttk.Frame(self.root, padding=(px(14), px(12), px(14), 0))
+        card = ttk.Frame(self.banner, style="Banner.TFrame", padding=(px(16), px(10)))
+        card.pack(fill="x")
+        self.banner_label = ttk.Label(
+            card,
             textvariable=self.content_banner,
+            style="OnBanner.TLabel",
             justify="left",
             anchor="w",
-            wraplength=px(1100),
-            bg=palette.BANNER_BG,
-            fg=palette.ACCENT,
-            padx=px(18),
-            pady=px(8),
+            wraplength=px(1040),
             cursor="hand2",
         )
+        self.banner_label.pack(side="left", fill="x", expand=True)
+        close = ttk.Label(
+            card,
+            image=(self.theme.image("icon_close"), "active", self.theme.image("icon_close_hover")),
+            style="OnBanner.Icon.TLabel",
+            cursor="hand2",
+        )
+        close.pack(side="right", padx=(px(10), 0))
+        hoverable(close)
         # A click dismisses the update note. The pack stays installed.
-        self.banner.bind("<Button-1>", lambda _event: self._set_content_banner(""))
+        for widget in (card, self.banner_label, close):
+            widget.bind("<Button-1>", lambda _event: self._set_content_banner(""))
 
         self.ask_claude = tk.BooleanVar(value=False)
         self.mode_slug = tk.StringVar(value=DEFAULT_MODE)
@@ -505,22 +686,26 @@ class App:
         self.status = tk.StringVar(value=key_status())
         self.content_status = tk.StringVar(value=content_status_line())
 
+        # The sash is a strip in the window colour. Each side pane draws its own hairline.
         body = tk.PanedWindow(
             self.root,
             orient="horizontal",
-            sashwidth=px(3),
+            sashwidth=px(5),
             sashpad=0,
             bd=0,
             relief="flat",
-            bg=palette.BORDER,
             showhandle=False,
             opaqueresize=True,
         )
+        self.theme.paint(body, bg="bg")
         body.pack(fill="both", expand=True)
         self.main_body = body
 
-        sidebar = ttk.Frame(body, style="Surface.TFrame", padding=(px(12), px(14), px(12), px(12)))
-        body.add(sidebar, minsize=px(190), width=px(250), stretch="never")
+        side = ttk.Frame(body, style="OnSide.TFrame")
+        self._hairline(side, "right")
+        sidebar = ttk.Frame(side, style="OnSide.TFrame", padding=(px(12), px(16), px(12), px(12)))
+        sidebar.pack(side="left", fill="both", expand=True)
+        body.add(side, minsize=px(200), width=px(268), stretch="never")
         self._build_sidebar(sidebar)
 
         chat = ttk.Frame(body)
@@ -529,73 +714,63 @@ class App:
         self._build_chat(chat)
 
         # Zone details is added to the paned window only while it is open.
-        self.details = ttk.Frame(body, padding=(px(16), px(12), px(12), px(10)))
-        self._build_details(self.details)
+        self.details = ttk.Frame(body, style="OnSide.TFrame")
+        self._hairline(self.details, "left")
+        drawer = ttk.Frame(self.details, style="OnSide.TFrame", padding=(px(18), px(14), px(12), px(10)))
+        drawer.pack(side="left", fill="both", expand=True)
+        self._build_details(drawer)
 
         self._sync_claude_default()
         self._render_chat()
         self.root.after(200, self._prefer_chat)
 
+    def _hairline(self, parent, side: str) -> None:
+        """A one-pixel line in the edge colour along one side of a pane."""
+        line = tk.Frame(parent, width=1, height=1, bd=0, highlightthickness=0)
+        self.theme.paint(line, bg="edge")
+        line.pack(side=side, fill="y" if side in ("left", "right") else "x")
+
     def _build_sidebar(self, parent) -> None:
         px = self.theme.px
-        ttk.Button(parent, text="+  New chat", style="Accent.TButton", command=self.new_job).pack(fill="x")
-        ttk.Label(parent, text="JOBS", style="Section.TLabel").pack(anchor="w", pady=(px(18), px(4)))
+        brand = ttk.Frame(parent, style="OnSide.TFrame")
+        brand.pack(fill="x", pady=(0, px(16)), padx=px(2))
+        ttk.Label(brand, image=self.theme.image("mark"), style="OnSide.TLabel").pack(side="left", padx=(0, px(9)))
+        names = ttk.Frame(brand, style="OnSide.TFrame")
+        names.pack(side="left")
+        Wordmark(names, self.theme, APP_NAME, surface="surface").pack(anchor="w")
+        ttk.Label(names, text=APP_STRAPLINE, style="OnSide.Faint.TLabel").pack(anchor="w")
+
+        ttk.Button(parent, text="+  New chat", style="OnSide.Accent.TButton", command=self.new_job).pack(fill="x")
+        ttk.Label(parent, text="JOBS", style="OnSide.Section.TLabel").pack(
+            anchor="w", pady=(px(20), px(6)), padx=px(6)
+        )
         self.settings_button = ttk.Button(
-            parent, text="Settings", style="Sidebar.TButton", command=self.open_settings
+            parent, text="Settings", style="OnSide.Sidebar.TButton", command=self.open_settings
         )
         self.settings_button.pack(side="bottom", fill="x", pady=(px(8), 0))
         # Activity (the job inbox) is packed only while it has something in it.
-        self.activity = ttk.Frame(parent, style="Surface.TFrame")
-        ttk.Label(self.activity, text="ACTIVITY", style="Section.TLabel").pack(anchor="w", pady=(px(10), px(4)))
-        self.inbox_list = tk.Listbox(
-            self.activity,
-            height=5,
-            exportselection=False,
-            activestyle="none",
-            bd=0,
-            highlightthickness=0,
-            relief="flat",
-            bg=palette.SURFACE,
-            fg=palette.MUTED,
-            selectbackground=palette.SURFACE,
-            selectforeground=palette.MUTED,
-            font=self.theme.fonts["small"],
+        self.activity = ttk.Frame(parent, style="OnSide.TFrame")
+        ttk.Label(self.activity, text="ACTIVITY", style="OnSide.Section.TLabel").pack(
+            anchor="w", pady=(px(12), px(4)), padx=px(6)
         )
-        self.inbox_list.pack(fill="x")
+        self.inbox_list = ListView(
+            self.activity, look=self.theme, style="Lines.Treeview", rows=1, selectable=False, font="small", inset=10
+        )
+        self.inbox_list.pack(fill="x", padx=px(4))
         # Team roster for the open job. Packed only while the job has agents.
-        self.team_box = ttk.Frame(parent, style="Surface.TFrame")
-        ttk.Label(self.team_box, text="TEAM", style="Section.TLabel").pack(anchor="w", pady=(px(10), px(4)))
-        self.team_list = tk.Listbox(
-            self.team_box,
-            height=4,
-            exportselection=False,
-            activestyle="none",
-            bd=0,
-            highlightthickness=0,
-            relief="flat",
-            bg=palette.SURFACE,
-            fg=palette.MUTED,
-            selectbackground=palette.SURFACE,
-            selectforeground=palette.MUTED,
-            font=self.theme.fonts["small"],
+        self.team_box = ttk.Frame(parent, style="OnSide.TFrame")
+        ttk.Label(self.team_box, text="TEAM", style="OnSide.Section.TLabel").pack(
+            anchor="w", pady=(px(12), px(4)), padx=px(6)
         )
-        self.team_list.pack(fill="x")
+        self.team_list = ListView(
+            self.team_box, look=self.theme, style="Lines.Treeview", rows=1, selectable=False, font="small", inset=10
+        )
+        self.team_list.configure(cursor="hand2")
+        self.team_list.pack(fill="x", padx=px(4))
         self.team_list.bind("<Button-1>", lambda _event: self.show_team(), add="+")
+        Tooltip(self.team_list, "Open the Team tab", self.theme)
         self._team_shown = False
-        self.project_list = tk.Listbox(
-            parent,
-            width=24,
-            exportselection=False,
-            activestyle="none",
-            bd=px(2),
-            highlightthickness=0,
-            relief="flat",
-            bg=palette.SURFACE,
-            fg=palette.TEXT,
-            selectbackground=palette.ACCENT_SOFT,
-            selectforeground=palette.ACCENT,
-            font=self.theme.fonts["list"],
-        )
+        self.project_list = ListView(parent, look=self.theme, style="Jobs.Treeview", rows=6)
         self.project_list.pack(fill="both", expand=True)
         self.project_list.bind("<<ListboxSelect>>", self._on_select)
         context = ("<Button-2>", "<Control-Button-1>") if sys.platform == "darwin" else ()
@@ -610,25 +785,42 @@ class App:
     def _build_chat(self, parent) -> None:
         px = self.theme.px
         fonts = self.theme.fonts
+        image = self.theme.image
 
-        top = ttk.Frame(parent, padding=(px(20), px(8), px(10), px(8)))
+        top = ttk.Frame(parent, padding=(px(26), px(11), px(12), px(11)))
         top.pack(side="top", fill="x")
-        self.more_button = ttk.Menubutton(top, text="⋯", style="Icon.TMenubutton")
-        self.more_menu = tk.Menu(self.more_button, tearoff=0)
-        self.more_button["menu"] = self.more_menu
+        # The menus are models. The window draws them itself (widgets.PopupMenu).
+        self.more_menu = tk.Menu(self.root, tearoff=0)
+        self.more_button = ttk.Menubutton(
+            top,
+            style="Icon.TMenubutton",
+            image=(image("icon_more"), "active", image("icon_more_hover")),
+            cursor="hand2",
+        )
         self.more_button.pack(side="right")
+        self.more_button.bind(
+            "<Button-1>", lambda _event: self._drop_menu(self.more_button, self.more_menu, align="right")
+        )
+        Tooltip(self.more_button, "Samples, exports, usage, settings", self.theme)
         self.details_toggle = ttk.Checkbutton(
             top,
             text="Zone details",
             variable=self.details_open,
             style="Toolbar.Toolbutton",
+            image=(image("icon_panel"), "selected", image("icon_panel_on")),
+            compound="left",
+            cursor="hand2",
             command=lambda: self.show_details(bool(self.details_open.get())),
         )
-        self.details_toggle.pack(side="right", padx=(0, px(2)))
-        self.mode_button = ttk.Menubutton(top, style="Toolbar.TMenubutton")
-        self.mode_menu = tk.Menu(self.mode_button, tearoff=0)
-        self.mode_button["menu"] = self.mode_menu
-        self.mode_button.pack(side="right", padx=(0, px(2)))
+        self.details_toggle.pack(side="right", padx=(0, px(4)))
+        Tooltip(self.details_toggle, "Zone inputs, results, and the team", self.theme)
+        self.mode_menu = tk.Menu(self.root, tearoff=0)
+        self.mode_button = ttk.Menubutton(top, style="Toolbar.TMenubutton", cursor="hand2")
+        self.mode_button.pack(side="right", padx=(0, px(6)))
+        self.mode_button.bind(
+            "<Button-1>", lambda _event: self._drop_menu(self.mode_button, self.mode_menu, align="right")
+        )
+        Tooltip(self.mode_button, "How the assistant answers: brainstorm, calculator, synthesis, or mixed", self.theme)
         # Packed last so a long job name is what gets shortened, not the controls.
         self._title_shown = tk.StringVar(value=self.job_title.get())
         self.title_label = ttk.Label(top, textvariable=self._title_shown, style="Job.TLabel")
@@ -638,9 +830,9 @@ class App:
         self.mode_slug.trace_add("write", lambda *_args: self._sync_mode_label())
         self._apply_mode(DEFAULT_MODE)
         self._build_more_menu()
-        ttk.Separator(parent, orient="horizontal").pack(side="top", fill="x")
+        self._hairline(parent, "top")
 
-        footer = ttk.Frame(parent, padding=(px(20), 0, px(14), px(6)))
+        footer = ttk.Frame(parent, padding=(px(26), 0, px(16), px(8)))
         footer.pack(side="bottom", fill="x")
         ttk.Label(footer, textvariable=self.content_status, style="Footer.TLabel").pack(side="right")
         # The footer shows the short note. The full status (with the job
@@ -651,66 +843,80 @@ class App:
             side="left", fill="x", expand=True
         )
 
-        self.composer_row = ttk.Frame(parent, padding=(px(24), px(6), px(24), px(2)))
+        self.composer_row = ttk.Frame(parent, padding=(px(26), px(4), px(26), px(2)))
         self.composer_row.pack(side="bottom", fill="x")
-        self.composer_box = tk.Frame(
-            self.composer_row,
-            bg=palette.BG,
-            highlightthickness=1,
-            highlightbackground=palette.BORDER_STRONG,
-            highlightcolor=palette.BORDER_STRONG,
-            bd=0,
-        )
+        # One-tap suggestions sit above the composer while there are any.
+        self.chip_row = ttk.Frame(self.composer_row)
+        self._chips_shown: tuple = ()
+        self.composer_box = ttk.Frame(self.composer_row, style="Composer.TFrame", padding=(px(6), px(6), px(8), px(7)))
         self.composer_box.pack(fill="x")
-        self.send_button = ttk.Button(self.composer_box, text="Send", style="Accent.TButton", command=self.send_chat)
-        self.send_button.pack(side="right", anchor="se", padx=px(8), pady=px(8))
+        self.send_button = ttk.Button(
+            self.composer_box, text="Send", style="OnCard.Accent.TButton", command=self.send_chat
+        )
+        self.send_button.pack(side="right", anchor="se", padx=(px(6), px(2)), pady=px(2))
         self.chat_entry = Composer(
             self.composer_box,
             on_submit=self.send_chat,
             placeholder=COMPOSER_PLACEHOLDER,
             font=fonts["chat"],
-            bg=palette.BG,
-            fg=palette.TEXT,
-            insertbackground=palette.TEXT,
-            selectbackground=palette.ACCENT_SOFT,
-            padx=px(12),
-            pady=px(10),
+            padx=px(10),
+            pady=px(8),
             min_lines=2,
             max_lines=8,
+            look=self.theme,
         )
         self.chat_entry.pack(side="left", fill="both", expand=True)
         self.chat_entry.bind("<FocusIn>", lambda _event: self._composer_focus(True), add="+")
         self.chat_entry.bind("<FocusOut>", lambda _event: self._composer_focus(False), add="+")
-        ttk.Label(self.composer_row, text=COMPOSER_HINT, style="Footer.TLabel").pack(anchor="w", pady=(px(4), 0))
+        hint_row = ttk.Frame(self.composer_row)
+        hint_row.pack(fill="x", pady=(px(5), 0))
+        ttk.Label(hint_row, text=COMPOSER_HINT, style="Footer.TLabel").pack(side="left")
+        # Shown only while a job on this project is running.
+        self.stop_link = Chip(hint_row, "Stop", self.cancel_running_jobs)
+        Tooltip(self.stop_link, "Stop the running job before its next model round", self.theme)
+        self._stop_shown = False
 
+        # The thread is a centred reading column. The scrollbar stays at the pane's edge.
         thread = ttk.Frame(parent)
         thread.pack(side="top", fill="both", expand=True)
+        scroll = ttk.Scrollbar(thread)
+        scroll.pack(side="right", fill="y", pady=px(4))
+        host = tk.Frame(thread, bd=0, highlightthickness=0)
+        self.theme.paint(host, bg="bg")
+        host.pack(side="left", fill="both", expand=True)
+        self.thread_host = host
         self.chat_view = tk.Text(
-            thread,
+            host,
             wrap="word",
             state="disabled",
             bd=0,
             relief="flat",
             highlightthickness=0,
-            bg=palette.BG,
-            fg=palette.TEXT,
             font=fonts["chat"],
-            padx=0,
+            padx=px(6),
             pady=px(10),
-            spacing2=px(2),
             cursor="arrow",
             insertwidth=0,
-            selectbackground=palette.ACCENT_SOFT,
-            inactiveselectbackground=palette.ACCENT_SOFT,
             height=10,
+            width=10,
         )
-        scroll = ttk.Scrollbar(thread, command=self.chat_view.yview)
+        scroll.configure(command=self.chat_view.yview)
         self.chat_view.configure(yscrollcommand=scroll.set)
-        scroll.pack(side="right", fill="y")
-        self.chat_view.pack(side="left", fill="both", expand=True)
+        self.chat_view.place(relx=0.5, rely=0.0, anchor="n", relheight=1.0, width=px(COLUMN_WIDTH))
         self._thread_scrollbar = scroll
-        self._configure_thread_tags()
-        self.chat_view.bind("<Configure>", self._on_thread_resize, add="+")
+        self.thread = ThreadView(
+            self.chat_view,
+            self.theme,
+            links={"link_sample_di": self.start_sample_di, "link_settings": self.open_settings},
+            on_copy=self._copy_text,
+            animate=self.motion,
+        )
+        for sequence in ("<B1-Motion>", "<ButtonRelease-1>"):
+            scroll.bind(sequence, self.thread.user_moved, add="+")
+        host.bind("<Configure>", self._on_thread_resize, add="+")
+        host.bind("<Button-1>", lambda _event: self.chat_view.focus_set(), add="+")
+        for sequence in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
+            host.bind(sequence, self._wheel_thread, add="+")
         self.chat_view.bind("<Button-1>", lambda _event: self.chat_view.focus_set(), add="+")
         self.chat_view.bind("<Key>", self._thread_key)
         self.thread_menu = tk.Menu(self.chat_view, tearoff=0)
@@ -718,6 +924,29 @@ class App:
         self.thread_menu.add_command(label="Select all", command=self._select_thread)
         for sequence in ("<Button-3>",) + (("<Button-2>",) if sys.platform == "darwin" else ()):
             self.chat_view.bind(sequence, self._thread_menu_popup)
+
+    def _drop_menu(self, button, menu: tk.Menu, *, align: str = "left") -> str:
+        """Open a menu under its button, in the window's own colours."""
+        try:
+            x = button.winfo_rootx() + (button.winfo_width() if align == "right" else 0)
+            y = button.winfo_rooty() + button.winfo_height() + self.theme.px(4)
+            self.popup.show(menu, x, y, align=align)
+        except tk.TclError:
+            pass
+        return "break"
+
+    def _wheel_thread(self, event) -> str:
+        self.chat_view.yview_scroll(wheel_steps(event) * 3, "units")
+        self.thread.user_moved()
+        return "break"
+
+    def _copy_text(self, text: str) -> None:
+        try:
+            self.root.clipboard_clear()
+            self.root.clipboard_append(text)
+            self.status.set("Message copied.")
+        except tk.TclError:
+            pass
 
     def _build_more_menu(self) -> None:
         menu = self.more_menu
@@ -739,16 +968,28 @@ class App:
 
     def _build_details(self, parent) -> None:
         px = self.theme.px
-        ttk.Label(parent, text="Zone details", style="Job.TLabel").pack(anchor="w")
+        head = ttk.Frame(parent, style="OnSide.TFrame")
+        head.pack(fill="x")
+        ttk.Label(head, text="Zone details", style="OnSide.Job.TLabel").pack(side="left")
+        close = ttk.Label(
+            head,
+            image=(self.theme.image("icon_close"), "active", self.theme.image("icon_close_hover")),
+            style="OnSide.Icon.TLabel",
+            cursor="hand2",
+        )
+        close.pack(side="right", padx=(0, px(4)))
+        hoverable(close)
+        close.bind("<Button-1>", lambda _event: self.show_details(False))
+        Tooltip(close, "Close the drawer. The form keeps its values.", self.theme)
         ttk.Label(
             parent,
             text="Optional. Chat works without it. /run and Run zone use these inputs.",
-            style="Small.TLabel",
+            style="OnSide.Small.TLabel",
             wraplength=px(420),
             justify="left",
-        ).pack(anchor="w", pady=(px(2), px(8)))
+        ).pack(anchor="w", pady=(px(3), px(12)))
         self.assumption_text = tk.StringVar()
-        self.tabs = ttk.Notebook(parent)
+        self.tabs = ttk.Notebook(parent, style="OnSide.TNotebook")
         self.tabs.pack(fill="both", expand=True)
         self._build_basis()
         self._build_zone()
@@ -763,8 +1004,8 @@ class App:
             if show and not self._details_shown:
                 self.main_body.add(
                     self.details,
-                    minsize=self.theme.px(360),
-                    width=self.theme.px(470),
+                    minsize=self.theme.px(400),
+                    width=self.theme.px(520),
                     stretch="never",
                 )
             elif not show and self._details_shown:
@@ -779,82 +1020,30 @@ class App:
         self.show_details(not self._details_shown)
 
     def _composer_focus(self, focused: bool) -> None:
-        color = palette.LINK if focused else palette.BORDER_STRONG
         try:
-            self.composer_box.configure(highlightbackground=color, highlightcolor=color)
+            self.composer_box.state(["focus"] if focused else ["!focus"])
         except tk.TclError:
             pass
-
-    def _configure_thread_tags(self) -> None:
-        view = self.chat_view
-        fonts = self.theme.fonts
-        px = self.theme.px
-        # Creation order sets priority: later tags win, so margins on bullet
-        # and pre override the plain body margins.
-        view.tag_configure("body", font=fonts["chat"], foreground=palette.TEXT)
-        view.tag_configure("who_user", font=fonts["who"], foreground=palette.MUTED, spacing1=px(18), spacing3=px(3))
-        view.tag_configure("who_assistant", font=fonts["who"], foreground=palette.ACCENT, spacing1=px(18), spacing3=px(3))
-        view.tag_configure("meta", font=fonts["small"], foreground=palette.MUTED, spacing3=px(4))
-        view.tag_configure("heading", font=fonts["heading"], spacing1=px(10), spacing3=px(2))
-        view.tag_configure("bullet")
-        view.tag_configure("bullet2")
-        # Margin colors keep a shaded block inside the text column.
-        view.tag_configure(
-            "pre", font=fonts["mono"], background=palette.CODE_BG,
-            lmargincolor=palette.BG, rmargincolor=palette.BG,
-        )
-        view.tag_configure("pre_head", font=fonts["mono_bold"])
-        view.tag_configure("rule", foreground=palette.BORDER_STRONG)
-        view.tag_configure("bold", font=fonts["chat_bold"])
-        view.tag_configure("code", font=fonts["mono"], background=palette.CODE_BG)
-        view.tag_configure("pending", font=fonts["italic"], foreground=palette.MUTED, spacing1=px(16))
-        view.tag_configure(
-            "welcome_title", font=fonts["title"], foreground=palette.TEXT, justify="center",
-            spacing1=px(110), spacing3=px(10),
-        )
-        view.tag_configure("welcome_sub", font=fonts["subtitle"], foreground=palette.MUTED, justify="center", spacing3=px(2))
-        view.tag_configure("welcome_link", font=fonts["chat"], foreground=palette.LINK, justify="center", spacing1=px(22))
-        view.tag_configure(
-            "welcome_hint", font=fonts["small"], foreground=palette.MUTED, justify="center",
-            spacing1=px(16), spacing3=px(2),
-        )
-        view.tag_configure("link_sample_di", underline=True)
-        view.tag_configure("link_settings", underline=True)
-        view.tag_bind("link_sample_di", "<Button-1>", lambda _event: self._follow_link(self.start_sample_di))
-        view.tag_bind("link_settings", "<Button-1>", lambda _event: self._follow_link(self.open_settings))
-        for tag in ("link_sample_di", "link_settings"):
-            view.tag_bind(tag, "<Enter>", lambda _event: view.configure(cursor="hand2"))
-            view.tag_bind(tag, "<Leave>", lambda _event: view.configure(cursor="arrow"))
-        self._layout_thread(max(view.winfo_width(), px(900)))
 
     def _layout_thread(self, width: int) -> None:
         """Keep the thread in a readable centered column and line the composer up with it."""
         px = self.theme.px
-        column = min(max(width - 2 * px(28), px(240)), px(780))
-        margin = max(px(28), (width - column) // 2)
-        if margin == self._thread_margin:
+        column = min(max(width - 2 * px(26), px(240)), px(COLUMN_WIDTH))
+        margin = max(px(26), (width - column) // 2)
+        if margin == self._thread_margin and column == self._thread_column:
             return
         self._thread_margin = margin
-        view = self.chat_view
-        for tag in ("body", "who_user", "who_assistant", "meta", "heading", "pending",
-                    "welcome_title", "welcome_sub", "welcome_link", "welcome_hint"):
-            view.tag_configure(tag, lmargin1=margin, lmargin2=margin, rmargin=margin)
-        view.tag_configure("bullet", lmargin1=margin + px(6), lmargin2=margin + px(22), rmargin=margin)
-        view.tag_configure("bullet2", lmargin1=margin + px(26), lmargin2=margin + px(42), rmargin=margin)
-        view.tag_configure("pre", lmargin1=margin + px(8), lmargin2=margin + px(8), rmargin=margin)
+        self._thread_column = column
         try:
+            self.chat_view.place_configure(width=column)
+            self.thread.set_column(column)
             bar = self._thread_scrollbar.winfo_width() if self._thread_scrollbar.winfo_ismapped() else 0
-            self.composer_row.configure(padding=(margin, px(6), margin + bar, px(2)))
+            self.composer_row.configure(padding=(margin, px(4), margin + bar, px(2)))
         except (tk.TclError, AttributeError):
             pass
 
     def _on_thread_resize(self, event) -> None:
         self._layout_thread(event.width)
-
-    def _follow_link(self, action) -> str:
-        # The link's own text is redrawn by the action, so run it after this click.
-        self.root.after_idle(action)
-        return "break"
 
     def _thread_key(self, event):
         """Typing while the thread has focus goes to the composer. Ctrl+C still copies."""
@@ -869,10 +1058,7 @@ class App:
         return None
 
     def _thread_menu_popup(self, event) -> str:
-        try:
-            self.thread_menu.tk_popup(event.x_root, event.y_root)
-        finally:
-            self.thread_menu.grab_release()
+        self.popup.show(self.thread_menu, event.x_root, event.y_root)
         return "break"
 
     def _copy_thread_selection(self) -> None:
@@ -903,12 +1089,43 @@ class App:
         self._local_exchange(raw, "```\n" + text + "\n```")
 
     def show_about(self) -> None:
-        """App, runtime, dependency, content, and record versions in one box."""
+        """The name, the license in brief, and the app, runtime, dependency, content, and record versions."""
         try:
-            text = version_text()
+            text = about_text()
         except Exception as exc:
             text = "Versions could not be read. " + safe_error(exc)
-        messagebox.showinfo("About FP/FA Design Assistant", text)
+        dialogs.showtext(
+            f"About {APP_NAME}",
+            text,
+            parent=self.root,
+            heading=APP_NAME,
+            note=f"{APP_TAGLINE} for hyperscale data centers. Licensed under the {LICENSE_NAME}.",
+            mono=True,
+            width=700,
+            height=560,
+        )
+
+    def show_license(self) -> None:
+        """The license terms this copy ships with, on a sheet that scrolls."""
+        dialogs.showtext(
+            f"{APP_NAME} license",
+            license_text(),
+            parent=self.root,
+            heading=LICENSE_NAME,
+            note=LICENSE_SUMMARY + " " + USE_NOTICE,
+            mono=True,
+        )
+
+    def show_notices(self) -> None:
+        """The licenses of the software the app bundles."""
+        dialogs.showtext(
+            "Third-party notices",
+            notices_text(),
+            parent=self.root,
+            heading="Third-party notices",
+            note=f"{APP_NAME} is built on these open-source projects. Each keeps its own license.",
+            mono=True,
+        )
 
     def _fit_title(self) -> None:
         """Show the job name, cut with an ellipsis when the top bar is narrow."""
@@ -932,6 +1149,9 @@ class App:
         lines = [line.strip() for line in (self.status.get() or "").splitlines() if line.strip()]
         kept = [line for line in lines if not is_job_heading(line)] or lines
         text = " ".join(kept)
+        # A job heading at the end of a note names the job for the inbox. The footer leaves it off.
+        short = _INLINE_HEADING.sub("", text).strip()
+        text = short or text
         if len(text) > 160:
             text = text[:157] + "…"
         try:
@@ -945,11 +1165,13 @@ class App:
         except (tk.TclError, AttributeError):
             pass
 
-    def _labeled(self, parent, text, variable, width=18, row=0, column=0):
+    def _labeled(self, parent, text, variable, width=18, row=0, column=0, surface="surface"):
         px = self.theme.px
-        ttk.Label(parent, text=text).grid(row=row, column=column, sticky="w", padx=(px(2), px(6)), pady=px(3))
-        entry = ttk.Entry(parent, textvariable=variable, width=width)
-        entry.grid(row=row, column=column + 1, sticky="ew", padx=(0, px(10)), pady=px(3))
+        ttk.Label(parent, text=text, style=on(surface, "Dim.TLabel")).grid(
+            row=row, column=column, sticky="w", padx=(px(2), px(8)), pady=px(4)
+        )
+        entry = ttk.Entry(parent, textvariable=variable, width=width, style=on(surface, "TEntry"))
+        entry.grid(row=row, column=column + 1, sticky="ew", padx=(0, px(12)), pady=px(4))
         return entry
 
     def _refresh_assumptions(self) -> None:
@@ -969,16 +1191,21 @@ class App:
             ]
         self.assumption_text.set("\n".join(lines))
 
-    def _combo(self, parent, text, variable, values, row, column, width=18):
+    def _combo(self, parent, text, variable, values, row, column, width=18, surface="surface"):
         px = self.theme.px
-        ttk.Label(parent, text=text).grid(row=row, column=column, sticky="w", padx=(px(2), px(6)), pady=px(3))
-        box = ttk.Combobox(parent, textvariable=variable, values=values, width=width, state="readonly")
-        box.grid(row=row, column=column + 1, sticky="ew", padx=(0, px(10)), pady=px(3))
+        ttk.Label(parent, text=text, style=on(surface, "Dim.TLabel")).grid(
+            row=row, column=column, sticky="w", padx=(px(2), px(8)), pady=px(4)
+        )
+        box = ttk.Combobox(
+            parent, textvariable=variable, values=values, width=width, state="readonly",
+            style=on(surface, "TCombobox"),
+        )
+        box.grid(row=row, column=column + 1, sticky="ew", padx=(0, px(12)), pady=px(4))
         return box
 
     def _build_basis(self) -> None:
         px = self.theme.px
-        tab = ttk.Frame(self.tabs, padding=px(12))
+        tab = ttk.Frame(self.tabs, style="OnSide.TFrame", padding=(px(4), px(10), px(4), px(10)))
         self.tabs.add(tab, text="Basis")
         self.ahj = tk.StringVar()
         self.nfpa_13 = tk.StringVar(value="2025")
@@ -988,21 +1215,31 @@ class App:
         self._labeled(tab, "NFPA 13 edition", self.nfpa_13, width=10, row=1, column=0)
         self._labeled(tab, "NFPA 72 edition", self.nfpa_72, width=10, row=2, column=0)
         self._labeled(tab, "Insurer", self.insurer, width=10, row=3, column=0)
-        ttk.Label(tab, text="Hazard notes").grid(row=4, column=0, sticky="nw", padx=(px(2), px(6)), pady=px(3))
+        ttk.Label(tab, text="Hazard notes", style="OnSide.Dim.TLabel").grid(
+            row=4, column=0, sticky="nw", padx=(px(2), px(8)), pady=px(8)
+        )
+        # A rounded field around a plain text box.
+        notes_box = ttk.Frame(tab, style="OnSide.Field.TFrame", padding=(px(4), px(4)))
+        notes_box.grid(row=4, column=1, sticky="nsew", padx=(0, px(12)), pady=px(4))
         self.hazard_notes = tk.Text(
-            tab,
+            notes_box,
             height=8,
+            width=20,
             wrap="word",
             bd=0,
             relief="flat",
-            highlightthickness=1,
-            highlightbackground=palette.BORDER_STRONG,
-            highlightcolor=palette.ACCENT,
+            highlightthickness=0,
             padx=px(6),
             pady=px(4),
-            font=self.theme.fonts["list"],
+            font=self.theme.fonts["ui"],
         )
-        self.hazard_notes.grid(row=4, column=1, sticky="nsew", padx=(0, px(10)), pady=px(3))
+        self.theme.paint(
+            self.hazard_notes, bg="raised", fg="ink", insertbackground="ink",
+            selectbackground="select", selectforeground="ink",
+        )
+        self.hazard_notes.pack(fill="both", expand=True)
+        self.hazard_notes.bind("<FocusIn>", lambda _event: notes_box.state(["focus"]), add="+")
+        self.hazard_notes.bind("<FocusOut>", lambda _event: notes_box.state(["!focus"]), add="+")
         tab.columnconfigure(1, weight=1)
         tab.rowconfigure(4, weight=1)
         ttk.Label(
@@ -1011,25 +1248,25 @@ class App:
                 "Scope: wet, dry, and double-interlock preaction, plus the detection "
                 "and releasing that trip them."
             ),
-            style="Small.TLabel",
+            style="OnSide.Small.TLabel",
             wraplength=px(400),
             justify="left",
-        ).grid(row=5, column=0, columnspan=2, sticky="w", pady=(px(8), 0))
+        ).grid(row=5, column=0, columnspan=2, sticky="w", pady=(px(10), 0))
 
     def _build_zone(self) -> None:
         px = self.theme.px
-        scroller = ScrollFrame(self.tabs)
+        scroller = ScrollFrame(self.tabs, surface="surface", look=self.theme)
         self.tabs.add(scroller, text="Zone")
         tab = scroller.inner
-        tab.configure(padding=(px(10), px(10), px(4), px(10)))
+        tab.configure(padding=(px(4), px(10), px(8), px(10)))
         ttk.Label(
             tab,
             textvariable=self.assumption_text,
-            style="Small.TLabel",
-            wraplength=px(400),
+            style="OnSide.Small.TLabel",
+            wraplength=px(410),
             justify="left",
-        ).pack(anchor="w", pady=(0, px(8)))
-        form = ttk.Frame(tab)
+        ).pack(anchor="w", pady=(0, px(10)))
+        form = ttk.Frame(tab, style="OnSide.TFrame")
         form.pack(fill="x")
         for column in (1, 3):
             form.columnconfigure(column, weight=1)
@@ -1081,67 +1318,82 @@ class App:
         self.trim_gal.trace_add("write", lambda *_args: self._refresh_assumptions())
         self.delivery_basis.trace_add("write", lambda *_args: self._refresh_assumptions())
         self._refresh_assumptions()
-        checks = ttk.Frame(form)
-        checks.grid(row=10, column=0, columnspan=4, sticky="w", pady=(px(6), 0))
-        ttk.Checkbutton(checks, text="Supervised waterflow", variable=self.supervised).grid(row=0, column=0, sticky="w", padx=(0, px(14)), pady=px(2))
-        ttk.Checkbutton(checks, text="Quick-opening device", variable=self.qod).grid(row=0, column=1, sticky="w", pady=px(2))
-        ttk.Checkbutton(checks, text="Manual station", variable=self.manual_station).grid(row=1, column=0, sticky="w", padx=(0, px(14)), pady=px(2))
-        ttk.Checkbutton(checks, text="Failsafe on total power loss", variable=self.failsafe).grid(row=1, column=1, sticky="w", pady=px(2))
+        checks = ttk.Frame(form, style="OnSide.TFrame")
+        checks.grid(row=10, column=0, columnspan=4, sticky="w", pady=(px(8), 0))
+        for row, column, label, variable in (
+            (0, 0, "Supervised waterflow", self.supervised),
+            (0, 1, "Quick-opening device", self.qod),
+            (1, 0, "Manual station", self.manual_station),
+            (1, 1, "Failsafe on total power loss", self.failsafe),
+        ):
+            ttk.Checkbutton(checks, text=label, variable=variable, style="OnSide.TCheckbutton").grid(
+                row=row, column=column, sticky="w", padx=(px(2), px(18)), pady=px(2)
+            )
 
-        pipes = ttk.LabelFrame(tab, text="PIPE SEGMENTS", padding=px(8))
-        pipes.pack(fill="x", pady=(px(12), 0))
+        ttk.Label(tab, text="PIPE SEGMENTS", style="OnSide.Section.TLabel").pack(anchor="w", pady=(px(16), px(6)))
+        pipes = ttk.Frame(tab, style="OnSide.Card.TFrame", padding=(px(12), px(10), px(12), px(12)))
+        pipes.pack(fill="x")
         columns = ("role", "nps", "schedule", "length_ft", "d_in")
-        self.pipes = ttk.Treeview(pipes, columns=columns, show="headings", height=6)
+        self.pipes = ttk.Treeview(pipes, columns=columns, show="headings", height=6, style="OnCard.Treeview")
         headings = {
-            "role": "Role",
+            "role": "ROLE",
             "nps": "NPS",
-            "schedule": "Schedule",
-            "length_ft": "Length ft",
-            "d_in": "ID in",
+            "schedule": "SCHEDULE",
+            "length_ft": "LENGTH FT",
+            "d_in": "ID IN",
         }
-        widths = {"role": 70, "nps": 50, "schedule": 72, "length_ft": 72, "d_in": 60}
+        widths = {"role": 70, "nps": 50, "schedule": 76, "length_ft": 80, "d_in": 60}
         for key, title in headings.items():
-            self.pipes.heading(key, text=title)
+            self.pipes.heading(key, text=title, anchor="w")
             self.pipes.column(key, width=px(widths[key]), minwidth=px(44), anchor="w", stretch=True)
         self.pipes.pack(fill="x")
-        add = ttk.Frame(pipes)
-        add.pack(fill="x", pady=(px(8), 0))
+        add = ttk.Frame(pipes, style="OnCard.TFrame")
+        add.pack(fill="x", pady=(px(10), 0))
         self.seg_role = tk.StringVar(value="branch")
         self.seg_nps = tk.StringVar()
         self.seg_schedule = tk.StringVar()
         self.seg_length = tk.StringVar()
         for column, title in enumerate(("Role", "NPS", "Schedule", "Length ft")):
-            ttk.Label(add, text=title, style="Small.TLabel").grid(row=0, column=column, sticky="w", padx=(0, px(6)))
+            ttk.Label(add, text=title, style="OnCard.Small.TLabel").grid(
+                row=0, column=column, sticky="w", padx=(0, px(6)), pady=(0, px(2))
+            )
             add.columnconfigure(column, weight=1)
+        # Fields on a card take the window colour, so they read as wells in the card.
         ttk.Combobox(
             add, textvariable=self.seg_role, width=8, state="readonly",
-            values=("branch", "drop", "cross", "main", "feed", "riser"),
+            values=("branch", "drop", "cross", "main", "feed", "riser"), style="OnCard.TCombobox",
         ).grid(row=1, column=0, sticky="ew", padx=(0, px(6)))
-        ttk.Entry(add, textvariable=self.seg_nps, width=6).grid(row=1, column=1, sticky="ew", padx=(0, px(6)))
-        ttk.Entry(add, textvariable=self.seg_schedule, width=7).grid(row=1, column=2, sticky="ew", padx=(0, px(6)))
-        ttk.Entry(add, textvariable=self.seg_length, width=7).grid(row=1, column=3, sticky="ew")
-        buttons = ttk.Frame(pipes)
-        buttons.pack(fill="x", pady=(px(8), 0))
-        ttk.Button(buttons, text="Add segment", command=self.add_segment).pack(side="left")
-        ttk.Button(buttons, text="Remove", command=self.remove_segment).pack(side="left", padx=px(6))
+        ttk.Entry(add, textvariable=self.seg_nps, width=6, style="OnCard.TEntry").grid(
+            row=1, column=1, sticky="ew", padx=(0, px(6))
+        )
+        ttk.Entry(add, textvariable=self.seg_schedule, width=7, style="OnCard.TEntry").grid(
+            row=1, column=2, sticky="ew", padx=(0, px(6))
+        )
+        ttk.Entry(add, textvariable=self.seg_length, width=7, style="OnCard.TEntry").grid(row=1, column=3, sticky="ew")
+        buttons = ttk.Frame(pipes, style="OnCard.TFrame")
+        buttons.pack(fill="x", pady=(px(10), 0))
+        ttk.Button(buttons, text="Add segment", command=self.add_segment, style="OnCard.TButton").pack(side="left")
+        ttk.Button(buttons, text="Remove", command=self.remove_segment, style="OnCard.Ghost.TButton").pack(
+            side="left", padx=px(6)
+        )
         ttk.Label(
-            pipes,
+            tab,
             text=(
                 "Blank schedule uses the shop default (branch and under 2 in = sch 40, mains and cross "
                 "2 in and up = sch 10). The ID comes from the calc pack. Blank fittings follow the length "
                 "basis. Blank trim is ASSUMED 5 gal (no valve data sheet), not calculated."
             ),
-            style="Small.TLabel",
-            wraplength=px(400),
+            style="OnSide.Small.TLabel",
+            wraplength=px(410),
             justify="left",
-        ).pack(anchor="w", pady=(px(8), 0))
-        ttk.Button(tab, text="Run zone", style="Accent.TButton", command=self.start_zone_run).pack(
-            anchor="e", pady=(px(12), px(4))
+        ).pack(anchor="w", pady=(px(10), 0))
+        ttk.Button(tab, text="Run zone", style="OnSide.Accent.TButton", command=self.start_zone_run).pack(
+            anchor="e", pady=(px(14), px(4))
         )
 
     def _build_results(self) -> None:
         px = self.theme.px
-        tab = ttk.Frame(self.tabs, padding=px(10))
+        tab = ttk.Frame(self.tabs, style="OnSide.TFrame", padding=(px(4), px(10), px(4), px(6)))
         self.tabs.add(tab, text="Results")
         ttk.Label(
             tab,
@@ -1150,25 +1402,33 @@ class App:
                 "Blank trim and the screen-limit seconds are marked ASSUMED. "
                 "A delivery time here is an optimistic screen, not a listed water-delivery-time calculation."
             ),
-            style="Small.TLabel",
-            wraplength=px(400),
+            style="OnSide.Small.TLabel",
+            wraplength=px(410),
             justify="left",
-        ).pack(anchor="w", pady=(0, px(6)))
+        ).pack(anchor="w", pady=(0, px(10)))
+        # The figures that go to the document sit on a paper sheet, as a document does.
+        sheet = ttk.Frame(tab, style="OnSide.Paper.TFrame", padding=(px(4), px(4)))
+        sheet.pack(fill="both", expand=True)
         self.results = tk.Text(
-            tab,
+            sheet,
             wrap="word",
             bd=0,
             relief="flat",
             highlightthickness=0,
-            bg=palette.SURFACE,
-            fg=palette.TEXT,
-            padx=px(10),
-            pady=px(8),
+            padx=px(14),
+            pady=px(12),
+            spacing2=px(1),
             font=self.theme.fonts["mono"],
+            width=20,
+            height=10,
         )
-        scroll = ttk.Scrollbar(tab, command=self.results.yview)
+        self.theme.paint(
+            self.results, bg="paper", fg="paper_ink", insertbackground="paper",
+            selectbackground="paper_select", selectforeground="paper_ink",
+        )
+        scroll = ttk.Scrollbar(sheet, command=self.results.yview, style="OnPaper.Vertical.TScrollbar")
         self.results.configure(yscrollcommand=scroll.set)
-        scroll.pack(side="right", fill="y")
+        scroll.pack(side="right", fill="y", pady=px(6))
         self.results.pack(fill="both", expand=True)
 
     def _build_team(self) -> None:
@@ -1435,6 +1695,8 @@ class App:
                     callback()
                 except Exception as exc:
                     self.status.set("Update failed. " + safe_error(exc))
+            if self._lives or self._closing is not None or not self._stream_events.empty():
+                self._kick_animation()
         finally:
             try:
                 self.root.after(100, self._poll)
@@ -1462,17 +1724,36 @@ class App:
                 panel.cancel_button.configure(
                     state="normal" if self._project_running((self.project or {}).get("id")) else "disabled"
                 )
-            lines = [job.inbox_line() for job in jobs.snapshot()]
+            snapshot = jobs.snapshot()
+            lines = [job.inbox_line() for job in snapshot]
             self._show_activity(bool(lines))
+            self._sync_stop_link()
             if tuple(listing.get(0, "end")) == tuple(lines):
                 return
             listing.delete(0, "end")
-            for line in lines:
-                listing.insert("end", line)
+            for job, line in zip(snapshot, lines):
+                glyph, tags = ACTIVITY_MARKS.get(job.status, ("·", ()))
+                # get() keeps the full line. The row shows a mark, the kind, and the job name.
+                listing.insert("end", line, display=f"{glyph}  {job.kind}  ·  {job.project_name}", tags=tags)
+            listing.configure(height=max(1, min(len(lines), 5)))
             if lines:
                 listing.see("end")
         except tk.TclError:
             return
+
+    def _sync_stop_link(self) -> None:
+        """Stop sits under the composer while a job on the open project is queued or running."""
+        show = self._pending_here()
+        if show == self._stop_shown:
+            return
+        try:
+            if show:
+                self.stop_link.pack(side="right")
+            else:
+                self.stop_link.pack_forget()
+        except tk.TclError:
+            return
+        self._stop_shown = show
 
     def _show_activity(self, show: bool) -> None:
         """The sidebar Activity list appears once there is a job to show."""
@@ -1861,14 +2142,10 @@ class App:
 
     def _project_menu_popup(self, event) -> str:
         index = self.project_list.nearest(event.y)
-        box = self.project_list.bbox(index) if index >= 0 else None
-        if not box or index >= len(self._ids) or not (box[1] <= event.y <= box[1] + box[3]):
+        if index < 0 or index >= len(self._ids):
             return "break"
         self._menu_project_id = self._ids[index]
-        try:
-            self.project_menu.tk_popup(event.x_root, event.y_root)
-        finally:
-            self.project_menu.grab_release()
+        self.popup.show(self.project_menu, event.x_root, event.y_root)
         return "break"
 
     def _ensure_project(self) -> None:
@@ -2088,7 +2365,9 @@ class App:
         project_id = project_id or self._selected_id()
         if not project_id:
             return
-        if not messagebox.askyesno("Delete", "Delete this job and its chat from this machine?"):
+        if not messagebox.askyesno(
+            "Delete job", "Delete this job and its chat from this machine?", parent=self.root, yes="Delete"
+        ):
             return
         delete_project(project_id)
         try:
@@ -2938,40 +3217,294 @@ class App:
         self.status.set(self._with_job_label(job_id, outcome["block_reason"]))
 
     def _render_chat(self) -> None:
-        view = self.chat_view
-        view.configure(state="normal")
-        view.delete("1.0", "end")
+        """Redraw the thread. With motion on, a reply that has just landed eases in."""
+        key = (self.project or {}).get("id") or ""
+        count = len(self.chat_log)
+        prior_key, prior_count = self._rendered
+        handoff, self._handoff = self._handoff, None
+        closing = self._closing
+        if closing is not None and (
+            closing["key"] != key
+            or closing["index"] != count - 1
+            or (self.chat_log[closing["index"]].get("text") or "") != closing["reveal"].target
+        ):
+            closing = self._closing = None
+        landed = (
+            self.motion
+            and closing is None
+            and count > prior_count
+            and prior_key == key
+            and self.chat_log[-1].get("role") != "user"
+        )
+        if landed:
+            text = self.chat_log[-1].get("text") or ""
+            # A streamed reply carries on from the words already on screen.
+            reveal = handoff if handoff is not None else Reveal(text, shown=0)
+            reveal.feed(text)
+            if reveal.flowing:
+                closing = self._closing = {"key": key, "index": count - 1, "reveal": reveal}
+        self._rendered = (key, count)
+        turns = self.chat_log[:-1] if closing is not None else self.chat_log
+        welcome = None
         if not self.chat_log:
-            self._render_welcome()
-        for turn in self.chat_log:
-            text = turn.get("text") or ""
-            if turn.get("role") == "user":
-                view.insert("end", "You\n", ("who_user",))
-                view.insert("end", text + "\n", ("body",))
-                continue
-            view.insert("end", "Assistant\n", ("who_assistant",))
-            for chunk, tags in markdown_segments(text):
-                view.insert("end", chunk, ("body",) + tags)
-            view.insert("end", "\n", ("body",))
-        pending = self._pending_here()
-        if pending and self.chat_log:
-            view.insert("end", "Working on it…\n", ("pending",))
-        self._pending_shown = pending
-        view.configure(state="disabled")
-        view.see("end")
+            lines = THREAD_HINT.splitlines()
+            links = []
+            if not self._key_saved:
+                links.append((WELCOME_KEY_LINK, "link_settings"))
+            links.append((WELCOME_SAMPLE_LINK, "link_sample_di"))
+            welcome = {"title": lines[0], "lines": lines[1:], "links": links, "footnote": WELCOME_FOOTNOTE}
+        pending = self._pending_spec()
+        live = self._live_items(time.monotonic())
+        self.thread.render(turns, welcome=welcome, live=live, pending=pending)
+        self._pending_shown = self._pending_here()
         self._update_title()
+        self._refresh_chips()
+        self._sync_stop_link()
+        if live:
+            self._kick_animation()
 
-    def _render_welcome(self) -> None:
-        """Empty-thread welcome. Asking a question needs nothing from this."""
-        view = self.chat_view
-        lines = THREAD_HINT.splitlines()
-        view.insert("end", lines[0] + "\n", ("welcome_title",))
-        for line in lines[1:]:
-            view.insert("end", line + "\n", ("welcome_sub",))
-        if not self._key_saved:
-            view.insert("end", WELCOME_KEY_LINK + "\n", ("welcome_link", "link_settings"))
-        view.insert("end", WELCOME_SAMPLE_LINK + "\n", ("welcome_link", "link_sample_di"))
-        view.insert("end", WELCOME_FOOTNOTE + "\n", ("welcome_hint",))
+    def _pending_spec(self) -> dict | None:
+        """The working line: None, or its label and what the newest running job is doing."""
+        jobs = getattr(self, "jobs", None)
+        if jobs is None or not self.project or not self.chat_log:
+            return None
+        project_id = self.project.get("id")
+        running = [
+            job for job in jobs.snapshot()
+            if job.project_id == project_id and job.status in ("queued", "running")
+        ]
+        if not running:
+            return None
+        newest = running[-1]
+        detail = self._activity.get(newest.id) or KIND_ACTIVITY.get(newest.kind, "")
+        return {"label": PENDING_LABEL, "detail": detail}
+
+    def _live_items(self, now: float) -> list[dict]:
+        """The replies still coming onto the screen for the open job, oldest first."""
+        key = (self.project or {}).get("id") or ""
+        items = []
+        closing = self._closing
+        if closing is not None and closing["key"] == key:
+            reveal = closing["reveal"]
+            items.append({
+                "key": ("turn", closing["index"]),
+                "text": reveal.text,
+                "caret": reveal.flowing,
+                "fades": reveal.fades(now, palette.FADE_STEPS),
+                "settled": reveal.settled(now),
+            })
+        for job_id, live in self._lives.items():
+            if live["project_id"] != key or not live["body"]:
+                continue
+            reveal = live.get("reveal")
+            if reveal is None:
+                items.append({"key": job_id, "text": live["text"], "caret": True, "fades": [], "settled": None})
+            else:
+                items.append({
+                    "key": job_id,
+                    "text": reveal.text,
+                    "caret": True,
+                    "fades": reveal.fades(now, palette.FADE_STEPS),
+                    "settled": reveal.settled(now),
+                })
+        return items
+
+    def _stream_listener(self, job_id: str):
+        """What a chat worker reports while its turn runs: (on_event, observe).
+
+        Both run on the worker thread and only put events on a queue; the
+        window reads it on its own thread. on_event hears the streamed reply
+        (claude_client.AnthropicMessages.streaming) and observe hears the
+        tool loop. While a tool runs, the model calls inside it belong to a
+        specialist or the checker, so their words stay out of the thread.
+        """
+        inbox = self._stream_events
+        depth = {"tools": 0}
+
+        def on_event(event: dict) -> None:
+            if depth["tools"]:
+                return
+            kind = event.get("type")
+            if kind in ("text", "reset"):
+                inbox.put((job_id, dict(event)))
+            elif kind == "thinking":
+                inbox.put((job_id, {"type": "activity", "text": "thinking"}))
+
+        def observe(event: dict) -> None:
+            kind = event.get("type")
+            if kind == "tool_start":
+                depth["tools"] += 1
+            elif kind == "tool_end":
+                depth["tools"] = max(0, depth["tools"] - 1)
+            elif kind == "round" and not depth["tools"] and not event.get("agent"):
+                # A new round of the lead. If it writes text, that text is the reply
+                # and replaces what an earlier round wrote, as the tool loop keeps it.
+                inbox.put((job_id, {"type": "round"}))
+            text = describe_activity(event)
+            if text is not None:
+                inbox.put((job_id, {"type": "activity", "text": text}))
+
+        return on_event, observe
+
+    def _drain_stream_events(self) -> tuple[bool, bool]:
+        """Take what the workers reported. Returns (reply text changed, working line changed)."""
+        text_changed = False
+        activity_changed = False
+        while True:
+            try:
+                job_id, event = self._stream_events.get_nowait()
+            except queue.Empty:
+                break
+            if job_id in self._stream_closed:
+                continue
+            job = self._job_record(job_id)
+            if job is None:
+                continue
+            kind = event.get("type")
+            if kind == "activity":
+                if self._activity.get(job_id) != event.get("text"):
+                    self._activity[job_id] = event.get("text") or ""
+                    activity_changed = True
+                continue
+            live = self._lives.get(job_id)
+            if kind == "round":
+                if live is not None:
+                    live["new_round"] = True
+                continue
+            if live is None:
+                live = self._lives[job_id] = {
+                    "project_id": job.project_id,
+                    "heading": job.heading(),
+                    "body": "",
+                    "text": "",
+                    "new_round": False,
+                    "reveal": Reveal("", shown=0) if self.motion else None,
+                }
+            if kind == "reset":
+                live["body"] = ""
+            elif kind == "text":
+                if live.get("new_round"):
+                    live["body"] = ""
+                    live["new_round"] = False
+                live["body"] += event.get("text") or ""
+                if self._activity.get(job_id) != "writing the reply":
+                    self._activity[job_id] = "writing the reply"
+                    activity_changed = True
+            live["text"] = label_result(live["heading"], live["body"])
+            if live["reveal"] is not None:
+                live["reveal"].feed(live["text"])
+            text_changed = True
+        return text_changed, activity_changed
+
+    def _end_stream(self, job_id: str | None, project_id: str | None) -> None:
+        """A chat job finished. Its live reply gives way to the turn that is about to be saved."""
+        if not job_id:
+            return
+        self._stream_closed.add(job_id)
+        self._activity.pop(job_id, None)
+        live = self._lives.pop(job_id, None)
+        if live is None or live.get("reveal") is None:
+            return
+        if self.project is not None and self.project.get("id") == project_id and live["body"]:
+            self._handoff = live["reveal"]
+
+    def _kick_animation(self, delay: int = FRAME_MS) -> None:
+        if self._frame_after is not None:
+            return
+        try:
+            self._frame_after = self.root.after(delay, self._animate)
+        except tk.TclError:
+            self._frame_after = None
+
+    def _animate(self) -> None:
+        """One frame: take stream events, move every easing reply forward, redraw what changed."""
+        self._frame_after = None
+        now = time.monotonic()
+        try:
+            text_changed, activity_changed = self._drain_stream_events()
+            redraw = text_changed
+            moving = False
+            key = (self.project or {}).get("id") or ""
+            reveals = [live["reveal"] for live in self._lives.values()
+                       if live.get("reveal") is not None and live["project_id"] == key]
+            closing = self._closing
+            if closing is not None and closing["key"] != key:
+                # The reply belongs to a job that is no longer open. It is saved; nothing is drawn.
+                closing = self._closing = None
+            if closing is not None:
+                reveals.append(closing["reveal"])
+            for reveal in reveals:
+                was_fading = reveal.fading(now)
+                if reveal.advance(now) or was_fading:
+                    redraw = True
+                if reveal.active(now):
+                    moving = True
+            finished = closing is not None and not closing["reveal"].active(now)
+            if finished:
+                self._closing = None
+                redraw = True
+            if redraw:
+                self.thread.render_live(self._live_items(now) if not finished else self._final_items(closing, now))
+                if finished:
+                    if any(live["project_id"] == key and live["body"] for live in self._lives.values()):
+                        self._render_chat()
+                    else:
+                        self.thread.commit_live()
+            if activity_changed:
+                self.thread.render_pending(self._pending_spec())
+            # The caret is steady while words flow and blinks while the model is thinking.
+            self.thread.blink(moving or int(now * 1.7) % 2 == 0)
+        except tk.TclError:
+            return
+        if moving:
+            self._kick_animation(FRAME_MS)
+        elif self._lives or not self._stream_events.empty() or self._chat_jobs_running():
+            self._kick_animation(IDLE_FRAME_MS)
+
+    def _final_items(self, closing: dict, now: float) -> list[dict]:
+        """The reply that just finished easing in, drawn whole, ahead of any still arriving."""
+        reveal = closing["reveal"]
+        reveal.finish()
+        final = {"key": ("turn", closing["index"]), "text": reveal.text, "caret": False, "fades": [], "settled": None}
+        return [final] + [item for item in self._live_items(now) if item["key"] != final["key"]]
+
+    def _chat_jobs_running(self) -> bool:
+        jobs = getattr(self, "jobs", None)
+        if jobs is None:
+            return False
+        return any(job.kind == "chat" and job.status in ("queued", "running") for job in jobs.snapshot())
+
+    def _refresh_chips(self) -> None:
+        """One-tap suggestions above the composer: starters on an empty thread, follow-ups after a zone run."""
+        try:
+            chips = suggested_prompts(self.project, self.chat_log, key_saved=self._key_saved,
+                                      busy=self._pending_here())
+        except Exception:
+            chips = []
+        shown = tuple(label for label, _action in chips)
+        if shown == self._chips_shown:
+            return
+        self._chips_shown = shown
+        try:
+            for child in self.chip_row.winfo_children():
+                child.destroy()
+            if not chips:
+                self.chip_row.pack_forget()
+                return
+            px = self.theme.px
+            for label, action in chips:
+                Chip(self.chip_row, label, lambda chosen=action: self._use_chip(chosen)).pack(
+                    side="left", padx=(0, px(8))
+                )
+            self.chip_row.pack(fill="x", pady=(0, px(9)), before=self.composer_box)
+        except tk.TclError:
+            pass
+
+    def _use_chip(self, action: str) -> None:
+        """A chip is a typed message sent for the designer: a slash command or a question."""
+        self.chat_entry.delete(0, "end")
+        self.chat_entry.insert(0, action)
+        self.send_chat()
 
     def _append_chat(self, role: str, text: str) -> None:
         self.chat_log.append({"role": role, "text": text})
@@ -3054,9 +3587,15 @@ class App:
             try:
                 pack = content_root()
                 client = AnthropicMessages(key)
+                # The reply streams into the thread as it is written. A client with no
+                # streaming call answers whole, and the thread eases that in instead.
+                on_event, observe = self._stream_listener(job_id)
+                streaming = getattr(client, "streaming", None)
+                create = streaming(on_event) if callable(streaming) else client.create
                 out = run_everyday(
-                    pack, client.create, request, mode=mode,
+                    pack, create, request, mode=mode,
                     record=self.record, project_id=origin_id, agent="lead", cancel=cancel,
+                    observe=observe,
                 )
                 reply = everyday_reply(out)
                 summary = team_summary(out)
@@ -3109,6 +3648,7 @@ class App:
         self._keep_composer_open()
         origin_id = self._destination_id(origin_id, job_id)
         reply = self._with_job_label(job_id, reply)
+        self._end_stream(job_id, origin_id)
         if self.project is not None and self.project.get("id") == origin_id:
             self.chat_log.append(self._assistant_turn(reply, job_id))
             self._render_chat()
@@ -3251,31 +3791,116 @@ class App:
 
     def open_settings(self) -> None:
         px = self.theme.px
+        existing = getattr(self, "_settings_window", None)
+        if existing is not None:
+            try:
+                if existing.winfo_exists():
+                    existing.lift()
+                    existing.focus_set()
+                    return
+            except tk.TclError:
+                pass
         win = tk.Toplevel(self.root)
+        self._settings_window = win
         win.title("Settings")
         win.transient(self.root)
-        win.configure(bg=palette.BG)
-        win.geometry(f"{px(640)}x{px(660)}")
-        win.minsize(px(520), px(480))
-        frame = ttk.Frame(win, padding=(px(22), px(18), px(22), px(16)))
-        frame.pack(fill="both", expand=True)
-        wrap = px(580)
+        self.theme.paint(win, bg="bg")
+        height = min(px(820), max(px(520), self.root.winfo_screenheight() - px(120)))
+        win.geometry(f"{px(720)}x{height}")
+        win.minsize(px(560), px(480))
+        scroller = ScrollFrame(win, surface="bg", look=self.theme)
+        scroller.pack(fill="both", expand=True)
+        frame = scroller.inner
+        frame.configure(padding=(px(24), px(20), px(18), px(20)))
+        wrap = px(600)
 
-        ttk.Label(frame, text="Anthropic API key", style="Job.TLabel").pack(anchor="w")
-        ttk.Label(
-            frame,
-            text=(
-                f"Your own key, used with {MODEL_ID}. It stays on this machine and is never written "
-                "into a job, the chat, or an export."
-            ),
-            style="Muted.TLabel",
-            wraplength=wrap,
-            justify="left",
-        ).pack(anchor="w", pady=(px(2), px(8)))
+        def section(title: str, blurb: str = "") -> ttk.Frame:
+            """A titled panel. Its children sit on the sidebar colour."""
+            panel = ttk.Frame(frame, style="Panel.TFrame", padding=(px(20), px(16), px(20), px(18)))
+            panel.pack(fill="x", pady=(0, px(14)))
+            ttk.Label(panel, text=title, style="OnSide.Heading.TLabel").pack(anchor="w")
+            if blurb:
+                ttk.Label(panel, text=blurb, style="OnSide.Dim.TLabel", wraplength=wrap, justify="left").pack(
+                    anchor="w", pady=(px(3), px(10))
+                )
+            return panel
+
+        # Appearance -----------------------------------------------------
+        looks = section("Appearance", "The window's colour scheme. It changes at once and is remembered.")
+        grid = ttk.Frame(looks, style="OnSide.TFrame")
+        grid.pack(fill="x")
+        cards: dict[str, ttk.Frame] = {}
+
+        def choose(scheme_id: str) -> None:
+            chosen = palette.remember_scheme(self.theme.set_scheme(scheme_id))
+            for name, card in cards.items():
+                try:
+                    card.state(["selected"] if name == chosen else ["!selected"])
+                except tk.TclError:
+                    pass
+            style_title_bar(win)
+            self.status.set(f"Colour scheme: {SCHEMES[chosen].name}.")
+
+        for position, scheme_id in enumerate(SCHEME_ORDER):
+            scheme = SCHEMES[scheme_id]
+            tones = scheme.colors
+            card = ttk.Frame(grid, style="OnSide.Swatch.TFrame", padding=(px(10), px(10), px(10), px(10)), cursor="hand2")
+            card.grid(row=position // 3, column=position % 3, sticky="nsew", padx=(0, px(10)), pady=(0, px(10)))
+            grid.columnconfigure(position % 3, weight=1, uniform="swatch")
+            # The scheme's own colours, whatever scheme the window is in: chrome, paper, accent.
+            preview = tk.Canvas(
+                card, width=px(150), height=px(56), highlightthickness=1,
+                highlightbackground=tones["edge"], bd=0, background=tones["bg"],
+            )
+            preview.create_rectangle(0, 0, px(34), px(60), fill=tones["surface"], outline="")
+            preview.create_rectangle(px(8), px(10), px(26), px(14), fill=tones["accent"], outline="")
+            for row in range(3):
+                preview.create_rectangle(
+                    px(8), px(22 + row * 8), px(26), px(25 + row * 8), fill=tones["edge"], outline=""
+                )
+            preview.create_rectangle(px(44), px(12), px(96), px(15), fill=tones["ink"], outline="")
+            preview.create_rectangle(px(44), px(22), px(84), px(25), fill=tones["ink_dim"], outline="")
+            preview.create_rectangle(px(44), px(32), px(72), px(35), fill=tones["ink_faint"], outline="")
+            preview.create_rectangle(px(106), px(8), px(160), px(60), fill=tones["paper"], outline="")
+            preview.create_rectangle(px(114), px(18), px(140), px(21), fill=tones["paper_ink"], outline="")
+            preview.create_rectangle(px(114), px(28), px(134), px(31), fill=tones["accent"], outline="")
+            preview.pack(fill="x")
+            name = ttk.Label(card, text=scheme.name, style="OnCard.TLabel", font=self.theme.fonts["ui_bold"])
+            name.pack(anchor="w", pady=(px(8), 0))
+            blurb = ttk.Label(card, text=scheme.blurb, style="OnCard.Small.TLabel", wraplength=px(170), justify="left")
+            blurb.pack(anchor="w")
+            cards[scheme_id] = card
+            if scheme_id == self.theme.scheme:
+                card.state(["selected"])
+            for widget in (card, preview, name, blurb):
+                widget.bind("<Button-1>", lambda _event, chosen=scheme_id: choose(chosen), add="+")
+                widget.bind("<Enter>", lambda _event, target=card: target.state(["active"]), add="+")
+                widget.bind("<Leave>", lambda _event, target=card: target.state(["!active"]), add="+")
+        still = tk.BooleanVar(value=bool(read_config().get("reduce_motion")))
+
+        def set_motion() -> None:
+            write_config({"reduce_motion": bool(still.get())})
+            self.motion = not still.get() and not os.environ.get("FPFA_REDUCE_MOTION")
+            self.thread.animate = self.motion
+
+        ttk.Checkbutton(
+            looks,
+            text="Reduce motion: show each reply at once instead of easing it in",
+            variable=still,
+            command=set_motion,
+            style="OnSide.TCheckbutton",
+        ).pack(anchor="w", pady=(px(4), 0))
+
+        # API key --------------------------------------------------------
+        keys = section(
+            "Anthropic API key",
+            f"Your own key, used with {MODEL_ID}. It stays on this machine and is never written "
+            "into a job, the chat, or an export.",
+        )
         key_var = tk.StringVar()
-        key_row = ttk.Frame(frame)
+        key_row = ttk.Frame(keys, style="OnSide.TFrame")
         key_row.pack(fill="x")
-        key_entry = ttk.Entry(key_row, textvariable=key_var, show="•")
+        key_entry = ttk.Entry(key_row, textvariable=key_var, show="•", style="OnSide.TEntry")
         key_entry.pack(side="left", fill="x", expand=True)
         status = tk.StringVar(value=key_status())
 
@@ -3284,6 +3909,9 @@ class App:
             self.status.set(key_status())
             if not self.chat_log:
                 self._render_chat()
+            else:
+                self._chips_shown = (None,)
+                self._refresh_chips()
 
         def save():
             raw = key_var.get().strip()
@@ -3324,22 +3952,29 @@ class App:
 
             threading.Thread(target=work, daemon=True).start()
 
-        ttk.Button(key_row, text="Save key", style="Accent.TButton", command=save).pack(side="left", padx=(px(8), 0))
+        ttk.Button(key_row, text="Save key", style="OnSide.Accent.TButton", command=save).pack(
+            side="left", padx=(px(8), 0)
+        )
         key_entry.bind("<Return>", lambda _event: save())
-        ttk.Label(frame, textvariable=status, wraplength=wrap, justify="left").pack(anchor="w", pady=(px(8), px(4)))
-        key_tools = ttk.Frame(frame)
+        ttk.Label(keys, textvariable=status, style="OnSide.TLabel", wraplength=wrap, justify="left").pack(
+            anchor="w", pady=(px(10), px(6))
+        )
+        key_tools = ttk.Frame(keys, style="OnSide.TFrame")
         key_tools.pack(anchor="w")
-        ttk.Button(key_tools, text="Check key", command=check).pack(side="left")
-        ttk.Button(key_tools, text="Clear key", command=clear).pack(side="left", padx=px(6))
-        ttk.Label(frame, text=key_storage_help(), style="Small.TLabel", wraplength=wrap, justify="left").pack(
-            anchor="w", pady=(px(8), 0)
+        ttk.Button(key_tools, text="Check key", command=check, style="OnSide.TButton").pack(side="left")
+        ttk.Button(key_tools, text="Clear key", command=clear, style="OnSide.Danger.TButton").pack(
+            side="left", padx=px(8)
+        )
+        ttk.Label(keys, text=key_storage_help(), style="OnSide.Small.TLabel", wraplength=wrap, justify="left").pack(
+            anchor="w", pady=(px(10), 0)
         )
 
-        ttk.Separator(frame, orient="horizontal").pack(fill="x", pady=px(16))
-
-        ttk.Label(frame, text="Content pack", style="Job.TLabel").pack(anchor="w")
+        # Content pack ---------------------------------------------------
+        pack = section("Content pack")
         self._settings_version = tk.StringVar(value=f"Content version: {content_version_text()}")
-        ttk.Label(frame, textvariable=self._settings_version, style="Muted.TLabel").pack(anchor="w", pady=(px(2), px(6)))
+        ttk.Label(pack, textvariable=self._settings_version, style="OnSide.Dim.TLabel").pack(
+            anchor="w", pady=(px(3), px(8))
+        )
         content_line = tk.StringVar(value="")
         feed_var = tk.StringVar(value=resolved_feed_url())
 
@@ -3354,39 +3989,43 @@ class App:
             content_line.set("Checking for a content pack…")
             self._start_content_check(manual=True, url=used, status_var=content_line)
 
-        update_row = ttk.Frame(frame)
+        update_row = ttk.Frame(pack, style="OnSide.TFrame")
         update_row.pack(fill="x")
-        ttk.Button(update_row, text="Check for updates", command=check_updates).pack(side="left")
-        ttk.Label(update_row, textvariable=content_line, style="Muted.TLabel", wraplength=px(400), justify="left").pack(
-            side="left", padx=(px(10), 0)
+        ttk.Button(update_row, text="Check for updates", command=check_updates, style="OnSide.TButton").pack(
+            side="left"
         )
         ttk.Label(
-            frame,
+            update_row, textvariable=content_line, style="OnSide.Dim.TLabel", wraplength=px(400), justify="left"
+        ).pack(side="left", padx=(px(12), 0))
+        ttk.Label(
+            pack,
             text=(
                 "A newer pack is used only after its sha256 matches. "
                 "Your API key and jobs stay on this machine."
             ),
-            style="Small.TLabel",
+            style="OnSide.Small.TLabel",
             wraplength=wrap,
             justify="left",
-        ).pack(anchor="w", pady=(px(6), px(8)))
-        ttk.Label(frame, text="WHAT'S NEW", style="Small.TLabel", font=self.theme.fonts["section"]).pack(anchor="w")
+        ).pack(anchor="w", pady=(px(8), px(10)))
+        ttk.Label(pack, text="WHAT'S NEW", style="OnSide.Section.TLabel").pack(anchor="w")
+        news_box = ttk.Frame(pack, style="OnSide.Field.TFrame", padding=(px(4), px(4)))
+        news_box.pack(fill="x", pady=(px(5), px(10)))
         self._changelog_view = tk.Text(
-            frame,
+            news_box,
             height=5,
             wrap="word",
             bd=0,
             relief="flat",
             highlightthickness=0,
-            bg=palette.SURFACE,
-            fg=palette.TEXT,
             padx=px(10),
             pady=px(6),
-            font=self.theme.fonts["list"],
+            font=self.theme.fonts["ui"],
         )
+        self.theme.paint(self._changelog_view, bg="raised", fg="ink", selectbackground="select",
+                         selectforeground="ink")
         self._changelog_view.insert("1.0", format_changelog(current_changelog()))
         self._changelog_view.configure(state="disabled")
-        self._changelog_view.pack(fill="x", pady=(px(4), px(10)))
+        self._changelog_view.pack(fill="x")
         changelog_widget = self._changelog_view
         version_var = self._settings_version
 
@@ -3395,41 +4034,43 @@ class App:
                 self._changelog_view = None
             if getattr(self, "_settings_version", None) is version_var:
                 self._settings_version = None
+            self._settings_window = None
             win.destroy()
 
         win.protocol("WM_DELETE_WINDOW", close_settings)
         win.bind("<Escape>", lambda _event: close_settings())
 
         advanced_open = tk.BooleanVar(value=False)
-        advanced = ttk.Frame(frame)
+        advanced = ttk.Frame(pack, style="OnSide.TFrame")
 
         def toggle_advanced():
             if advanced_open.get():
-                advanced.pack(fill="x", pady=(px(6), 0))
+                advanced.pack(fill="x", pady=(px(8), 0))
             else:
                 advanced.pack_forget()
 
         ttk.Checkbutton(
-            frame,
+            pack,
             text="Advanced: content feed and content pack folder",
             variable=advanced_open,
             command=toggle_advanced,
+            style="OnSide.TCheckbutton",
         ).pack(anchor="w")
-        ttk.Label(advanced, text="Content feed URL", style="Small.TLabel").pack(anchor="w", pady=(px(4), px(2)))
-        ttk.Entry(advanced, textvariable=feed_var).pack(fill="x")
+        ttk.Label(advanced, text="Content feed URL", style="OnSide.Small.TLabel").pack(anchor="w", pady=(px(4), px(3)))
+        ttk.Entry(advanced, textvariable=feed_var, style="OnSide.TEntry").pack(fill="x")
         ttk.Label(
             advanced,
             text="Content pack folder (skills/, roles/, modes/, and calcs/ at the top level)",
-            style="Small.TLabel",
-        ).pack(anchor="w", pady=(px(8), px(2)))
+            style="OnSide.Small.TLabel",
+        ).pack(anchor="w", pady=(px(10), px(3)))
         try:
             current = str(content_root())
         except FileNotFoundError:
             current = read_config().get("content_root") or ""
         root_var = tk.StringVar(value=current)
-        folder_row = ttk.Frame(advanced)
+        folder_row = ttk.Frame(advanced, style="OnSide.TFrame")
         folder_row.pack(fill="x")
-        ttk.Entry(folder_row, textvariable=root_var).pack(side="left", fill="x", expand=True)
+        ttk.Entry(folder_row, textvariable=root_var, style="OnSide.TEntry").pack(side="left", fill="x", expand=True)
 
         def save_root():
             folder = root_var.get().strip()
@@ -3453,7 +4094,30 @@ class App:
             else:
                 content_line.set(f"Content pack: {resolved}")
 
-        ttk.Button(folder_row, text="Save content pack", command=save_root).pack(side="left", padx=(px(8), 0))
+        ttk.Button(folder_row, text="Save content pack", command=save_root, style="OnSide.TButton").pack(
+            side="left", padx=(px(8), 0)
+        )
+
+        # About and license ----------------------------------------------
+        about = section(f"About {APP_NAME}")
+        ttk.Label(
+            about, text=f"{APP_NAME} {__version__}. {COPYRIGHT}.", style="OnSide.Dim.TLabel",
+            wraplength=wrap, justify="left",
+        ).pack(anchor="w", pady=(px(3), px(6)))
+        ttk.Label(
+            about, text=LICENSE_SUMMARY + " " + USE_NOTICE, style="OnSide.Small.TLabel",
+            wraplength=wrap, justify="left",
+        ).pack(anchor="w", pady=(0, px(10)))
+        about_row = ttk.Frame(about, style="OnSide.TFrame")
+        about_row.pack(anchor="w")
+        ttk.Button(about_row, text="License", command=self.show_license, style="OnSide.TButton").pack(side="left")
+        ttk.Button(about_row, text="Third-party notices", command=self.show_notices, style="OnSide.TButton").pack(
+            side="left", padx=px(8)
+        )
+        ttk.Button(about_row, text="About and versions", command=self.show_about, style="OnSide.TButton").pack(
+            side="left"
+        )
+        style_title_bar(win)
         key_entry.focus_set()
 
     def load_demo(self) -> None:
@@ -3488,13 +4152,19 @@ def capture_window(root: tk.Tk, path: Path) -> None:
 
 
 def main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(prog="fpfa")
+    parser = argparse.ArgumentParser(prog="fpfa", description=f"{APP_NAME}: {APP_TAGLINE.lower()}.")
     parser.add_argument("--demo", action="store_true", help="Load the sample DI zone and run the tool plan")
     parser.add_argument("--quit", action="store_true", help="With --demo, exit after the run and screenshots")
     parser.add_argument("--screenshot-dir", default="", help="With --demo, write zone and results PNGs here")
     parser.add_argument("--export", default="", help="With --demo, write the draft .docx here")
     parser.add_argument("--versions", action="store_true", help="Print app, runtime, dependency, and content versions and exit")
+    parser.add_argument(
+        "--theme", default="", choices=("",) + SCHEME_ORDER,
+        help="Colour scheme for this run. Settings saves the lasting choice.",
+    )
     args = parser.parse_args(argv)
+    if args.theme:
+        os.environ["FPFA_THEME"] = args.theme
     if args.versions:
         sys.stdout.write(version_text() + "\n")
         return
@@ -3506,12 +4176,14 @@ def main(argv: list[str] | None = None) -> None:
     enable_windows_dpi_awareness()
     root = tk.Tk()
     try:
-        app = App(root)
+        # The demo draws its replies at once so its screenshots show the finished thread.
+        app = App(root, motion=not args.demo and not reduce_motion())
     except InstanceLockError as exc:
         root.withdraw()
-        messagebox.showerror("FP/FA Design Assistant", str(exc))
+        messagebox.showerror(APP_NAME, str(exc))
         root.destroy()
         sys.exit(1)
+    style_title_bar(root)
     if args.demo:
         def finish_demo():
             app.load_demo()
