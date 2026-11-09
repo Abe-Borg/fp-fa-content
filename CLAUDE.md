@@ -22,7 +22,7 @@ A Windows desktop assistant for hyperscale data-center fire sprinkler and fire-a
 
 | Path | Role |
 | --- | --- |
-| `app/fpfa/` | Desktop app. `ui.py` window, `claude_client.py` tool loop, `calc_tools.py` tool schemas and the tool session, `record.py` project record (SQLite), `workflow.py` DI tool plan, `claim_check.py` blind checker, `spec_docx.py` Section 21 13 19 export, `design_basis_docx.py` Design Basis and Open Questions export, `team.py` lead, specialists, handoffs, and the record-fed checker, `jobs.py` inbox, `content_update.py` pack updater |
+| `app/fpfa/` | Desktop app. `ui.py` window, `claude_client.py` tool loop, `calc_tools.py` tool schemas and the tool session, `record.py` project record (SQLite), `workflow.py` DI tool plan, `claim_check.py` blind checker, `spec_docx.py` Section 21 13 19 export, `design_basis_docx.py` Design Basis and Open Questions export, `team.py` lead, specialists, handoffs, and the record-fed checker, `team_panel.py` the Team tab, `jobs.py` inbox, `content_update.py` pack updater |
 | `app/tests/` | App suite. Window tests need a display |
 | `calcs/fp`, `calcs/fa` | Deterministic kernels and their tests |
 | `skills/<slug>/SKILL.md`, `roles/<slug>/ROLE.md`, `modes/<slug>/MODE.md` | Content with `name` and `description` frontmatter |
