@@ -43,6 +43,7 @@ from fpfa.claim_check import (
 )
 from fpfa.claude_client import MODEL_ID, AnthropicMessages, run_tool_loop, safe_error, usage_summary
 from fpfa.design_basis_docx import DESIGN_BASIS_TITLE, write_design_basis
+from fpfa.team import export_gate, latest_check
 from fpfa.content_update import (
     ContentUpdateError,
     UpdateResult,
@@ -2398,7 +2399,8 @@ class App:
                 "Nothing is on this job's record yet. Run /sample-di or /run, or ask a question, "
                 "then export the design basis."
             )
-        return ""
+        # Findings are model claims. They need a current blind check that supports every one.
+        return export_gate(self.record, self.project["id"])
 
     def export_design_basis_to(self, path: Path) -> Path:
         """Write the Design Basis and Open Questions document for the open job."""
@@ -2407,7 +2409,7 @@ class App:
             raise RuntimeError(reason)
         snapshot = self.record.snapshot(self.project["id"])
         return write_design_basis(
-            Path(path), self.project, snapshot, claim_check=self.project.get("claim_check")
+            Path(path), self.project, snapshot, claim_check=latest_check(self.record, self.project["id"])
         )
 
     def export_design_basis(self) -> None:

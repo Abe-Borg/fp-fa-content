@@ -327,6 +327,22 @@ SCHEMAS = [
         "description": "Show this job's project record: facts, calc records, findings, decisions, open questions, and pending handoffs, with their ids.",
         "input_schema": _obj({}, []),
     },
+    {
+        "name": "handoff",
+        "description": (
+            "Hand work to another agent on this job. The handoff is written to the project record as "
+            "pending and is delivered when the lead next activates that agent. Name the specialist by its "
+            "role slug (fp-sprinkler, fa-releasing, spec-draft) or the lead as lead."
+        ),
+        "input_schema": _obj(
+            {
+                "to": {"type": "string", "description": "Role slug of the receiving agent, or lead."},
+                "brief": {"type": "string", "description": "What the receiver should do, in a few sentences."},
+                "payload": {"type": "object", "description": "Figures, ids, or elections the receiver needs. Optional."},
+            },
+            ["to", "brief"],
+        ),
+    },
 ]
 
 # Tools that write to or read the project record. They need an open record on the turn.
@@ -337,6 +353,7 @@ RECORD_TOOLS = frozenset({
     "open_question",
     "record_decision",
     "read_record",
+    "handoff",
 })
 
 # The DI workflow refuses a narrative until these have run on the form.
@@ -438,6 +455,15 @@ class ToolSession:
                 label=args.get("label"), basis=args.get("basis") or "",
             )
             return {"id": row["id"], "label": row["label"]}
+        if name == "handoff":
+            payload = args.get("payload")
+            if payload is not None and not isinstance(payload, dict):
+                raise RecordError("payload must be an object")
+            row = record.create_handoff(
+                project_id, from_agent=self.agent or "lead", to_agent=args.get("to"),
+                brief=args.get("brief"), payload=payload,
+            )
+            return {"id": row["id"], "to": row["to_agent"], "status": row["status"]}
         raise KeyError(f"unknown tool {name}")
 
     def _run(self, name: str, args: dict) -> dict:

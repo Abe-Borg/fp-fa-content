@@ -45,6 +45,7 @@ LABELS = (
 EVIDENCE_STATUSES = ("held", "NOT PULLED", "NEEDS HOLD", "PACKAGE ASSERTION")
 QUESTION_STATUSES = ("open", "answered", "withdrawn")
 HANDOFF_STATUSES = ("pending", "delivered", "returned", "cancelled")
+FINDING_STATUSES = ("open", "Supported", "Not supported", "Source not found")
 TASK_STATUSES = ("open", "working", "done", "blocked", "cancelled")
 AGENT_STATUSES = ("idle", "working", "done", "error", "interrupted")
 
@@ -413,6 +414,25 @@ class Record:
 
         return self._write(work)
 
+    def set_finding_status(self, project_id: str, finding_id: str, *, status: str, by: str = "") -> dict:
+        """Mark a finding after a check: open, Supported, Not supported, or Source not found."""
+        finding_id = _text(finding_id, "finding_id", limit=64)
+        status = _choice(status, "status", FINDING_STATUSES)
+
+        def work(conn):
+            cur = conn.execute(
+                "UPDATE findings SET status = ? WHERE id = ? AND project_id = ?",
+                (status, finding_id, project_id),
+            )
+            if cur.rowcount != 1:
+                raise RecordError(f"no finding {finding_id} on this project")
+            self._event(conn, project_id, "finding_" + status.replace(" ", "_").lower(), by, {"id": finding_id})
+            row = dict(conn.execute("SELECT * FROM findings WHERE id = ?", (finding_id,)).fetchone())
+            row["supports"] = json.loads(row["supports"] or "[]")
+            return row
+
+        return self._write(work)
+
     def open_question(self, project_id: str, *, raised_by: str, text: str) -> dict:
         row = {
             "id": new_id(),
@@ -714,6 +734,17 @@ class Record:
 
     def agents(self, project_id: str) -> list[dict]:
         return self._read("SELECT * FROM agents WHERE project_id = ? ORDER BY name", (project_id,))
+
+    def latest_event(self, project_id: str, kind: str) -> dict | None:
+        rows = self._read(
+            "SELECT * FROM events WHERE project_id = ? AND kind = ? ORDER BY seq DESC LIMIT 1",
+            (project_id, kind),
+        )
+        if not rows:
+            return None
+        row = rows[0]
+        row["payload"] = json.loads(row["payload"] or "{}")
+        return row
 
     def events(self, project_id: str, limit: int = 500) -> list[dict]:
         rows = self._read(
