@@ -214,6 +214,8 @@ Every model context writes what it spent onto the job's record, so the cost of a
 
 +Cynosure is source-available under the [PolyForm Shield License 1.0.0](LICENSE).
 
+The app is Abraham Borg's own: he holds the copyright, and the installer names him as the publisher (the name Windows shows beside the app under Installed apps and in the setup file's properties).
+
 **In short:** use it for anything, including commercial work, except to provide a product that competes with +Cynosure. A design firm running it on billable projects is squarely permitted. Reading, forking, modifying, and redistributing it are permitted. Selling a rival design assistant built on it is not, unless you hold a separate license from the copyright holder. The [LICENSE](LICENSE) file governs; this paragraph is a summary, not the terms. This is a source-available license, not an OSI-approved open-source one: the noncompete term restricts a field of use.
 
 The software comes as is, without warranty, and the licensor is not liable for damages (the license's No Liability clause). That matters more here than in most software. What +Cynosure produces is a draft for the engineer of record to review. A delivery time from its tools is an optimistic screen, not a listed water-delivery-time calculation. A figure labeled ASSUMED or use best judgment is exactly that. Nothing it writes is a sealed design, a code interpretation by an authority having jurisdiction, or an approval.
