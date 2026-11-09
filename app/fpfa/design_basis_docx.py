@@ -267,7 +267,12 @@ def write_design_basis(
             "Inputs for each record, as passed to the tool:"
         )
         for row in calcs:
-            doc.add_paragraph(f"[{row['id']}] {row['tool']}: {_compact(row.get('inputs'))}", style="List Bullet")
+            code = row.get("calc_identity") or "unknown"
+            pack = row.get("pack_version") or "unknown"
+            doc.add_paragraph(
+                f"[{row['id']}] {row['tool']} (pack {pack}, calc code {code}): {_compact(row.get('inputs'))}",
+                style="List Bullet",
+            )
     else:
         doc.add_paragraph("No calculation has been recorded on this job.")
 

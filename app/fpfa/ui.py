@@ -1280,6 +1280,8 @@ class App:
             return
         try:
             self.record.import_project(project)
+            # Form-owned basis fields follow the form. A changed value supersedes the old row.
+            self.record.sync_basis(project["id"], project.get("basis"))
         except Exception as exc:
             self.status.set("Project record is not available. " + safe_error(exc))
 
@@ -1456,6 +1458,7 @@ class App:
         error = self._capture_form(self.project)
         save_project(self.project)
         self.refresh_projects(self.project["id"])
+        self._open_record(self.project)
         if error:
             messagebox.showerror("Save", error)
             self.status.set(error)

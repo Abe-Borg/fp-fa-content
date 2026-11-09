@@ -73,7 +73,8 @@ One SQLite database at `<data_dir>/fpfa.db`. Every table has `project_id`. The J
 Rules:
 
 - An agent never opens the database. It calls a tool. The tool validates, writes one transaction, and appends an event.
-- A calc tool computes an input hash. If a record with that hash exists for the project, the tool returns the recorded output and marks the call as a replay. This is the duplicate prevention for Phase 5.
+- A calc tool computes a hash of the tool, its inputs, and the identity of the calc code in the running pack (a hash of the kernel files). If a record with that hash exists for the project, the tool returns the recorded output and marks the call as a replay. This is the duplicate prevention for Phase 5. A pack update that changes a kernel file changes the identity, so old results are never replayed by new code; the old rows stay as history.
+- Form-owned basis facts follow the form. A changed value writes a new row and supersedes the old one. Import from a JSON job happens once; the sync runs on every open, save, run, and turn.
 - A fact or finding carries exactly one of the three labels from the current app, or a cite class. The tool rejects a row with none.
 - Documents are exports. Nothing in a document is typed into the record by hand.
 - Implemented in `app/fpfa/record.py`. The database is `fpfa.db` in the data directory. `Record.snapshot(project_id)` is what an export reads. Rows written by a model context carry its agent name: `lead`, `narrator`, `tool-plan`, or a specialist slug.

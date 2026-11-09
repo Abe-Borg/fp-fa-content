@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import sys
@@ -324,8 +325,19 @@ SCHEMAS = [
     },
     {
         "name": "read_record",
-        "description": "Show this job's project record: facts, calc records, findings, decisions, open questions, and pending handoffs, with their ids.",
-        "input_schema": _obj({}, []),
+        "description": (
+            "Show this job's project record with row ids: facts, calc records with inputs and outputs, "
+            "evidence, findings, decisions, open questions, and pending handoffs. Pass kind for the full "
+            "rows of one table (calcs, evidence, facts, findings, questions, decisions, handoffs, tasks, agents), "
+            "and id for one row."
+        ),
+        "input_schema": _obj(
+            {
+                "kind": {"type": "string", "description": "A table name. Omit for the summary."},
+                "id": {"type": "string", "description": "One row id. Needs kind."},
+            },
+            [],
+        ),
     },
     {
         "name": "handoff",
@@ -390,6 +402,9 @@ class ToolSession:
         self.project_id = (project_id or "").strip() or None
         self.agent = (agent or "").strip()
         self.pack_version = _pack_version() if self.record is not None else ""
+        # Identity of the calc code in this pack. A changed kernel file changes it,
+        # so a recorded result is never replayed by different code.
+        self.calc_identity = calc_identity(self.root) if self.record is not None else ""
 
     @property
     def recording(self) -> bool:
@@ -400,20 +415,33 @@ class ToolSession:
         if name in RECORD_TOOLS:
             return self._record_tool(name, args)
         if name in CALC_TOOLS and self.recording:
-            found = self.record.find_calc(self.project_id, name, args)
+            found = self.record.find_calc(self.project_id, name, args, self.calc_identity)
             if found is not None:
-                # Same tool, same inputs, same project: count the replay and return the recorded output.
-                self.record.record_calc(
-                    self.project_id, tool=name, inputs=args, outputs=found["outputs"], agent=self.agent
+                # Same tool, inputs, calc code, and project: count the replay and return the recorded output.
+                row = self.record.record_calc(
+                    self.project_id, tool=name, inputs=args, outputs=found["outputs"],
+                    agent=self.agent, calc_identity=self.calc_identity,
                 )
-                return found["outputs"]
+                return self._with_record_id(found["outputs"], row["id"])
             output = self._run(name, args)
-            self.record.record_calc(
+            row = self.record.record_calc(
                 self.project_id, tool=name, inputs=args, outputs=output,
-                agent=self.agent, pack_version=self.pack_version,
+                agent=self.agent, pack_version=self.pack_version, calc_identity=self.calc_identity,
             )
-            return output
+            return self._with_record_id(output, row["id"])
         return self._run(name, args)
+
+    def _with_record_id(self, output: dict, record_id: str) -> dict:
+        """A model-facing result carries the calc record id so a finding can cite it.
+
+        The fixed tool plan (agent tool-plan) gets the bare output, so its
+        tables and export stay byte-identical to a run with no record.
+        """
+        if self.agent in ("", "tool-plan") or not isinstance(output, dict):
+            return output
+        shown = dict(output)
+        shown["record_id"] = record_id
+        return shown
 
     def _record_tool(self, name: str, args: dict) -> dict:
         if not self.recording:
@@ -421,6 +449,10 @@ class ToolSession:
         record = self.record
         project_id = self.project_id
         if name == "read_record":
+            kind = str(args.get("kind") or "").strip()
+            if kind:
+                rows = record.detail(project_id, kind, str(args.get("id") or "").strip() or None)
+                return {"kind": kind, "rows": rows}
             snap = record.snapshot(project_id)
             return {
                 "summary": record.summary_text(project_id),
@@ -625,6 +657,36 @@ def _govern_delivery_exemption(formulas, screen: dict, args: dict) -> dict:
     from fpfa.workflow import govern_nfpa_exemption
 
     return govern_nfpa_exemption(screen, zone_gal)
+
+
+_IDENTITY_CACHE: dict[str, str] = {}
+
+
+def calc_identity(content_root: Path) -> str:
+    """Short hash of the calc kernel files under the content root.
+
+    calcs/fp/*.py and calcs/fa/lib/*.py, by path and bytes. Any change to the
+    code that produces a figure changes this value, and with it the replay
+    key, so a pack update computes fresh instead of replaying.
+    """
+    root = Path(content_root).resolve()
+    key = str(root)
+    if key in _IDENTITY_CACHE:
+        return _IDENTITY_CACHE[key]
+    digest = hashlib.sha256()
+    files: list[Path] = []
+    for folder in (root / "calcs" / "fp", root / "calcs" / "fa" / "lib"):
+        if folder.is_dir():
+            files.extend(sorted(path for path in folder.glob("*.py") if not path.name.startswith("test_")))
+    for path in files:
+        try:
+            digest.update(path.relative_to(root).as_posix().encode("utf-8"))
+            digest.update(path.read_bytes())
+        except OSError:
+            continue
+    value = digest.hexdigest()[:16]
+    _IDENTITY_CACHE[key] = value
+    return value
 
 
 def _pack_version() -> str:

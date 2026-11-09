@@ -190,6 +190,160 @@ class RecordStoreTests(unittest.TestCase):
         self.assertEqual(len(record.calcs("job1")), 8)
 
 
+class ReviewFollowUpTests(unittest.TestCase):
+    """The three review findings on the first record commit."""
+
+    def test_a_different_calc_identity_is_a_new_row_not_a_replay(self):
+        record = _record()
+        record.ensure_project("p1")
+        first = record.record_calc("p1", tool="hose_duration", inputs={"hazard": "ordinary"},
+                                   outputs={"duration_min": 60}, calc_identity="aaaa")
+        same = record.record_calc("p1", tool="hose_duration", inputs={"hazard": "ordinary"},
+                                  outputs={"duration_min": 60}, calc_identity="aaaa")
+        changed = record.record_calc("p1", tool="hose_duration", inputs={"hazard": "ordinary"},
+                                     outputs={"duration_min": 75}, calc_identity="bbbb")
+        self.assertTrue(same["replayed"])
+        self.assertFalse(changed["replayed"])
+        self.assertNotEqual(changed["id"], first["id"])
+        rows = record.calcs("p1")
+        self.assertEqual(len(rows), 2)
+        self.assertEqual({row["calc_identity"] for row in rows}, {"aaaa", "bbbb"})
+        self.assertIsNone(record.find_calc("p1", "hose_duration", {"hazard": "ordinary"}, "cccc"))
+        self.assertEqual(record.find_calc("p1", "hose_duration", {"hazard": "ordinary"}, "aaaa")["id"], first["id"])
+
+    def test_tool_session_identity_follows_the_calc_code(self):
+        import shutil
+
+        from fpfa.calc_tools import ToolSession, calc_identity
+
+        record = _record()
+        record.ensure_project("p1")
+        session = ToolSession(REPO, record=record, project_id="p1", agent="lead")
+        self.assertEqual(session.calc_identity, calc_identity(REPO))
+        self.assertEqual(len(session.calc_identity), 16)
+        session.execute("hose_duration", {"hazard": "ordinary", "supervised": True})
+        # A pack whose kernel differs by one byte has another identity and does not replay.
+        pack = Path(tempfile.mkdtemp(prefix="fpfa-pack-")) / "pack"
+        shutil.copytree(REPO / "calcs", pack / "calcs")
+        shutil.copytree(REPO / "skills", pack / "skills")
+        for folder in ("roles", "modes", "specs", "corpus"):
+            shutil.copytree(REPO / folder, pack / folder)
+        formulas = pack / "calcs" / "fp" / "formulas.py"
+        formulas.write_text(formulas.read_text(encoding="utf-8") + "\n# changed kernel\n", encoding="utf-8")
+        other = ToolSession(pack, record=record, project_id="p1", agent="lead")
+        self.assertNotEqual(other.calc_identity, session.calc_identity)
+        other.execute("hose_duration", {"hazard": "ordinary", "supervised": True})
+        rows = record.calcs("p1")
+        self.assertEqual(len(rows), 2)
+        self.assertEqual([row["replay_count"] for row in rows], [0, 0])
+
+    def test_model_facing_results_carry_the_record_id_and_the_tool_plan_does_not(self):
+        from fpfa.calc_tools import ToolSession
+        from fpfa.sample_data import EXAMPLE_BASIS, EXAMPLE_DI
+        from fpfa.workflow import run_di_zone
+
+        record = _record()
+        record.ensure_project("p1")
+        lead = ToolSession(REPO, record=record, project_id="p1", agent="lead")
+        out = lead.execute("hose_duration", {"hazard": "ordinary", "supervised": True})
+        self.assertEqual(out["record_id"], record.calcs("p1")[0]["id"])
+        again = lead.execute("hose_duration", {"hazard": "ordinary", "supervised": True})
+        self.assertEqual(again["record_id"], out["record_id"])
+        self.assertNotIn("record_id", record.calcs("p1")[0]["outputs"])
+        plan = ToolSession(REPO, record=record, project_id="p1", agent="tool-plan")
+        self.assertNotIn("record_id", plan.execute("hose_duration", {"hazard": "light", "supervised": False}))
+        plain = run_di_zone(REPO, EXAMPLE_DI, EXAMPLE_BASIS)
+        recorded = run_di_zone(REPO, EXAMPLE_DI, EXAMPLE_BASIS, record=record, project_id="p1")
+        self.assertEqual(plain["tools"], recorded["tools"])
+
+    def test_sync_basis_supersedes_changed_form_values(self):
+        record = _record()
+        record.ensure_project("p1")
+        first = record.sync_basis("p1", {"ahj": "Sample AHJ", "nfpa_13": "2025", "nfpa_72": "2025", "insurer": "FM"})
+        self.assertEqual(len(first), 4)
+        self.assertEqual(record.sync_basis("p1", {"ahj": "Sample AHJ", "nfpa_13": "2025", "nfpa_72": "2025", "insurer": "FM"}), [])
+        changed = record.sync_basis("p1", {"ahj": "Sample AHJ", "nfpa_13": "2022", "nfpa_72": "2025", "insurer": "FM"})
+        self.assertEqual([row["key"] for row in changed], ["nfpa_13"])
+        current = {row["key"]: row for row in record.facts("p1", "basis")}
+        self.assertEqual(current["nfpa_13"]["value"], "2022")
+        self.assertEqual(len(record.facts("p1", "basis")), 4)
+        history = record.facts("p1", "basis", include_superseded=True)
+        self.assertEqual(len(history), 5)
+        old = next(row for row in history if row["value"] == "2025" and row["key"] == "nfpa_13")
+        self.assertEqual(old["superseded_by"], changed[0]["id"])
+        self.assertIn("basis/nfpa_13: 2022 (CODE)", record.summary_text("p1"))
+        self.assertNotIn("basis/nfpa_13: 2025", record.summary_text("p1"))
+
+    def test_import_then_sync_follows_the_form_on_later_opens(self):
+        record = _record()
+        project = {"id": "job1", "name": "J", "basis": {"ahj": "A", "nfpa_13": "2025", "nfpa_72": "2025", "insurer": "FM", "hazard_notes": "notes"}}
+        record.import_project(project)
+        self.assertEqual(record.facts("job1", "basis")[1]["value"], "2025")
+        project["basis"]["nfpa_13"] = "2022"
+        self.assertEqual(record.import_project(project)["migrated"], False)
+        record.sync_basis("job1", project["basis"])
+        values = {row["key"]: row["value"] for row in record.facts("job1", "basis")}
+        self.assertEqual(values["nfpa_13"], "2022")
+        self.assertEqual(values["insurer"], "FM")
+
+    def test_read_record_shows_inputs_outputs_evidence_and_full_rows_by_kind(self):
+        from fpfa.calc_tools import ToolSession
+        from fpfa.record import RecordError
+
+        record = _record()
+        record.ensure_project("p1")
+        session = ToolSession(REPO, record=record, project_id="p1", agent="fp-sprinkler")
+        session.execute("hose_duration", {"hazard": "ordinary", "supervised": True})
+        session.execute("hose_duration", {"hazard": "light", "supervised": False})
+        cite = session.execute("record_evidence", {"document": "NFPA 13", "edition": "2025", "section": "19.2.3.1.3",
+                                                    "note": "duration band", "status": "held"})
+        summary = session.execute("read_record", {})["summary"]
+        self.assertIn('"hazard":"ordinary"', summary)
+        self.assertIn('"hazard":"light"', summary)
+        self.assertIn('"duration_min":60', summary)
+        self.assertIn('"duration_min":30', summary)
+        self.assertIn(f"[{cite['id']}] NFPA 13 2025 19.2.3.1.3: duration band [held]", summary)
+        calcs = session.execute("read_record", {"kind": "calcs"})
+        self.assertEqual(calcs["kind"], "calcs")
+        self.assertEqual(len(calcs["rows"]), 2)
+        self.assertEqual(calcs["rows"][0]["inputs"], {"hazard": "ordinary", "supervised": True})
+        self.assertEqual(calcs["rows"][0]["outputs"]["duration_min"], 60)
+        one = session.execute("read_record", {"kind": "evidence", "id": cite["id"]})
+        self.assertEqual([row["id"] for row in one["rows"]], [cite["id"]])
+        self.assertEqual(one["rows"][0]["section"], "19.2.3.1.3")
+        with self.assertRaises(RecordError):
+            session.execute("read_record", {"kind": "secrets"})
+
+    def test_an_older_database_gains_the_new_columns(self):
+        import sqlite3
+
+        from fpfa.record import Record
+
+        path = Path(tempfile.mkdtemp(prefix="fpfa-old-")) / "fpfa.db"
+        conn = sqlite3.connect(path)
+        conn.executescript("""
+            CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+            INSERT INTO meta VALUES ('schema_version', '1');
+            CREATE TABLE facts (id TEXT PRIMARY KEY, project_id TEXT NOT NULL, kind TEXT NOT NULL, key TEXT NOT NULL,
+                value TEXT NOT NULL, label TEXT NOT NULL, source TEXT NOT NULL DEFAULT '', agent TEXT NOT NULL DEFAULT '',
+                created TEXT NOT NULL);
+            CREATE TABLE calc_records (id TEXT PRIMARY KEY, project_id TEXT NOT NULL, tool TEXT NOT NULL,
+                input_hash TEXT NOT NULL, inputs TEXT NOT NULL, outputs TEXT NOT NULL, pack_version TEXT NOT NULL DEFAULT '',
+                agent TEXT NOT NULL DEFAULT '', replay_count INTEGER NOT NULL DEFAULT 0, created TEXT NOT NULL,
+                last_used TEXT NOT NULL, UNIQUE (project_id, input_hash));
+            INSERT INTO facts VALUES ('f1', 'p1', 'basis', 'insurer', 'FM', 'OWNER', '', '', '2026-01-01T00:00:00+00:00');
+        """)
+        conn.commit(); conn.close()
+        record = Record(path)
+        self.assertEqual(record.facts("p1", "basis")[0]["value"], "FM")
+        self.assertIsNone(record.facts("p1", "basis")[0]["superseded_by"])
+        row = record.record_calc("p1", tool="hose_duration", inputs={}, outputs={}, calc_identity="zz")
+        self.assertEqual(record.calcs("p1")[0]["calc_identity"], "zz")
+        conn = sqlite3.connect(path)
+        self.assertEqual(conn.execute("SELECT value FROM meta WHERE key='schema_version'").fetchone()[0], "2")
+        conn.close()
+
+
 class ToolSessionRecordingTests(unittest.TestCase):
     def test_calc_tools_record_themselves_and_replay_identical_calls(self):
         from fpfa.calc_tools import ToolSession

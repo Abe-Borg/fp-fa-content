@@ -28,7 +28,7 @@ from typing import Any
 from fpfa.paths import data_dir
 
 DB_NAME = "fpfa.db"
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 # The three figure labels the app already uses, plus the cite classes the
 # content pack uses on a sentence that quotes a source.
@@ -87,7 +87,8 @@ CREATE TABLE IF NOT EXISTS facts (
     label TEXT NOT NULL,
     source TEXT NOT NULL DEFAULT '',
     agent TEXT NOT NULL DEFAULT '',
-    created TEXT NOT NULL
+    created TEXT NOT NULL,
+    superseded_by TEXT
 );
 CREATE INDEX IF NOT EXISTS facts_project ON facts(project_id, kind, key);
 CREATE TABLE IF NOT EXISTS evidence (
@@ -111,6 +112,7 @@ CREATE TABLE IF NOT EXISTS calc_records (
     inputs TEXT NOT NULL,
     outputs TEXT NOT NULL,
     pack_version TEXT NOT NULL DEFAULT '',
+    calc_identity TEXT NOT NULL DEFAULT '',
     agent TEXT NOT NULL DEFAULT '',
     replay_count INTEGER NOT NULL DEFAULT 0,
     created TEXT NOT NULL,
@@ -210,8 +212,16 @@ def canonical_json(value: Any) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), default=str, ensure_ascii=False)
 
 
-def input_hash(tool: str, inputs: Any) -> str:
-    return hashlib.sha256(canonical_json({"tool": tool, "inputs": inputs}).encode("utf-8")).hexdigest()
+def input_hash(tool: str, inputs: Any, calc_identity: str = "") -> str:
+    """Hash of the tool, its inputs, and the identity of the calc code that ran it.
+
+    A replay is only valid when the same code would produce the same output,
+    so a content-pack update that changes a kernel file changes the hash and
+    the next call computes fresh. The old row stays as history.
+    """
+    return hashlib.sha256(
+        canonical_json({"tool": tool, "inputs": inputs, "calc": calc_identity or ""}).encode("utf-8")
+    ).hexdigest()
 
 
 def _text(value: Any, field: str, *, required: bool = True, limit: int = 20_000) -> str:
@@ -271,8 +281,9 @@ class Record:
         with _WRITE_LOCK:
             with self._connect() as conn:
                 conn.executescript(_SCHEMA)
+                _add_missing_columns(conn)
                 conn.execute(
-                    "INSERT OR IGNORE INTO meta (key, value) VALUES ('schema_version', ?)",
+                    "INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', ?)",
                     (str(SCHEMA_VERSION),),
                 )
 
@@ -340,7 +351,8 @@ class Record:
     # -- facts, evidence, findings, questions, decisions -----------------
 
     def record_fact(self, project_id: str, *, kind: str, key: str, value: Any, label: str,
-                    source: str = "", agent: str = "") -> dict:
+                    source: str = "", agent: str = "", supersede: bool = False) -> dict:
+        """Write one fact. supersede=True marks earlier rows with the same kind and key as replaced."""
         row = {
             "id": new_id(),
             "project_id": _text(project_id, "project_id", limit=64),
@@ -359,10 +371,39 @@ class Record:
                 "VALUES (:id, :project_id, :kind, :key, :value, :label, :source, :agent, :created)",
                 row,
             )
+            if supersede:
+                conn.execute(
+                    "UPDATE facts SET superseded_by = ? WHERE project_id = ? AND kind = ? AND key = ? "
+                    "AND id != ? AND superseded_by IS NULL",
+                    (row["id"], row["project_id"], row["kind"], row["key"], row["id"]),
+                )
             self._event(conn, row["project_id"], "fact", row["agent"], {"id": row["id"], "kind": row["kind"], "key": row["key"]})
             return row
 
         return self._write(work)
+
+    def sync_basis(self, project_id: str, basis: dict | None, *, agent: str = "job form") -> list[dict]:
+        """Bring the form's basis fields onto the record. A changed value supersedes the old row.
+
+        Returns the rows written. An unchanged value writes nothing, so calling
+        this on every open, run, and turn is cheap.
+        """
+        project_id = _text(project_id, "project_id", limit=64)
+        basis = basis if isinstance(basis, dict) else {}
+        current = {row["key"]: row for row in self.facts(project_id, "basis")}
+        written: list[dict] = []
+        for key, label in BASIS_LABELS:
+            value = str(basis.get(key) or "").strip()
+            if not value:
+                continue
+            row = current.get(key)
+            if row is not None and row["value"] == value and row["label"] == label:
+                continue
+            written.append(self.record_fact(
+                project_id, kind="basis", key=key, value=value, label=label,
+                source=agent, agent=agent, supersede=True,
+            ))
+        return written
 
     def record_evidence(self, project_id: str, *, document: str, edition: str = "", section: str = "",
                         note: str = "", applicability: str = "", status: str = "held", agent: str = "") -> dict:
@@ -500,11 +541,16 @@ class Record:
     # -- calculation records --------------------------------------------
 
     def record_calc(self, project_id: str, *, tool: str, inputs: Any, outputs: Any,
-                    agent: str = "", pack_version: str = "") -> dict:
-        """Store one calc. A second identical call on the project counts a replay."""
+                    agent: str = "", pack_version: str = "", calc_identity: str = "") -> dict:
+        """Store one calc. The same tool, inputs, and calc identity on the project counts a replay.
+
+        calc_identity names the calc code that produced the output. A different
+        identity is a different row, so a pack update never replays old results.
+        """
         project_id = _text(project_id, "project_id", limit=64)
         tool = _text(tool, "tool", limit=80)
-        digest = input_hash(tool, inputs)
+        calc_identity = _text(calc_identity, "calc_identity", required=False, limit=80)
+        digest = input_hash(tool, inputs, calc_identity)
         stamp = now_text()
 
         def work(conn):
@@ -531,14 +577,15 @@ class Record:
                 "inputs": canonical_json(inputs),
                 "outputs": canonical_json(outputs),
                 "pack_version": _text(pack_version, "pack_version", required=False, limit=80),
+                "calc_identity": calc_identity,
                 "agent": _text(agent, "agent", required=False, limit=80),
                 "replay_count": 0,
                 "created": stamp,
                 "last_used": stamp,
             }
             conn.execute(
-                "INSERT INTO calc_records (id, project_id, tool, input_hash, inputs, outputs, pack_version, agent, replay_count, created, last_used) "
-                "VALUES (:id, :project_id, :tool, :input_hash, :inputs, :outputs, :pack_version, :agent, :replay_count, :created, :last_used)",
+                "INSERT INTO calc_records (id, project_id, tool, input_hash, inputs, outputs, pack_version, calc_identity, agent, replay_count, created, last_used) "
+                "VALUES (:id, :project_id, :tool, :input_hash, :inputs, :outputs, :pack_version, :calc_identity, :agent, :replay_count, :created, :last_used)",
                 row,
             )
             self._event(conn, project_id, "calc", row["agent"], {"id": row["id"], "tool": tool})
@@ -547,14 +594,39 @@ class Record:
 
         return self._write(work)
 
-    def find_calc(self, project_id: str, tool: str, inputs: Any) -> dict | None:
+    def find_calc(self, project_id: str, tool: str, inputs: Any, calc_identity: str = "") -> dict | None:
+        """The row for this tool, these inputs, and this calc code, or None."""
         rows = self._read(
             "SELECT * FROM calc_records WHERE project_id = ? AND input_hash = ?",
-            (project_id, input_hash(tool, inputs)),
+            (project_id, input_hash(tool, inputs, calc_identity)),
         )
         if not rows:
             return None
         return _calc_row(rows[0])
+
+    def calc(self, project_id: str, calc_id: str) -> dict | None:
+        rows = self._read("SELECT * FROM calc_records WHERE project_id = ? AND id = ?", (project_id, calc_id))
+        return _calc_row(rows[0]) if rows else None
+
+    def detail(self, project_id: str, kind: str, row_id: str | None = None) -> list[dict]:
+        """Full rows of one kind, or the one row with row_id. kind is a snapshot key."""
+        readers = {
+            "facts": lambda: self.facts(project_id),
+            "evidence": lambda: self.evidence(project_id),
+            "calcs": lambda: self.calcs(project_id),
+            "findings": lambda: self.findings(project_id),
+            "questions": lambda: self.questions(project_id),
+            "decisions": lambda: self.decisions(project_id),
+            "handoffs": lambda: self.handoffs(project_id),
+            "tasks": lambda: self.tasks(project_id),
+            "agents": lambda: self.agents(project_id),
+        }
+        if kind not in readers:
+            raise RecordError("kind must be one of: " + ", ".join(sorted(readers)))
+        rows = readers[kind]()
+        if row_id:
+            rows = [row for row in rows if row.get("id") == row_id]
+        return rows
 
     # -- handoffs, tasks, agents ------------------------------------------
 
@@ -693,10 +765,15 @@ class Record:
 
     # -- reads --------------------------------------------------------------
 
-    def facts(self, project_id: str, kind: str | None = None) -> list[dict]:
+    def facts(self, project_id: str, kind: str | None = None, *, include_superseded: bool = False) -> list[dict]:
+        where = "project_id = ?"
+        params: list[Any] = [project_id]
         if kind:
-            return self._read("SELECT * FROM facts WHERE project_id = ? AND kind = ? ORDER BY created, rowid", (project_id, kind))
-        return self._read("SELECT * FROM facts WHERE project_id = ? ORDER BY created, rowid", (project_id,))
+            where += " AND kind = ?"
+            params.append(kind)
+        if not include_superseded:
+            where += " AND superseded_by IS NULL"
+        return self._read(f"SELECT * FROM facts WHERE {where} ORDER BY created, rowid", tuple(params))
 
     def evidence(self, project_id: str) -> list[dict]:
         return self._read("SELECT * FROM evidence WHERE project_id = ? ORDER BY created, rowid", (project_id,))
@@ -780,9 +857,18 @@ class Record:
             for row in snap["facts"][:max_rows]:
                 lines.append(f"- [{row['id']}] {row['kind']}/{row['key']}: {row['value']} ({row['label']})")
         if snap["calcs"]:
-            lines.append("Calculation records:")
+            lines.append("Calculation records (cite the id in supports):")
             for row in snap["calcs"][:max_rows]:
-                lines.append(f"- [{row['id']}] {row['tool']} by {row['agent'] or 'tool'}; replays {row['replay_count']}")
+                lines.append(
+                    f"- [{row['id']}] {row['tool']} by {row['agent'] or 'tool'}; "
+                    f"inputs {_clip(canonical_json(row['inputs']), 160)}; "
+                    f"outputs {_clip(canonical_json(_key_outputs(row['outputs'])), 240)}"
+                )
+        if snap["evidence"]:
+            lines.append("Evidence (cite the id in supports):")
+            for row in snap["evidence"][:max_rows]:
+                where = " ".join(part for part in (row["document"], row.get("edition") or "", row.get("section") or "") if part)
+                lines.append(f"- [{row['id']}] {where}: {row.get('note') or ''} [{row['status']}]")
         if snap["findings"]:
             lines.append("Findings:")
             for row in snap["findings"][:max_rows]:
@@ -815,15 +901,8 @@ class Record:
         row = self.project_row(project_id) or {}
         if row.get("migrated_at"):
             return {"migrated": False, "facts": 0, "calcs": 0}
-        facts = 0
         basis = project.get("basis") if isinstance(project.get("basis"), dict) else {}
-        for key, label in (("ahj", "use best judgment"), ("nfpa_13", "CODE"), ("nfpa_72", "CODE"),
-                           ("insurer", "OWNER"), ("hazard_notes", "use best judgment")):
-            value = str(basis.get(key) or "").strip()
-            if value:
-                self.record_fact(project_id, kind="basis", key=key, value=value, label=label,
-                                 source="job form", agent=agent)
-                facts += 1
+        facts = len(self.sync_basis(project_id, basis, agent=agent))
         calcs = 0
         for run_key in ("last_run", "bess_run"):
             run = project.get(run_key)
@@ -850,6 +929,40 @@ class Record:
 
         self._write(work)
         return {"migrated": True, "facts": facts, "calcs": calcs}
+
+
+# Form-owned basis fields and the label each one carries on the record.
+BASIS_LABELS = (
+    ("ahj", "use best judgment"),
+    ("nfpa_13", "CODE"),
+    ("nfpa_72", "CODE"),
+    ("insurer", "OWNER"),
+    ("hazard_notes", "use best judgment"),
+)
+
+
+def _add_missing_columns(conn: sqlite3.Connection) -> None:
+    """Columns added after the first schema. A fresh database already has them."""
+    wanted = {
+        "calc_records": [("calc_identity", "TEXT NOT NULL DEFAULT ''")],
+        "facts": [("superseded_by", "TEXT")],
+    }
+    for table, columns in wanted.items():
+        present = {row[1] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+        for name, spec in columns:
+            if name not in present:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {spec}")
+
+
+def _clip(text: str, limit: int) -> str:
+    return text if len(text) <= limit else text[: limit - 1] + "…"
+
+
+def _key_outputs(outputs: Any) -> Any:
+    """Scalar outputs only, so a summary line stays short. Lists and nested rows are dropped."""
+    if not isinstance(outputs, dict):
+        return outputs
+    return {key: value for key, value in outputs.items() if isinstance(value, (int, float, str, bool)) or value is None}
 
 
 def _calc_row(row: dict) -> dict:
