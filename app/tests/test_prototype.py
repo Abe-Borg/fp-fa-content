@@ -963,6 +963,26 @@ class KeyAndSkillTests(unittest.TestCase):
                     hits.append(str(path.relative_to(REPO)))
         self.assertEqual(hits, [])
 
+    def test_pack_has_no_qa_status_or_round_tags(self):
+        """Strip rules 2026-11-09: no claim-check/QA status lines, round tags, or PE-approval lines ship."""
+        banned = re.compile(
+            r"(?i)claimcheck(?!\.md)"  # the <section>-claimcheck.md verdict file name is functional
+            r"|(?i:\bqa-?\d+\b)"
+            r"|PASS \d+/\d+|\b\d+/\d+ Supported\b"
+            r"|(?i:\bPE[- ]approved\b)|\bNot PE\b"
+            r"|Synthetic training (?:use|tool)|_scout/"
+            r"|\bLead\d+\b|\bfold ?\d+\b|\b[Bb]\d+-R\d+\b|\bbatch\d+ R\d+\b"
+        )
+        hits = []
+        for folder in (REPO / "skills", REPO / "corpus", REPO / "calcs", REPO / "roles", REPO / "modes", REPO / "specs"):
+            for path in folder.rglob("*"):
+                if path.suffix.lower() not in {".py", ".md"} or "__pycache__" in path.parts or ".bak" in path.name:
+                    continue
+                for number, line in enumerate(path.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
+                    if banned.search(line):
+                        hits.append(f"{path.relative_to(REPO)}:{number}")
+        self.assertEqual(hits, [])
+
     def test_content_pack_inventory_matches_the_indexes(self):
         """Saturday step 6: the in-repo pack is the index. Corpus search is search_corpus."""
         skills_readme = (REPO / "skills" / "README.md").read_text(encoding="utf-8")
