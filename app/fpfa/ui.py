@@ -42,6 +42,7 @@ from fpfa.claim_check import (
     write_packet_files,
 )
 from fpfa.claude_client import MODEL_ID, AnthropicMessages, run_tool_loop, safe_error, usage_summary
+from fpfa.design_basis_docx import DESIGN_BASIS_TITLE, write_design_basis
 from fpfa.content_update import (
     ContentUpdateError,
     UpdateResult,
@@ -247,7 +248,8 @@ def slash_help_text() -> str:
         "- Ctrl+S saves the open job. Closing the window saves it too. Ctrl+N starts a new chat.\n"
         "- Right-click a job in the sidebar to rename or delete it.\n"
         f"- ⋯ menu: the samples, Run zone, Export draft Section {DRAFT_SECTION} "
-        "(after a run and a blind claim check in this thread), and Settings.\n\n"
+        "(after a run and a blind claim check in this thread), Export Design Basis and Open Questions "
+        "(from this job's project record), and Settings.\n\n"
         "## Labels\n"
         "- Pipe gallons and trip time come from the calc tools. "
         "Blank trim and the screen-limit seconds stay labeled ASSUMED.\n"
@@ -673,6 +675,7 @@ class App:
         menu.add_separator()
         menu.add_command(label="Run zone from Zone details", accelerator="/run", command=self.start_zone_run)
         menu.add_command(label=f"Export draft Section {DRAFT_SECTION}…", command=self.export_docx)
+        menu.add_command(label="Export Design Basis and Open Questions…", command=self.export_design_basis)
         menu.add_separator()
         menu.add_checkbutton(label="Narrate zone runs with Claude", variable=self.ask_claude)
         menu.add_separator()
@@ -2381,6 +2384,53 @@ class App:
             messagebox.showinfo("Export", EXPORT_NEEDS_RUN)
             return
         self.start_claim_check(offer_export=True)
+
+    def design_basis_ready(self) -> str:
+        """Empty when the job has a record to export. Otherwise the reason it does not."""
+        if not self.project:
+            return "Open a job first."
+        self._open_record(self.project)
+        snapshot = self.record.snapshot(self.project["id"])
+        # Basis facts alone come from the form defaults. A design basis needs
+        # at least one recorded calculation, finding, or decision.
+        if not snapshot["calcs"] and not snapshot["findings"] and not snapshot["decisions"]:
+            return (
+                "Nothing is on this job's record yet. Run /sample-di or /run, or ask a question, "
+                "then export the design basis."
+            )
+        return ""
+
+    def export_design_basis_to(self, path: Path) -> Path:
+        """Write the Design Basis and Open Questions document for the open job."""
+        reason = self.design_basis_ready()
+        if reason:
+            raise RuntimeError(reason)
+        snapshot = self.record.snapshot(self.project["id"])
+        return write_design_basis(
+            Path(path), self.project, snapshot, claim_check=self.project.get("claim_check")
+        )
+
+    def export_design_basis(self) -> None:
+        reason = self.design_basis_ready()
+        if reason:
+            messagebox.showinfo(DESIGN_BASIS_TITLE, reason)
+            return
+        path = filedialog.asksaveasfilename(
+            parent=self.root,
+            title=f"Export {DESIGN_BASIS_TITLE}",
+            defaultextension=".docx",
+            filetypes=[("Word document", "*.docx")],
+            initialfile=f"{self.project.get('name', 'job')}-design-basis.docx",
+        )
+        if not path:
+            self.status.set("Design basis export was not written.")
+            return
+        try:
+            written = self.export_design_basis_to(Path(path))
+        except Exception as exc:
+            messagebox.showerror(DESIGN_BASIS_TITLE, safe_error(exc))
+            return
+        self.status.set(f"Exported {written}")
 
     def start_claim_check(self, offer_export: bool = False) -> None:
         """Queue the blind claim check on this project. The composer stays usable."""

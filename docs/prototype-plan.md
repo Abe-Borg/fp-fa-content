@@ -2,7 +2,7 @@
 
 This file is the single source of truth for the v0 prototype. Every agent working on this repository reads it before starting and updates the status columns when a phase or a gate changes. Email threads, chat transcripts, and earlier planning notes are history, not the plan.
 
-Updated: 2026-11-09. Phase 1 complete, Phase 2 next. Implementation of v0 is authorized as of 2026-11-09 along the path in this file.
+Updated: 2026-11-09. Phases 1 and 2 complete, Phase 3 next. Implementation of v0 is authorized as of 2026-11-09 along the path in this file.
 
 ## 1. Definition of done for v0
 
@@ -37,7 +37,7 @@ Sizes are focused work sessions. No dates are promised.
 | --- | --- | --- | --- | --- |
 | 0. Freeze | This file, `CLAUDE.md`, `docs/known-answer-dh1.md`, README pointer | Owner confirms the known answer | 1 | Documents merged. Known answer awaiting the owner's confirmation |
 | 1. Project record | SQLite store with the tables in section 5. App tools that write to it. Calc tools record themselves and return a prior result for identical inputs. Migration of today's JSON jobs. | Store tests green. Existing suite green. | 2 to 3 | Done in `app/fpfa/record.py`, `calc_tools.py`, and the three model paths. Tests in `app/tests/test_record.py` |
-| 2. Design-basis export | Word export built from the record. Sections in section 7. | Export from a seeded record matches the known answer by hand. | 1 to 2 | Not started |
+| 2. Design-basis export | Word export built from the record. Sections in section 7. | Export from a seeded record matches the known answer by hand. | 1 to 2 | Done in `app/fpfa/design_basis_docx.py`; menu item in the window; `app/tests/test_design_basis.py` locks the section 2 figures of the known answer. The checker gate on this export moves to Phase 3 with the record-fed checker |
 | 3. Team | Lead loop with `list_specialists`, `delegate`, `handoff`, `request_check`. FP and FA specialists run in their own contexts from the existing role files with their own skill and tool subsets. Checker runs blind from the record. The lead picks specialists from the request. | Fake-client tests show three distinct contributors and a complete handoff log on the sample. | 3 to 4 | Not started |
 | 4. Team UI | Roster with states, collapsed activity, expandable handoff cards, blockers and open-questions pane, cancel. Built on the existing Activity list and inbox. | Window tests under Xvfb. | 2 | Not started |
 | 5. Recovery | Pending handoffs re-queued on launch. Calc idempotency by input hash. In-flight jobs marked interrupted on relaunch. Forced-kill and sleep tests. | Tests C and D protocol written and passed. | 2 | Not started |
@@ -101,6 +101,8 @@ Word document from the record, section order:
 8. Handoff log.
 
 The Section 21 13 19 export stays as it is. This is a second document.
+
+Implemented in `app/fpfa/design_basis_docx.py`. Elections are read from the trim, releasing, and nitrogen calc records and from recorded decisions. Until the record-fed checker lands in Phase 3, section 5 prints a line saying no blind claim check has run, and the export does not wait for one.
 
 ## 8. Reuse map
 
