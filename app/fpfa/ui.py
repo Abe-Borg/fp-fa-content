@@ -22,6 +22,7 @@ import queue
 import re
 import sys
 import threading
+import time
 import tkinter as tk
 import tkinter.font as tkfont
 from pathlib import Path
@@ -44,7 +45,7 @@ from fpfa.claim_check import (
 from fpfa.claude_client import MODEL_ID, AnthropicMessages, TurnCancelled, run_tool_loop, safe_error, usage_summary
 from fpfa.design_basis_docx import DESIGN_BASIS_TITLE, write_design_basis
 from fpfa.team import check_record, export_gate, latest_check, team_summary
-from fpfa.team_panel import TeamPanel
+from fpfa.team_panel import TeamPanel, recovery_text
 from fpfa.content_update import (
     ContentUpdateError,
     UpdateResult,
@@ -60,13 +61,14 @@ from fpfa.content_update import (
     updates_on_launch,
 )
 from fpfa.everyday import everyday_reply, run_everyday
-from fpfa.jobs import JobInbox, label_result
+from fpfa.instance_lock import LOCK_NAME, ANOTHER_WINDOW_TEXT, InstanceLock, InstanceLockError
+from fpfa.jobs import KINDS as JOB_KINDS, JobInbox, label_result
 from fpfa.managed import anthropic_request, reply_with_delete_status, run_heavy_job, session_system
 from fpfa.keystore import clear_api_key, key_status, key_storage_help, load_api_key, save_api_key
 from fpfa.modes_loader import DEFAULT_MODE, MODE_SLUGS, list_modes, normalize_mode
-from fpfa.paths import content_root, is_content_pack, read_config, write_config
+from fpfa.paths import content_root, data_dir, is_content_pack, read_config, write_config
 from fpfa.projects import delete_project, list_projects, load_project, new_project, save_project
-from fpfa.record import Record
+from fpfa.record import INTERRUPTED_NOTE, Record
 from fpfa.spec_docx import DRAFT_SECTION, write_docx
 from fpfa.theme import apply_theme, enable_windows_dpi_awareness
 from fpfa.widgets import Composer, ScrollFrame
@@ -179,6 +181,9 @@ EXPORT_NEEDS_RUN = (
     "Fill in Zone details and press Run zone (or type /run). /sample-di loads a sample zone to try it."
 )
 COMPOSER_PLACEHOLDER = "Ask about a zone, a releasing sequence, a spec section, or a calc…"
+# A gap between two polls longer than this means the machine slept or the process was
+# frozen. The poll runs every 100 ms, so an awake machine never comes close.
+WAKE_GAP_SECONDS = 90.0
 CANCELLED_RUN_LINE = (
     "Cancelled. The designer stopped the narration before it finished. "
     "The tool plan had already run, so its figures stand below and in the tables."
@@ -330,6 +335,10 @@ def _blank_to_none(text: str):
 class App:
     def __init__(self, root: tk.Tk):
         self.root = root
+        # One window per data directory. A second one would recover this one's live work.
+        self.instance_lock = InstanceLock(data_dir() / LOCK_NAME)
+        if not self.instance_lock.acquire():
+            raise InstanceLockError(ANOTHER_WINDOW_TEXT)
         self.root.title("FP/FA Design Assistant")
         self.root.geometry("1280x800+40+40")
         self.root.minsize(1020, 680)
@@ -366,6 +375,13 @@ class App:
         self.record = Record()
         # Cancel flags for running jobs, by job id. Set from the Team tab.
         self._cancel_events: dict[str, threading.Event] = {}
+        # Last (status, error) each job was written to the record with. Main thread only.
+        self._job_sync_seen: dict[str, tuple[str, str]] = {}
+        # Per project, the thread note recovery owes it, posted once when the job opens.
+        self._recovery_notes: dict[str, str] = {}
+        # Wall clock at the last poll. A long gap is a sleep or a freeze.
+        self._last_tick = time.time()
+        self._recover_from_record()
         # Cached agent and cloud environment ids for later /heavy calls.
         # Not a session. Session cleanup does not delete these.
         self._managed_resources: dict = {}
@@ -403,6 +419,9 @@ class App:
             # close() deletes a hosted session that is still polling.
             # The delete runs off this thread and is joined for a short bound.
             jobs.close()
+        lock = getattr(self, "instance_lock", None)
+        if lock is not None:
+            lock.release()
 
     def _on_save_key(self, event=None):
         try:
@@ -1215,6 +1234,109 @@ class App:
     def _cancel_event(self, job_id: str) -> threading.Event:
         return self._cancel_events.setdefault(job_id, threading.Event())
 
+    def _recover_from_record(self) -> None:
+        """Launch pass. The inbox is in memory, so nothing survives a relaunch except the record.
+
+        Every job the record still shows queued or running is marked interrupted there
+        and listed in Activity under its original id. Working agents are marked
+        interrupted and delivered handoffs go back to pending. Nothing is re-run.
+        """
+        try:
+            self.record.recover()
+            # Owed notes carry over launches until the job is opened and the note is read.
+            report = self.record.unnoted_recoveries()
+        except Exception as exc:
+            self.status.set("Project record recovery did not run. " + safe_error(exc))
+            return
+        if not report:
+            return
+        jobs = handoffs = 0
+        for project_id, item in report.items():
+            for row in item.get("jobs") or []:
+                if row.get("kind") not in JOB_KINDS or self.jobs.get(row["id"]) is not None:
+                    continue
+                try:
+                    self.jobs.record(
+                        project_id=project_id, project_name=item.get("name") or UNTITLED_JOB,
+                        kind=row["kind"], title=row.get("title") or "", status="interrupted",
+                        error=INTERRUPTED_NOTE, job_id=row["id"],
+                    )
+                except (ValueError, RuntimeError):
+                    continue
+                self._job_sync_seen[row["id"]] = ("interrupted", INTERRUPTED_NOTE)
+                jobs += 1
+            handoffs += len(item.get("handoffs") or [])
+            note = recovery_text(item)
+            if note:
+                self._recovery_notes[project_id] = note
+        self.status.set(
+            f"Recovered after a relaunch: {jobs} job{'s' if jobs != 1 else ''} interrupted, "
+            f"{handoffs} handoff{'s' if handoffs != 1 else ''} re-queued, "
+            f"across {len(report)} job{'s' if len(report) != 1 else ''} in the sidebar. "
+            "Open one to read what was in flight."
+        )
+
+    def _post_recovery_note(self, project_id: str | None) -> None:
+        """Put the recovery note for this project into its thread, once."""
+        notes = getattr(self, "_recovery_notes", None)
+        if not project_id or not notes or project_id not in notes:
+            return
+        if not self.project or self.project.get("id") != project_id:
+            return
+        note = notes.pop(project_id)
+        self._append_chat("assistant", note)
+        self._save_form_or_chat(self.project)
+        save_project(self.project)
+        try:
+            self.record.note_recovery(project_id)
+        except Exception as exc:
+            self.status.set("Project record is not available. " + safe_error(exc))
+
+    def _sync_jobs_to_record(self) -> None:
+        """Write each job's status to the record once per change. Main thread, from the inbox refresh."""
+        jobs = getattr(self, "jobs", None)
+        record = getattr(self, "record", None)
+        if jobs is None or record is None:
+            return
+        for job in jobs.snapshot():
+            state = (job.status, job.error or "")
+            if self._job_sync_seen.get(job.id) == state:
+                continue
+            try:
+                record.set_job(
+                    job.project_id, job_id=job.id, kind=job.kind, title=job.title,
+                    status=job.status, error=job.error or "",
+                )
+            except Exception as exc:
+                self.status.set("Project record is not available. " + safe_error(exc))
+                return
+            self._job_sync_seen[job.id] = state
+
+    def _on_wake(self, gap: float) -> None:
+        """The clock jumped between two polls: the machine slept or the process was frozen.
+
+        Running jobs are left alone. A model call that was on the network when the
+        machine slept returns, times out, or fails on its own, and the job reports
+        that in its thread. The record gets a wake event on the open job.
+        """
+        minutes = max(1, int(round(gap / 60.0)))
+        running = [job.id for job in self.jobs.snapshot() if job.status in ("queued", "running")]
+        project_id = (self.project or {}).get("id") if self.project else None
+        if project_id:
+            try:
+                self.record.log_event(project_id, "wake", {"gap_seconds": int(gap), "running_jobs": running})
+            except Exception:
+                pass
+        if running:
+            self.status.set(
+                f"Resumed after about {minutes} min. {len(running)} job{'s' if len(running) != 1 else ''} "
+                "still running; one that lost its connection reports an error in its thread, "
+                "or cancel it from the Team tab."
+            )
+        else:
+            self.status.set(f"Resumed after about {minutes} min. No job was running.")
+        self._refresh_team()
+
     def start_record_check(self) -> None:
         """Run the blind checker over this job's findings as a claim job, without a chat turn."""
         self._keep_composer_open()
@@ -1269,6 +1391,14 @@ class App:
             pass
 
     def _poll(self) -> None:
+        now = time.time()
+        gap = now - getattr(self, "_last_tick", now)
+        self._last_tick = now
+        if gap > WAKE_GAP_SECONDS:
+            try:
+                self._on_wake(gap)
+            except Exception as exc:
+                self.status.set("Resume check failed. " + safe_error(exc))
         try:
             while True:
                 try:
@@ -1297,6 +1427,7 @@ class App:
         listing = getattr(self, "inbox_list", None)
         if jobs is None or listing is None:
             return
+        self._sync_jobs_to_record()
         try:
             if self._pending_here() != self._pending_shown:
                 self._render_chat()
@@ -1443,6 +1574,7 @@ class App:
         self._show_saved_run(project.get("last_run") or project.get("bess_run"))
         self._apply_mode(project.get("mode"))
         self._open_record(project)
+        self._post_recovery_note(project.get("id"))
         self._refresh_team()
 
     def _open_record(self, project: dict | None) -> None:
@@ -3341,7 +3473,13 @@ def main(argv: list[str] | None = None) -> None:
     # Crisp text on a scaled Windows display. Must run before the first window.
     enable_windows_dpi_awareness()
     root = tk.Tk()
-    app = App(root)
+    try:
+        app = App(root)
+    except InstanceLockError as exc:
+        root.withdraw()
+        messagebox.showerror("FP/FA Design Assistant", str(exc))
+        root.destroy()
+        sys.exit(1)
     if args.demo:
         def finish_demo():
             app.load_demo()

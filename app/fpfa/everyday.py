@@ -124,12 +124,16 @@ def run_everyday(
     nothing is recorded and the tool list is the plain one.
     """
     if record is not None and project_id:
-        from fpfa.team import TEAM_SCHEMAS, TeamSession
+        from fpfa.team import TEAM_SCHEMAS, TeamSession, pending_handoff_note
 
         team = TeamSession(
             content_root, record, project_id, create,
             max_rounds=max_rounds, max_tokens=max_tokens, cancel=cancel,
         )
+        # Pending handoffs ride in the user message, so the lead sees them without a tool call.
+        waiting = pending_handoff_note(record, project_id)
+        if waiting:
+            user_text = waiting + "\n\n" + user_text
         record.set_agent(project_id, name="Lead", role_slug=agent, status="working")
         try:
             out = run_tool_loop(

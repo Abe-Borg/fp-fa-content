@@ -142,7 +142,7 @@ class RecordStoreTests(unittest.TestCase):
         record.open_question("p1", raised_by="lead", text="Enforced edition?")
         snap = record.snapshot("p1")
         self.assertEqual(set(snap), {"project", "facts", "evidence", "calcs", "findings", "questions",
-                                     "decisions", "handoffs", "tasks", "agents", "events"})
+                                     "decisions", "handoffs", "tasks", "agents", "jobs", "events"})
         self.assertEqual(snap["project"]["name"], "Sample")
         text = record.summary_text("p1")
         self.assertIn("basis/insurer: FM (OWNER)", text)
@@ -339,8 +339,11 @@ class ReviewFollowUpTests(unittest.TestCase):
         self.assertIsNone(record.facts("p1", "basis")[0]["superseded_by"])
         row = record.record_calc("p1", tool="hose_duration", inputs={}, outputs={}, calc_identity="zz")
         self.assertEqual(record.calcs("p1")[0]["calc_identity"], "zz")
+        # The version-2 database had no jobs table. Opening it with this code adds one.
+        record.set_job("p1", job_id="j1", kind="chat", title="t", status="running")
+        self.assertEqual(record.jobs("p1")[0]["status"], "running")
         conn = sqlite3.connect(path)
-        self.assertEqual(conn.execute("SELECT value FROM meta WHERE key='schema_version'").fetchone()[0], "2")
+        self.assertEqual(conn.execute("SELECT value FROM meta WHERE key='schema_version'").fetchone()[0], "3")
         conn.close()
 
 

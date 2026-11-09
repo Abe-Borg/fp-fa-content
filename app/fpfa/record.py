@@ -28,7 +28,7 @@ from typing import Any
 from fpfa.paths import data_dir
 
 DB_NAME = "fpfa.db"
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 # The three figure labels the app already uses, plus the cite classes the
 # content pack uses on a sentence that quotes a source.
@@ -48,6 +48,13 @@ HANDOFF_STATUSES = ("pending", "delivered", "returned", "cancelled")
 FINDING_STATUSES = ("open", "Supported", "Not supported", "Source not found")
 TASK_STATUSES = ("open", "working", "done", "blocked", "cancelled")
 AGENT_STATUSES = ("idle", "working", "done", "error", "interrupted")
+# Window jobs as the record keeps them. "interrupted" is set only by recover(): the app
+# was not running when the job would have ended.
+JOB_STATUSES = ("queued", "running", "done", "error", "cancelled", "interrupted")
+_JOB_RANK = {"queued": 0, "running": 1, "done": 2, "error": 2, "cancelled": 2, "interrupted": 2}
+# Result text on a handoff that recovery put back on the queue.
+REQUEUED_NOTE = "Re-queued after a relaunch. The receiver was interrupted before it returned."
+INTERRUPTED_NOTE = "Interrupted. The app was not running when this job would have ended. Run it again; recorded calcs replay."
 
 # Tools whose outputs are calculation records. Content and record tools are not.
 CALC_TOOLS = frozenset({
@@ -183,6 +190,17 @@ CREATE TABLE IF NOT EXISTS agents (
     last_active TEXT NOT NULL,
     PRIMARY KEY (project_id, name)
 );
+CREATE TABLE IF NOT EXISTS jobs (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    title TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL,
+    error TEXT NOT NULL DEFAULT '',
+    started TEXT NOT NULL,
+    updated TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS jobs_project ON jobs(project_id, status);
 CREATE TABLE IF NOT EXISTS events (
     seq INTEGER PRIMARY KEY AUTOINCREMENT,
     project_id TEXT NOT NULL,
@@ -341,7 +359,7 @@ class Record:
         def work(conn):
             for table in (
                 "facts", "evidence", "calc_records", "findings", "questions",
-                "decisions", "handoffs", "tasks", "agents", "events",
+                "decisions", "handoffs", "tasks", "agents", "jobs", "events",
             ):
                 conn.execute(f"DELETE FROM {table} WHERE project_id = ?", (project_id,))
             conn.execute("DELETE FROM projects WHERE id = ?", (project_id,))
@@ -620,6 +638,7 @@ class Record:
             "handoffs": lambda: self.handoffs(project_id),
             "tasks": lambda: self.tasks(project_id),
             "agents": lambda: self.agents(project_id),
+            "jobs": lambda: self.jobs(project_id),
         }
         if kind not in readers:
             raise RecordError("kind must be one of: " + ", ".join(sorted(readers)))
@@ -763,6 +782,150 @@ class Record:
         kind = _text(kind, "kind", limit=80)
         self._write(lambda conn: self._event(conn, project_id, kind, agent, payload if isinstance(payload, dict) else {"value": payload}))
 
+    # -- jobs and recovery ---------------------------------------------------
+
+    def set_job(self, project_id: str, *, job_id: str, kind: str, title: str = "", status: str,
+                error: str = "") -> dict:
+        """Keep a window job on the record so a relaunch can tell what was in flight.
+
+        A job never moves back: a late "queued" after "running" is ignored, and a
+        finished job stays finished. An unchanged status writes no event.
+        """
+        row = {
+            "id": _text(job_id, "job_id", limit=64),
+            "project_id": _text(project_id, "project_id", limit=64),
+            "kind": _text(kind, "kind", limit=40),
+            "title": _text(title, "title", required=False, limit=500),
+            "status": _choice(status, "status", JOB_STATUSES),
+            "error": _text(error, "error", required=False, limit=2000),
+            "started": now_text(),
+            "updated": now_text(),
+        }
+
+        def work(conn):
+            current = conn.execute("SELECT * FROM jobs WHERE id = ?", (row["id"],)).fetchone()
+            if current is not None:
+                if _JOB_RANK[row["status"]] < _JOB_RANK[current["status"]]:
+                    return dict(current)
+                if current["status"] == row["status"] and (current["error"] == row["error"] or not row["error"]):
+                    return dict(current)
+                conn.execute(
+                    "UPDATE jobs SET status = ?, error = ?, title = ?, updated = ? WHERE id = ?",
+                    (row["status"], row["error"] or current["error"], row["title"] or current["title"],
+                     row["updated"], row["id"]),
+                )
+            else:
+                conn.execute(
+                    "INSERT INTO jobs (id, project_id, kind, title, status, error, started, updated) "
+                    "VALUES (:id, :project_id, :kind, :title, :status, :error, :started, :updated)",
+                    row,
+                )
+            self._event(conn, row["project_id"], "job_" + row["status"], "", {"id": row["id"], "kind": row["kind"]})
+            return dict(conn.execute("SELECT * FROM jobs WHERE id = ?", (row["id"],)).fetchone())
+
+        return self._write(work)
+
+    def jobs(self, project_id: str, status: str | None = None) -> list[dict]:
+        if status:
+            return self._read(
+                "SELECT * FROM jobs WHERE project_id = ? AND status = ? ORDER BY started, rowid", (project_id, status)
+            )
+        return self._read("SELECT * FROM jobs WHERE project_id = ? ORDER BY started, rowid", (project_id,))
+
+    def recover(self) -> dict[str, dict]:
+        """The launch pass. Nothing can still be running when the app starts, so every
+        queued or running job and every working agent is marked interrupted, and every
+        delivered handoff goes back to pending so the next delegation to its receiver
+        delivers it again. The same rows are updated; no row is copied. One transaction.
+
+        Returns, per project that changed, its name and the jobs, agents, and
+        handoffs touched. A second call finds nothing and returns an empty dict.
+        """
+        stamp = now_text()
+
+        def work(conn):
+            report: dict[str, dict] = {}
+
+            def entry(project_id: str) -> dict:
+                if project_id not in report:
+                    name_row = conn.execute("SELECT name FROM projects WHERE id = ?", (project_id,)).fetchone()
+                    report[project_id] = {
+                        "name": (name_row["name"] if name_row else "") or "Untitled job",
+                        "jobs": [], "agents": [], "handoffs": [],
+                    }
+                return report[project_id]
+
+            for row in conn.execute("SELECT * FROM jobs WHERE status IN ('queued', 'running') ORDER BY started").fetchall():
+                conn.execute(
+                    "UPDATE jobs SET status = 'interrupted', error = ?, updated = ? WHERE id = ?",
+                    (INTERRUPTED_NOTE, stamp, row["id"]),
+                )
+                self._event(conn, row["project_id"], "job_interrupted", "", {"id": row["id"], "kind": row["kind"], "was": row["status"]})
+                item = dict(row)
+                item["status"] = "interrupted"
+                item["error"] = INTERRUPTED_NOTE
+                entry(row["project_id"])["jobs"].append(item)
+            for row in conn.execute("SELECT * FROM agents WHERE status = 'working'").fetchall():
+                conn.execute(
+                    "UPDATE agents SET status = 'interrupted', last_active = ? WHERE project_id = ? AND name = ?",
+                    (stamp, row["project_id"], row["name"]),
+                )
+                self._event(conn, row["project_id"], "agent_interrupted", row["name"], {"role": row["role_slug"], "by": "recovery"})
+                entry(row["project_id"])["agents"].append(row["name"])
+            for row in conn.execute("SELECT * FROM handoffs WHERE status = 'delivered' ORDER BY created").fetchall():
+                conn.execute(
+                    "UPDATE handoffs SET status = 'pending', delivered = NULL, result = ? WHERE id = ?",
+                    (REQUEUED_NOTE, row["id"]),
+                )
+                self._event(conn, row["project_id"], "handoff_requeued", "", {"id": row["id"], "to": row["to_agent"]})
+                entry(row["project_id"])["handoffs"].append(
+                    {"id": row["id"], "from_agent": row["from_agent"], "to_agent": row["to_agent"], "brief": row["brief"]}
+                )
+            for project_id, item in report.items():
+                # The whole item goes on the event, so a later launch can still say what
+                # was in flight if the designer never opened the job this time.
+                self._event(conn, project_id, "recovered", "", {
+                    "jobs": [{"id": row["id"], "kind": row["kind"], "title": row["title"]} for row in item["jobs"]],
+                    "agents": list(item["agents"]),
+                    "handoffs": list(item["handoffs"]),
+                })
+            return report
+
+        return self._write(work)
+
+    def unnoted_recoveries(self) -> dict[str, dict]:
+        """Recoveries whose note the designer has not seen, merged per project.
+
+        A `recovered` event stays owed until a `recovery_noted` event follows it on
+        that project. Items look like recover()'s report. Empty when nothing is owed.
+        """
+        rows = self._read(
+            "SELECT project_id, kind, payload FROM events WHERE kind IN ('recovered', 'recovery_noted') ORDER BY seq"
+        )
+        owed: dict[str, dict] = {}
+        for row in rows:
+            project_id = row["project_id"]
+            if row["kind"] == "recovery_noted":
+                owed.pop(project_id, None)
+                continue
+            payload = json.loads(row["payload"] or "{}")
+            item = owed.setdefault(project_id, {"name": "", "jobs": [], "agents": [], "handoffs": []})
+            for key in ("jobs", "agents", "handoffs"):
+                values = payload.get(key)
+                if not isinstance(values, list):
+                    continue
+                for value in values:
+                    if value not in item[key]:
+                        item[key].append(value)
+        for project_id, item in owed.items():
+            project = self.project_row(project_id) or {}
+            item["name"] = project.get("name") or "Untitled job"
+        return owed
+
+    def note_recovery(self, project_id: str) -> None:
+        """The recovery note for this project reached its thread. Later launches owe nothing for it."""
+        self.log_event(project_id, "recovery_noted", {})
+
     # -- reads --------------------------------------------------------------
 
     def facts(self, project_id: str, kind: str | None = None, *, include_superseded: bool = False) -> list[dict]:
@@ -845,6 +1008,7 @@ class Record:
             "handoffs": self.handoffs(project_id),
             "tasks": self.tasks(project_id),
             "agents": self.agents(project_id),
+            "jobs": self.jobs(project_id),
             "events": self.events(project_id),
         }
 
