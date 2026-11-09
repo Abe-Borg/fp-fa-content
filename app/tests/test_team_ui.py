@@ -112,6 +112,51 @@ class CancelTests(unittest.TestCase):
             inbox.close()
 
 
+class CancelledNarrationTests(unittest.TestCase):
+    def test_zone_and_starter_report_a_cancelled_narration_and_keep_the_tool_plan(self):
+        from fpfa.bess import run_bess_plan
+        from fpfa.claude_client import TurnCancelled
+        from fpfa.sample_data import EXAMPLE_BASIS, EXAMPLE_BESS, EXAMPLE_BESS_BASIS, EXAMPLE_DI
+        from fpfa.workflow import NARRATION_CANCELLED, run_di_zone
+
+        def narrator(_system, _user, _tools, _execute):
+            raise TurnCancelled("Cancelled by the designer before the next model round.")
+
+        plain = run_di_zone(REPO, EXAMPLE_DI, EXAMPLE_BASIS)
+        zone = run_di_zone(REPO, EXAMPLE_DI, EXAMPLE_BASIS, narrator=narrator)
+        self.assertTrue(zone["cancelled"])
+        self.assertFalse(plain["cancelled"])
+        self.assertEqual(zone["tools"], plain["tools"])
+        self.assertEqual(zone["source"], "tool-plan")
+        self.assertIn(NARRATION_CANCELLED, zone["warnings"])
+        self.assertIn(NARRATION_CANCELLED, zone["flags"])
+        self.assertFalse(any(item.startswith("Claude was not used") for item in zone["warnings"]))
+        bess = run_bess_plan(REPO, EXAMPLE_BESS, EXAMPLE_BESS_BASIS, narrator=narrator)
+        self.assertTrue(bess["cancelled"])
+        self.assertIn(NARRATION_CANCELLED, bess["warnings"])
+        self.assertEqual(bess["source"], "tool-plan")
+
+    def test_check_line_notices_findings_that_changed_after_the_check(self):
+        from fpfa.team import check_record
+        from fpfa.team_panel import check_line
+
+        record = _record()
+        record.ensure_project("job1")
+        record.record_finding("job1", agent="fp-sprinkler", text="Duration is 60 min", label="PRACTICE")
+
+        def create(**_kwargs):
+            return SimpleNamespace(content=[Block(type="text", text='1. Supported. Cite: "x"')])
+
+        # A PRACTICE finding with no supports is open, so the check does not pass; the line still speaks for it.
+        check_record(REPO, record, "job1", create)
+        before = check_line(record.snapshot("job1"))
+        self.assertIn("Blind check:", before)
+        self.assertNotIn("changed since", before)
+        record.record_finding("job1", agent="fp-sprinkler", text="A new claim", label="PRACTICE")
+        self.assertEqual(check_line(record.snapshot("job1")),
+                         "Blind check: findings changed since the last check. Run it again.")
+
+
 class PanelHelperTests(unittest.TestCase):
     def test_roster_blockers_check_line_and_summary(self):
         from fpfa.team import team_summary
@@ -360,6 +405,83 @@ class TeamWindowTests(unittest.TestCase):
         self.assertIn("✓ Lead (lead) done", roster)
         self.assertEqual(len(app.team_panel.tree.get_children()), 1)
         self.assertIn("rounds", app.status.get())
+
+    def test_cancelling_a_narrated_zone_run_keeps_the_figures_and_marks_the_job(self):
+        app = self._app()
+        app.ask_claude.set(True)
+        entered = threading.Event()
+        release = threading.Event()
+
+        class Blocking:
+            def __init__(self, _key):
+                pass
+
+            def create(self, **kwargs):
+                entered.set()
+                if not release.wait(5):
+                    raise TimeoutError("not released")
+                return _turn("tool_use", Block(type="tool_use", id="t1", name="hose_duration",
+                                               input={"hazard": "ordinary", "supervised": True}))
+
+        with patch("fpfa.ui.AnthropicMessages", Blocking):
+            app.start_sample_di()
+            self.assertTrue(entered.wait(3), "the narration did not start")
+            self._wait_until(app, lambda: str(app.team_panel.cancel_button.cget("state")) == "normal")
+            app.cancel_running_jobs()
+            release.set()
+            self._wait_for(app, "Cancelled. The designer stopped the narration")
+        thread = app.chat_view.get("1.0", "end")
+        self.assertIn("Zone total is 281.3 gal", thread)
+        zone_jobs = [job for job in app.jobs.snapshot() if job.kind == "zone"]
+        self.assertEqual([job.status for job in zone_jobs], ["cancelled"])
+        self.assertTrue(app.project["last_run"]["cancelled"])
+        self.assertTrue(any("Narration cancelled by the designer" in flag for flag in app.project["last_run"]["flags"]))
+        self.assertIn("Cancelled.", app.status.get())
+        self.assertEqual(app._cancel_events, {})
+
+    def test_a_queued_blind_check_that_was_cancelled_makes_no_model_call(self):
+        app = self._app()
+        app.ask_claude.set(False)
+        app.start_sample_di()
+        app.root.update()
+        project_id = app.project["id"]
+        calc_id = app.record.calcs(project_id)[0]["id"]
+        app.record.record_finding(project_id, agent="fp-sprinkler", text="Zone total 281.3 gal",
+                                  label="calculated", supports=[calc_id])
+        hold = threading.Event()
+        started = [threading.Event(), threading.Event()]
+
+        def block(index):
+            def work(_job_id):
+                started[index].set()
+                hold.wait(5)
+            return work
+
+        # Both workers busy, so the blind check waits in the queue.
+        for index in range(2):
+            app.jobs.submit(project_id=project_id, project_name="n", kind="chat", title="busy", work=block(index))
+        self.assertTrue(started[0].wait(3) and started[1].wait(3))
+
+        class Boom:
+            def __init__(self, _key):
+                pass
+
+            def create(self, **kwargs):
+                raise AssertionError("a cancelled check must not call the model")
+
+        with patch("fpfa.ui.AnthropicMessages", Boom):
+            app.start_record_check()
+            claim = [job for job in app.jobs.snapshot() if job.kind == "claim"]
+            self.assertEqual([job.status for job in claim], ["queued"])
+            app.cancel_running_jobs()
+            self.assertIn("Cancel requested for 3 jobs", app.status.get())
+            hold.set()
+            self._wait_for(app, "Cancelled before the blind check started")
+        claim = [job for job in app.jobs.snapshot() if job.kind == "claim"]
+        self.assertEqual([job.status for job in claim], ["cancelled"])
+        self.assertEqual(app.record.findings(project_id)[0]["status"], "open")
+        # The check dropped its own event. The two stand-in jobs never pop theirs.
+        self.assertNotIn(claim[0].id, app._cancel_events)
 
 
 if __name__ == "__main__":

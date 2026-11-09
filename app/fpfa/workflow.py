@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from fpfa.calc_tools import REQUIRED_DI_TOOLS, SCHEMAS, ToolSession
-from fpfa.claude_client import MODEL_ID, incomplete_notice, safe_error
+from fpfa.claude_client import MODEL_ID, TurnCancelled, incomplete_notice, safe_error
 from fpfa.everyday import EVERYDAY_ROLE, SPECIALIST_ROLES, assemble_system
 from fpfa.modes_loader import MODE_SLUGS, list_modes, normalize_mode
 from fpfa.record import Record
@@ -30,6 +30,10 @@ DI_SKILL_SLUGS = [
     "nitrogen-inerting-and-c-factor-gate",
     "density-area-dry-increase",
 ]
+
+
+# Warning and flag text when the designer cancels a narration mid-run.
+NARRATION_CANCELLED = "Narration cancelled by the designer. Tables stay on the tool plan."
 
 
 def fmt1(value: Any) -> str:
@@ -500,6 +504,7 @@ def run_di_zone(
     source = "tool-plan"
     model = None
     usage = None
+    cancelled = False
     known = {item["slug"] for item in list_skills(content_root)}
     missing = [slug for slug in DI_SKILL_SLUGS if slug not in known]
     if missing:
@@ -552,6 +557,12 @@ def run_di_zone(
                 warnings.append(
                     "Claude did not successfully call: " + ", ".join(skipped) + ". The tool plan still ran them."
                 )
+        except TurnCancelled:
+            # The designer stopped the narration. The tool plan already ran and stands.
+            cancelled = True
+            warnings.append(NARRATION_CANCELLED)
+            source = "tool-plan"
+            narrative = template
         except Exception as exc:
             warnings.append("Claude was not used. " + safe_error(exc))
             source = "tool-plan"
@@ -570,6 +581,7 @@ def run_di_zone(
         "basis": basis,
         "mode": selected,
         "usage": usage,
+        "cancelled": cancelled,
     }
 
 

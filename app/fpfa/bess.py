@@ -11,11 +11,11 @@ from pathlib import Path
 from typing import Any, Callable
 
 from fpfa.calc_tools import SCHEMAS, ToolSession
-from fpfa.claude_client import MODEL_ID, incomplete_notice, safe_error
+from fpfa.claude_client import MODEL_ID, TurnCancelled, incomplete_notice, safe_error
 from fpfa.modes_loader import normalize_mode
 from fpfa.record import Record
 from fpfa.skills_loader import read_starter_cites
-from fpfa.workflow import fmt1, judgment_label_line, system_prompt
+from fpfa.workflow import NARRATION_CANCELLED, fmt1, judgment_label_line, system_prompt
 
 BESS_SKILL = "ess-isolation-venting-and-duration"
 BESS_MODE = "synthesis"
@@ -298,6 +298,7 @@ def run_bess_plan(
     source = "tool-plan"
     model = None
     usage = None
+    cancelled = False
     if narrator is not None:
         model = MODEL_ID
         try:
@@ -346,6 +347,11 @@ def run_bess_plan(
                 warnings.append(
                     "Claude did not successfully call read_skill. The tool plan still used the skill file."
                 )
+        except TurnCancelled:
+            cancelled = True
+            warnings.append(NARRATION_CANCELLED)
+            source = "tool-plan"
+            narrative = template
         except Exception as exc:
             warnings.append("Claude was not used. " + safe_error(exc))
             source = "tool-plan"
@@ -371,4 +377,5 @@ def run_bess_plan(
         "cites": cites,
         "zone_governing": zone,
         "usage": usage,
+        "cancelled": cancelled,
     }

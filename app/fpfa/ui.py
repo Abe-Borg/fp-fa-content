@@ -71,6 +71,7 @@ from fpfa.spec_docx import DRAFT_SECTION, write_docx
 from fpfa.theme import apply_theme, enable_windows_dpi_awareness
 from fpfa.widgets import Composer, ScrollFrame
 from fpfa.workflow import (
+    NARRATION_CANCELLED,
     form_assumption_lines,
     format_transcript,
     govern_note,
@@ -178,6 +179,10 @@ EXPORT_NEEDS_RUN = (
     "Fill in Zone details and press Run zone (or type /run). /sample-di loads a sample zone to try it."
 )
 COMPOSER_PLACEHOLDER = "Ask about a zone, a releasing sequence, a spec section, or a calc…"
+CANCELLED_RUN_LINE = (
+    "Cancelled. The designer stopped the narration before it finished. "
+    "The tool plan had already run, so its figures stand below and in the tables."
+)
 COMPOSER_HINT = "Enter to send  ·  Shift+Enter for a new line  ·  /help for commands"
 
 
@@ -1229,14 +1234,22 @@ class App:
             return
 
         def work(job_id: str) -> None:
+            cancel = self._cancel_event(job_id)
             try:
-                outcome = check_record(content_root(), self.record, origin_id, AnthropicMessages(key).create)
-                text = outcome.get("status_line") or "Blind check ran."
-                if outcome.get("verdict"):
-                    text += "\n" + outcome["verdict"]
+                if cancel.is_set():
+                    # Cancelled while it waited in the queue. No model call, no verdicts written.
+                    text = "Cancelled before the blind check started. No model call was made."
+                    self.jobs.mark(job_id, "cancelled", text)
+                else:
+                    outcome = check_record(content_root(), self.record, origin_id, AnthropicMessages(key).create)
+                    text = outcome.get("status_line") or "Blind check ran."
+                    if outcome.get("verdict"):
+                        text += "\n" + outcome["verdict"]
             except Exception as exc:
                 text = safe_error(exc)
                 self.jobs.mark(job_id, "error", text)
+            finally:
+                self._cancel_events.pop(job_id, None)
             self.queue.put(lambda oid=origin_id, body=text, jid=job_id: self._finish_chat(oid, body, job_id=jid))
 
         job = self.jobs.submit(
@@ -2051,10 +2064,14 @@ class App:
                     pack, di, basis, narrator=narrator, mode=mode, record=self.record, project_id=origin_id
                 )
                 error = None
+                if result.get("cancelled"):
+                    self.jobs.mark(job_id, "cancelled", NARRATION_CANCELLED)
             except Exception as exc:
                 result = None
                 error = safe_error(exc)
                 self.jobs.mark(job_id, "error", error)
+            finally:
+                self._cancel_events.pop(job_id, None)
             self.queue.put(
                 lambda oid=origin_id, res=result, err=error, jid=job_id: self._finish_run(
                     oid, res, err, job_id=jid
@@ -2170,10 +2187,14 @@ class App:
                     project_id=origin_id,
                 )
                 error = None
+                if result.get("cancelled"):
+                    self.jobs.mark(job_id, "cancelled", NARRATION_CANCELLED)
             except Exception as exc:
                 result = None
                 error = safe_error(exc)
                 self.jobs.mark(job_id, "error", error)
+            finally:
+                self._cancel_events.pop(job_id, None)
             self.queue.put(
                 lambda oid=origin_id, res=result, err=error, jid=job_id: self._finish_bess(
                     oid, res, err, job_id=jid
@@ -2255,9 +2276,10 @@ class App:
             self.status.set("The explosion-control starter did not run.")
             return
         result = self._stamp_job(result, job_id)
-        summary = (
-            self._with_job_label(job_id, self._with_seed(job_id, bess_chat_summary(result))) if announce else ""
-        )
+        body = bess_chat_summary(result)
+        if result.get("cancelled"):
+            body = CANCELLED_RUN_LINE + "\n\n" + body
+        summary = self._with_job_label(job_id, self._with_seed(job_id, body)) if announce else ""
         if still_here:
             self.project["bess_run"] = result
             self.project["mode"] = "synthesis"
@@ -2285,7 +2307,9 @@ class App:
             note = "Explosion-control starter finished on another project. Open it to see the draft."
             self.status.set(f"{heading}. {note}" if heading else note)
             return
-        if result.get("source") == "claude":
+        if result.get("cancelled"):
+            self.status.set(self._with_job_label(job_id, CANCELLED_RUN_LINE))
+        elif result.get("source") == "claude":
             note = f"LFL tool plan plus {MODEL_ID}. The starter uses the tool plan when the draft disagrees."
             if result.get("warnings"):
                 note = note + " " + result["warnings"][0]
@@ -2384,9 +2408,10 @@ class App:
             self.status.set("The zone did not run.")
             return
         result = self._stamp_job(result, job_id)
-        summary = (
-            self._with_job_label(job_id, self._with_seed(job_id, chat_run_summary(result))) if announce else ""
-        )
+        body = chat_run_summary(result)
+        if result.get("cancelled"):
+            body = CANCELLED_RUN_LINE + "\n\n" + body
+        summary = self._with_job_label(job_id, self._with_seed(job_id, body)) if announce else ""
         if still_here:
             self.project["last_run"] = result
             if summary:
@@ -2414,6 +2439,8 @@ class App:
             return
         if form_error:
             self.status.set(self._with_job_label(job_id, form_error))
+        elif result.get("cancelled"):
+            self.status.set(self._with_job_label(job_id, CANCELLED_RUN_LINE))
         elif result["source"] == "claude":
             note = f"Tool plan plus {MODEL_ID}. Tables and Section {DRAFT_SECTION} use the tool plan."
             if result.get("warnings"):

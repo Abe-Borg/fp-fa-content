@@ -15,6 +15,7 @@ from tkinter import ttk
 from typing import Any, Callable
 
 from fpfa import theme as palette
+from fpfa.team import check_token
 
 STATUS_GLYPH = {
     "working": "●",
@@ -85,6 +86,9 @@ def check_line(snapshot: dict | None) -> str:
             return "Blind check: not run on the current findings."
         return "Blind check: nothing to check yet."
     payload = latest.get("payload") or {}
+    # A check speaks for the findings it saw. New or changed findings need a new one.
+    if payload.get("token") and payload.get("token") != check_token(list(snap.get("findings") or [])):
+        return "Blind check: findings changed since the last check. Run it again."
     return str(payload.get("status_line") or "Blind check ran.")
 
 
