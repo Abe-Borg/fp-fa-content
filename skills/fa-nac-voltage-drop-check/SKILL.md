@@ -12,8 +12,8 @@ description: >-
 ## Intake and scope (all FA skills)
 - The input packet is optional. Any missing input gets a stated value, labeled **ASSUMED** (value used + why). ASSUMED is never shown as a code value. Keep going.
 - Scope locks are hard Stops: wet, dry, or double-interlock (DI) preaction only. No clean agent. No foam. Single- or non-interlock as basis of design: record, Stop, RFI-variance.
-- Country gate (US | Canada). Canada in scope (the engineer 2026-10-29). NBC 2025 Div. B 3.2.4 held (fold26). CAN/ULC-S524, S536, S537, S1001, and CEC Sec. 32 are NEEDS HOLD. Foam and clean agent still locked. On a Canada job, stop any claim that needs S524/S536/S537/S1001/CEC 32 until held. Do not invent S524 battery hours.
-- If country = Canada: STOP. Return NEEDS HOLD (CAN/ULC-S524 NAC install). Do not map NFPA 72 rows as CA CODE. Do not state hours or ULC body text. (fixture-166 / fold 29)
+- Country gate (US | Canada). Canada in scope (the engineer 2026-10-29). NBC 2025 Div. B 3.2.4 held. CAN/ULC-S524, S536, S537, S1001, and CEC Sec. 32 are NEEDS HOLD. Foam and clean agent still locked. On a Canada job, stop any claim that needs S524/S536/S537/S1001/CEC 32 until held. Do not invent S524 battery hours.
+- If country = Canada: STOP. Return NEEDS HOLD (CAN/ULC-S524 NAC install). Do not map NFPA 72 rows as CA CODE. Do not state hours or ULC body text. (fixture-166)
 - On FM DI jobs carry the standing flag: "[OWNER]/insurer conflict: FM DS 5-32 (Jan 2026) s2.4.1.1 ranks DI preaction last. Company decision (the engineer, standing): keep DI. Flag to owner and FM on this job."
 - Label every claim [CODE] [HB] [PARA] [PRACTICE] [OWNER] (or [OWNER]/insurer). Cite section AND edition. Mark approximations with ~. Never invent code text; gaps get "needs LiNK: <id>".
 - Pin the enforced NFPA 72 edition first. A label can change by edition (run `fa-code-edition-delta-check`). Pin the enforced **NEC** edition for Table 8 separately (not the same as 72). Prefer `fa-nec-table-8-wire-sizing` for the shared R / gauge layer when that skill has already elected ohm/kft.
@@ -60,25 +60,25 @@ description: >-
 Input table with labels and ASSUMED flags; start voltage basis (CUSTV, CMSTV, MVA); Class and length basis; method (ELL or PTP); Table 8 values used (NEC edition cited; 2026 NEEDS HOLD); per-gauge Vdrop and end voltage (ELL end voltage, or the lowest PTP appliance voltage, with the segment drops); percent drop; pass or fail; ELL max length when that screen was run; fixes. File it as the NAC voltage drop calculation required in documentation [CODE NFPA 72 §7.2.1(8), 2019 / 2022 / 2025 (72-26, 72-20, 72-13)].
 
 ## Sources
-KB: 60_power-battery-and-voltage-drop/nac-voltage-drop-calculations.md. Worked: EXERCISES/worked/fixture-02-nac-voltage-drop.md, _calc/ex02_nac_vdrop.py (method only; its solid-wire values and "draft ~18.3.7.1" wording are stale). Filed LiNK sources: held notes/held-nfpa-link-72-14-nac-voltage-drop-2025-2026-10-15.md, held notes/held-nfpa-link-70-03-nec-ch9-table8-2023-2026-10-15.md; 70-08 (2020 Table 8). Adoption [PARA]: held notes/the site-dallas-nec-2026-local-status-2026-11-04.md (Chunk 19). Companion: fa-nec-table-8-wire-sizing. _sources 72-08, 72-13, manufacturer-public-guidance-PRACTICE.md. (Paths under held training corpus unless absolute.) fold28: fixture-165, _calc/ex165_campus_nac_sync.py, SKILLS-HANDOFF-2026-11-02-fold28.
+KB: 60_power-battery-and-voltage-drop/nac-voltage-drop-calculations.md. Worked: EXERCISES/worked/fixture-02-nac-voltage-drop.md, _calc/ex02_nac_vdrop.py (method only; its solid-wire values and "draft ~18.3.7.1" wording are stale). Filed LiNK sources: held notes/held-nfpa-link-72-14-nac-voltage-drop-2025-2026-10-15.md, held notes/held-nfpa-link-70-03-nec-ch9-table8-2023-2026-10-15.md; 70-08 (2020 Table 8). Adoption [PARA]: held notes/the site-dallas-nec-2026-local-status-2026-11-04.md (Chunk 19). Companion: fa-nec-table-8-wire-sizing. _sources 72-08, 72-13, manufacturer-public-guidance-PRACTICE.md. (Paths under held training corpus unless absolute.) Also: fixture-165, _calc/ex165_campus_nac_sync.py.
 
-## fold 23 restamp (2026-10-29)
+## Restamp (2026-10-29)
 - Worked: fixture-151 (`_calc/ex151_nac_evacs_secondary.py`, test `_calc/tests/test_ex151.py`). SHIP-NAC2 14 x 0.20 A, 600 ft, 14 AWG: Veol 9.85 V FAIL vs 16.0 V. Fix: split 2 x 7 on 12 AWG, 1.40 A, Veol 17.07 V PASS [PRACTICE fix].
 - Horn/strobe NAC on wet buildings and EVACS speakers in halls are separate checks. Run `fa-speaker-circuit-loss-check` for the speaker side.
 
-## fold 24 restamp (2026-10-29)
+## Restamp (2026-10-29)
 - Worked pointer: fixture-151 (NAC vdrop + EVACS booster secondary). Speaker line loss limit 1.0 dB [CODE] NFPA 72-2025 §18.3.7.2 (held). EVACS 24 h + 15 min [CODE] governs over FM 24 h + 5 [OWNER]. Battery spare follow-on: fixture-154 (training / PRACTICE only; PE-185 Verify with engineer of record; not CODE; not approved live design).
 
-## fold 28: campus strobe sync / multi-building negative (fixture-165)
+## Campus strobe sync / multi-building negative (fixture-165)
 - Voltage drop and sync are related but separate checks. After a NAC pass, still screen visual sync across buildings when a view spans them.
-- Room sync [CODE NFPA 72 18.5.5.7.2, 2022=2025]: includes visuals run by separate systems (item 2). Corridor: more than two in view flash in sync [CODE; Lead optional fold29 clause pin on exact 18.5.5.x wording].
+- Room sync [CODE NFPA 72 18.5.5.7.2, 2022=2025]: includes visuals run by separate systems (item 2). Corridor: more than two in view flash in sync [CODE; optional clause pin on exact 18.5.5.x wording].
 - Negative rejected (fixture-165): skip sync across buildings where the view spans them. REJECTED. 18.5.5.7.2(2) covers separate systems.
 - Fix patterns [PRACTICE]: one campus sync master (follower power supplies follow the master), or keep each building its own master and close the link with a door so no view spans buildings.
 - Sync-module / master loss: strobes may keep flashing unsynced; report trouble [PRACTICE]. Single point of failure on one campus master is [OWNER] (flag; redundant master or a boundary door).
 - Foam or clean agent: REJECTED (locked).
 - Worked: EXERCISES/worked/fixture-165-campus-nac-sync-multibuilding-strobe.md, _calc/ex165_campus_nac_sync.py. Training value. Verify with the engineer of record. Do not copy synthetic numbers.
 
-## fold 29: campus sync-master redundancy (fixture-167)
+## Campus sync-master redundancy (fixture-167)
 - One campus sync master is a SPOF [OWNER]. fixture-165 base left all groups on A-PS1.
 - Offer hot-standby sync master (separate enclosure and circuit, auto takeover + trouble) [PRACTICE]. Never tag backup dual-master as CODE. No held NFPA 72 text requires a backup sync master.
 - Offer view-break door at the link corridor as [OWNER] architectural option (splits FOV so loss of A master unsyncs A side only).
@@ -86,7 +86,7 @@ KB: 60_power-battery-and-voltage-drop/nac-voltage-drop-calculations.md. Worked: 
 - Held sync CODE stays fixture-165 / 18.5.5.7.2 only. Negatives: dual-master as CODE REJECTED; foam/clean REJECTED.
 - Worked: EXERCISES/worked/fixture-167-campus-sync-master-redundancy.md, _calc/ex167_campus_sync_master_redundancy.py. Training value. Verify with the engineer of record.
 
-## fold 29: Canada explicit STOP (fixture-166)
+## Canada explicit STOP (fixture-166)
 - Intake CA STOP added after Country gate. Worked: EXERCISES/worked/fixture-166-canada-skill-gate-negative-stops.md, _calc/test_ex166_168_b29.py T166. Training value. Verify with the engineer of record.
 
 ## Campus NAC voltage drop

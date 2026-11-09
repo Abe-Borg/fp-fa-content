@@ -420,11 +420,11 @@ The code-floor citation must use the enforced edition and enforcing instrument, 
 
 Use the exact local instrument where local amendments change the result.
 
-### 4.2b Canada jobs — code-floor pins (B26/Lead28 restamp 2026-10-29; supersedes 2026-10-09 fence)
+### 4.2b Canada jobs — code-floor pins (restamp 2026-10-29; supersedes 2026-10-09 fence)
 
 Canada is **unlocked** for BC / AB / ON (SK/Saskatoon still parked). The old rule "every Canadian code-floor cell = `unresolved`" is **retired**: fill the Layer-1 code floor from the pins below; a cell stays `unresolved` + RFI **only** where the pin is not held (see GAPs). Do **not** port US pins (IFC/IBC §§, US state amendments, US frost depths, IFC 100 ft FDC) into a Canadian row. Insurer and owner layers apply as written. ULC vs UL listing → `[verify]`. Company scope locks (wet/dry/DI only; foam prohibited; clean agent hand-away; mist refused) do not change at the border. No ULC hours / CSA text invented.
 
-**Referenced-standard pins (Layer 1; Table 1.3.1.2 of each code; quote-checked 32/32 B26-R1 + OBC 4/4 Lead28):**
+**Referenced-standard pins (Layer 1; Table 1.3.1.2 of each code; quote-checked 32/32 + OBC 4/4):**
 
 | Std | NBC/NFC 2025 model | BC (BCBC 2024) | AB (NBC/NFC 2023 AE) | ON (OBC 2024 Table 1.3.1.2 / OFC 2026) | US delta baseline |
 |---|---|---|---|---|---|
@@ -443,9 +443,9 @@ Enforced ≠ latest: always cite the pinned edition; report the US-2025 value on
 - **AB only — NBC 2023 AE 3.2.5.15.(3):** FDC **≥ 3 m and ≤ 15 m from the principal entrance**, in addition to ≤45 m to hydrant. Absent from NBC 2025 / BCBC 2024 (OBC [verify e-Laws]) — do not transplant.
 - **3.2.5.17.(1)**: freeze protection is performance-only → method from the pinned NFPA 13 edition (see `freeze-heat-trace-fp-piping`).
 - **3.2.5.18.(1)**: fire pump per NFPA 20 at that code's Table 1.3.1.2 edition.
-- **NFC(AE) 2023 4.3.13.3**: fuel tank static head ≤ 70 kPa (confirmed in AE PDF, Lead28).
+- **NFC(AE) 2023 4.3.13.3**: fuel tank static head ≤ 70 kPa (confirmed in AE PDF).
 
-**NEG-CA (explicit stop list — prior fold Lead31, GAP-B29R1-2):**
+**NEG-CA (explicit stop list — GAP-B29R1-2):**
 - NEG-CA-1 inventing ULC assembly fire-resistance hours.
 - NEG-CA-2 inventing CSA B139 text.
 - NEG-CA-3 inventing OBC 3.2.5.7 / 3.2.5.15.(3) body not held.
@@ -1361,13 +1361,13 @@ Use the shop codebook by title. Every requirement citation must include section 
 23. Add the dual-carrier collapse note where applicable.
 24. Write only to the caller-named path, or return the matrix and stop if no path was named.
 
-## Support-space duration pin — Lead18/18b B16-R2 (E1; E3 CLOSED = E1), 2026-10-27
+## Support-space duration pin (E1; E3 CLOSED = E1), 2026-10-27
 - Support OH2 wet: **60 min** under NFPA 13-2025 §19.2.3.1.3 (supervised + monitored at a constantly attended location). Show-and-verify [SYN]: 550 gpm × 60 = **33,000 gal**.
 - FM layer agrees: FM DS 3-26 (Apr 2019 / IR Apr 2025) §2.3.1.13 → **60 min for all HC**; hose **250 gpm** for HC-1/HC-2 (§2.3.1.12). E3 is closed and equals E1. Delta vs NFPA 13-2025: none on duration.
 - E2 (90 min, 49,500 gal) only if AHJ/owner requires the unsupervised branch. Hall demand × duration (e.g. 66,797 gal) still governs supply and storage.
 
 
-## 2026-11-03 — prior fold Lead31: GAP-B29R1-2 NEG-CA list
+## 2026-11-03 — GAP-B29R1-2 NEG-CA list
 Added explicit NEG-CA-1..5 above §4.2b Still-unresolved list (substance already in prose). Unresolved + RFI list kept unchanged.
 
 ## 2026-11-04 — stop-vocab normalize (staged)

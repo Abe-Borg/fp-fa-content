@@ -532,7 +532,7 @@ If notes conflict, **most-stringent wins** and both sources stay visible.
 8. MasterSpec §210533 / §210700 edit checklist (generic); tank handoff if present; optional combustion-air free-area note.
 9. Δ vs NFPA 13-2025; status register complete; `[SYN]`/`[V]`; open RFIs; reciprocal HAND OFF lines.
 
-## Canada freeze / heat-trace chain (AB teaching; BC/ON same NBC family) — B26-R4/R5 / Lead28 fold, 2026-10-29
+## Canada freeze / heat-trace chain (AB teaching; BC/ON same NBC family) — 2026-10-29
 
 Canada unlocked. Teaching case SYNTHETIC the province DI hall + wet support (NBC 2023 AE; NFPA 13-2019 pin; NFPA 25-2020 ITM).
 
@@ -544,7 +544,7 @@ Canada unlocked. Teaching case SYNTHETIC the province DI hall + wet support (NBC
 - **B26R4-NEG-1:** NEC 427 / 702 labels on a Canadian job → restamp CE Code 62-116 + provincial power class.
 - **B26R4-NEG-2:** alarm-only GF on FP trace → 30 mA trip + supervisory.
 - **B26R4-NEG-3:** heat trace in lieu of heated DI valve room → FAIL (§8.1.4).
-- R5 Design Team: FP-501 freeze/HT/DI valve-room shop register — maker cells stay empty.
+- Design team: FP-501 freeze/HT/DI valve-room shop register — maker cells stay empty.
 
 ## 2026-11-04 — stop-vocab normalize (staged)
 - `structure the register and **Stop / `[V]` / RFI** when the primary is …` → `structure the register and carry a stated `ASSUMED` value (value + why) + `[V]` + RFI, fla…`

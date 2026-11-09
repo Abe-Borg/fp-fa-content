@@ -33,7 +33,7 @@ def v1_screen(header_m, b, endcap_lpm):
     return asd.transport_s(L, b["id_mm"], endcap_lpm)
 
 def port_times(header_m, header_id_mm, branches, total_lpm):
-    """r11: transport time from EVERY port to the detector. Returns {branch: [t_port1 (nearest), ..., t_far]}.
+    """Transport time from EVERY port to the detector. Returns {branch: [t_port1 (nearest), ..., t_far]}.
     Port k (1-based from tee) path: header + lead + (k-1) spacings; segment j carries holes-j holes of flow."""
     n = sum(b["holes"] for b in branches); q = total_lpm / n
     th = asd.transport_s(header_m, header_id_mm, total_lpm) if header_m > 0 else 0.0

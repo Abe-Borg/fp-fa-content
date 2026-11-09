@@ -1,4 +1,4 @@
-"""NAC voltage drop library (DC FA Calcs, r7 round 1). Synthetic training use. Not for construction.
+"""NAC voltage drop library. Not for construction. Verify with engineer of record.
 
 Basis and tags:
 - Starting voltage is CUSTV or CMSTV at the appliance minimum input voltage [CODE NFPA 72-2025 18.3.7.1.1, 72-14].

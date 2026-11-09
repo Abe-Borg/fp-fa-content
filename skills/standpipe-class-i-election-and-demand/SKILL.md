@@ -483,7 +483,7 @@ If notes conflict, **most-stringent wins** and both sources stay visible.
 9. Δ vs NFPA 13-2025 interface + Δ vs NFPA 14; status register complete; `[SYN]`/`[V]`; open RFIs; reciprocal HAND OFF lines.
 10. Write **only** to caller-named path (or return and stop).
 
-## 2026-10-29 PDT — prior fold Lead25: B23 note wet Class I demand teaching case + NEGs
+## 2026-10-29 PDT — wet Class I demand teaching case + NEGs
 Synthetic 5-story teaching case, 75 ft, 3 stairs, sprinklered throughout, C=100.
 - Edition: model NFPA 14-**2024** (Ch.10 numbering); the site default NFPA 14-2019 (provisional; [V] edition). Trigger IFC/IBC 2024 §905.3.1.
 - Flow: 500 gpm most-remote standpipe (§10.6.1.1.1) + 250 × 2 additional (§10.6.1.1.4) = **1,000 gpm**, cap 1,000 sprinklered (§10.6.1.1.6). Combined: greater of sprinkler or standpipe (§10.6.1.3.1); sprinkler hose not added (§10.6.4). DI sprinkler 390 + 250 = 640 < 1,000 → standpipe governs.
@@ -493,14 +493,14 @@ Synthetic 5-story teaching case, 75 ft, 3 stairs, sprinklered throughout, C=100.
 - **B23R3-NEG-1:** stacking 1,000 + 390 + 250 = 1,640 gpm, which ignores §10.6.1.3.1/§10.6.4. **B23R3-NEG-2:** a 4th stair taken to 1,250 gpm overruns the 1,000 cap (1,250 applies only when not sprinklered).
 - OPEN/GAP: FDC/check losses (dims GAP); PRD at max churn ≈172.8 borderline → shop curve.
 
-## 2026-10-29 PDT — prior fold Lead26: errata feed (core note + the site §905.8)
+## 2026-10-29 PDT — errata feed (core note + the site §905.8)
 Source: errata note on the NFPA 14 section renumber and the local §905.8 amendment.
 - When citing NFPA 14-**2024**, use **§10.x** (demand §10.6; PRD >175 static §10.2.4.2; residual §10.2.6.1). §7.8/§7.10 is 2013–2019 numbering, so check the edition label before citing.
 - UFGS 125 psi PRD trigger is agency/owner practice, not code (owner layer only).
 - **the site §905.8:** dry standpipes are not installed **except where subject to freezing, per NFPA 14**. Do not teach a blanket "dry prohibited in the site" (CE-1353 printing drops the exception).
 - [V]: the site NFPA 14 edition (2019 provisional), NFPA 14-2019↔2024 crosswalk; hose-valve 3.0 psi ASSUMED / 1.33 psi margin; Verify with the engineer of record.
 
-## Canada (BC / AB / ON) — B26 note / Lead28 fold, 2026-10-29
+## Canada (BC / AB / ON) — 2026-10-29
 
 Canada unlocked (SK parked). On a Canadian site the *whether* trigger is **NBC/BCBC/NBC-AE/OBC 3.2.5.8**, not IFC/IBC §905. Pin NFPA 14 = **2013** and NFPA 24 = **2013** (AB/ON; BC NFPA 24 = BCFC GAP) per `most-stringent-basis-matrix` §4.2b.
 
@@ -510,29 +510,29 @@ Canada unlocked (SK parked). On a Canadian site the *whether* trigger is **NBC/B
 - **Private main:** install/test per NFPA 24-2013 pin, text **[nearest]** 24-2022/2025 until re-verified. the province DSSP 2018: ≥150 mm, any leg ≤180 m to hydrant or looped; check-valve loop at ≥2 private hydrants. AE 3.2.5.7.(4): NFPA 13-sprinklered → supply = NFPA 13-2019 demand + hose. Teaching `_calc` (C=100, 150 mm, 590.6 ft): 475.5 gpm → 7.36 psi; 500 → 8.08; ASSUMED 750+475.5 = 1,225.5 → **42.41 psi** → CONDITIONAL PASS; elect loop or 200 mm for hyperscale; prove on `hydrant-supply-curve`.
 - **B26R3-NEG-1 (FAIL):** US IFC 100 ft FDC-to-hydrant cited on a Canadian set — mis-cite and drops the AB 3–15 m entrance band. Cite 3.2.5.15; a tighter distance only as a labelled owner rule.
 - **B26R3-NEG-2 (FAIL):** NFPA 14-2024 dry-standpipe air band put on a 14-2013 pin — 14-2013 has no numeric band (supervisory air §6.1.1; 20 psi over trip §5.2.1.4.10). Latest ≠ enforced.
-- **Stop — CAN/ULC-S561 (prior fold Lead31, GAP-B29R1-2):** any CAN/ULC-S561 supervising-station or reduced-duration claim → **NEEDS HOLD (GAP-B27R2-3)**; do not invent hours/durations.
-- **Stop — CSA B139 (prior fold Lead31, GAP-B29R1-2):** fuel/oil piping at a diesel FP / standpipe pump-house interface → **NEEDS HOLD**; do not invent CSA B139 body text.
+- **Stop — CAN/ULC-S561 (GAP-B29R1-2):** any CAN/ULC-S561 supervising-station or reduced-duration claim → **NEEDS HOLD (GAP-B27R2-3)**; do not invent hours/durations.
+- **Stop — CSA B139 (GAP-B29R1-2):** fuel/oil piping at a diesel FP / standpipe pump-house interface → **NEEDS HOLD**; do not invent CSA B139 body text.
 - Open [V]: NFPA 14-2013 Class I 500 gpm section; NFPA 24-2013 text; OBC 3.2.5.15.(3); Vancouver/Markham servicing standard; VBBL inside Vancouver.
 
-## prior fold / Lead27 fold (2026-10-29) — hose-valve maker-loss sensitivity (B25 note, US teaching case)
+## 2026-10-29 — hose-valve maker-loss sensitivity (US teaching case)
 Synthetic 5-story teaching case.
 - Fixed required (100 residual + 28.17 elev + 0.96 riser + 3.88 common) = 133.01 psi. Available at 1,000 gpm = 137.34 psi. **Margin = 4.33 − hose-valve loss**, so every psi of valve loss is a psi of margin. The 3.0 psi ASSUMED teaching loss gives **+1.33 (thin PASS, Verify with the engineer of record)**. Break-even is 4.33 psi, about 14.3 ft EL at 0.3018 psi/ft for a 2½ in outlet at 250 gpm, C=100.
 - **B25R4-NEG-1:** a 5.0 psi valve loss gives −0.67, FAIL. The thin margin is smaller than the plausible valve-loss uncertainty. Fix with listed valve data (NFPA 14-2024 §10.2.6.1.1), a larger pump, or a bigger main. **B25R4-NEG-2:** the FM DS 3-0 **4 in** angle-valve EL applied to a 2½ in outlet gives 7.55 psi FAIL. That is the wrong method, because EL rows are size-specific and FM DS 3-0 is not the NFPA 14 basis.
 - **GAP:** no maker-published 2½ in hose/angle/PRV-valve loss sheet in corpus, so none is invented. the site NFPA 14 edition is unpinned (14-2019 ASSUMED). No the site restamp.
 
-## prior fold / Lead30 fold (2026-11-02) — Class I 2½ in hose-valve loss 4.0 psi envelope; PRV break; NFPA 14 2019↔2024 pin
+## 2026-11-02 — Class I 2½ in hose-valve loss 4.0 psi envelope; PRV break; NFPA 14 2019↔2024 pin
 Hose-valve loss synthesis and the NFPA 14 2019-to-2024 crosswalk. Synthetic US teaching case. Canada gates above stay unchanged.
-- **Hose-valve loss @ 250 gpm, C=100 (maker data):** Elkhart angle ≈ **3.1 psi** (graph ±0.2) — clears the 4.33 break-even; Giacomini full-open Cv 125 → **4.00 psi** — clears by 0.33 (thin); **pressure-restricting setting Cv 73.32 → 11.6 psi — breaks** (B25 note margin goes negative). A PRV / restricting hose valve must be carried with its own listed loss at its set position, never the full-open number.
-- **Design envelope elected: 4.0 psi** hose-valve loss — this is a **data bound**, not a listing value (Lead30 dated note); Class III valve listing caveat applies (Class I election only; do not import Class III-listed data without [verify]). Supersedes the 3.0 ASSUMED teaching loss for new runs; B25 note margin on 4.0 = +0.33 (thin PASS, Verify with the engineer of record).
+- **Hose-valve loss @ 250 gpm, C=100 (maker data):** Elkhart angle ≈ **3.1 psi** (graph ±0.2) — clears the 4.33 break-even; Giacomini full-open Cv 125 → **4.00 psi** — clears by 0.33 (thin); **pressure-restricting setting Cv 73.32 → 11.6 psi — breaks** (teaching-case margin goes negative). A PRV / restricting hose valve must be carried with its own listed loss at its set position, never the full-open number.
+- **Design envelope elected: 4.0 psi** hose-valve loss — this is a **data bound**, not a listing value (dated note); Class III valve listing caveat applies (Class I election only; do not import Class III-listed data without [verify]). Supersedes the 3.0 ASSUMED teaching loss for new runs; B25 note margin on 4.0 = +0.33 (thin PASS, Verify with the engineer of record).
 - **Residual pin:** 100 psi at the most remote 2½ in outlet = **NFPA 14-2024 §10.2.6.1 = NFPA 14-2019 §7.8.1**; maker hose-valve loss basis via **2024 §10.2.6.1.1** (2019 equivalent per crosswalk). Other held pairs: 2019 §7.2 → 2024 §10.2; §7.10 → §10.6. Check edition label before citing; crosswalk has 11 rows not in the held pull — treat those as [verify].
 - **Canada pin:** NFPA 14-**2013** (AB/ON per §4.2b) — use 2013 numbering (§7.8.1 family); this fold adds no Canadian cite.
 - Open: Potter-Roemer 4085 / Elkhart current cut sheet [verify]; 11 crosswalk rows not in the held pull.
 
 
-## 2026-11-03 — prior fold Lead31: GAP-B29R1-2 narrow Canada stops
+## 2026-11-03 — GAP-B29R1-2 narrow Canada stops
 Added S561 (→ GAP-B27R2-3) and CSA B139 NEEDS HOLD stop lines to the Canada section. NFPA 14-2013 pin, OBC 3.2.5.8, B26R3-NEG-1/2 unchanged. No ULC/CSA/OBC body invented.
 
-## 2026-11-04 — prior fold Lead32: B30R4 Class I demand close (hose-valve 4.0 + thin margin)
+## 2026-11-04 — Class I demand close (hose-valve 4.0 + thin margin)
 
 Synthetic two-story double-interlock hall. Do not invent OBC, CAN/ULC-S561, or CSA body text. Foam and clean agent stay locked. Do not reopen the closed nitrogen pressure cap (at or under 25 psi).
 
@@ -552,7 +552,7 @@ Synthetic two-story double-interlock hall. Do not invent OBC, CAN/ULC-S561, or C
 Churn 82 + 91 = 173 ≤ 175 → no PRD trigger at 2½ in outlets (14-2019 §7.2.3.2 / 14-2024 static >175 path). 6 in feed (ID 6.065 @750, 400 ft) = 11.58 → **−8.13 FAIL**; 8 in feed decision stands.
 
 ### Pins to apply on every US Class I demand run
-1. **Hose-valve loss:** use the **current maker envelope 4.0 psi @250 gpm** (prior fold/Lead30 elected; prior fold AFS hygiene leaves 4.0 unchanged). Do **not** fall back to NFPA 14 Table 11.3.1.3 when current maker data is held. Class III listing caveat on Giacomini stands — confirm Class I before submittal.
+1. **Hose-valve loss:** use the **current maker envelope 4.0 psi @250 gpm** (elected; AFS hygiene leaves 4.0 unchanged). Do **not** fall back to NFPA 14 Table 11.3.1.3 when current maker data is held. Class III listing caveat on Giacomini stands — confirm Class I before submittal.
 2. **ASSUMED device-stack** (DCDA / check / alarm / similar): label **ASSUMED** and **Verify with the engineer of record**. Thin margins under an ASSUMED stack are not live-job PASS without maker losses. Verify with the engineer of record (GAP-B30R4-1).
 3. **Greater-of, not sum:** combined system demand = greater of sprinkler(+hose) **or** standpipe — **not** the sum. Cite the edition in force. NFPA 14-2019 §7.10.1.3.1.1 and NFPA 14-2024 §10.6.1.3.1 state the same greater-of sentence (GAP-B31R1-1 closed). NFPA 14-2019 §7.10.1.3.1.2 stays on the 2019 pin. Do not drop the edition label. If sprinkler(+hose) > standpipe flow, re-run feed/riser loss at that flow. The greater-of re-check itself is closed. Summing the two demands stays a failure (B30R4-NEG-5).
 4. **NEG — AFS indicative as design (B30R4-NEG-4):** A graph read of about 2.5 psi at 250 gpm is an extrapolation. It is not a design value. The graph-read floor stays about 3.2 psi at 280 gpm. Using 2.5 psi as the design loss inflates the margin. Keep the 4.0 psi envelope at 250 gpm. Do not reopen this negative.
@@ -570,7 +570,7 @@ Churn 82 + 91 = 173 ≤ 175 → no PRD trigger at 2½ in outlets (14-2019 §7.2.
 ### Open GAPs (do not invent close)
 GAP-B30R4-1 device-stack maker at 750 gpm stays open. GAP-B30R4-2 greater-of re-check is closed. GAP-B30R4-3 is closed: hand Hazen-Williams matches the kernel to four decimal places, and the +0.41 psi result stays a thin pass. Verify with the engineer of record. GAP-B31R1-1 is closed. The FM rated-cap check stays open (GAP-B31R1-2). Potter-Roemer 4085 curve still procurement.
 
-Supersedes B23/B25 **3.0 ASSUMED** teaching loss for **new** US runs (prior fold 4.0 envelope already elected); B23/B25 historical margins stay as dated sensitivity only.
+Supersedes B23/B25 **3.0 ASSUMED** teaching loss for **new** US runs (4.0 envelope already elected); B23/B25 historical margins stay as dated sensitivity only.
 
 ## 2026-11-04 — stop-vocab normalize (staged)
 - `structure the demand register and **Stop / `[V]` / RFI** when the prim…` → `structure the demand register and carry a stated `ASSUMED` value (value + why) + `[V]` + R…`

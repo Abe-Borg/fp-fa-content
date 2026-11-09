@@ -365,7 +365,7 @@ def air_fill_scfm(v_gal: Number, p_psig: Number, t_min: Number = 30.0) -> dict[s
 
 
 def compressor_n2_sizing(systems: Any, t_min: Number = 30.0) -> dict[str, Any]:
-    """Dry/DI air-compressor and N2-generator sizing (batch9 R5).
+    """Dry/DI air-compressor and N2-generator sizing.
 
     Compressor: sized on the LARGEST single system to restore its supervisory pressure in
     t_min (NFPA 13-2025 s8.2.7.3: 30 min).
@@ -402,7 +402,7 @@ def k_factor(k: Number, p_psi: Any = None, q_gpm: Any = None, density: Any = Non
     """Sprinkler/nozzle discharge q = K*sqrt(P) (NFPA 13-2025 K-factor definition; hydraulic calc ch.).
 
     Modes (exactly one): p_psi -> Q; q_gpm -> P; density (gpm/ft2) + area_ft2 (head coverage)
-    -> q_req = density*area, P_req = (q_req/K)^2 floored at min_p_psi (batch7 R5).
+    -> q_req = density*area, P_req = (q_req/K)^2 floored at min_p_psi.
     Floor: 7 psi = FM DS 2-0 (Oct 2021 / Interim Rev Jan 2024) s2.5.1.1.2 minimum sprinkler design
     pressure; US listings carry the same 7 psi minimum (NFPA 13 section pin still open; verify with the engineer of record).
     The floor is applied only when min_p_psi is given. When the floor governs, Q is recomputed.
@@ -436,7 +436,7 @@ def k_factor(k: Number, p_psi: Any = None, q_gpm: Any = None, density: Any = Non
 
 def tapered_branch(k: Number, p_end_psi: Number, c: Number, segments: Any,
                    min_head_psi: Number = 7.0) -> dict[str, Any]:
-    """Multi-node branch line, end-head-first (rebuilt batch6 R2).
+    """Multi-node branch line, end-head-first.
 
     Sources: Hazen-Williams per-foot loss p = 4.52 Q^1.85 / (C^1.85 d^4.87) (NFPA 13-2025 hydraulic
     calc chapter; same constant as hazen_williams op), head flow q = K*sqrt(P) (NFPA 13-2025 K-factor
@@ -484,7 +484,7 @@ DI_LIMITS_S = {"FM": 30.0, "NFPA-LH": 60.0, "NFPA-OH": 50.0, "NFPA-EH": 45.0, "N
 def di_trip_to_water(v_gal: Number, q_fill_gpm: Number, t_detect_s: Number = 0.0,
                      t_release_s: Number = 0.0, t_exhaust_s: Number = 0.0,
                      limit_s: Any = None, basis: str = "FM") -> dict[str, Any]:
-    """SCREEN ONLY - not a listed water-delivery calc (rebuilt batch6 R3).
+    """SCREEN ONLY - not a listed water-delivery calc.
 
     t_total = t_detect + t_release + t_exhaust + 60 * V / Q_fill.
     V = trapped pipe volume to the test/remote outlet (gal); Q_fill = average fill flow (gpm) at low
@@ -557,10 +557,10 @@ def brace_load(cp: Number, segments: Any, pipe: Any = None, spacing_ft: Any = No
     """NFPA 13 style lateral brace load: Wp = 1.15 * sum(water-filled lb/ft * ZOI length);
     Fpw = Cp * Wp (NFPA 13-2025 s18.5.9.2 1.15 factor; s18.5.9.3 Fpw = Cp*Wp).
     Cp is a caller input. NFPA 13-2025 has NO Cp table: Cp = 0.754*S_DS (s18.5.9.3), so use
-    cp_from_sds(). Older editions (2022 and earlier) used a Cp table vs Ss (docstring fixed batch8 R5;
+    cp_from_sds(). Older editions (2022 and earlier) used a Cp table vs Ss (docstring fixed;
     prior text "Cp from NFPA 13 seismic coefficient table (held)" was stale for 2025).
     segments: [{"lb_per_ft": w, "length_ft": L}].
-    Optional (batch7 R6): pipe + spacing_ft -> Tables 18.5.5.2 max Fpw check (pipe_ok);
+    Optional: pipe + spacing_ft -> Tables 18.5.5.2 max Fpw check (pipe_ok);
     listed_capacity_lb + angle_deg -> capacity / Table 18.5.2.3 angle divisor (brace_ok).
     Divisor reading of Table 18.5.2.3 is an interpretation. Verify with the engineer of record.
     capacity_is_horizontal=True for FM
@@ -577,7 +577,7 @@ def brace_load(cp: Number, segments: Any, pipe: Any = None, spacing_ft: Any = No
     wp = 1.15 * w
     out = {"formula": "Fpw = Cp*Wp, Wp = 1.15*water-filled ZOI weight", "segments_detail": rows,
            "w_pipe_lb": w, "wp_lb": wp, "fpw_lb": cp * wp}
-    # batch7 R6: optional pipe-capacity and brace-angle checks.
+    # optional pipe-capacity and brace-angle checks.
     if pipe is not None or spacing_ft is not None:
         if pipe not in BRACE_PIPE_FPW_MAX or spacing_ft is None:
             raise CalcError(f"pipe must be one of {sorted(BRACE_PIPE_FPW_MAX)} with spacing_ft")
@@ -602,7 +602,7 @@ def brace_load(cp: Number, segments: Any, pipe: Any = None, spacing_ft: Any = No
 def brace_spacing_max(cp: Number, pipe: Any, main_lb_per_ft: Number,
                       branch_lb_per_main_ft: Number = 0.0, listed_capacity_lb: Any = None,
                       angle_deg: Any = None, capacity_is_horizontal: Any = False) -> dict[str, Any]:
-    """Max lateral brace spacing (batch9 R13), chained to cp_from_sds.
+    """Max lateral brace spacing, chained to cp_from_sds.
     For each held NFPA 13-2025 Tables 18.5.5.2 column upper bound (20/25/30/35/40 ft):
     ZOI weight = (main_lb_per_ft + branch_lb_per_main_ft) * S; Wp = 1.15*ZOI (s18.5.9.2);
     Fpw = Cp*Wp (s18.5.9.3); pass if Fpw <= table max for pipe (and <= listed/angle divisor
@@ -636,7 +636,7 @@ def brace_spacing_max(cp: Number, pipe: Any, main_lb_per_ft: Number,
 
 def diesel_derate(pump_bhp: Number, altitude_ft: Number = 0.0, ambient_f: Number = 77.0,
                   nameplate_hp: Any = None, stepwise: Any = False, gear_loss_hp: Number = 0.0) -> dict[str, Any]:
-    """Diesel engine derate, ADDITIVE (batch10 R3).
+    """Diesel engine derate, ADDITIVE.
     NFPA 20-2025 s11.2.2.4: deduct 3 % per 1,000 ft above 300 ft; s11.2.2.5: deduct 1 % per 10 F
     above 77 F (2022 text matches). The code gives no combination rule. ADDITIVE
     (1 - (a+t)/100) is the design practice (the larger deduction). Verify with the engineer of record.
@@ -669,7 +669,7 @@ def diesel_derate(pump_bhp: Number, altitude_ft: Number = 0.0, ambient_f: Number
 
 def cp_from_sds(sds: Any = None, attach_height_ratio: Any = None,
                 apply_height_factor: bool = False) -> dict[str, Any]:
-    """Seismic coefficient Cp (batch8 R5).
+    """Seismic coefficient Cp.
 
     NFPA 13-2025 s18.5.9.3 (OCR L25385-25387): Fpw = Cp*Wp, Cp = 0.754*S_DS.
     s18.5.9.5 (L25412-25413): where data for Cp are not available, Cp = 0.5.
@@ -726,7 +726,7 @@ def relief_check(net_shutoff_psi: Number, max_static_suction_psi: Number,
 
 def junction_balance(q_low_gpm: Number, p_low_psi: Number, p_high_psi: Number,
                      q_high_gpm: Number = 0.0, tol_psi: Number = 0.5) -> dict[str, Any]:
-    """Two-path hydraulic junction balance (batch7 R19).
+    """Two-path hydraulic junction balance.
 
     NFPA 13-2025 s28.2.2.4.1: pressures at hydraulic junction points balance within
     0.5 psi; s28.2.2.4.2: carry the highest pressure and the adjusted total flow forward.
@@ -757,7 +757,7 @@ def dry_delivery_screen(segments: Any, q_fill_gpm: Number, qod: Any = False,
                         t_detect_s: Number = 0.0, t_release_s: Number = 0.0,
                         t_exhaust_s: Number = 0.0, limit_s: Any = None,
                         basis: str = "FM", system_type: str = "dry") -> dict[str, Any]:
-    """Chained op (batch8 R26): pipe_volume(segments) -> NFPA 13-2025 s8.2.4.2.1/.2 size
+    """Chained op: pipe_volume(segments) -> NFPA 13-2025 s8.2.4.2.1/.2 size
     exemption check -> di_trip_to_water screen. SCREEN ONLY, optimistic (see di_trip_to_water).
 
     NFPA 13-2025 s8.2.4.2.1: <= 500 gal without QOD, s8.2.4.2.2: <= 750 gal with QOD -> no
@@ -771,7 +771,7 @@ def dry_delivery_screen(segments: Any, q_fill_gpm: Number, qod: Any = False,
     st = {"double_interlock": "di", "di_preaction": "di", "dry_pipe": "dry"}.get(st, st)
     if st not in ("dry", "di"):
         raise CalcError("system_type must be 'dry' or 'di' (wet/dry/DI locks; single-interlock not supported)")
-    # batch10 R1 fix: DI gets NO 750 gal QOD size exemption. NFPA 13-2025 s8.3.2.3.1.1: DI <= 500 gal
+    # DI gets NO 750 gal QOD size exemption. NFPA 13-2025 s8.3.2.3.1.1: DI <= 500 gal
     # exempt; a QOD only "helps meet" the delivery-time options (s8.3.2.3.2), it does not raise the cap.
     # The 750 gal QOD cap is a dry-pipe rule only (s8.2.4.2.2).
     cap = 750.0 if (q and st == "dry") else 500.0
@@ -827,7 +827,7 @@ _HOSE_DUR = {  # NFPA 13-2025 Table 19.2.3.1.2 (inside hose gpm, total inside+ou
 
 
 def hose_duration(hazard: str, supervised: Any = False) -> dict[str, Any]:
-    """Hose stream allowance and duration lookup (batch8 R17).
+    """Hose stream allowance and duration lookup.
 
     NFPA 13-2025 Table 19.2.3.1.2 (values: inside hose 0, 50 or 100 gpm; total combined
     inside+outside LH 100 / OH 250 / EH 500 gpm; duration LH 30, OH 60-90, EH 90-120 min).

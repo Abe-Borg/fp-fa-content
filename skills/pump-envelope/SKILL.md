@@ -322,7 +322,7 @@ Default = **packing** (most stringent). A mechanical seal on a pre-2025 AHJ need
 
 ### 7A.5 Variable-speed / pressure-limiting relief
 
-**Diesel derate op (batch10 R3, 2026-10-23).** `_calc` `diesel_derate` (`pump_bhp`, `altitude_ft`, `ambient_f`, `nameplate_hp?`, `stepwise?`, `gear_loss_hp?`): deduct 3 %/1,000 ft above 300 ft [CODE NFPA 20-2025 §11.2.2.4; 2022 identical] and 1 %/10 °F above 77 °F [CODE NFPA 20-2025 §11.2.2.5]; gear loss is a caller input [§11.2.2.6]; derated rating ≥ pump BHP [§11.2.2.7] via `engine_ok` / `deficit_hp`. **Additive combination is a Design practice (batch9 F2), not code text — Verify with the engineer of record** (conservative: additive gives the larger deduction). Prefer the engine OEM's published derate when it is larger. Worked (batch10 R21, the site): 17.64 % → 186.98 hp required; 175 hp fails, 200 hp OK. Use the job's altitude and design ambient; never a demo value.
+**Diesel derate op (2026-10-23).** `_calc` `diesel_derate` (`pump_bhp`, `altitude_ft`, `ambient_f`, `nameplate_hp?`, `stepwise?`, `gear_loss_hp?`): deduct 3 %/1,000 ft above 300 ft [CODE NFPA 20-2025 §11.2.2.4; 2022 identical] and 1 %/10 °F above 77 °F [CODE NFPA 20-2025 §11.2.2.5]; gear loss is a caller input [§11.2.2.6]; derated rating ≥ pump BHP [§11.2.2.7] via `engine_ok` / `deficit_hp`. **Additive combination is a Design practice, not code text — Verify with the engineer of record** (conservative: additive gives the larger deduction). Prefer the engine OEM's published derate when it is larger. Worked (the site): 17.64 % → 186.98 hp required; 175 hp fails, 200 hp OK. Use the job's altitude and design ambient; never a demo value.
 
 **Diesel main relief (2026-10-23b).** Where a diesel pump is installed and **1.21 × net rated shutoff (churn) + max static suction, elevation-adjusted > component rating**, a main relief valve is required [CODE NFPA 20-2019/2022/2025 §4.20.1.2; 2025 says "main relief valve", 2019/2022 "pressure relief valve"]. This metric uses the **net shutoff**, not `churn_frac`. `_calc` op `relief_check` (`net_shutoff_psi`, `max_static_suction_psi`, `component_rating_psi`=175 default, signed `elevation_adj_psi`) returns `relief_check_psi`. The 175 psi default is the NFPA 13 §7.1.2 aboveground floor (pull 13-30); use the actual lowest component rating. Unknown max static: Design practice C1 = min static + 10 psi, `ASSUMED`, **Verify with the engineer of record**; get the purveyor value on a real job.
 
@@ -722,25 +722,25 @@ Shop codebook **by title** (not a required filesystem path). Prefer these sectio
 - **DS 5-20** *Electrical Testing* IR Oct 2025 is the 2-81 **ATS test** target — ITM Skill, not envelope sizing.
 - **DS 5-23** is facility gensets, not the listed fire-pump envelope.
 
-## Duty-not-SKU pin — Lead18 B16-R3, 2026-10-27
+## Duty-not-SKU pin — 2026-10-27
 - Write rated duty + NFPA 20-2025 envelope (§4.8.1; churn §4.7.7.1). Never freeze a maker/model; contractor picks the listed unit.
 - Teaching duty **KEEP 1,000 gpm @ 40 psi** (city+pump 96.67 vs 47.92, +48.75 on the capped design curve). Motor ≥ 40 hp class ASSUMED, per listed curve.
 - Optional alternate **C 1,250 @ 40** (city+pump 100.72, PASS) = alternate duty criteria note only; no auto restamp. If a live job elects it: re-check NFPA 20 / NEC 695 feeder and test header. Option with 8.6 psi churn margin to 175 psi = least preferred. Verify with the engineer of record.
 
-## 2026-10-28 update — prior fold Lead24: diesel derate + §4.20.1.2 relief + B22R2-NEG-1 (worked-only, SYNTHETIC)
-Source: EXERCISES/worked/batch22-r2__diesel-fp-derate-relief-screen.md (_calc exit 0). Synthetic 4,500 ft / 104 °F, 1,500 gpm diesel, max BHP 140.
-- **Derate:** NFPA 20-2022/2025 §11.2.2.4 (3 %/1,000 ft above 300 ft) + §11.2.2.5 (1 %/10 °F above 77 °F; A.11.2.2.5 include room temp rise). 3×4.2 = 12.6 % + 1×2.7 = 2.7 % → 15.3 %, factor 0.847 → engine ≥ **165.3 hp** 4-h (140/0.847 = 165.29). 150 hp FAIL (127.05); 175 hp PASS (148.2). Additive combination = Lead practice, code silent → Verify with the engineer of record; continuous vs stepwise (162.8 hp). Verify with the engineer of record. §11.2.2.2 10 % listing margin is not a designer derate — don't stack. Schedule: "≥ 165.3 hp after §11.2.2.4/.5 derate", no SKU.
+## 2026-10-28 update — diesel derate + §4.20.1.2 relief + B22R2-NEG-1 (worked-only, SYNTHETIC)
+Source: worked example (_calc exit 0). Synthetic 4,500 ft / 104 °F, 1,500 gpm diesel, max BHP 140.
+- **Derate:** NFPA 20-2022/2025 §11.2.2.4 (3 %/1,000 ft above 300 ft) + §11.2.2.5 (1 %/10 °F above 77 °F; A.11.2.2.5 include room temp rise). 3×4.2 = 12.6 % + 1×2.7 = 2.7 % → 15.3 %, factor 0.847 → engine ≥ **165.3 hp** 4-h (140/0.847 = 165.29). 150 hp FAIL (127.05); 175 hp PASS (148.2). Additive combination = design practice, code silent → Verify with the engineer of record; continuous vs stepwise (162.8 hp). Verify with the engineer of record. §11.2.2.2 10 % listing margin is not a designer derate — don't stack. Schedule: "≥ 165.3 hp after §11.2.2.4/.5 derate", no SKU.
 - **Diesel relief NFPA 20-2025 §4.20.1.2:** 121 % × churn + max static vs 175 psi (NFPA 13 §7.1.2 rating). Option A 1.21×125+40 = **191.25 > 175 → MRV required** (size per §4.20.2.1). Option B 1.21×110+40 = 173.1 PASS only if max static ≤ **41.9 psi** (50 psi → 183.1 FAIL). Purveyor max-static letter needed.
 - **B22R2-NEG-1:** using electric §4.7.7.1 (125+40 = 165 ≤ 175 "OK") falsely clears diesel — misses ~110 % overspeed (pressure ∝ speed² ≈ 1.21).
 - Not restamped into the site (electric). C = 1,250@40 alt note and 1,000@40 duty unchanged.
 
-## 2026-10-29 PDT — prior fold Lead25: B23R2-NEG-1 (electric relief rule falsely clears diesel)
-Source: `EXERCISES/worked/batch23-r2__diesel-fp-controller-config-supervision.md` (`_calc` exit 0). Synthetic 1,000 gpm / 110 psi net diesel, shutoff 130.
+## 2026-10-29 PDT — B23R2-NEG-1 (electric relief rule falsely clears diesel)
+Source: worked example (`_calc` exit 0). Synthetic 1,000 gpm / 110 psi net diesel, shutoff 130.
 - Derate: 110 hp nameplate × 0.977 → 107.47 hp ≥ 95 bhp → PASS (NFPA 20-2025 §11.2.2.4/.5/.7).
 - Diesel relief screen is NFPA 20-2025 §4.20.1.2 (121 % overspeed shutoff basis): static 55 → 212.3 psi; static 40 → 197.3 psi; both > 175 → **MRV required**.
 - **B23R2-NEG-1:** at static 40 the electric §4.7.7.1 churn screen gives 170 ≤ 175 and looks "compliant". That is a false clear for diesel, because the electric rule leaves out the 121 % overspeed term. Always screen diesel on §4.20.1.2. (Extends B22R2-NEG-1.) Static suction = purveyor letter (ASSUMED until held).
 
-## Canada diesel pump house (AB/BC/ON) — B26-R2 / Lead28 fold, 2026-10-29
+## Canada diesel pump house (AB/BC/ON) — 2026-10-29
 
 Canada unlocked; pin NFPA 20 per that code's Table 1.3.1.2 (**2016** BC/AB/ON-OBC; **2019** NBC 2025 model) — never cite 2019/2025 §§ on an AB/BC job. Teaching case is SYNTHETIC (the province DI campus; 1,000 gpm @ 100 psi diesel; suction 60 psi, 125 hp ASSUMED).
 
@@ -748,10 +748,10 @@ Canada unlocked; pin NFPA 20 per that code's Table 1.3.1.2 (**2016** BC/AB/ON-OB
 - **NFC Part 4 room fork:** NFC(AE) 2023 4.3.13.1.(1)(b) allows indoor fire-pump fuel; 4.3.13.4.(1) routes to a **4.3.14 room** except per 4.2.8. **Branch F2 (industrial):** 4.2.8.2.(1)(b) incidental ≤5 000 L Class IB–IIIA **per fire compartment, summing all tanks** (generator day tanks too). **Branch Group D:** 4.2.8 N/A → dedicated 4.3.14 room: ≥2 h separation, contain ≥100% largest tank, liquid-tight joint, no other use. Room cannot close until AHJ/architect pins F2 vs D. Static head ≤**70 kPa** (NFC(AE) 2023 4.3.13.3 — confirmed). Heat ≥40 °F (NFPA 20-2016 §4.13.3.1; FM DS 3-7); winter-grade diesel, no biodiesel (FM DS 3-7 §2.4.21).
 - **Churn NEG (B26R2-NEG-3, STANDS):** 60 psi ASSUMED suction + 120 psi net churn = **180 > 175 psi** ceiling → FAIL. Fix path: lower Pr / flatter curve / NFPA 20-2016 pressure control (section pin [verify]); do not freeze Pr or relief; replace ASSUMED suction with the province flow test.
 - Other NEGs: **NEG-1** Group D with tank in pump room (4.2.8 is industrial-only) → 4.3.14 room; **NEG-2** F2 count of only the FP tank → sum compartment; **NEG-4** summer diesel/biodiesel.
-- **NEG-CA (prior fold Lead31, GAP-B29R1-2 — supersedes the prior "Open (no invent)" line):** NEG-CA-1 inventing a ULC 2 h assembly number; NEG-CA-2 inventing CSA B139 piping text; NEG-CA-3 inventing an NFPA 20-2016 pressure-control § number not pinned; NEG-CA-4 citing NFPA 20-2019/2025 §§ on an AB/BC 2016 pin. Each → NEEDS HOLD. Still open: ASSUMED suction/hp.
+- **NEG-CA (GAP-B29R1-2 — supersedes the prior "Open (no invent)" line):** NEG-CA-1 inventing a ULC 2 h assembly number; NEG-CA-2 inventing CSA B139 piping text; NEG-CA-3 inventing an NFPA 20-2016 pressure-control § number not pinned; NEG-CA-4 citing NFPA 20-2019/2025 §§ on an AB/BC 2016 pin. Each → NEEDS HOLD. Still open: ASSUMED suction/hp.
 
 
-## 2026-11-03 — prior fold Lead31: GAP-B29R1-2 NEG-CA list
+## 2026-11-03 — GAP-B29R1-2 NEG-CA list
 Canada diesel pump-house "Open (no invent)" upgraded to NEG-CA-1..4. B26R2-NEG-3 churn and NEG-1/2/4 unchanged.
 
 ## 2026-11-04 — stop-vocab normalize (staged)

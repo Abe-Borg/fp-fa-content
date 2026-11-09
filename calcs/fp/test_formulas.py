@@ -194,7 +194,7 @@ class VolumeFillTests(unittest.TestCase):
 
 class Inc5MethodOpTests(unittest.TestCase):
     def test_k_factor_density_mode_hand_check(self):
-        # HAND CHECK (batch7 R5): K5.6, 0.15 gpm/ft2 x 130 ft2 = 19.5 gpm;
+        # HAND CHECK: K5.6, 0.15 gpm/ft2 x 130 ft2 = 19.5 gpm;
         # 19.5/5.6 = 3.48214; 3.48214^2 = 12.1253 psi (> 7 psi floor, so the floor does not govern).
         from formulas import k_factor
         r = k_factor(5.6, density=0.15, area_ft2=130, min_p_psi=7)
@@ -252,7 +252,7 @@ class Inc5MethodOpTests(unittest.TestCase):
         self.assertAlmostEqual(r2["fp"], 0.45, delta=1e-9)
 
     def test_brace_load_pipe_table_hand_check(self):
-        # HAND CHECK (batch7 R6): 23 lb/ft x 40 ft = 920 lb; Wp = 1.15 x 920 = 1058 lb; Fpw = 0.5 x 1058 = 529 lb.
+        # HAND CHECK: 23 lb/ft x 40 ft = 920 lb; Wp = 1.15 x 920 = 1058 lb; Fpw = 0.5 x 1058 = 529 lb.
         # NFPA 13-2025 Table 18.5.5.2, Sch40 4 in @ 35-40 ft = 850 lb -> OK; Sch40 2 in = 149 lb -> FAIL.
         from formulas import brace_load
         r = brace_load(0.5, [{"lb_per_ft": 23.0, "length_ft": 40}], pipe="sch40-4", spacing_ft=40)
@@ -294,7 +294,7 @@ class Inc5AtGradeTests(unittest.TestCase):
         self.assertAlmostEqual(r["fp"], 450.0, places=6)
         self.assertEqual(r["r_mu_used"], 1.0)
 
-# batch8 R17 (A1): unittest.main() moved to end of file so all classes run.
+# unittest.main() moved to end of file so all classes run.
 
 
 class Batch6TaperedBranchTests(unittest.TestCase):
@@ -369,7 +369,7 @@ class Batch6DiTripTests(unittest.TestCase):
 
 
 class Batch7JunctionBalanceTests(unittest.TestCase):
-    """batch7 R19: NFPA 13-2025 s28.2.2.4 junction balance."""
+    """NFPA 13-2025 s28.2.2.4 junction balance."""
 
     def test_hand_check_square_root_law(self):
         from formulas import junction_balance
@@ -400,7 +400,7 @@ class Batch7JunctionBalanceTests(unittest.TestCase):
 
 
 class Batch8ReliefCheckTests(unittest.TestCase):
-    """batch8 R4: NFPA 20-2025 s4.20.1.2 diesel main relief valve test."""
+    """NFPA 20-2025 s4.20.1.2 diesel main relief valve test."""
 
     def test_hand_check_relief_valve(self):
         from formulas import relief_check
@@ -431,7 +431,7 @@ class Batch8ReliefCheckTests(unittest.TestCase):
 
 
 class Batch8CpFromSdsTests(unittest.TestCase):
-    """batch8 R5: NFPA 13-2025 s18.5.9.3 / .5."""
+    """NFPA 13-2025 s18.5.9.3 / .5."""
 
     def test_hand_check(self):
         from formulas import cp_from_sds
@@ -497,7 +497,7 @@ class Batch8DryDeliveryScreenTests(unittest.TestCase):
 
 
 class Batch9StepReferenceTests(unittest.TestCase):
-    """batch9 pre-work: run.py step references "@<step>.<key>"."""
+    """run.py step references "@<step>.<key>"."""
 
     def _run(self, steps):
         import io, contextlib, run
@@ -531,7 +531,7 @@ class Batch9StepReferenceTests(unittest.TestCase):
 
 
 class Batch10DiNoQodExemptionTests(unittest.TestCase):
-    """batch10 R1: DI gets NO 750 gal QOD size exemption (NFPA 13-2025 s8.3.2.3.1.1 / s8.3.2.3.2)."""
+    """DI gets NO 750 gal QOD size exemption (NFPA 13-2025 s8.3.2.3.1.1 / s8.3.2.3.2)."""
     BIG = [{"d_in": 6.065, "length_ft": 400}]  # hand check: pi/4*6.065^2/144*7.48*400 = 600.4 gal
 
     def test_hand_check_volume(self):
@@ -682,7 +682,7 @@ class Batch9CompressorN2Tests(unittest.TestCase):
 
 
 class Batch9BraceSpacingTests(unittest.TestCase):
-    """batch9 R13: brace_spacing_max, cross-checked vs brace_load at 30 ft (batch8 R14 672.88 lb)."""
+    """brace_spacing_max, cross-checked vs brace_load at 30 ft (672.88 lb)."""
     def test_matches_brace_load_at_30(self):
         from formulas import brace_spacing_max, brace_load
         r = brace_spacing_max(0.9048, "sch40-4", 16.3, 2.92 * 54 / 30)

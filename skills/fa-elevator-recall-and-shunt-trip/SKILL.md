@@ -44,7 +44,7 @@ FA side only. The elevator contractor owns the controller and the ASME A17.1 res
 3. Lobby door centerlines and ceiling height / type per lobby.
 4. Machine room, machinery space, control space, control room: locations and levels.
 5. Hoistway sprinklered? Sprinklers at top, pit, both (FP). Pit sprinkler on a separately valved pit-only line? (FP)
-6. Shunt trip required? (elevator code / AHJ; A17.1 2.8 not held, ASSUME per elevator consultant). Which sprinklers drive it (machine room only, or hoistway too)? If missing, ASSUME machine room only and flag (QA-20 e20-3).
+6. Shunt trip required? (elevator code / AHJ; A17.1 2.8 not held, ASSUME per elevator consultant). Which sprinklers drive it (machine room only, or hoistway too)? If missing, ASSUME machine room only and flag.
 7. Sprinkler temperature rating and RTI at each shunt trip location (FP). Waterflow or pressure switch used for shunt trip?
 8. Required building FA system present? Signal class election: alarm, or supervisory with AHJ approval [OWNER].
 
@@ -53,10 +53,10 @@ FA side only. The elevator contractor owns the controller and the ASME A17.1 res
 2. Place lobby detectors within 21 ft of each door centerline [§21.3.5.1]; use the edition wording (2019 / 2022 "on the ceiling within"; 2025 "a maximum of ... per Chapter 17"). High or non-flat ceilings per Chapter 17 [§21.3.5.2].
 3. Place machine room type detectors. Place hoistway detectors only where sprinklered (top / pit to match sprinklers) or where A17.1 needs them [§21.3.6, §21.3.8]. Serviceable from outside and listed for the environment [§21.3.7, §21.3.9].
 4. Pit waterflow as a recall trigger only on a pit-only valved line [§21.3.3.2]; else no. On 2019, the switch has no time-delay capability [2019 §21.3.3.2].
-5. Build the trigger map in a script: each device to designated, alternate, and/or machine room output per §21.3.14.1 / §21.3.14.2. Whether hoistway devices also drive output (3) is A17.1 2.27: edition text not confirmed, list as a gap (QA-20 e20-5).
+5. Build the trigger map in a script: each device to designated, alternate, and/or machine room output per §21.3.14.1 / §21.3.14.2. Whether hoistway devices also drive output (3) is A17.1 2.27: edition text not confirmed, list as a gap.
 6. Circuit rule: each device still recalls with all others on its circuit in alarm [§21.3.4]. Add a test step.
 7. Annunciation: each device at the FACU; distinct visible for non-lobby devices [§21.3.11, §21.3.12]. Class alarm, or supervisory only with AHJ approval recorded [§21.3.13] [OWNER].
-8. Shunt trip: heat detector within 24 in. of each driving sprinkler; check rating AND RTI both lower in the script, with a negative test [§21.4.1*, §21.4.2*]. Tag the rating and placement rows [CODE]; tag the detector's signal class [PRACTICE] (§21.4 does not set it; QA-20 e20-1).
+8. Shunt trip: heat detector within 24 in. of each driving sprinkler; check rating AND RTI both lower in the script, with a negative test [§21.4.1*, §21.4.2*]. Tag the rating and placement rows [CODE]; tag the detector's signal class [PRACTICE] (§21.4 does not set it).
 9. Switches used for shunt trip: no time delay [§21.4.3*]. Shunt control voltage monitor point, loss = SUPV [§21.4.4*, §21.4.5]. Integrity monitoring of detectors and switches [§21.4.6].
 9a. A space with a shunt heat detector also has a recall smoke detector in that space [CODE §21.3]. Shunt trip is not self-resetting where IBC 2021 §3005.5 is adopted [CODE]. Placement, temperature rating, RTI, the 24 in limit, and no time delay stay [CODE §21.4.1 to §21.4.3]. The shunt heat detector's signal class is alarm [PRACTICE]. Do not upgrade that tag. Control-voltage loss stays supervisory [CODE §21.4.5].
 9b. Worked fixture, method only. Do not copy it as a job device list. Place the recall detectors, map the three outputs, and keep each shunt-trip heat detector within 24 in. of its sprinkler with no time delay. A space with no elevator, including a diesel pump house, gets no elevator points.

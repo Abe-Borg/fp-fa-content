@@ -79,7 +79,7 @@ Notes:
 - **Manufacturer ID governs** (thin-wall, Sch 10 "light-wall", Sch 7, dynaflow/eddythread etc. differ). Record the data sheet + rev on the output.
 - CPVC, copper, other types → manufacturer ID only; no default row → `ASSUMED` with flag.
 
-### 3.1 `calcs` op — `pipe_volume` (2026-10-23, `calcs` inc4 ; do not edit `calcs`)
+### 3.1 `calcs` op — `pipe_volume` (2026-10-23; do not edit `calcs`)
 - Run **one step per zone**; IDs come from Table 3 or the data sheet (the op holds **no ID table** — it takes `d_in` as the actual ID). So the op does **not** clear the 12 in. `[SYN]` rows.
 - Constant: op uses π/4·ID²/144·7.48 = 0.0407999 gal/(ft·in²) ≡ 0.0408 here (diff < 0.001 %).
 - Op output is pipe-only (`volume_gal`, `volume_ft3`, `segments_detail`); add fittings % and trim (§4) by hand on the zone summary. Save the JSON + stdout **with the project**, not in `calcs/runs/`.
@@ -188,4 +188,4 @@ Each zone: `grounded` (all IDs from data sheet or held table, lengths from repor
 Out-of-scope system type as BOD; segment list absent for every zone (no gallons invented from ft²).
 
 ## Verify with the engineer of record
-1. Fittings allowance 0 % / +5 % defaults. 2. Trim placeholder 5 gal. 3. Missing riser length = height + 10 ft. 4. 12 in. IDs (and 10 in. Sch 40) `[SYN]` until a manufacturer sheet or ASTM A795 table is held. 5. 2 in. branch line → Sch 40 under the shop default. 6. Corpus core-r5 (2026-10-23) cites "13-2025 §8.2.3.3" for the 500 gal dry exemption — wrong clause for 2025 (held: §8.2.4.2.1; 2022 = §8.2.3.3). Use this Skill's §6 cites, not the package's.
+1. Fittings allowance 0 % / +5 % defaults. 2. Trim placeholder 5 gal. 3. Missing riser length = height + 10 ft. 4. 12 in. IDs (and 10 in. Sch 40) `[SYN]` until a manufacturer sheet or ASTM A795 table is held. 5. 2 in. branch line → Sch 40 under the shop default. 6. Corpus core (2026-10-23) cites "13-2025 §8.2.3.3" for the 500 gal dry exemption — wrong clause for 2025 (held: §8.2.4.2.1; 2022 = §8.2.3.3). Use this Skill's §6 cites, not the package's.
