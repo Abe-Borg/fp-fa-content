@@ -24,7 +24,9 @@ from dataclasses import dataclass
 from typing import Callable
 
 KINDS = ("zone", "chat", "bess", "heavy", "claim")
-STATUSES = ("queued", "running", "done", "error", "cancelled")
+# "interrupted" is only ever set at launch, for a job the record says was still queued or
+# running when the app last stopped. Nothing re-runs it; the designer does.
+STATUSES = ("queued", "running", "done", "error", "cancelled", "interrupted")
 _KEY_RE = re.compile(r"sk-ant-[A-Za-z0-9_\-]+")
 _log = logging.getLogger("fpfa.jobs")
 _hooks_lock = threading.Lock()
@@ -184,13 +186,20 @@ class JobInbox:
         title: str,
         status: str = "done",
         error: str = "",
+        job_id: str | None = None,
     ) -> Job:
-        """Remember a job that ran on the caller. No worker is used."""
+        """Remember a job that ran on the caller, or one the record kept. No worker is used.
+
+        job_id keeps a job's original id, so an interrupted job from the last
+        launch shows under the id its thread labels carry.
+        """
         if kind not in KINDS:
             raise ValueError(f"Unknown job kind {kind}")
         if status not in STATUSES:
             raise ValueError(f"Unknown job status {status}")
         job = self._new(project_id, project_name, kind, title, status)
+        if job_id:
+            job.id = str(job_id)
         job.error = _scrub(error) if error else ""
         with self._lock:
             if self._closed:

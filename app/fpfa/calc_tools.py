@@ -328,7 +328,7 @@ SCHEMAS = [
         "description": (
             "Show this job's project record with row ids: facts, calc records with inputs and outputs, "
             "evidence, findings, decisions, open questions, and pending handoffs. Pass kind for the full "
-            "rows of one table (calcs, evidence, facts, findings, questions, decisions, handoffs, tasks, agents), "
+            "rows of one table (calcs, evidence, facts, findings, questions, decisions, handoffs, tasks, agents, jobs), "
             "and id for one row."
         ),
         "input_schema": _obj(

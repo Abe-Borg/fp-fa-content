@@ -68,11 +68,48 @@ def blocker_lines(snapshot: dict | None) -> list[str]:
             lines.append(f"? {row.get('text')} (raised by {row.get('raised_by')})")
     for row in snap.get("handoffs") or []:
         if row.get("status") == "pending":
-            lines.append(f"… handoff waiting for {row.get('to_agent')}: {row.get('brief')}")
+            requeued = " (re-queued after a relaunch)" if str(row.get("result") or "").startswith("Re-queued") else ""
+            lines.append(f"… handoff waiting for {row.get('to_agent')}{requeued}: {row.get('brief')}")
     for row in snap.get("findings") or []:
         if row.get("status") in ("Not supported", "Source not found"):
             lines.append(f"! finding {row.get('status').lower()}: {row.get('text')}")
+    for row in snap.get("jobs") or []:
+        if row.get("status") == "interrupted":
+            title = _short(row.get("title") or "", 60)
+            lines.append(f"! {row.get('kind')} job interrupted by a relaunch{': ' + title if title else ''}. Run it again; recorded calcs replay.")
     return lines
+
+
+def recovery_text(item: dict | None) -> str:
+    """The app-written note a thread gets once after a relaunch found work in flight.
+
+    item is one project's entry from Record.recover(). Empty when nothing was touched.
+    """
+    if not item:
+        return ""
+    jobs = list(item.get("jobs") or [])
+    agents = list(item.get("agents") or [])
+    handoffs = list(item.get("handoffs") or [])
+    if not jobs and not agents and not handoffs:
+        return ""
+    lines = ["**Recovered after a relaunch.** The app was not running when this work would have ended."]
+    for row in jobs:
+        title = _short(row.get("title") or "", 70)
+        quoted = f' "{title}"' if title else ""
+        lines.append(
+            f"- The {row.get('kind')} job{quoted} was interrupted. "
+            "Run it again from the thread or the form; calcs already on the record replay instead of recomputing."
+        )
+    for name in agents:
+        lines.append(f"- {name} was interrupted before it returned.")
+    for row in handoffs:
+        brief = _short(row.get("brief") or "", 70)
+        lines.append(
+            f"- The handoff from {row.get('from_agent')} to {row.get('to_agent')} ({brief}) was re-queued. "
+            f"It is delivered again at the next delegation to {row.get('to_agent')}."
+        )
+    lines.append("Nothing on the record was lost. The Team tab under Zone details shows the state.")
+    return "\n".join(lines)
 
 
 def check_line(snapshot: dict | None) -> str:

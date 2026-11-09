@@ -176,6 +176,23 @@ def specialist_request(
     return "\n\n".join(parts)
 
 
+def pending_handoff_note(record: Record, project_id: str) -> str:
+    """Lines the lead gets at the top of its turn when handoffs wait on the record.
+
+    A handoff is delivered when the lead delegates to its receiver, so the lead
+    has to see it. Recovery puts an interrupted delivery back here, so this is
+    also how a relaunch reaches the lead. Empty when nothing is pending.
+    """
+    pending = record.pending_handoffs(project_id)
+    if not pending:
+        return ""
+    lines = ["Handoffs waiting on the record. Each is delivered when you delegate to its receiver:"]
+    for row in pending:
+        note = " (re-queued after a relaunch)" if str(row.get("result") or "").startswith("Re-queued") else ""
+        lines.append(f"- [{row['id']}] from {row['from_agent']} to {row['to_agent']}{note}: {row['brief']}")
+    return "\n".join(lines)
+
+
 def _new_rows(before: set[str], rows: list[dict]) -> list[dict]:
     return [row for row in rows if row["id"] not in before]
 
