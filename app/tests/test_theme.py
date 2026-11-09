@@ -154,6 +154,25 @@ class SchemeTests(unittest.TestCase):
             self.assertGreaterEqual(contrast(c["on_accent"], c["accent"]), 3.0, scheme.id)
             self.assertGreaterEqual(contrast(c["paper_ink"], c["paper"]), 7.0, scheme.id)
 
+    def test_the_keyboard_ring_shows_on_every_fill_it_is_drawn_on(self):
+        from fpfa import theme
+        from fpfa.shapes import contrast
+
+        try:
+            for scheme_id in theme.SCHEME_ORDER:
+                theme.colors.use(scheme_id)
+                c = theme.colors
+                # A button, a tab, a check box; a well on a card; a selected toolbar pill.
+                for fill in (c.raised_hover, c.bg, c.accent_soft):
+                    self.assertGreaterEqual(contrast(c.accent, fill), 3.0, (scheme_id, fill))
+                # On the accent itself the ring is the colour of the text on it.
+                self.assertGreaterEqual(contrast(c.on_accent, c.accent), 3.0, scheme_id)
+                # A scheme card: the focused one in the ink, the one in use in the accent.
+                self.assertGreaterEqual(contrast(c.ink, c.raised), 7.0, scheme_id)
+                self.assertGreaterEqual(contrast(c.accent, c.raised), 3.0, scheme_id)
+        finally:
+            theme.colors.use(theme.DEFAULT_SCHEME)
+
     def test_a_scheme_must_define_every_token_and_no_other(self):
         from fpfa import theme
 
@@ -204,8 +223,18 @@ class SchemeTests(unittest.TestCase):
         theme.colors.use("clay")
         pictures = theme._pictures(lambda value: int(round(value)))
         for name in ("btn_accent", "btn_soft", "field", "field_focus", "card", "paper", "composer", "bubble",
-                     "chip", "thumb_v", "check_on", "icon_more", "dot_0", "dot_4", "mark", "mark_large"):
+                     "chip", "thumb_v", "check_on", "icon_more", "dot_0", "dot_4", "mark", "mark_large",
+                     "btn_focus", "btn_accent_focus", "btn_well_focus", "pill_selected_focus",
+                     "swatch_focus", "swatch_selected_focus", "check_off_focus", "check_on_focus"):
             self.assertIn(name, pictures)
+        # A scheme card's labels sit on the card colour, so no state of the card may change its fill.
+        middles = {name: shapes.decode_png(pictures[name]) for name in
+                   ("swatch", "swatch_hover", "swatch_selected", "swatch_focus", "swatch_selected_focus")}
+        fills = set()
+        for name, (width, height, pixels) in middles.items():
+            at = (height // 2) * width + width // 2
+            fills.add(tuple(pixels[at * 4:at * 4 + 4]))
+        self.assertEqual(len(fills), 1, fills)
         # A nine-slice picture keeps a stretchable middle between its two slices.
         px = lambda value: int(round(value))  # noqa: E731
         for name, radius in (("btn_accent", theme.RADIUS), ("card", theme.RADIUS_CARD),
@@ -268,6 +297,95 @@ class ThemeWindowTests(unittest.TestCase):
         if sys.platform != "win32":
             # Only Windows has a title bar the app can colour.
             self.assertFalse(theme.style_title_bar(root))
+
+    def test_tab_gives_a_control_the_ring_and_a_click_takes_it_off(self):
+        from tkinter import ttk
+
+        from fpfa import theme
+
+        root = self._root()
+        look = theme.apply_theme(root, "clay")
+        first = ttk.Button(root, text="First")
+        second = ttk.Button(root, text="Second")
+        third = ttk.Checkbutton(root, text="Third")
+        for widget in (first, second, third):
+            widget.pack()
+        root.update()
+        first.focus_force()
+        root.update()
+        if root.focus_get() is not first:
+            self.skipTest("this display gives no keyboard focus")
+        ring = theme.KEYBOARD_FOCUS
+        # Focus the program gave, before any Tab: no ring.
+        self.assertFalse(look.keyboard)
+        self.assertFalse(first.instate([ring]))
+        first.event_generate("<Key-Tab>")
+        root.update()
+        self.assertIs(root.focus_get(), second)
+        self.assertTrue(look.keyboard)
+        self.assertTrue(second.instate([ring]))
+        self.assertFalse(first.instate([ring]))
+        second.event_generate("<Key-Tab>")
+        root.update()
+        self.assertTrue(third.instate([ring]))
+        self.assertFalse(second.instate([ring]))
+        third.event_generate("<Shift-Key-Tab>")
+        root.update()
+        self.assertIs(root.focus_get(), second)
+        self.assertTrue(second.instate([ring]))
+        self.assertFalse(third.instate([ring]))
+        # A click is the pointer again: the button clicked takes the focus and wears no ring.
+        first.event_generate("<ButtonPress-1>", x=4, y=4)
+        first.event_generate("<ButtonRelease-1>", x=4, y=4)
+        root.update()
+        self.assertFalse(look.keyboard)
+        self.assertIs(root.focus_get(), first)
+        for widget in (first, second, third):
+            self.assertFalse(widget.instate([ring]), widget)
+        # Every control the ring is drawn for has a picture for it in its element.
+        style = ttk.Style(root)
+        for element in ("Accent.button", "Soft.button", "Ghost.button", "Danger.button", "Outline.button",
+                        "Pill.button", "Well.button", "Check.indicator", "Pill.tab", "Swatch.frame"):
+            self.assertIn(element, style.element_names(), element)
+        for name in ("btn_focus", "btn_accent_focus", "swatch_focus", "check_on_focus"):
+            self.assertIn(name, look.images)
+
+    def test_a_scheme_card_is_picked_from_the_keyboard(self):
+        from fpfa import theme
+        from fpfa.paths import read_config, write_config
+        from fpfa.ui import App
+
+        root = self._root()
+        os.environ["FPFA_CONTENT_UPDATES"] = "0"
+        write_config({"key_backend": "file"})
+        app = App(root)
+        root.update()
+        self.assertEqual(app.theme.scheme, "clay")
+        app.open_settings()
+        root.update()
+        cards = [child for child in _walk(app._settings_window) if child.winfo_class() == "TFrame"
+                 and "Swatch" in str(child.cget("style"))]
+        # Tab stops at every card.
+        self.assertTrue(all(str(card.cget("takefocus")) in ("1", "True") for card in cards))
+        linen = cards[theme.SCHEME_ORDER.index("linen")]
+        blueprint = cards[theme.SCHEME_ORDER.index("blueprint")]
+        blueprint.focus_force()
+        root.update()
+        if root.focus_get() is not blueprint:
+            self.skipTest("this display gives no keyboard focus")
+        blueprint.event_generate("<Key-space>")
+        root.update()
+        self.assertEqual(app.theme.scheme, "blueprint")
+        self.assertEqual(read_config()["appearance"], "blueprint")
+        self.assertTrue(blueprint.instate(["selected"]))
+        linen.focus_force()
+        root.update()
+        linen.event_generate("<Key-Return>")
+        root.update()
+        self.assertEqual(app.theme.scheme, "linen")
+        self.assertEqual(read_config()["appearance"], "linen")
+        self.assertEqual([card.instate(["selected"]) for card in cards],
+                         [name == "linen" for name in theme.SCHEME_ORDER])
 
     def test_the_window_opens_in_the_saved_scheme_and_settings_changes_it(self):
         from fpfa import theme

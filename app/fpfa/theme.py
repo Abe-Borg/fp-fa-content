@@ -226,6 +226,9 @@ class Theme:
         self.fonts: dict = {}
         self.images: dict[str, tk.PhotoImage] = {}
         self.scheme = colors.scheme
+        # True while the reader's last move was Tab or Shift+Tab rather than a click
+        # (watch_keyboard_focus). A control focused then wears the keyboard's ring.
+        self.keyboard = False
         self._painted: list[tuple[weakref.ref, dict]] = []
         self._listeners: list[Callable[[], None]] = []
 
@@ -434,8 +437,19 @@ def _pictures(px: Callable[[float], int]) -> dict[str, bytes]:
     box("composer", c.raised, c.edge, r=RADIUS_COMPOSER)
     box("composer_focus", c.raised, c.focus_edge, r=RADIUS_COMPOSER, width=line * 1.5)
     box("swatch", c.raised, c.edge, r=RADIUS_CARD)
-    box("swatch_hover", c.raised_hover, c.ink_faint, r=RADIUS_CARD)
+    # The card's labels are drawn on the card colour, so every state keeps that fill and
+    # speaks through its edge: a hover, the scheme in use, and the keyboard's ring.
+    box("swatch_hover", c.raised, c.ink_faint, r=RADIUS_CARD)
     box("swatch_selected", c.raised, c.accent, r=RADIUS_CARD, width=line * 2)
+    # The ring a control wears when the keyboard reached it (KEYBOARD_FOCUS). On the accent
+    # an accent ring would not show, so there it is drawn in the colour of the text on it.
+    ring = line * 2
+    box("btn_focus", c.raised_hover, c.accent, width=ring)
+    box("btn_accent_focus", c.accent, c.on_accent, width=ring)
+    box("btn_well_focus", c.bg, c.accent, width=ring)
+    box("pill_selected_focus", c.accent_soft, c.accent, width=ring)
+    box("swatch_focus", c.raised, c.ink, r=RADIUS_CARD, width=ring)
+    box("swatch_selected_focus", c.raised, c.accent, r=RADIUS_CARD, width=line * 4)
     box("banner", c.banner, c.banner_edge, r=RADIUS_PAPER)
     box("chip", None, c.edge, r=RADIUS_CHIP)
     box("chip_hover", c.raised, c.focus_edge, r=RADIUS_CHIP)
@@ -473,6 +487,8 @@ def _pictures(px: Callable[[float], int]) -> dict[str, bytes]:
     check_box("check_on", c.accent, None, True)
     check_box("check_on_hover", c.accent_hover, None, True)
     check_box("check_disabled", c.surface, c.edge, False)
+    check_box("check_off_focus", c.raised_hover, c.accent, False)
+    check_box("check_on_focus", c.accent, c.on_accent, True)
 
     # Small line icons.
     icon = px(18)
@@ -526,6 +542,56 @@ def app_icon_pictures(sizes: tuple[int, ...] = (16, 32, 48, 64)) -> list[bytes]:
 _PICTURE_CACHE: dict[tuple[str, float], dict[str, bytes]] = {}
 
 
+# The ttk state a control is given when the keyboard moved the focus to it. ttk's own
+# "focus" state is also set by a click, and a ring left on the last button clicked reads as
+# a fault, so the ring follows this state and not that one.
+KEYBOARD_FOCUS = "user1"
+
+
+def watch_keyboard_focus(theme: "Theme") -> None:
+    """Mark the ttk control that Tab or Shift+Tab reached; a click anywhere takes the mark off.
+
+    theme.keyboard says which of the two the reader used last. Tk moves the focus from the
+    "all" bindings and delivers the focus events afterwards, so adding to those bindings sets
+    it before the control hears that it has the focus. Only a binding Tk already has is added
+    to: a new <Tab> binding would hide <<NextWindow>>. A press whose own binding returns
+    "break" never reaches "all", so such a control sets theme.keyboard itself (PopupMenu.show).
+    """
+    root = theme.root
+
+    def by_keys(_event=None) -> None:
+        theme.keyboard = True
+
+    def by_pointer(_event=None) -> None:
+        theme.keyboard = False
+
+    def mark(event, flag: str) -> None:
+        widget = event.widget
+        if isinstance(widget, ttk.Widget):
+            try:
+                widget.state([flag])
+            except tk.TclError:
+                pass
+
+    def arrived(event) -> None:
+        if theme.keyboard:
+            mark(event, KEYBOARD_FOCUS)
+
+    def left(event) -> None:
+        mark(event, "!" + KEYBOARD_FOCUS)
+
+    try:
+        bound = set(root.bind_all())
+        for sequence in ("<<NextWindow>>", "<<PrevWindow>>", "<Key-Tab>", "<Shift-Key-Tab>"):
+            if sequence in bound:
+                root.bind_all(sequence, by_keys, add="+")
+        root.bind_all("<ButtonPress>", by_pointer, add="+")
+        root.bind_all("<FocusIn>", arrived, add="+")
+        root.bind_all("<FocusOut>", left, add="+")
+    except tk.TclError:
+        pass
+
+
 def _load_images(theme: Theme) -> None:
     """Draw every picture in the current colours. Existing pictures are redrawn in place."""
     key = (colors.scheme, round(theme.scale, 3))
@@ -563,45 +629,53 @@ def _create_elements(theme: Theme, style: ttk.Style) -> None:
     def frame(element: str) -> list:
         return [(element, {"sticky": "nswe"})]
 
+    # A state list is read in order and the first match is drawn, so the keyboard's ring
+    # (KEYBOARD_FOCUS) sits after disabled and pressed and before the pointer's hover.
+    keys = KEYBOARD_FOCUS
     create("Accent.button", "image", img("btn_accent"),
            ("disabled", img("btn_accent_disabled")), ("pressed", img("btn_accent_pressed")),
-           ("active", img("btn_accent_hover")), border=edge, sticky="nsew")
+           (keys, img("btn_accent_focus")), ("active", img("btn_accent_hover")), border=edge, sticky="nsew")
     create("Soft.button", "image", img("btn_soft"),
            ("disabled", img("btn_soft_disabled")), ("pressed", img("btn_soft_pressed")),
-           ("active", img("btn_soft_hover")), border=edge, sticky="nsew")
+           (keys, img("btn_focus")), ("active", img("btn_soft_hover")), border=edge, sticky="nsew")
     create("Ghost.button", "image", img("clear"),
            ("disabled", img("clear")), ("pressed", img("btn_ghost_pressed")),
-           ("active", img("btn_ghost_hover")), border=edge, sticky="nsew")
+           (keys, img("btn_focus")), ("active", img("btn_ghost_hover")), border=edge, sticky="nsew")
     create("Danger.button", "image", img("btn_soft"),
            ("disabled", img("btn_soft_disabled")), ("pressed", img("btn_danger_hover")),
-           ("active", img("btn_danger_hover")), border=edge, sticky="nsew")
+           (keys, img("btn_focus")), ("active", img("btn_danger_hover")), border=edge, sticky="nsew")
     create("Outline.button", "image", img("outline"),
-           ("pressed", img("btn_soft_pressed")), ("active", img("outline_hover")), border=edge, sticky="nsew")
+           ("pressed", img("btn_soft_pressed")), (keys, img("btn_focus")),
+           ("active", img("outline_hover")), border=edge, sticky="nsew")
     create("Pill.button", "image", img("clear"),
-           ("selected", img("pill_selected")), ("pressed", img("btn_ghost_pressed")),
+           ("selected", keys, img("pill_selected_focus")), ("selected", img("pill_selected")),
+           ("pressed", img("btn_ghost_pressed")), (keys, img("btn_focus")),
            ("active", img("pill_hover")), border=edge, sticky="nsew")
     create("Field.field", "image", img("field"),
            ("disabled", img("field_disabled")), ("focus", img("field_focus")), border=edge, sticky="nsew")
     create("Well.button", "image", img("btn_well"),
            ("disabled", img("btn_soft_disabled")), ("pressed", img("btn_well_pressed")),
-           ("active", img("btn_well_hover")), border=edge, sticky="nsew")
+           (keys, img("btn_well_focus")), ("active", img("btn_well_hover")), border=edge, sticky="nsew")
     create("Well.field", "image", img("field_well"),
            ("disabled", img("field_disabled")), ("focus", img("field_well_focus")), border=edge, sticky="nsew")
     create("Chevron.indicator", "image", img("chevron"), sticky="")
     create("MenuChevron.indicator", "image", img("chevron_menu"), sticky="")
     create("Check.indicator", "image", img("check_off"),
            ("disabled", img("check_disabled")),
+           ("selected", keys, img("check_on_focus")), (keys, img("check_off_focus")),
            ("selected", "active", img("check_on_hover")), ("selected", img("check_on")),
            ("active", img("check_off_hover")), sticky="w")
     create("Pill.tab", "image", img("clear"),
-           ("selected", img("tab_selected")), ("active", img("tab_hover")), border=edge, sticky="nsew")
+           ("selected", keys, img("btn_focus")), ("selected", img("tab_selected")),
+           ("active", img("tab_hover")), border=edge, sticky="nsew")
     create("Round.row", "image", img("clear"), ("selected", img("row_selected")), border=edge, sticky="nsew")
     create("Card.frame", "image", img("card"), border=large, sticky="nsew")
     create("Panel.frame", "image", img("panel"), border=large, sticky="nsew")
     create("Paper.frame", "image", img("paper"), border=_slice(px, RADIUS_PAPER), sticky="nsew")
     create("Banner.frame", "image", img("banner"), border=_slice(px, RADIUS_PAPER), sticky="nsew")
     create("Swatch.frame", "image", img("swatch"),
-           ("selected", img("swatch_selected")), ("active", img("swatch_hover")), border=large, sticky="nsew")
+           ("selected", keys, img("swatch_selected_focus")), ("selected", img("swatch_selected")),
+           (keys, img("swatch_focus")), ("active", img("swatch_hover")), border=large, sticky="nsew")
     create("Composer.frame", "image", img("composer"), ("focus", img("composer_focus")),
            border=_slice(px, RADIUS_COMPOSER), sticky="nsew")
     create("Bubble.frame", "image", img("bubble"), border=_slice(px, RADIUS_BUBBLE), sticky="nsew")
@@ -975,6 +1049,7 @@ def apply_theme(root: tk.Tk, scheme: str | None = None) -> Theme:
     else:
         style.theme_use("cynosure")
     _configure_styles(theme)
+    watch_keyboard_focus(theme)
     try:
         icons = [tk.PhotoImage(master=root, data=base64.b64encode(data)) for data in app_icon_pictures()]
         root.iconphoto(True, *reversed(icons))

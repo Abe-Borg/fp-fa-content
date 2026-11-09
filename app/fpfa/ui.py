@@ -798,9 +798,7 @@ class App:
             cursor="hand2",
         )
         self.more_button.pack(side="right")
-        self.more_button.bind(
-            "<Button-1>", lambda _event: self._drop_menu(self.more_button, self.more_menu, align="right")
-        )
+        self._menu_button(self.more_button, self.more_menu)
         Tooltip(self.more_button, "Samples, exports, usage, settings", self.theme)
         self.details_toggle = ttk.Checkbutton(
             top,
@@ -817,9 +815,7 @@ class App:
         self.mode_menu = tk.Menu(self.root, tearoff=0)
         self.mode_button = ttk.Menubutton(top, style="Toolbar.TMenubutton", cursor="hand2")
         self.mode_button.pack(side="right", padx=(0, px(6)))
-        self.mode_button.bind(
-            "<Button-1>", lambda _event: self._drop_menu(self.mode_button, self.mode_menu, align="right")
-        )
+        self._menu_button(self.mode_button, self.mode_menu)
         Tooltip(self.mode_button, "How the assistant answers: brainstorm, calculator, synthesis, or mixed", self.theme)
         # Packed last so a long job name is what gets shortened, not the controls.
         self._title_shown = tk.StringVar(value=self.job_title.get())
@@ -911,7 +907,8 @@ class App:
             on_copy=self._copy_text,
             animate=self.motion,
         )
-        for sequence in ("<B1-Motion>", "<ButtonRelease-1>"):
+        # The press too: a click in the trough moves the thread a page before any release.
+        for sequence in ("<ButtonPress-1>", "<B1-Motion>", "<ButtonRelease-1>"):
             scroll.bind(sequence, self.thread.user_moved, add="+")
         host.bind("<Configure>", self._on_thread_resize, add="+")
         host.bind("<Button-1>", lambda _event: self.chat_view.focus_set(), add="+")
@@ -925,12 +922,22 @@ class App:
         for sequence in ("<Button-3>",) + (("<Button-2>",) if sys.platform == "darwin" else ()):
             self.chat_view.bind(sequence, self._thread_menu_popup)
 
-    def _drop_menu(self, button, menu: tk.Menu, *, align: str = "left") -> str:
+    # What opens a menu button from the keyboard. ttk's own Space and <<Invoke>> post the
+    # button's "menu" option, which is left empty because the window draws the menu itself.
+    MENU_KEYS = ("<<Invoke>>", "<Key-space>", "<Key-Return>", "<Key-KP_Enter>", "<Key-Down>")
+
+    def _menu_button(self, button, menu: tk.Menu, *, align: str = "right") -> None:
+        """Open menu under button on a click, and on the keys a menu button answers to."""
+        button.bind("<Button-1>", lambda _event: self._drop_menu(button, menu, align=align))
+        for sequence in self.MENU_KEYS:
+            button.bind(sequence, lambda _event: self._drop_menu(button, menu, align=align, keyboard=True))
+
+    def _drop_menu(self, button, menu: tk.Menu, *, align: str = "left", keyboard: bool = False) -> str:
         """Open a menu under its button, in the window's own colours."""
         try:
             x = button.winfo_rootx() + (button.winfo_width() if align == "right" else 0)
             y = button.winfo_rooty() + button.winfo_height() + self.theme.px(4)
-            self.popup.show(menu, x, y, align=align)
+            self.popup.show(menu, x, y, align=align, keyboard=keyboard)
         except tk.TclError:
             pass
         return "break"
@@ -3844,7 +3851,10 @@ class App:
         for position, scheme_id in enumerate(SCHEME_ORDER):
             scheme = SCHEMES[scheme_id]
             tones = scheme.colors
-            card = ttk.Frame(grid, style="OnSide.Swatch.TFrame", padding=(px(10), px(10), px(10), px(10)), cursor="hand2")
+            card = ttk.Frame(
+                grid, style="OnSide.Swatch.TFrame", padding=(px(10), px(10), px(10), px(10)), cursor="hand2",
+                takefocus=True,
+            )
             card.grid(row=position // 3, column=position % 3, sticky="nsew", padx=(0, px(10)), pady=(0, px(10)))
             grid.columnconfigure(position % 3, weight=1, uniform="swatch")
             # The scheme's own colours, whatever scheme the window is in: chrome, paper, accent.
@@ -3872,6 +3882,9 @@ class App:
             cards[scheme_id] = card
             if scheme_id == self.theme.scheme:
                 card.state(["selected"])
+            # Tab reaches a card and Space or Return picks it, as a click does.
+            for sequence in ("<Key-space>", "<Key-Return>", "<Key-KP_Enter>"):
+                card.bind(sequence, lambda _event, chosen=scheme_id: choose(chosen), add="+")
             for widget in (card, preview, name, blurb):
                 widget.bind("<Button-1>", lambda _event, chosen=scheme_id: choose(chosen), add="+")
                 widget.bind("<Enter>", lambda _event, target=card: target.state(["active"]), add="+")

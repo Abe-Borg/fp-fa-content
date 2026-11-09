@@ -86,11 +86,17 @@ class ThreadView:
         # True while the reader is at the end of the thread. New words keep the end in
         # view only then, so a reader who scrolled up to read is left where they are.
         self.follow = True
+        self._pin_after: str | None = None
+        self._bubble_sizes: dict[str, tuple[int, int]] = {}
         self.configure_tags()
         look.on_change(self.configure_tags)
         view.bind("<Destroy>", lambda _event: self._stop_shimmer(), add="+")
+        # Every way the reader moves the thread. A key is heard when it goes down as well as when
+        # it comes up: the move happens on the press, and the thread must know before it redraws.
         for sequence in (
             "<MouseWheel>", "<Button-4>", "<Button-5>", "<B1-Motion>", "<ButtonRelease-1>",
+            "<KeyPress-Prior>", "<KeyPress-Next>", "<KeyPress-Up>", "<KeyPress-Down>",
+            "<KeyPress-Home>", "<KeyPress-End>",
             "<KeyRelease-Prior>", "<KeyRelease-Next>", "<KeyRelease-Up>", "<KeyRelease-Down>",
             "<KeyRelease-Home>", "<KeyRelease-End>",
         ):
@@ -234,6 +240,7 @@ class ThreadView:
                 pass
         self._embedded = []
         self._bubble_labels = []
+        self._bubble_sizes = {}
         self._dots = None
         self._pending_label = ""
         self.view.delete("1.0", "end")
@@ -268,6 +275,9 @@ class ThreadView:
             for sequence in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
                 widget.bind(sequence, self._wheel, add="+")
             widget.bind("<Button-3>", lambda event, body=text: self._copy_menu(event, body), add="+")
+        # A bubble takes its height only once it is on screen, which is after the thread has
+        # scrolled to its end, so the end moves down again. Go back to it when that happens.
+        bubble.bind("<Configure>", self._bubble_sized, add="+")
         self._embedded.append(bubble)
         self._bubble_labels.append(label)
         view.window_create("end", window=bubble, align="top")
@@ -281,7 +291,9 @@ class ThreadView:
             self._on_copy(text)
 
     def _wheel(self, event) -> str:
+        """The wheel over a bubble. The bubble is its own widget, so the thread never hears this turn itself."""
         self.view.yview_scroll(wheel_steps(event) * 3, "units")
+        self.user_moved()
         return "break"
 
     def _assistant(self, text: str) -> None:
@@ -329,9 +341,39 @@ class ThreadView:
         except tk.TclError:
             return True
 
+    def _bubble_sized(self, event) -> None:
+        """A bubble was laid out. Only a new size changes the thread's height; a scroll only moves it."""
+        name, size = str(event.widget), (event.width, event.height)
+        if self._bubble_sizes.get(name) == size:
+            return
+        self._bubble_sizes[name] = size
+        self._pin()
+
+    def _pin(self, _event=None) -> None:
+        """The thread's height changed under it. If it follows its end, go back there, once per idle."""
+        if not self.follow or self._pin_after is not None:
+            return
+        try:
+            self._pin_after = self.view.after_idle(self._pinned)
+        except tk.TclError:
+            pass
+
+    def _pinned(self) -> None:
+        self._pin_after = None
+        if not self.follow:
+            return
+        try:
+            self.view.see("end")
+        except tk.TclError:
+            pass
+
     def user_moved(self, _event=None) -> None:
         """The reader scrolled. Decide after Tk has moved the view whether they are still at the end."""
         try:
+            if self._pin_after is not None:
+                # The reader's own move comes first: a return to the end that was waiting is dropped.
+                self.view.after_cancel(self._pin_after)
+                self._pin_after = None
             self.view.after_idle(self._note_position)
         except tk.TclError:
             pass

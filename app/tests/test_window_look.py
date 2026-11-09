@@ -74,6 +74,20 @@ class _Window(unittest.TestCase):
         root.update()
         return app
 
+    def _wheel(self, widget, *, up: bool) -> None:
+        """One turn of the wheel over widget, as this display sends it."""
+        if str(widget.tk.call("tk", "windowingsystem")) == "x11":
+            widget.event_generate("<Button-4>" if up else "<Button-5>")
+        else:
+            widget.event_generate("<MouseWheel>", delta=120 if up else -120)
+
+    def _focus(self, widget) -> None:
+        """Give widget the keyboard. Tk sends a key to whatever holds the focus, so a key test needs it."""
+        widget.focus_force()
+        widget.update()
+        if widget.focus_get() is not widget:
+            self.skipTest("this display gives no keyboard focus")
+
 
 class ThreadViewTests(_Window):
     def test_a_message_is_a_bubble_and_its_words_stay_in_the_text(self):
@@ -230,6 +244,84 @@ class ThreadViewTests(_Window):
         root.update()
         self.assertTrue(thread.follow)
 
+    def test_a_thread_drawn_again_with_bubbles_still_ends_at_its_end(self):
+        # A bubble has no height until it is on screen, so the end of the thread moves down
+        # after the thread has scrolled to it. The last line has to be on screen all the same.
+        root, view, thread, _copied = self._thread()
+
+        def last_line_shown() -> bool:
+            line = view.dlineinfo("end-1c")
+            return line is not None and line[1] + line[3] <= view.winfo_height()
+
+        turns = []
+        for n in range(1, 9):
+            turns.append({"role": "user", "text": f"Question {n}: what is the zone total, and what does the trim add?"})
+            turns.append({"role": "assistant", "text": f"Answer {n}. " + "words " * 90})
+            thread.render(turns)
+            for _ in range(4):
+                root.update()
+            self.assertTrue(last_line_shown(), n)
+            self.assertGreater(view.yview()[1], 0.995, n)
+            self.assertTrue(thread.follow, n)
+        # A reader who went up is not brought back: not by the bubbles up there finding their
+        # size as they come on screen, and not by every bubble wrapping to a narrower column.
+        view.yview_moveto(0.0)
+        thread.user_moved()
+        for _ in range(4):
+            root.update()
+        self.assertFalse(thread.follow)
+        self.assertLess(view.yview()[0], 0.05)
+        thread.set_column(thread._column - 120)
+        for _ in range(4):
+            root.update()
+        self.assertFalse(last_line_shown())
+        self.assertLess(view.yview()[0], 0.05)
+        # Back at the end and following, the narrower column's taller thread is followed too.
+        view.yview_moveto(1.0)
+        thread.user_moved()
+        root.update()
+        self.assertTrue(thread.follow)
+        thread.set_column(thread._column - 120)
+        for _ in range(4):
+            root.update()
+        self.assertTrue(last_line_shown())
+
+    def test_the_wheel_over_a_bubble_is_the_reader_moving(self):
+        # A bubble is a widget of its own, so a wheel turned over one never reaches the
+        # thread's own wheel binding. It has to count all the same.
+        root, view, thread, _copied = self._thread()
+        turns = []
+        for n in range(14):
+            turns.append({"role": "user", "text": f"Question {n}: what is the zone total?"})
+            turns.append({"role": "assistant", "text": f"Answer {n}. " + "words " * 80})
+        thread.render(turns)
+        for _ in range(4):
+            root.update()
+        self.assertTrue(thread.follow)
+        self.assertGreater(view.yview()[1], 0.99)
+        bubble = thread._embedded[-1]
+
+        def turn(times: int, *, up: bool) -> None:
+            for _ in range(times):
+                self._wheel(bubble, up=up)
+                root.update()
+            root.update()
+
+        turn(3, up=True)
+        self.assertLess(view.yview()[1], 0.99)
+        self.assertFalse(thread.follow)
+        # Wheeled back to the end over the same bubble, the thread follows again.
+        turn(6, up=False)
+        self.assertGreater(view.yview()[1], 0.99)
+        self.assertTrue(thread.follow)
+        # New words under a reader who wheeled away do not pull them back down.
+        turn(3, up=True)
+        self.assertFalse(thread.follow)
+        thread.render_live([{"key": "job", "text": "New words arrive. " * 40, "caret": True, "fades": [],
+                             "settled": None}])
+        root.update()
+        self.assertLess(view.yview()[1], 0.99)
+
 
 class WidgetTests(_Window):
     def test_the_list_answers_the_listbox_calls_the_window_makes(self):
@@ -328,6 +420,99 @@ class WidgetTests(_Window):
         app._drop_menu(app.more_button, app.more_menu)
         app.popup.close()
         self.assertFalse(app.popup.showing)
+
+    def test_the_menu_buttons_open_from_the_keyboard(self):
+        # The window draws these menus itself, so the buttons carry no "menu" option and
+        # ttk's own Space does nothing. The keys a menu button answers to are bound here.
+        app = self._app()
+        root = app.root
+        for button, menu in ((app.mode_button, app.mode_menu), (app.more_button, app.more_menu)):
+            usable = [entry for entry in app.popup.entries(menu) if entry["kind"] != "separator"
+                      and not entry["disabled"]]
+            for sequence in ("<Key-space>", "<Key-Return>", "<Key-Down>", "<<Invoke>>"):
+                self._focus(button)
+                button.event_generate(sequence)
+                root.update()
+                self.assertTrue(app.popup.showing, sequence)
+                # Opened from the keys, the first row is chosen already, so Return works at once.
+                self.assertEqual(app.popup._rows[app.popup._active][0], usable[0]["index"], sequence)
+                self.assertTrue(app.theme.keyboard)
+                app.popup._top.event_generate("<Key-Escape>")
+                root.update()
+                self.assertFalse(app.popup.showing, sequence)
+                # Escape chose nothing and the keys are back on the button.
+                self.assertIs(root.focus_get(), button, sequence)
+        self.assertEqual(app.mode_slug.get(), "mixed")
+        self.assertFalse(app.details_open.get())
+        # Home, Down, Return picks the second mode.
+        labels = [entry["label"] for entry in app.popup.entries(app.mode_menu)]
+        self._focus(app.mode_button)
+        app.mode_button.event_generate("<Key-space>")
+        root.update()
+        for sequence in ("<Key-End>", "<Key-Home>", "<Key-Down>"):
+            app.popup._top.event_generate(sequence)
+            root.update()
+        self.assertEqual(labels[app.popup._rows[app.popup._active][0]], "Calculator")
+        app.popup._top.event_generate("<Key-Return>")
+        root.update()
+        root.update()
+        self.assertFalse(app.popup.showing)
+        self.assertEqual(app.mode_slug.get(), "calculator")
+        self.assertIs(root.focus_get(), app.mode_button)
+        # A click still opens the menu, with no row chosen until the pointer is over one.
+        app.mode_button.event_generate("<Button-1>", x=4, y=4)
+        root.update()
+        self.assertTrue(app.popup.showing)
+        self.assertIsNone(app.popup._active)
+        self.assertFalse(app.theme.keyboard)
+        app.popup.close()
+
+    def test_the_keys_pass_over_a_row_that_cannot_be_chosen(self):
+        import tkinter as tk
+
+        app = self._app()
+        root = app.root
+        picked = []
+        model = tk.Menu(root, tearoff=0)
+        model.add_command(label="Off", state="disabled", command=lambda: picked.append("off"))
+        model.add_command(label="One", command=lambda: picked.append("one"))
+        model.add_separator()
+        model.add_command(label="Also off", state="disabled", command=lambda: picked.append("also off"))
+        model.add_command(label="Two", command=lambda: picked.append("two"))
+
+        def chosen() -> str:
+            return str(model.entrycget(app.popup._rows[app.popup._active][0], "label"))
+
+        app.popup.show(model, 40, 40, keyboard=True)
+        root.update()
+        self.assertEqual(chosen(), "One")
+        app.popup._step(1)
+        self.assertEqual(chosen(), "Two")
+        app.popup._step(1)
+        self.assertEqual(chosen(), "One")
+        app.popup._step(-1)
+        self.assertEqual(chosen(), "Two")
+        app.popup._edge(0)
+        self.assertEqual(chosen(), "One")
+        app.popup._edge(-1)
+        app.popup._choose(app.popup._active)
+        root.update()
+        root.update()
+        self.assertEqual(picked, ["two"])
+        # A menu with nothing to choose opens, takes the keys, and chooses nothing.
+        empty = tk.Menu(root, tearoff=0)
+        empty.add_command(label="Off", state="disabled", command=lambda: picked.append("off"))
+        app.popup.show(empty, 40, 40, keyboard=True)
+        root.update()
+        self.assertIsNone(app.popup._active)
+        app.popup._step(1)
+        app.popup._step(-1)
+        self.assertIsNone(app.popup._active)
+        app.popup._choose(app.popup._active)
+        root.update()
+        self.assertTrue(app.popup.showing)
+        app.popup.close()
+        self.assertEqual(picked, ["two"])
 
     def test_dialogs_answer_like_the_stock_ones(self):
         import tkinter as tk

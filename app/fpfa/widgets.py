@@ -438,14 +438,20 @@ class PopupMenu:
     commands. Windows draws a native menu in the system's colours whatever
     the app asks for, so the window draws its own. Choosing a row calls
     invoke() on the model, so a check entry toggles its variable as usual.
+
+    The keyboard works it as it works a native menu: Up, Down, Home, and End
+    move over the rows that can be chosen, Return or Space chooses, Escape
+    closes. Closing gives the focus back to whatever had it.
     """
 
     def __init__(self, look: "theme.Theme"):
         self._look = look
         self._top: tk.Toplevel | None = None
         self._rows: list[tuple[int, list[tk.Widget]]] = []
+        self._usable: list[int] = []
         self._active: int | None = None
         self._model: tk.Menu | None = None
+        self._opener: tk.Misc | None = None
         # A drop-down belongs to where the window was. Moving or resizing the window closes it.
         look.root.bind("<Configure>", self._on_window_change, add="+")
 
@@ -486,12 +492,23 @@ class PopupMenu:
             out.append(row)
         return out
 
-    def show(self, model: tk.Menu, x: int, y: int, *, align: str = "left") -> None:
-        """Open the menu with its top corner at screen point (x, y). align="right" hangs it leftward."""
+    def show(self, model: tk.Menu, x: int, y: int, *, align: str = "left", keyboard: bool = False) -> None:
+        """Open the menu with its top corner at screen point (x, y). align="right" hangs it leftward.
+
+        keyboard=True is a menu opened from the keys: its first row starts chosen, so Return works at once.
+        """
         self.close()
         look = self._look
         px = look.px
         root = look.root
+        # A menu button's click stops at the button, so the theme never hears it: say here how
+        # the menu was opened, or a ring would follow a reader who has gone back to the pointer.
+        look.keyboard = bool(keyboard)
+        try:
+            self._opener = root.focus_get()
+        except (KeyError, tk.TclError):
+            # focus_get cannot name a widget Tk made itself, such as a combobox's list.
+            self._opener = None
         top = tk.Toplevel(root)
         top.withdraw()
         top.overrideredirect(True)
@@ -505,6 +522,7 @@ class PopupMenu:
         body = tk.Frame(frame, bg=colors.raised, bd=0)
         body.pack(fill="both", expand=True, padx=px(5), pady=px(5))
         self._rows = []
+        self._usable = []
         self._model = model
         self._active = None
         for entry in self.entries(model):
@@ -528,6 +546,7 @@ class PopupMenu:
             self._rows.append((entry["index"], parts))
             if entry["disabled"]:
                 continue
+            self._usable.append(position)
             for part in parts:
                 part.bind("<Enter>", lambda _event, at=position: self._highlight(at), add="+")
                 part.bind("<ButtonRelease-1>", lambda _event, at=position: self._choose(at), add="+")
@@ -547,12 +566,17 @@ class PopupMenu:
         top.bind("<Button-1>", self._on_press, add="+")
         top.bind("<Down>", lambda _event: self._step(1))
         top.bind("<Up>", lambda _event: self._step(-1))
-        top.bind("<Return>", lambda _event: self._choose(self._active))
+        top.bind("<Home>", lambda _event: self._edge(0))
+        top.bind("<End>", lambda _event: self._edge(-1))
+        for sequence in ("<Return>", "<KP_Enter>", "<space>"):
+            top.bind(sequence, lambda _event: self._choose(self._active))
         try:
             top.focus_force()
             top.grab_set()
         except tk.TclError:
             pass
+        if keyboard:
+            self._edge(0)
 
     def _on_focus_out(self, event) -> None:
         if self._top is not None and event.widget is self._top:
@@ -578,10 +602,18 @@ class PopupMenu:
         self._active = position
 
     def _step(self, change: int) -> None:
-        if not self._rows:
+        """Move the choice one usable row down or up, round the ends. A disabled row is passed over."""
+        usable = self._usable
+        if not usable:
             return
-        position = -1 if self._active is None else self._active
-        self._highlight((position + change) % len(self._rows))
+        if self._active in usable:
+            self._highlight(usable[(usable.index(self._active) + change) % len(usable)])
+        else:
+            self._edge(0 if change > 0 else -1)
+
+    def _edge(self, end: int) -> None:
+        if self._usable:
+            self._highlight(self._usable[end])
 
     def _choose(self, position: int | None) -> None:
         if position is None or not (0 <= position < len(self._rows)):
@@ -605,16 +637,35 @@ class PopupMenu:
 
     def close(self) -> None:
         top, self._top = self._top, None
+        opener, self._opener = self._opener, None
         self._rows = []
+        self._usable = []
         self._active = None
         if top is None:
             return
+        # Was the menu still the place the keys went? If the reader has gone to another
+        # program, the focus is theirs to keep and is not taken back.
+        held = False
+        try:
+            holder = top.focus_displayof()
+            held = holder is not None and str(holder.winfo_toplevel()) == str(top)
+        except (KeyError, tk.TclError):
+            pass
         try:
             top.grab_release()
         except tk.TclError:
             pass
         try:
             top.destroy()
+        except tk.TclError:
+            pass
+        # Back to the button or the box that had the focus, so the keyboard carries on from there.
+        try:
+            if opener is not None and opener.winfo_exists():
+                if held:
+                    opener.focus_force()
+                else:
+                    opener.focus_set()
         except tk.TclError:
             pass
 
