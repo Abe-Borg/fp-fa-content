@@ -14,6 +14,7 @@ from typing import Any, Callable
 from fpfa.calc_tools import SCHEMAS, ToolSession
 from fpfa.claude_client import incomplete_notice, run_tool_loop
 from fpfa.modes_loader import list_modes, normalize_mode, read_mode
+from fpfa.record import Record
 from fpfa.roles_loader import list_roles, read_role
 from fpfa.skills_loader import list_skills, spec_notes
 
@@ -65,6 +66,13 @@ def assemble_system(content_root: Path, mode: str | None = None) -> str:
     lines.append("Skills in this content pack:")
     for skill in list_skills(content_root):
         lines.append(f"- {skill['slug']}: {skill['description']}")
+    lines.append("")
+    lines.append(
+        "Project record. record_fact, record_evidence, record_finding, open_question, and "
+        "record_decision write to this job's record. read_record shows it with row ids. "
+        "Calc tools record themselves. Write a finding with the calc record ids that support it. "
+        "A question the designer must answer is open_question."
+    )
     # Every spec file goes in whole. Nothing here shortens or summarizes it.
     notes = spec_notes(content_root)
     if notes:
@@ -94,9 +102,16 @@ def run_everyday(
     required: list[str] | None = None,
     max_rounds: int = 16,
     max_tokens: int = 16000,
+    record: Record | None = None,
+    project_id: str | None = None,
+    agent: str = "lead",
 ) -> dict:
-    """One everyday turn. create() is Messages.create. Tools run in calcs/."""
-    session = ToolSession(content_root)
+    """One everyday turn. create() is Messages.create. Tools run in calcs/.
+
+    With record and project_id, calc calls and record tools write to that
+    job's record as agent. Without them, nothing is recorded.
+    """
+    session = ToolSession(content_root, record=record, project_id=project_id, agent=agent)
     return run_tool_loop(
         create,
         system=assemble_system(content_root, mode),

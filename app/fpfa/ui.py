@@ -63,6 +63,7 @@ from fpfa.keystore import clear_api_key, key_status, key_storage_help, load_api_
 from fpfa.modes_loader import DEFAULT_MODE, MODE_SLUGS, list_modes, normalize_mode
 from fpfa.paths import content_root, is_content_pack, read_config, write_config
 from fpfa.projects import delete_project, list_projects, load_project, new_project, save_project
+from fpfa.record import Record
 from fpfa.spec_docx import DRAFT_SECTION, write_docx
 from fpfa.theme import apply_theme, enable_windows_dpi_awareness
 from fpfa.widgets import Composer, ScrollFrame
@@ -352,6 +353,8 @@ class App:
         self._menu_project_id: str | None = None
         self._build()
         self.jobs = JobInbox(worker_count=2, on_change=self._on_jobs_changed)
+        # The project record. Calc tools and record tools write to it by job id.
+        self.record = Record()
         # Cached agent and cloud environment ids for later /heavy calls.
         # Not a session. Session cleanup does not delete these.
         self._managed_resources: dict = {}
@@ -1265,6 +1268,16 @@ class App:
         self._render_chat()
         self._show_saved_run(project.get("last_run") or project.get("bess_run"))
         self._apply_mode(project.get("mode"))
+        self._open_record(project)
+
+    def _open_record(self, project: dict | None) -> None:
+        """Make sure the job is in the project record. An older JSON job is imported once."""
+        if not project or not project.get("id"):
+            return
+        try:
+            self.record.import_project(project)
+        except Exception as exc:
+            self.status.set("Project record is not available. " + safe_error(exc))
 
     def _known_modes(self) -> list[str]:
         try:
@@ -1739,6 +1752,10 @@ class App:
         if not messagebox.askyesno("Delete", "Delete this job and its chat from this machine?"):
             return
         delete_project(project_id)
+        try:
+            self.record.delete_project(project_id)
+        except Exception as exc:
+            self.status.set("The job file was deleted. Its record rows were not. " + safe_error(exc))
         if self.project and self.project.get("id") == project_id:
             # Clear the thread too, so a deleted job's chat is not left on screen.
             self.project = None
@@ -1800,6 +1817,7 @@ class App:
         except FileNotFoundError as exc:
             self._report_run_problem(origin_id, str(exc), announce=announce)
             return
+        self._open_record(self.project)
         use_claude = bool(self.ask_claude.get()) and bool(load_api_key())
         if use_claude:
             self._enqueue_zone(
@@ -1823,7 +1841,9 @@ class App:
             self._announce_jobs.add(job.id)
             self._remember_seed(job.id, seed)
         try:
-            result = run_di_zone(pack, di, basis, narrator=None, mode=mode)
+            result = run_di_zone(
+                pack, di, basis, narrator=None, mode=mode, record=self.record, project_id=origin_id
+            )
         except Exception as exc:
             self.jobs.mark(job.id, "error", safe_error(exc))
             self._report_run_problem(origin_id, safe_error(exc), job_id=job.id)
@@ -1857,7 +1877,9 @@ class App:
                 )
 
             try:
-                result = run_di_zone(pack, di, basis, narrator=narrator, mode=mode)
+                result = run_di_zone(
+                    pack, di, basis, narrator=narrator, mode=mode, record=self.record, project_id=origin_id
+                )
                 error = None
             except Exception as exc:
                 result = None
@@ -1933,7 +1955,8 @@ class App:
             self._remember_seed(job.id, seed)
         try:
             result = run_bess_plan(
-                pack, room, basis, zone_result=zone_result, narrator=None, mode="synthesis"
+                pack, room, basis, zone_result=zone_result, narrator=None, mode="synthesis",
+                record=self.record, project_id=origin_id,
             )
         except Exception as exc:
             self.jobs.mark(job.id, "error", safe_error(exc))
@@ -1970,6 +1993,8 @@ class App:
                     zone_result=zone_result,
                     narrator=narrator,
                     mode="synthesis",
+                    record=self.record,
+                    project_id=origin_id,
                 )
                 error = None
             except Exception as exc:
@@ -2588,6 +2613,7 @@ class App:
         self._save_form_or_chat(self.project)
         save_project(self.project)
         self.refresh_projects(origin_id)
+        self._open_record(self.project)
         try:
             basis = self.collect_basis()
             di = self.collect_di()
@@ -2617,7 +2643,10 @@ class App:
             try:
                 pack = content_root()
                 client = AnthropicMessages(key)
-                out = run_everyday(pack, client.create, request, mode=mode)
+                out = run_everyday(
+                    pack, client.create, request, mode=mode,
+                    record=self.record, project_id=origin_id, agent="lead",
+                )
                 reply = everyday_reply(out)
                 used = usage_summary(out.get("usage"))
             except Exception as exc:

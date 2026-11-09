@@ -16,6 +16,7 @@ from fpfa.calc_tools import REQUIRED_DI_TOOLS, SCHEMAS, ToolSession
 from fpfa.claude_client import MODEL_ID, incomplete_notice, safe_error
 from fpfa.everyday import EVERYDAY_ROLE, SPECIALIST_ROLES, assemble_system
 from fpfa.modes_loader import MODE_SLUGS, list_modes, normalize_mode
+from fpfa.record import Record
 from fpfa.roles_loader import list_roles
 from fpfa.skills_loader import list_skills
 
@@ -475,10 +476,20 @@ def run_di_zone(
     basis: dict | None = None,
     narrator: Narrator | None = None,
     mode: str | None = None,
+    *,
+    record: Record | None = None,
+    project_id: str | None = None,
 ) -> dict[str, Any]:
+    """Run the fixed tool plan, then the optional narrative.
+
+    With record and project_id, the plan's eight calls are written to that
+    job's record as tool-plan, and a narrator's own calls as narrator. A
+    repeat run with the same inputs replays the recorded figures.
+    """
     basis = dict(basis or {})
     selected = normalize_mode(mode)
-    session = ToolSession(content_root)
+    session = ToolSession(content_root, record=record, project_id=project_id, agent="tool-plan")
+    narrator_session = ToolSession(content_root, record=record, project_id=project_id, agent="narrator")
     tools, sent = run_tool_plan(session, di, basis)
     template = template_narrative(di, tools, basis)
     transcript = _plan_transcript(tools, sent)
@@ -508,7 +519,7 @@ def run_di_zone(
                 system_prompt(content_root, selected),
                 _user_message(content_root, di, basis, tools, sent, selected),
                 SCHEMAS,
-                session.execute,
+                narrator_session.execute,
             )
             usage = drafted.get("usage")
             unfinished = incomplete_notice(drafted.get("stop_reason"))
