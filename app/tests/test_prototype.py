@@ -4427,8 +4427,16 @@ class BlindClaimCheckTests(unittest.TestCase):
         self.assertIn("38.1", packet["claims"])
         self.assertNotIn("NOT PULLED", packet["sources"])
         self.assertIn("PACKAGE ASSERTION (not a retrieved standard passage)", packet["sources"])
-        self.assertIn("DI 500 gal; QOD does not extend", packet["sources"])
-        self.assertNotIn("requires DI 500 gal; QOD does not extend", packet["claims"])
+        # The double-interlock 500 gal rule, as the kernel cites it: a size threshold under
+        # NFPA 13-2025 s8.3.2.3.1.1, not a cap. The sources carry that wording with the
+        # section tokens taken out; the claims never state it as a requirement.
+        basis = result["tools"]["dry_delivery_screen"]["nfpa_basis"]
+        self.assertTrue(basis.startswith("NFPA 13-2025 s8.3.2.3.1.1 ("), basis)
+        for phrase in ("DI <=500 gal: no delivery-time requirement", "QOD may help"):
+            self.assertIn(phrase, basis)
+            self.assertIn(phrase, packet["sources"])
+            self.assertNotIn(phrase, packet["claims"])
+        self.assertNotIn("QOD does not extend", packet["sources"])
         self.assertNotIn("requires NFPA 13-2025 Table", packet["claims"])
         self.assertNotIn("Draft for the engineer of record", packet["claims"])
         self.assertNotIn("ranks double-interlock", packet["claims"])
