@@ -286,6 +286,7 @@ def run_bess_plan(
     narrative = template
     source = "tool-plan"
     model = None
+    usage = None
     if narrator is not None:
         model = MODEL_ID
         try:
@@ -295,6 +296,7 @@ def run_bess_plan(
                 SCHEMAS,
                 session.execute,
             )
+            usage = drafted.get("usage")
             unfinished = incomplete_notice(drafted.get("stop_reason"))
             if unfinished:
                 warnings.append(unfinished + " The starter stays on the tool plan.")
@@ -357,4 +359,5 @@ def run_bess_plan(
         "basis": basis,
         "cites": cites,
         "zone_governing": zone,
+        "usage": usage,
     }
