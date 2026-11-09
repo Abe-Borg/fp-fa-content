@@ -347,8 +347,9 @@ def run_bess_plan(
                 warnings.append(
                     "Claude did not successfully call read_skill. The tool plan still used the skill file."
                 )
-        except TurnCancelled:
+        except TurnCancelled as exc:
             cancelled = True
+            usage = getattr(exc, "usage", None)
             warnings.append(NARRATION_CANCELLED)
             source = "tool-plan"
             narrative = template
@@ -356,6 +357,10 @@ def run_bess_plan(
             warnings.append("Claude was not used. " + safe_error(exc))
             source = "tool-plan"
             narrative = template
+        if narrator_session.recording:
+            record.log_event(project_id, "narration", {
+                "usage": dict(usage or {}), "source": source, "cancelled": cancelled, "kind": "bess",
+            }, agent="narrator")
     checks = {
         "texts": texts,
         "quotes_all": all(text in (narrative or "") for text in texts),

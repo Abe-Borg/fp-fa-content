@@ -2,7 +2,7 @@
 
 This file is the single source of truth for the v0 prototype. Every agent working on this repository reads it before starting and updates the status columns when a phase or a gate changes. Email threads, chat transcripts, and earlier planning notes are history, not the plan.
 
-Updated: 2026-11-09. Phases 1 through 5 complete. Phase 6 next. Implementation of v0 is authorized as of 2026-11-09 along the path in this file.
+Updated: 2026-11-09. Phases 1 through 5 complete. Phase 6 in progress: everything that runs without a Windows machine or a key is done; the Windows runs wait for the owner. Implementation of v0 is authorized as of 2026-11-09 along the path in this file.
 
 ## 1. Definition of done for v0
 
@@ -41,17 +41,17 @@ Sizes are focused work sessions. No dates are promised.
 | 3. Team | Lead loop with `list_specialists`, `delegate`, `handoff`, `request_check`. FP and FA specialists run in their own contexts from the existing role files with their own skill and tool subsets. Checker runs blind from the record. The lead picks specialists from the request. | Fake-client tests show three distinct contributors and a complete handoff log on the sample. | 3 to 4 | Done in `app/fpfa/team.py`; tests in `app/tests/test_team.py`. The Design Basis export now waits for a current all-Supported record check when findings exist. Awaiting review before Phase 4 |
 | 4. Team UI | Roster with states, collapsed activity, expandable handoff cards, blockers and open-questions pane, cancel. Built on the existing Activity list and inbox. | Window tests under Xvfb. | 2 | Done: Team tab in the drawer (`app/fpfa/team_panel.py`), TEAM roster in the sidebar, app-written team summary under lead replies, cooperative cancel through the tool loop, a Run blind check job. Tests in `app/tests/test_team_ui.py` |
 | 5. Recovery | Pending handoffs re-queued on launch. Calc idempotency by input hash. In-flight jobs marked interrupted on relaunch. Forced-kill and sleep tests. | Tests C and D protocol written and passed. | 2 | Done: jobs persist as record rows, `Record.recover()` runs once at launch, the lead sees waiting handoffs at the top of its turn, a wake detector in the window. `docs/recovery-protocol.md` is the protocol; its automated part, including a real process kill, is `app/tests/test_recovery.py`. The manual Windows runs wait for the Phase 6 machine |
-| 6. Package and measure | Installer from the existing scripts. Clean Windows VM. Run tests A through E. Record versions, cost per task, failures, and limits. | A, B, E pass. C and D at least documented. | 1 to 2 | Not started |
+| 6. Package and measure | Installer from the existing scripts. Clean Windows VM. Run tests A through E. Record versions, cost per task, failures, and limits. | A, B, E pass. C and D at least documented. | 1 to 2 | In progress. Done from Linux: the Windows workflow gained a build-only mode (`publish` off uploads the installer and zip as artifacts, no tag), `__version__` is 0.1.3 for the next release, every model context writes its usage on the record (`turn`, `narration`, `record_check`, `delegation` events), `app/fpfa/usage_report.py` prices a job (`/usage`, the ⋯ menu, `python -m fpfa.usage_report`), `app/fpfa/about.py` records versions (`About and versions`, `--versions`), and `docs/acceptance-tests.md` is the A through E protocol with result tables. Waiting on the owner: the clean Windows machine, a key, and the known-answer confirmation, then the manual runs and the result tables |
 
 ## 4. Acceptance tests
 
 | Test | What passes | Status |
 | --- | --- | --- |
-| A. Clean Windows install | Install on a clean machine, open the sample, load the skills, run the DH-1 tool plan, export. Figures match `docs/known-answer-dh1.md`. Runtime and dependency versions recorded. | Not run |
-| B. Specialist collaboration | Distinct FP, FA, and checker contributions on DH-1. Every substantive handoff is a record row with sender, receiver, time, and payload, visible in the window. | Not run |
+| A. Clean Windows install | Install on a clean machine, open the sample, load the skills, run the DH-1 tool plan, export. Figures match `docs/known-answer-dh1.md`. Runtime and dependency versions recorded. | Protocol in `docs/acceptance-tests.md`. Figures locked by tests; versions come from About and versions. Manual run: not run |
+| B. Specialist collaboration | Distinct FP, FA, and checker contributions on DH-1. Every substantive handoff is a record row with sender, receiver, time, and payload, visible in the window. | Automated half passed (`app/tests/test_team.py`). Manual run with a key per `docs/acceptance-tests.md`: not run |
 | C. Continuity | Relaunch the app and the roster, the pending handoffs, and the record are back. A completed specialist can be asked a follow-up with its prior contribution in front of it. | Automated half passed (`app/tests/test_recovery.py`, a second window on the same data directory). Manual Windows run per `docs/recovery-protocol.md`: not run |
 | D. Recovery | Forced process kill and sleep/wake, tested separately. No duplicate calc records. No repeated handoff. In-flight jobs are marked interrupted and can be re-run. | Automated half passed: a child process killed between calc records, recovery, re-run with replays only, and the wake detector as a clock gap. Manual Windows runs per `docs/recovery-protocol.md`: not run |
-| E. Usability and cost | Activity collapsed by default, handoffs inspectable, cancel works, blockers visible, export reviewable. Cost per DH-1 task measured from the usage totals. | Not run |
+| E. Usability and cost | Activity collapsed by default, handoffs inspectable, cancel works, blockers visible, export reviewable. Cost per DH-1 task measured from the usage totals. | Automated half passed (`app/tests/test_usage.py`, `test_team_ui.py`, `test_prototype.py`); the cost report exists. Manual run and the cost table per `docs/acceptance-tests.md`: not run |
 
 ## 5. Project record
 
@@ -88,7 +88,7 @@ Rules:
 - **Checker.** `roles/qa-specialist/ROLE.md`, blind. `request_check` builds the claim list from the record's findings and the cites from `evidence` and `calc_records`, and runs the one-call check that exists today in `app/fpfa/claim_check.py`. Verdicts are written to the record. Export waits for Supported, as today.
 - **Routing.** A specialist that needs another specialist writes a handoff with `to`. The lead sees pending handoffs on its next round and delivers them when it activates that specialist. No specialist talks to another directly in v0.
 - **Activation.** Dynamic. The lead is told which specialists exist and chooses. A fixed sequence is not imposed.
-- **Cost.** Every context sums its usage. The lead's status line shows the task total. The total goes on the `events` row that closes the task.
+- **Cost.** Every context sums its usage. The lead's status line shows the task total. The total goes on the `events` row that closes the task: a `turn` event per lead turn (lead rounds plus every delegation and check inside it, also written when the turn is cancelled), a `narration` event per narrated zone run or starter, usage on each `record_check` event, and a `delegation` event per specialist, including one marked cancelled for a specialist a cancel interrupted. `app/fpfa/usage_report.py` reads every usage event on the job back and prices them at a dated rate snapshot; `/usage` posts the report into the thread.
 - **Cancel.** A cancel flag per job is checked by the tool loop before each model round and by the lead before each team tool. The round or tool in flight finishes. A cancelled specialist is marked interrupted and its handoff cancelled; the job shows `cancelled` in Activity.
 - **Relaunch.** The lead's user message starts with the handoffs waiting on the record, re-queued or not, so a delivery that a kill interrupted is in front of the lead on its next turn without a tool call. Interrupted jobs show in Activity under their original ids, the thread gets one app-written note when the job opens, and the Team tab shows the interrupted agents and the re-queued handoffs. A clock gap over 90 s between polls is reported as a resume with a `wake` event; nothing is restarted. The note is owed across launches until the job is opened (`recovered` and `recovery_noted` events). One window per data directory: an OS file lock on `fpfa.lock` (`app/fpfa/instance_lock.py`) refuses a second window, so it cannot recover the first one's live work; a kill releases the lock.
 
@@ -152,4 +152,6 @@ Shared hosting. Managed Agents. Real-time peer chat. Wet and dry verticals beyon
 ## 12. Open items for the project owner
 
 1. Confirm or edit `docs/known-answer-dh1.md`, especially the open questions and the judgment items marked OWNER TO CONFIRM.
-2. Provide a clean Windows machine or VM for test A at Phase 6.
+2. Provide a clean Windows machine or VM for test A at Phase 6, with an API key for tests B and E.
+3. Run the manual halves of tests A through E per `docs/acceptance-tests.md` and `docs/recovery-protocol.md`, and fill their result tables.
+4. Decide when to publish `app-v0.1.3`: push the tag, or run the Windows app workflow with `publish` on.

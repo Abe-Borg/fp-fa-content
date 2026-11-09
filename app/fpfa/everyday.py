@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from fpfa.calc_tools import SCHEMAS, ToolSession
-from fpfa.claude_client import incomplete_notice, run_tool_loop
+from fpfa.claude_client import TurnCancelled, incomplete_notice, run_tool_loop
 from fpfa.modes_loader import list_modes, normalize_mode, read_mode
 from fpfa.record import Record
 from fpfa.roles_loader import list_roles, read_role
@@ -101,6 +101,16 @@ def everyday_reply(out: dict) -> str:
     return text
 
 
+def _task_total(lead_usage: dict | None, team_usage: dict | None) -> dict:
+    """The lead's own rounds plus every delegation and check it ran."""
+    total = dict(lead_usage or {})
+    for key, value in (team_usage or {}).items():
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            continue
+        total[key] = int(total.get(key, 0)) + int(value)
+    return total
+
+
 def run_everyday(
     content_root: Path,
     create: Callable[..., Any],
@@ -147,20 +157,32 @@ def run_everyday(
                 max_tokens=max_tokens,
                 cancel=cancel,
             )
+        except TurnCancelled as exc:
+            # The rounds that ran were billed. Close the task on the record with what they cost.
+            record.set_agent(project_id, name="Lead", role_slug=agent, status="interrupted")
+            record.log_event(project_id, "turn", {
+                "usage": _task_total(getattr(exc, "usage", None), team.usage),
+                "lead_usage": dict(getattr(exc, "usage", None) or {}),
+                "delegations": len(team.delegations), "checks": len(team.checks),
+                "cancelled": True, "stop_reason": "cancelled",
+            }, agent=agent)
+            raise
         except Exception:
             record.set_agent(project_id, name="Lead", role_slug=agent, status="error")
             raise
         record.set_agent(project_id, name="Lead", role_slug=agent, status="done")
         lead_usage = dict(out.get("usage") or {})
-        total = dict(lead_usage)
-        for key, value in team.usage.items():
-            if isinstance(value, bool) or not isinstance(value, (int, float)):
-                continue
-            total[key] = int(total.get(key, 0)) + int(value)
+        total = _task_total(lead_usage, team.usage)
         out["usage"] = total
         out["lead_usage"] = lead_usage
         out["delegations"] = team.delegations
         out["checks"] = team.checks
+        # The events row that closes the task carries the whole task's usage.
+        record.log_event(project_id, "turn", {
+            "usage": total, "lead_usage": lead_usage,
+            "delegations": len(team.delegations), "checks": len(team.checks),
+            "cancelled": False, "stop_reason": out.get("stop_reason") or "",
+        }, agent=agent)
         return out
     session = ToolSession(content_root, record=record, project_id=project_id, agent=agent)
     return run_tool_loop(

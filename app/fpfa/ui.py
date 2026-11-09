@@ -46,6 +46,8 @@ from fpfa.claude_client import MODEL_ID, AnthropicMessages, TurnCancelled, run_t
 from fpfa.design_basis_docx import DESIGN_BASIS_TITLE, write_design_basis
 from fpfa.team import check_record, export_gate, latest_check, team_summary
 from fpfa.team_panel import TeamPanel, recovery_text
+from fpfa.usage_report import report_text
+from fpfa.about import version_text
 from fpfa.content_update import (
     ContentUpdateError,
     UpdateResult,
@@ -255,6 +257,7 @@ def slash_help_text() -> str:
         "- /heavy task — text-only hosted reasoning on the zone packet already in the message. "
         "The reply comes back into this thread. It does not call read_role, read_skill, read_mode, "
         "or a calc tool, and it is the only path that uses the hosted runtime.\n"
+        "- /usage — tokens and estimated cost for this job, from the record\n"
         "- /help — this list\n\n"
         "## Keys and menus\n"
         "- Ctrl+S saves the open job. Closing the window saves it too. Ctrl+N starts a new chat.\n"
@@ -725,12 +728,14 @@ class App:
         menu.add_command(label=f"Export draft Section {DRAFT_SECTION}…", command=self.export_docx)
         menu.add_command(label="Export Design Basis and Open Questions…", command=self.export_design_basis)
         menu.add_command(label="Team panel", command=self.show_team)
+        menu.add_command(label="Usage and cost", accelerator="/usage", command=self.show_usage)
         menu.add_separator()
         menu.add_checkbutton(label="Narrate zone runs with Claude", variable=self.ask_claude)
         menu.add_separator()
         menu.add_command(label="Rename job…", command=self.rename_job)
         menu.add_command(label="Settings…", command=self.open_settings)
         menu.add_command(label="Commands", accelerator="/help", command=self._show_help)
+        menu.add_command(label="About and versions", command=self.show_about)
 
     def _build_details(self, parent) -> None:
         px = self.theme.px
@@ -883,6 +888,27 @@ class App:
 
     def _show_help(self) -> None:
         self._local_exchange("/help", slash_help_text())
+
+    def show_usage(self, raw: str = "/usage") -> None:
+        """Post the job's token use and estimated cost into the thread, read from the record."""
+        self._keep_composer_open()
+        if not self.project:
+            self._local_exchange(raw, "Open a job first. Usage is read from that job's record.")
+            return
+        self._open_record(self.project)
+        try:
+            text = report_text(self.record, self.project["id"], name=self.project.get("name") or UNTITLED_JOB)
+        except Exception as exc:
+            text = "Usage could not be read. " + safe_error(exc)
+        self._local_exchange(raw, "```\n" + text + "\n```")
+
+    def show_about(self) -> None:
+        """App, runtime, dependency, content, and record versions in one box."""
+        try:
+            text = version_text()
+        except Exception as exc:
+            text = "Versions could not be read. " + safe_error(exc)
+        messagebox.showinfo("About FP/FA Design Assistant", text)
 
     def _fit_title(self) -> None:
         """Show the job name, cut with an ellipsis when the top bar is narrow."""
@@ -2028,6 +2054,8 @@ class App:
             self._slash_new(raw, argument)
         elif command == "help":
             self._local_exchange(raw, slash_help_text())
+        elif command == "usage":
+            self.show_usage(raw)
         elif command == "mode":
             self._slash_mode(raw, argument)
         else:
@@ -3465,7 +3493,11 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--quit", action="store_true", help="With --demo, exit after the run and screenshots")
     parser.add_argument("--screenshot-dir", default="", help="With --demo, write zone and results PNGs here")
     parser.add_argument("--export", default="", help="With --demo, write the draft .docx here")
+    parser.add_argument("--versions", action="store_true", help="Print app, runtime, dependency, and content versions and exit")
     args = parser.parse_args(argv)
+    if args.versions:
+        sys.stdout.write(version_text() + "\n")
+        return
 
     if args.demo:
         # Skip the OS keyring probe. The demo never calls Claude.

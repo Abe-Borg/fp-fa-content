@@ -250,9 +250,14 @@ def delegate(
             max_tokens=max_tokens,
             cancel=cancel,
         )
-    except TurnCancelled:
+    except TurnCancelled as exc:
         record.set_agent(project_id, name=name, role_slug=slug, status="interrupted")
         record.set_handoff(project_id, lead_handoff["id"], status="cancelled", result="Cancelled by the designer.", by=LEAD)
+        # The rounds the specialist ran were billed. They close on the record like a finished delegation.
+        record.log_event(project_id, "delegation", {
+            "specialist": slug, "handoff": lead_handoff["id"], "findings": 0, "questions": 0, "handoffs": 0,
+            "usage": dict(getattr(exc, "usage", None) or empty_usage()), "stop_reason": "cancelled", "cancelled": True,
+        }, agent=LEAD)
         raise
     except Exception:
         record.set_agent(project_id, name=name, role_slug=slug, status="error")
@@ -375,7 +380,9 @@ def check_record(content_root: Path, record: Record, project_id: str, create: Ca
         record.log_event(project_id, CHECK_EVENT, outcome, agent=CHECKER_ROLE)
         return outcome
     system = claim_check.checker_system(content_root)
-    model_text = claim_check._ask(create, system, claim_check.checker_request(packet["claims"], packet["sources"]))
+    model_text, usage = claim_check._ask_usage(
+        create, system, claim_check.checker_request(packet["claims"], packet["sources"])
+    )
     words = claim_check._verdict_words(model_text)
     rows: list[dict] = []
     for item in packet["meta"]:
@@ -408,6 +415,7 @@ def check_record(content_root: Path, record: Record, project_id: str, create: Ca
         status_line = f"Blind check: findings not Supported: {open_rows}. The design basis is not cleared for issue."
         block_reason = status_line
     outcome = {
+        "usage": usage,
         "rows": rows,
         "all_supported": supported,
         "claim_count": len(rows),
@@ -482,12 +490,17 @@ class TeamSession:
         if name == "list_specialists":
             return {"specialists": list_specialists(self.root)}
         if name == "delegate":
-            contribution = delegate(
-                self.root, self.record, self.project_id, self.create,
-                specialist=str(args.get("specialist") or ""), brief=str(args.get("brief") or ""),
-                inputs=args.get("inputs"), max_rounds=self.max_rounds, max_tokens=self.max_tokens,
-                cancel=self.cancel,
-            )
+            try:
+                contribution = delegate(
+                    self.root, self.record, self.project_id, self.create,
+                    specialist=str(args.get("specialist") or ""), brief=str(args.get("brief") or ""),
+                    inputs=args.get("inputs"), max_rounds=self.max_rounds, max_tokens=self.max_tokens,
+                    cancel=self.cancel,
+                )
+            except TurnCancelled as exc:
+                # The interrupted specialist's rounds count toward the task.
+                _merge_usage(self.usage, getattr(exc, "usage", None))
+                raise
             self.delegations.append(contribution)
             _merge_usage(self.usage, contribution.get("usage"))
             return contribution

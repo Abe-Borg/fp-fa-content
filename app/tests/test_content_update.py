@@ -113,7 +113,9 @@ class ContentPackBuildTests(unittest.TestCase):
         self.assertEqual(built.manifest["created"], "2026-10-27T00:00:00Z")
         self.assertEqual(built.manifest["changelog"], ["Shorter screen note"])
         self.assertEqual(built.manifest["filename"], "fp-fa-content-v2026.10.1.zip")
-        self.assertEqual(built.manifest["min_app_version"], "0.1.2")
+        from fpfa import __version__
+
+        self.assertEqual(built.manifest["min_app_version"], __version__)
         digest = hashlib.sha256(built.zip_path.read_bytes()).hexdigest()
         self.assertEqual(digest, built.manifest["sha256"])
         with zipfile.ZipFile(built.zip_path) as archive:
