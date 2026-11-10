@@ -103,7 +103,8 @@ Source: "..\dist\Cynosure\*"; DestDir: "{app}"; Flags: ignoreversion recursesubd
 ; page, so this copy is how such a recipient gets them.
 Source: "..\..\LICENSE"; DestDir: "{app}"; DestName: "LICENSE.txt"; Flags: ignoreversion
 ; The license texts of everything the app bundles (the Python interpreter,
-; Tcl and Tk, and every Python package), written by build_app.py through
+; every Python package, the WebView2 SDK inside pywebview, and the JavaScript
+; packages in the window's page), written by build_app.py through
 ; third_party_notices.py, which fails the build when a text is missing. If
 ; the file is absent, ISCC stops with "Source file does not exist".
 Source: "..\dist\Cynosure\THIRD-PARTY-NOTICES.txt"; DestDir: "{app}"; Flags: ignoreversion

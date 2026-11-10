@@ -19,7 +19,7 @@ The plan of record (`docs/prototype-plan.md`, section 4) names two acceptance te
 
 ## What the automated tests cover
 
-`app/tests/test_recovery.py`, run with the app suite under Xvfb.
+`app/tests/test_recovery.py`, run with the app suite (no display needed).
 
 | Test | Covers |
 | --- | --- |
@@ -91,7 +91,7 @@ Pass: steps 3, 4, 5, and 6 as expected.
 
 | Test | Where | Result | Date | Notes |
 | --- | --- | --- | --- | --- |
-| Automated (`app/tests/test_recovery.py`, 13 tests) | Linux, Python 3.12, Xvfb | Passed | 2026-11-09 | Runs with the app suite |
+| Automated (`app/tests/test_recovery.py`, 13 tests) | Linux, Python 3.12 | Passed | 2026-11-10 | Runs with the app suite; since the window became a web page it needs no display |
 | C. Continuity, manual | Windows, installed app | Not run | | Phase 6 machine |
 | D. Forced kill, manual | Windows, installed app | Not run | | Phase 6 machine; record the counts from steps 6 and 8 |
 | D. Sleep and wake, manual | Windows, installed app | Not run | | Phase 6 machine |

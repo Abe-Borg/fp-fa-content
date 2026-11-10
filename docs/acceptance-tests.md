@@ -20,11 +20,11 @@ Everything that can run without a Windows machine or an API key has run and is m
 What passes: install on a clean machine, open the sample, load the skills, run the DH-1 tool plan, export. Figures match `docs/known-answer-dh1.md` section 2. Runtime and dependency versions recorded.
 
 1. Run `Cynosure-Setup-<version>.exe`. Expected: the second page shows the license (PolyForm Shield License 1.0.0) under a short summary, and Next stays disabled until **I accept the agreement** is selected. Accept it, then accept the defaults. Note the install time and the install folder. Expected in the install folder: `Cynosure.exe`, `LICENSE.txt`, and `THIRD-PARTY-NOTICES.txt`.
-2. Start +Cynosure from the Start menu. Expected: the chat-first window opens in the Warm Clay colour scheme with a dark title bar, no error, and the status line shows the key is not saved.
-3. ⋯ menu, **About and versions**. Copy the version lines into the versions table below (the Copy button takes the whole box). The box opens with the name, the copyright line, and the license in brief, then lists the app version and whether it is frozen, the model id, Python, Windows, each dependency's version, the content pack version and folder, the data directory, and the record schema. A packaged app reports `anthropic`, `python-docx`, `keyring`, and `pywin32-ctypes` by version; `pyinstaller` reads "not installed" there, because the build tool is not bundled.
+2. Start +Cynosure from the Start menu. Expected: the chat-first window opens maximized in the Warm Clay colour scheme with a dark title bar, no error, and the status line shows the key is not saved. The window is drawn by Microsoft Edge WebView2, which Windows 10 and 11 carry. If the page opens in a browser tab instead of the app's own window, WebView2 is missing or broken on that machine: note it under failures, and the app still works in the tab.
+3. ⋯ menu, **About and versions**. Copy the version lines into the versions table below (the Copy button takes the whole box). The box opens with the name, the copyright line, and the license in brief, then lists the app version and whether it is frozen, the model id, Python, Windows, each dependency's version, the content pack version and folder, the data directory, and the record schema. A packaged app reports `anthropic`, `python-docx`, `keyring`, `pywin32-ctypes`, `pywebview`, and `pythonnet` by version; `pyinstaller` reads "not installed" there, because the build tool is not bundled. The last line, `Window`, names the Edge engine version WebView2 is running.
 4. Type `/sample-di` and press Enter. Expected: a new job named for the sample, the tool plan runs without a key, and the thread shows the zone figures. Open Zone details, Results tab: the tables.
 5. Compare the figures with `docs/known-answer-dh1.md` section 2: pipe volume, fittings allowance, trim, zone total, delivery time, screen limit, releasing rows, density and area, hose, duration, nitrogen. Every figure and every label must match.
-6. ⋯ menu, **Export draft Section 21 13 19…**. Expected: a .docx is written and opens in Word. Then **Export Design Basis and Open Questions…**. Expected: with no findings yet the export is allowed and section 3 lists the eight calculation records with the same figures.
+6. ⋯ menu, **Export draft Section 21 13 19…**. Expected: after the claim check, the Windows Save dialog asks where; a .docx is written there and opens in Word. Then **Export Design Basis and Open Questions…**. Expected: with no findings yet the export is allowed and section 3 lists the eight calculation records with the same figures.
 7. Settings, paste the key, save. Expected: the status line says the key is saved. Note which key store the Settings dialog reports (Credential Manager on Windows).
 8. Ask: "Give me the design basis for zone DH-1." (the **Design basis** chip above the composer sends the same question). Expected: three pulsing dots and a line that says what the app is doing while it works, then the reply arriving in the thread as it is written, with a **Team** block under it, the Team tab roster showing the lead and at least one specialist, and findings on the record. Compare the reply's content against sections 3 and later of the known answer. Note what differs.
 9. ⋯ menu, **Usage and cost**. Copy the job total and the estimated cost into the cost table below.
@@ -56,8 +56,9 @@ See `docs/recovery-protocol.md`, Test D: forced kill, a second copy while the fi
 
 What passes: Activity collapsed by default, handoffs inspectable, cancel works, blockers visible, export reviewable. Cost per DH-1 task measured from the usage totals.
 
-1. On a fresh launch, expected: Activity is not shown until a job runs; Zone details starts closed; only New chat, Settings, and Send are plain buttons.
-2. After Test B, expected: every handoff row opens its detail on the Team tab; blockers list the open questions and any finding not Supported; the Design Basis export can be read in Word and traced to the record.
+1. On a fresh launch, expected: Activity is not shown until a job runs; Zone details starts closed; the top bar holds Mode, Zone details, and ⋯, and the only other buttons are New chat, Settings, and Send.
+2. Responsiveness, the reason the window moved to WebView2. With the Test A job open and a long reply in the thread: drag the window's edge to resize it, open and close Zone details, switch to another job and back, scroll the thread with the wheel while a reply is arriving, and change the colour scheme in Settings. Expected: each responds without a visible pause, the thread stays where you scrolled it while words arrive, and Latest brings it back to the end. Note anything that stutters under failures, with the machine's display scale.
+3. After Test B, expected: every handoff row opens its detail on the Team tab; blockers list the open questions and any finding not Supported; the Design Basis export can be read in Word and traced to the record.
 3. Cancel: ask a long question with **Ask Claude** on, press **Cancel running job** on the Team tab while Activity shows `running`. Expected: the turn stops at its next round, the thread shows a "Cancelled" line, Activity shows `cancelled`, and **Usage and cost** still lists the cancelled turn with what it spent.
 4. Cost: ⋯ menu, **Usage and cost**, or from a source checkout `py -m fpfa.usage_report --db "%APPDATA%\fpfa-assistant\fpfa.db"`. The report lists each model context (lead turns with their delegations and checks inside, narrations, blind checks), the job total, and the estimated dollars at the rates printed on the second line. Fill the cost table below with the Test A question alone and with the full Test B task.
 
@@ -95,6 +96,9 @@ Automated half, already passed: `app/tests/test_usage.py` proves the events, the
 | python-docx | |
 | keyring | |
 | pywin32-ctypes | |
+| pywebview | |
+| pythonnet | |
+| Window (WebView2 engine) | |
 | Content pack version | |
 | Record schema | |
 | Installer file and size | |

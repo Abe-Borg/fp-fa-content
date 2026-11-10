@@ -10,6 +10,8 @@ text.
 from __future__ import annotations
 
 import importlib.util
+import json
+import os
 import re
 import sys
 import tempfile
@@ -117,15 +119,19 @@ class NameTests(unittest.TestCase):
         other = build_app.pyinstaller_command(work / "seed", work / "dist", work / "w", windowed=False, windows=False)
         self.assertNotIn("--icon", other)
         # The About box of a packaged app reads these versions from the bundle.
-        for name in ("anthropic", "python-docx", "keyring"):
+        for name in ("anthropic", "python-docx", "keyring", "pywebview", "pythonnet"):
             self.assertIn(name, [windows[i + 1] for i, flag in enumerate(windows) if flag == "--copy-metadata"])
+        # The window: the built page goes in as data, pywebview's Windows backend whole, and no tkinter.
+        data = [windows[i + 1] for i, flag in enumerate(windows) if flag == "--add-data"]
+        self.assertTrue(any(item.endswith("fpfa/web/static") and "static" in item.split(os.pathsep)[0] for item in data))
+        collected = [windows[i + 1] for i, flag in enumerate(windows) if flag == "--collect-all"]
+        self.assertEqual(collected, ["webview", "clr_loader", "pythonnet"])
+        self.assertIn("clr", [windows[i + 1] for i, flag in enumerate(windows) if flag == "--hidden-import"])
+        self.assertIn("tkinter", [windows[i + 1] for i, flag in enumerate(windows) if flag == "--exclude-module"])
+        self.assertNotIn("clr_loader", [other[i + 1] for i, flag in enumerate(other) if flag == "--collect-all"])
         self.assertEqual(_iss_value("SetupIconFile"), ["assets\\Cynosure.ico"])
 
     def test_the_icon_file_is_the_star_the_window_draws(self):
-        try:
-            import tkinter  # noqa: F401
-        except ImportError:
-            self.skipTest("tkinter is not installed")
         from fpfa import shapes, theme
 
         make_icon = _load("fpfa_make_icon", PACKAGING / "make_icon.py")
@@ -253,15 +259,8 @@ class NoticesTests(unittest.TestCase):
         self.notices = _load("fpfa_third_party_notices", PACKAGING / "third_party_notices.py")
         self.work = Path(tempfile.mkdtemp(prefix="fpfa-notices-"))
 
-    def _interpreter_license(self, *, with_tcl: bool = True) -> Path:
+    def _interpreter_license(self) -> Path:
         text = "A. HISTORY\n\nPYTHON SOFTWARE FOUNDATION LICENSE VERSION 2\n\n1. This LICENSE AGREEMENT...\n"
-        if with_tcl:
-            text += (
-                "\nTCL\n" + self.notices.TCL_TERMS_OPENING.replace(" ", "\r\n", 3)
-                + " The following terms apply to all files. ... " + self.notices.TCL_TK_TERMS_CLOSING + "\n"
-                "\nTK\n" + self.notices.TK_TERMS_OPENING + " The following terms apply. ... "
-                + self.notices.TCL_TK_TERMS_CLOSING + "\n"
-            )
         path = self.work / "LICENSE.txt"
         path.write_text(text, encoding="utf-8")
         return path
@@ -336,46 +335,66 @@ class NoticesTests(unittest.TestCase):
         self.assertEqual([item.title for item in components], ["has-text 1.0", "no-text 2.5"])
         self.assertIn("supplied with +Cynosure", components[1].texts[0].source)
 
-    def test_the_interpreter_and_the_window_toolkit_are_always_listed(self):
+    def test_the_interpreter_is_always_listed_and_no_window_toolkit_is(self):
         license_path = self._interpreter_license()
-        components = self.notices.base_components(
-            interpreter_license=license_path, tcl_dir=self.work / "tcl8.6", tk_dir=self.work / "tk8.6",
-            python_version="3.12.0",
-        )
-        self.assertEqual([item.title for item in components], ["Python 3.12.0", "Tcl 8.6", "Tk 8.6"])
-        self.assertIn("Apple Inc.", components[2].texts[0].text)
-        self.assertNotIn("Apple Inc.", components[1].texts[0].text)
-        # A license.terms file in the library directory is preferred over the block in Python's file.
-        (self.work / "tcl8.6").mkdir()
-        (self.work / "tcl8.6" / "license.terms").write_text("Tcl terms from the library directory.", encoding="utf-8")
-        again = self.notices.base_components(
-            interpreter_license=license_path, tcl_dir=self.work / "tcl8.6", tk_dir=self.work / "tk8.6",
-        )
-        self.assertEqual(again[1].texts[0].text, "Tcl terms from the library directory.")
-        with self.assertRaises(self.notices.NoticesError) as raised:
-            self.notices.base_components(
-                interpreter_license=self._interpreter_license(with_tcl=False),
-                tcl_dir=self.work / "nowhere" / "tcl8.6", tk_dir=self.work / "nowhere" / "tk8.6",
-                system_docs=None,
-            )
-        self.assertEqual(len(raised.exception.problems), 2)
-        # A Linux distribution keeps the terms with its own Tcl and Tk packages.
-        docs = self.work / "doc"
-        for package in ("libtcl8.6", "tk8.6"):
-            (docs / package).mkdir(parents=True)
-            (docs / package / "copyright").write_text(f"Terms of the system {package} package.", encoding="utf-8")
-        packaged = self.notices.base_components(
-            interpreter_license=self._interpreter_license(with_tcl=False),
-            tcl_dir=self.work / "nowhere" / "tcl8.6", tk_dir=self.work / "nowhere" / "tk8.6", system_docs=docs,
-        )
-        self.assertEqual([item.texts[0].text for item in packaged[1:]],
-                         ["Terms of the system libtcl8.6 package.", "Terms of the system tk8.6 package."])
+        components = self.notices.base_components(interpreter_license=license_path, python_version="3.12.0")
+        self.assertEqual([item.title for item in components], ["Python 3.12.0"])
+        self.assertFalse(hasattr(self.notices, "tcl_tk_directories"), "the window is WebView2; no Tcl or Tk ships")
         not_python = self.work / "other.txt"
         not_python.write_text("Some other license.", encoding="utf-8")
         with self.assertRaises(self.notices.NoticesError) as raised:
-            self.notices.base_components(interpreter_license=not_python, tcl_dir=self.work / "tcl8.6",
-                                         tk_dir=self.work / "tk8.6", system_docs=None)
+            self.notices.base_components(interpreter_license=not_python)
         self.assertTrue(any("is not the Python license" in item for item in raised.exception.problems))
+
+    def _webview_dist(self, version: str = "1.0.3856.49"):
+        folder = self.work / "site" / "pywebview-6.2.1.dist-info"
+        folder.mkdir(parents=True, exist_ok=True)
+        lib = self.work / "site" / "webview" / "lib"
+        lib.mkdir(parents=True, exist_ok=True)
+        # A version resource as Windows writes it: the key, its padding, then the value, in UTF-16.
+        (lib / "Microsoft.Web.WebView2.Core.dll").write_bytes(
+            b"MZ\x90\x00" + "FileVersion".encode("utf-16-le") + b"\x00\x00\x00\x00" + version.encode("utf-16-le")
+            + b"\x00\x00" + "InternalName".encode("utf-16-le")
+        )
+        (folder / "METADATA").write_text("Metadata-Version: 2.1\nName: pywebview\nVersion: 6.2.1\n", encoding="utf-8")
+        (folder / "RECORD").write_text(
+            f"{folder.name}/METADATA,,\nwebview/lib/Microsoft.Web.WebView2.Core.dll,,\n", encoding="utf-8"
+        )
+        return self._lookup("pywebview")
+
+    def test_the_webview2_sdk_inside_pywebview_needs_its_text_at_its_own_version(self):
+        dist = self._webview_dist()
+        self.assertEqual(self.notices.dll_file_version(dist.locate_file("webview/lib/Microsoft.Web.WebView2.Core.dll")),
+                         "1.0.3856.49")
+        overrides = self.work / "third_party_licenses"
+        overrides.mkdir()
+        with self.assertRaises(self.notices.NoticesError) as raised:
+            self.notices.webview2_components([dist], overrides_dir=overrides)
+        self.assertIn("Microsoft.Web.WebView2-1.0.3856.49.txt", raised.exception.problems[0])
+        (overrides / "Microsoft.Web.WebView2-1.0.3856.49.txt").write_text("Copyright (C) Microsoft...", encoding="utf-8")
+        [component] = self.notices.webview2_components([dist], overrides_dir=overrides)
+        self.assertEqual(component.title, "Microsoft Edge WebView2 SDK 1.0.3856.49")
+        self.assertIn("part of Windows", component.note)
+        self.assertEqual(self.notices.webview2_components([], overrides_dir=overrides), [])
+        # The text committed with the app is the package's own.
+        shipped = (PACKAGING / "third_party_licenses" / "Microsoft.Web.WebView2-1.0.3856.49.txt").read_text(encoding="utf-8")
+        self.assertIn("Copyright (C) Microsoft Corporation. All rights reserved.", shipped)
+        self.assertIn("NOTICES AND INFORMATION", shipped)
+
+    def test_the_pages_packages_are_listed_from_its_build(self):
+        components = self.notices.page_components()
+        names = [item.name for item in components]
+        self.assertTrue({"react", "react-dom", "scheduler"} <= set(names), names)
+        self.assertTrue(all(item.kind == "javascript" and "Permission is hereby granted" in item.texts[0].text
+                            for item in components))
+        broken = self.work / "licenses.json"
+        broken.write_text(json.dumps({"packages": [{"name": "left-pad", "version": "1.3.0", "license": "WTFPL", "text": ""}]}),
+                          encoding="utf-8")
+        with self.assertRaises(self.notices.NoticesError) as raised:
+            self.notices.page_components(broken)
+        self.assertIn("left-pad 1.3.0", raised.exception.problems[0])
+        with self.assertRaises(self.notices.NoticesError):
+            self.notices.page_components(self.work / "missing.json")
 
     def test_the_document_lists_every_component_with_its_text_and_nothing_is_written_on_a_gap(self):
         components = [
@@ -386,15 +405,14 @@ class NoticesTests(unittest.TestCase):
         ]
         text = self.notices.render_notices(components)
         self.assertTrue(text.startswith("THIRD-PARTY NOTICES\n"))
-        self.assertIn("+Cynosure's own\nlicense is in LICENSE.txt", text)
+        self.assertIn("+Cynosure's own license is in LICENSE.txt", text)
         self.assertIn("  Python 3.12.0 - PSF-2.0", text)
         self.assertIn("  anthropic 2.7.0 - Apache-2.0", text)
         self.assertLess(text.index("PSF TEXT"), text.index("APACHE TEXT"))
         destination = self.work / "out" / "THIRD-PARTY-NOTICES.txt"
         with self.assertRaises(self.notices.NoticesError):
             self.notices.write_notices(destination, roots=["no-such-package-anywhere"],
-                                       interpreter_license=self._interpreter_license(),
-                                       tcl_dir=self.work / "tcl8.6", tk_dir=self.work / "tk8.6")
+                                       interpreter_license=self._interpreter_license())
         self.assertFalse(destination.exists())
 
     def test_this_environment_has_a_license_text_for_every_package_the_app_needs(self):
@@ -405,8 +423,11 @@ class NoticesTests(unittest.TestCase):
             self.assertIn(name, names)
         components = self.notices.distribution_components(dists)
         self.assertEqual(len(components), len(dists))
+        components += self.notices.webview2_components(dists) + self.notices.page_components()
         for component in components:
             self.assertTrue(component.texts and all(text.text.strip() for text in component.texts), component.title)
+        if "pywebview" in names:
+            self.assertIn("Microsoft Edge WebView2 SDK", [item.name for item in components])
 
 
 if __name__ == "__main__":

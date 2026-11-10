@@ -11,3 +11,6 @@ dist/
 build/
 *.egg-info/
 .DS_Store
+
+# The page: its dependencies are installed by `npm ci`; its build (app/fpfa/web/static) is committed.
+node_modules/

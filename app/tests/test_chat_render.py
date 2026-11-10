@@ -111,14 +111,8 @@ class MarkdownSegmentsTests(unittest.TestCase):
 
 
 class ChatTitleTests(unittest.TestCase):
-    def setUp(self):
-        try:
-            import tkinter  # noqa: F401
-        except ImportError:
-            self.skipTest("tkinter is not installed")
-
     def test_title_comes_from_the_first_line(self):
-        from fpfa.ui import UNTITLED_JOB, chat_title
+        from fpfa.desk import UNTITLED_JOB, chat_title
 
         self.assertEqual(chat_title("hello there"), "hello there")
         self.assertEqual(chat_title("\n  Trim   family?  \nmore text"), "Trim family?")

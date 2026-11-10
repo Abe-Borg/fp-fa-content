@@ -20,6 +20,9 @@ REPO = APP_DIR.parent
 if str(APP_DIR) not in sys.path:
     sys.path.insert(0, str(APP_DIR))
 
+from desk_loop import Loop  # noqa: E402
+
+
 
 class Block:
     def __init__(self, **kwargs):
@@ -247,11 +250,7 @@ class ObserveTests(unittest.TestCase):
         self.assertEqual([event["type"] for event in heard], ["round", "tool_start", "tool_end", "round"])
 
     def test_the_working_line_names_the_tool_and_never_a_result(self):
-        try:
-            import tkinter  # noqa: F401
-        except ImportError:
-            self.skipTest("tkinter is not installed")
-        from fpfa.ui import describe_activity
+        from fpfa.desk import describe_activity
 
         self.assertEqual(describe_activity({"type": "round", "round": 2}), "thinking")
         self.assertEqual(
@@ -278,11 +277,7 @@ class ObserveTests(unittest.TestCase):
         self.assertIsNone(describe_activity({"type": "something-else"}))
 
     def test_suggestions_follow_the_thread(self):
-        try:
-            import tkinter  # noqa: F401
-        except ImportError:
-            self.skipTest("tkinter is not installed")
-        from fpfa.ui import suggested_prompts
+        from fpfa.desk import suggested_prompts
 
         empty = suggested_prompts(None, [], key_saved=False)
         self.assertEqual([action for _label, action in empty], ["/sample-di", "/help"])
@@ -327,21 +322,14 @@ ANSWER = (
 
 class StreamingWindowTests(unittest.TestCase):
     def _app(self, *, motion: bool = False, key: bool = True):
-        if not os.environ.get("DISPLAY"):
-            self.skipTest("no display")
-        try:
-            import tkinter as tk
-        except ImportError:
-            self.skipTest("tkinter is not installed")
         _isolate_data()
         from fpfa.keystore import save_api_key
-        from fpfa.ui import App
-
+        
         if key:
             save_api_key("sk-ant-local-test")
-        root = tk.Tk()
+        root = Loop()
         self.addCleanup(root.destroy)
-        app = App(root, motion=motion)
+        app = root.open_desk()
         root.update()
         return app
 
@@ -349,14 +337,14 @@ class StreamingWindowTests(unittest.TestCase):
         deadline = time.time() + timeout
         while time.time() < deadline:
             app._poll()
-            app.root.update()
+            app.pump()
             if until():
                 return
             time.sleep(0.01)
         self.fail("timed out waiting for the window")
 
     def _thread(self, app) -> str:
-        return app.chat_view.get("1.0", "end")
+        return app.thread_text()
 
     def test_a_streamed_reply_is_in_the_thread_before_the_turn_ends(self):
         from fpfa.projects import load_project
@@ -383,9 +371,8 @@ class StreamingWindowTests(unittest.TestCase):
                 return create
 
         try:
-            with patch("fpfa.ui.AnthropicMessages", Streaming):
-                app.chat_entry.insert(0, "Give me the design basis for zone DH-1.")
-                app.send_chat()
+            with patch("fpfa.desk.AnthropicMessages", Streaming):
+                app.send_chat("Give me the design basis for zone DH-1.")
                 self._pump(app, lambda: "Design basis for zone DH-1" in self._thread(app))
                 thread = self._thread(app)
                 # The turn is still running: its words, its caption, and the working line are all there.
@@ -398,7 +385,7 @@ class StreamingWindowTests(unittest.TestCase):
                 self.assertIn("Working on it…", thread)
                 self.assertIn("▍", thread)
                 self.assertEqual(app.chat_log[-1]["role"], "user")
-                self.assertTrue(app._stop_shown)
+                self.assertTrue(app._pending_here())
                 release.set()
                 self._pump(app, lambda: "Confirm the AHJ" in self._thread(app) and not app._pending_here())
         finally:
@@ -408,7 +395,7 @@ class StreamingWindowTests(unittest.TestCase):
         self.assertNotIn("▍", thread)
         self.assertEqual(thread.count("Design basis for zone DH-1"), 1)
         self.assertEqual(app._lives, {})
-        self.assertFalse(app._stop_shown)
+        self.assertFalse(app._pending_here())
         saved = load_project(app.project["id"])
         self.assertTrue(saved["chat"][-1]["text"].endswith(ANSWER))
         self.assertEqual([job.status for job in app.jobs.snapshot()], ["done"])
@@ -491,9 +478,8 @@ class StreamingWindowTests(unittest.TestCase):
                 return create
 
         try:
-            with patch("fpfa.ui.AnthropicMessages", Retried):
-                app.chat_entry.insert(0, "Which trim family?")
-                app.send_chat()
+            with patch("fpfa.desk.AnthropicMessages", Retried):
+                app.send_chat("Which trim family?")
                 self._pump(app, lambda: "The second attempt." in self._thread(app))
                 self.assertNotIn("HALF AN ANSWER", self._thread(app))
                 release.set()
@@ -503,42 +489,34 @@ class StreamingWindowTests(unittest.TestCase):
         self.assertNotIn("HALF AN ANSWER", self._thread(app))
         self.assertEqual(self._thread(app).count("The second attempt."), 1)
 
-    def test_with_motion_a_reply_eases_in_and_ends_as_the_same_thread(self):
-        from fpfa.chat_render import plain_text
+    def test_a_reply_that_arrives_whole_is_in_the_thread_at_once(self):
+        """The desk keeps the whole reply; easing it in is the page's (frontend/tests/reveal.test.ts)."""
+        app = self._app(key=False)
+        app.send_chat("/help")
+        app.pump()
+        state = app.snapshot()
+        self.assertIn("/sample-di —", state["thread"]["turns"][-1]["text"])
+        self.assertIn("/sample-di —", self._thread(app))
+        self.assertEqual(app.live_items(), [])
 
-        app = self._app(motion=True, key=False)
-        app.chat_entry.insert(0, "/help")
-        app.send_chat()
-        app.root.update()
-        reply = app.chat_log[-1]["text"]
-        # Just landed: the reply is still coming onto the screen.
-        self.assertIsNotNone(app._closing)
-        self.assertLess(len(self._thread(app)), len(plain_text(reply)))
-        self._pump(app, lambda: app._closing is None, timeout=12.0)
-        eased = self._thread(app)
-        self.assertIn("/sample-di —", eased)
-        self.assertNotIn("▍", eased)
-        for step in range(6):
-            self.assertEqual(app.chat_view.tag_ranges(f"fade{step}"), ())
-        # A plain redraw of the saved thread gives the same text.
-        app._render_chat()
-        self.assertEqual(self._thread(app), eased)
-
-    def test_opening_a_saved_thread_draws_it_at_once(self):
+    def test_opening_a_saved_thread_sends_it_whole(self):
         from fpfa.projects import new_project, save_project
 
-        app = self._app(motion=True, key=False)
+        app = self._app(key=False)
+        before = app.thread_rev
         project = new_project("Saved job")
         project["chat"] = [{"role": "user", "text": "hello"}, {"role": "assistant", "text": "A saved reply."}]
         save_project(project)
         app.open_project(project["id"])
-        self.assertIsNone(app._closing)
+        self.assertGreater(app.thread_rev, before)
+        turns = app.snapshot()["thread"]["turns"]
+        self.assertEqual([turn["text"] for turn in turns], ["hello", "A saved reply."])
         self.assertIn("A saved reply.", self._thread(app))
         self.assertIn("hello", self._thread(app))
 
     def test_reduce_motion_setting_and_environment(self):
         from fpfa.paths import write_config
-        from fpfa.ui import reduce_motion
+        from fpfa.desk import reduce_motion
 
         _isolate_data()
         self.assertFalse(reduce_motion())
@@ -553,19 +531,18 @@ class StreamingWindowTests(unittest.TestCase):
 
     def test_chips_send_what_they_say_and_the_footer_drops_the_job_heading(self):
         app = self._app()
-        labels = [str(child.cget("text")) for child in app.chip_row.winfo_children()]
+        labels = [chip["label"] for chip in app.snapshot()["chips"]]
         self.assertEqual(labels, ["Load the sample zone", "What trips a double-interlock valve?", "Show the commands"])
-        self.assertTrue(app.chip_row.winfo_ismapped())
         app.ask_claude.set(False)
         app._use_chip("/sample-di")
-        app.root.update()
+        app.pump()
         self.assertIn("Sample loaded", self._thread(app))
-        labels = [str(child.cget("text")) for child in app.chip_row.winfo_children()]
+        labels = [chip["label"] for chip in app.snapshot()["chips"]]
         self.assertEqual(labels, ["Design basis", "Explain the screen", "Questions for the engineer"])
         app.status.set("Asking claude-opus-5-5… Job 6b34e02bf8dc | Sample data hall DI zone | chat | Give me the basis")
-        self.assertEqual(app._status_line.get(), "Asking claude-opus-5-5…")
+        self.assertEqual(app.snapshot()["status"], "Asking claude-opus-5-5…")
         app.status.set("Chat updated.")
-        self.assertEqual(app._status_line.get(), "Chat updated.")
+        self.assertEqual(app.snapshot()["status"], "Chat updated.")
 
 
 if __name__ == "__main__":

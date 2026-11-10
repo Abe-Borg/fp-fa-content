@@ -91,7 +91,8 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $PSNativeCommandUseErrorActionPreference = $false
-          # Before the long build: every bundled package, the interpreter, and Tcl/Tk must have a license text.
+          # Before the long build: the interpreter, every bundled package, the WebView2 SDK, and the page's
+          # JavaScript packages (app/fpfa/web/static/licenses.json) must have a license text.
           python app/packaging/third_party_notices.py --check
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 

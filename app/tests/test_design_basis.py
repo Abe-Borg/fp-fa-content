@@ -12,6 +12,9 @@ REPO = APP_DIR.parent
 if str(APP_DIR) not in sys.path:
     sys.path.insert(0, str(APP_DIR))
 
+from desk_loop import Loop  # noqa: E402
+
+
 
 def _record():
     from fpfa.record import Record
@@ -225,21 +228,16 @@ class DesignBasisWindowTests(unittest.TestCase):
 
     def _app(self):
         import os
-
-        if not os.environ.get("DISPLAY"):
-            self.skipTest("no display")
         data = Path(tempfile.mkdtemp(prefix="fpfa-basis-ui-"))
         os.environ["FPFA_DATA_DIR"] = str(data)
         os.environ["FPFA_CONTENT_UPDATES"] = "0"
-        import tkinter as tk
 
         from fpfa.paths import write_config
-        from fpfa.ui import App
-
+        
         write_config({"key_backend": "file"})
-        root = tk.Tk()
+        root = Loop()
         self.addCleanup(root.destroy)
-        app = App(root)
+        app = root.open_desk()
         root.update()
         return app
 
@@ -250,7 +248,7 @@ class DesignBasisWindowTests(unittest.TestCase):
         self.assertEqual(app.design_basis_ready(), "Open a job first.")
         app.ask_claude.set(False)
         app.start_sample_di()
-        app.root.update()
+        app.pump()
         self.assertEqual(app.design_basis_ready(), "")
         out = Path(tempfile.mkdtemp(prefix="fpfa-basis-ui-out-")) / "basis.docx"
         written = app.export_design_basis_to(out)
@@ -260,9 +258,8 @@ class DesignBasisWindowTests(unittest.TestCase):
         self.assertIn("Zone total 281.3 gal (calculated)", text)
         self.assertIn("zone_trapped_volume | tool-plan", text)
         self.assertIn("basis/insurer | FM | OWNER", text)
-        labels = [app.more_menu.entrycget(i, "label") for i in range(app.more_menu.index("end") + 1)
-                  if app.more_menu.type(i) == "command"]
-        self.assertIn("Export Design Basis and Open Questions…", labels)
+        # The ⋯ menu's row names the document from the state the page reads.
+        self.assertEqual(app.snapshot()["app"]["design_basis_title"], DESIGN_BASIS_TITLE)
 
     def test_a_new_empty_job_is_not_ready(self):
         app = self._app()

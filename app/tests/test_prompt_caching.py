@@ -21,8 +21,11 @@ REPO = APP_DIR.parent
 if str(APP_DIR) not in sys.path:
     sys.path.insert(0, str(APP_DIR))
 
+from desk_loop import Loop  # noqa: E402
+
 FA_SPEC = "28-31-00-fire-detection-and-alarm.md"
 EPHEMERAL = {"type": "ephemeral"}
+
 
 
 class Block:
@@ -287,7 +290,7 @@ class StatusLineWindowTests(unittest.TestCase):
         deadline = time.time() + timeout
         while time.time() < deadline:
             app._poll()
-            if needle in app.chat_view.get("1.0", "end"):
+            if needle in app.thread_text():
                 return
             time.sleep(0.02)
         self.fail(f"timed out waiting for {needle!r}")
@@ -295,23 +298,18 @@ class StatusLineWindowTests(unittest.TestCase):
     def _app(self):
         import os
         import tempfile
-
-        if not os.environ.get("DISPLAY"):
-            self.skipTest("no display")
         data = Path(tempfile.mkdtemp(prefix="fpfa-cache-test-"))
         os.environ["FPFA_DATA_DIR"] = str(data)
         os.environ["FPFA_CONTENT_UPDATES"] = "0"
-        import tkinter as tk
 
         from fpfa.keystore import save_api_key
         from fpfa.paths import write_config
-        from fpfa.ui import App
-
+        
         write_config({"key_backend": "file"})
         save_api_key("sk-ant-local-test")
-        root = tk.Tk()
+        root = Loop()
         self.addCleanup(root.destroy)
-        app = App(root)
+        app = root.open_desk()
         root.update()
         return app
 
@@ -334,16 +332,15 @@ class StatusLineWindowTests(unittest.TestCase):
                                           cache_creation_input_tokens=0, cache_read_input_tokens=21200),
                 )
 
-        with patch("fpfa.ui.AnthropicMessages", Fast):
-            app.chat_entry.insert(0, "What limits the zone size?")
-            app.send_chat()
+        with patch("fpfa.desk.AnthropicMessages", Fast):
+            app.send_chat("What limits the zone size?")
             self._wait_for(app, "Cached reply text")
         self.assertEqual(len(seen), 1)
         status = app.status.get()
         self.assertIn("Chat updated.", status)
         self.assertIn("1 round, 21,600 input tokens (98% read from cache), 120 output tokens.", status)
         # The stand-in replaced the wrapper, so the thread text is unchanged either way.
-        self.assertNotIn("read from cache", app.chat_view.get("1.0", "end"))
+        self.assertNotIn("read from cache", app.thread_text())
 
 
 if __name__ == "__main__":
