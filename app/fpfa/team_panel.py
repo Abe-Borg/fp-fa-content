@@ -1,7 +1,7 @@
 """The Team tab. Roster, blockers, and the handoff log, read from the project record.
 
-The panel renders a Record.snapshot(). It holds no state of its own beyond
-the last snapshot, so a refresh after any job is one call. Specialist
+team_view() turns a Record.snapshot() into what the page draws. It holds no
+state of its own, so a refresh after any job is one call. Specialist
 activity stays collapsed: the handoff table shows one line per exchange,
 and the detail pane opens the brief, the payload, and the result for the
 selected row.
@@ -10,9 +10,7 @@ selected row.
 from __future__ import annotations
 
 import json
-import tkinter as tk
-from tkinter import ttk
-from typing import Any, Callable
+from typing import Any
 
 from fpfa.team import check_token
 
@@ -138,152 +136,48 @@ def _time(text: Any) -> str:
     return text[11:16] if len(text) >= 16 else text
 
 
-class TeamPanel(ttk.Frame):
-    def __init__(
-        self,
-        master,
-        theme,
-        *,
-        on_cancel: Callable[[], None],
-        on_check: Callable[[], None],
-        on_export: Callable[[], None],
-    ):
-        px = theme.px
-        super().__init__(master, style="OnSide.TFrame", padding=(px(4), px(10), px(4), px(6)))
-        self.theme = theme
-        self.snapshot: dict | None = None
-        self._rows: dict[str, dict] = {}
+def handoff_detail(row: dict) -> str:
+    """The detail pane for one handoff: who, when, the brief, the payload, and the result."""
+    payload = row.get("payload")
+    if isinstance(payload, str):
+        try:
+            payload = json.loads(payload)
+        except json.JSONDecodeError:
+            pass
+    lines = [
+        f"[{row.get('id')}] {row.get('from_agent')} → {row.get('to_agent')}: {row.get('status')}",
+        f"Created {row.get('created') or ''}. Delivered {row.get('delivered') or '—'}. Returned {row.get('returned') or '—'}.",
+        "",
+        "Brief:",
+        str(row.get("brief") or ""),
+    ]
+    if payload:
+        lines += ["", "Payload:", json.dumps(payload, indent=2, sort_keys=True, default=str)]
+    if row.get("result"):
+        lines += ["", "Result:", str(row.get("result"))]
+    return "\n".join(lines)
 
-        ttk.Label(
-            self,
-            text=(
-                "The lead delegates to specialists. Each exchange is a row below. "
-                "Select a row for its brief, payload, and result. Findings and questions live on the record, "
-                "not in the thread."
-            ),
-            style="OnSide.Small.TLabel",
-            wraplength=px(410),
-            justify="left",
-        ).pack(anchor="w", pady=(0, px(10)))
 
-        buttons = ttk.Frame(self, style="OnSide.TFrame")
-        buttons.pack(fill="x", pady=(0, px(12)))
-        self.cancel_button = ttk.Button(
-            buttons, text="Cancel running job", command=on_cancel, state="disabled", style="OnSide.Danger.TButton"
-        )
-        self.cancel_button.pack(side="left")
-        self.check_button = ttk.Button(buttons, text="Run blind check", command=on_check, style="OnSide.TButton")
-        self.check_button.pack(side="left", padx=(px(8), 0))
-        ttk.Button(buttons, text="Export basis…", command=on_export, style="OnSide.TButton").pack(
-            side="left", padx=(px(8), 0)
-        )
-
-        self.roster_text = self._section("TEAM", height=4)
-        self.blockers_text = self._section("BLOCKERS AND OPEN QUESTIONS", height=4)
-
-        ttk.Label(self, text="HANDOFFS", style="OnSide.Section.TLabel").pack(anchor="w", pady=(0, px(5)))
-        table = ttk.Frame(self, style="OnSide.Card.TFrame", padding=(px(8), px(6), px(8), px(8)))
-        table.pack(fill="x", pady=(0, px(12)))
-        columns = ("when", "from", "to", "status", "brief")
-        self.tree = ttk.Treeview(
-            table, columns=columns, show="headings", height=5, selectmode="browse", style="OnCard.Treeview"
-        )
-        for name, title, width in (
-            ("when", "WHEN", 52), ("from", "FROM", 92), ("to", "TO", 92), ("status", "STATUS", 78), ("brief", "BRIEF", 200),
-        ):
-            self.tree.heading(name, text=title, anchor="w")
-            self.tree.column(name, width=px(width), anchor="w", stretch=(name == "brief"))
-        self.tree.pack(fill="x")
-        self.tree.bind("<<TreeviewSelect>>", self._on_select)
-
-        self.detail = self._section("DETAIL", height=8, expand=True)
-
-    def _section(self, title: str, *, height: int, expand: bool = False) -> tk.Text:
-        """A small heading and a rounded card that holds a read-only text."""
-        px = self.theme.px
-        ttk.Label(self, text=title, style="OnSide.Section.TLabel").pack(anchor="w", pady=(0, px(5)))
-        card = ttk.Frame(self, style="OnSide.Card.TFrame", padding=(px(4), px(4)))
-        card.pack(fill="both" if expand else "x", expand=expand, pady=(0, 0 if expand else px(12)))
-        widget = tk.Text(
-            card,
-            wrap="word",
-            height=height,
-            width=20,
-            bd=0,
-            relief="flat",
-            highlightthickness=0,
-            padx=px(10),
-            pady=px(7),
-            spacing2=px(2),
-            font=self.theme.fonts["small"],
-            cursor="arrow",
-        )
-        self.theme.paint(
-            widget, bg="raised", fg="ink", selectbackground="select", selectforeground="ink",
-            insertbackground="raised",
-        )
-        widget.pack(fill="both", expand=True)
-        widget.configure(state="disabled")
-        return widget
-
-    def _set(self, widget: tk.Text, text: str) -> None:
-        widget.configure(state="normal")
-        widget.delete("1.0", "end")
-        widget.insert("1.0", text)
-        widget.configure(state="disabled")
-
-    def render(self, snapshot: dict | None, *, running: bool = False) -> None:
-        """Draw the snapshot. running enables the cancel button."""
-        self.snapshot = snapshot
-        roster = roster_lines(snapshot)
-        self._set(self.roster_text, "\n".join(roster) if roster else NO_TEAM_LINE)
-        blockers = blocker_lines(snapshot)
-        text = "\n".join(blockers) if blockers else "None open."
-        self._set(self.blockers_text, text + "\n" + check_line(snapshot))
-        selected = self.tree.selection()
-        keep = selected[0] if selected else None
-        for item in self.tree.get_children():
-            self.tree.delete(item)
-        self._rows = {}
-        for row in (snapshot or {}).get("handoffs") or []:
-            glyph = HANDOFF_GLYPH.get(row.get("status") or "", "")
-            item = self.tree.insert(
-                "", "end", iid=row["id"],
-                values=(_time(row.get("created")), row.get("from_agent"), row.get("to_agent"),
-                        f"{glyph} {row.get('status')}", _short(row.get("brief"))),
-            )
-            self._rows[item] = row
-        if keep and keep in self._rows:
-            self.tree.selection_set(keep)
-            self._show_detail(self._rows[keep])
-        else:
-            self._set(self.detail, "Select a handoff to read it.")
-        self.cancel_button.configure(state="normal" if running else "disabled")
-
-    def _on_select(self, _event=None) -> None:
-        selected = self.tree.selection()
-        if not selected:
-            return
-        row = self._rows.get(selected[0])
-        if row is not None:
-            self._show_detail(row)
-
-    def _show_detail(self, row: dict) -> None:
-        payload = row.get("payload")
-        if isinstance(payload, str):
-            try:
-                payload = json.loads(payload)
-            except json.JSONDecodeError:
-                pass
-        lines = [
-            f"[{row.get('id')}] {row.get('from_agent')} → {row.get('to_agent')}: {row.get('status')}",
-            f"Created {row.get('created') or ''}. Delivered {row.get('delivered') or '—'}. Returned {row.get('returned') or '—'}.",
-            "",
-            "Brief:",
-            str(row.get("brief") or ""),
-        ]
-        if payload:
-            lines += ["", "Payload:", json.dumps(payload, indent=2, sort_keys=True, default=str)]
-        if row.get("result"):
-            lines += ["", "Result:", str(row.get("result"))]
-        self._set(self.detail, "\n".join(lines))
+def team_view(snapshot: dict | None) -> dict:
+    """What the Team tab and the sidebar roster draw for one job's record."""
+    roster = roster_lines(snapshot)
+    blockers = blocker_lines(snapshot)
+    handoffs = []
+    for row in (snapshot or {}).get("handoffs") or []:
+        handoffs.append({
+            "id": str(row.get("id")),
+            "when": _time(row.get("created")),
+            "from": str(row.get("from_agent") or ""),
+            "to": str(row.get("to_agent") or ""),
+            "status": f"{HANDOFF_GLYPH.get(row.get('status') or '', '')} {row.get('status') or ''}".strip(),
+            "brief": _short(row.get("brief")),
+            "detail": handoff_detail(row),
+        })
+    return {
+        "roster": roster,
+        "roster_text": "\n".join(roster) if roster else NO_TEAM_LINE,
+        "blockers": blockers,
+        "blockers_text": ("\n".join(blockers) if blockers else "None open.") + "\n" + check_line(snapshot),
+        "check_line": check_line(snapshot),
+        "handoffs": handoffs,
+    }

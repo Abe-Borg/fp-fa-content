@@ -21,6 +21,8 @@ APP_DIR = Path(__file__).resolve().parents[1]
 REPO = APP_DIR.parent
 sys.path.insert(0, str(APP_DIR))
 
+from desk_loop import Loop  # noqa: E402
+
 
 def isolate() -> Path:
     path = Path(tempfile.mkdtemp(prefix="fpfa-test-"))
@@ -637,56 +639,48 @@ class ContentUpdateUiTests(unittest.TestCase):
         os.environ.pop("FPFA_CONTENT_UPDATES", None)
         os.environ["FPFA_DATA_DIR"] = tempfile.mkdtemp(prefix="fpfa-test-")
 
-    def _root(self):
-        if not os.environ.get("DISPLAY"):
-            self.skipTest("no display")
-        try:
-            import tkinter as tk
-
-            return tk.Tk()
-        except Exception as exc:
-            self.skipTest(f"tkinter display is not available ({exc})")
-
-    def test_settings_shows_the_version_and_check_button(self):
+    def test_settings_shows_the_version_and_the_update_note(self):
         from fpfa.content_update import UpdateResult
-        from fpfa.ui import App
 
-        root = self._root()
+        root = Loop()
         try:
-            app = App(root)
-            root.update_idletasks()
+            app = root.open_desk()
             root.update()
             self.assertIn("source checkout", app.content_status.get())
-            app.open_settings()
-            root.update_idletasks()
-            root.update()
-            labels = _button_labels(root)
-            self.assertIn("Check for updates", labels)
-            self.assertIn("Settings", labels)
+            settings = app.snapshot()["settings"]
+            self.assertIn("source checkout", settings["content_version"])
+            self.assertFalse(settings["checking_content"])
             result = UpdateResult(
                 status="updated",
                 message="Content pack 2026.10.1 is installed.",
                 version="2026.10.1",
                 changelog=["Shorter screen note"],
             )
-            app._finish_content_check(result, manual=True, status_var=None)
+            app._finish_content_check(result, manual=True)
             root.update()
-            self.assertIn("2026.10.1", app.content_banner.get())
-            self.assertIn("Shorter screen note", app.content_banner.get())
-            self.assertIn("source checkout", app._settings_version.get())
-            self.assertIn("Shorter screen note", app._changelog_view.get("1.0", "end"))
+            state = app.snapshot()
+            self.assertIn("2026.10.1", state["banner"])
+            self.assertIn("Shorter screen note", state["banner"])
+            self.assertIn("source checkout", state["settings"]["content_version"])
+            self.assertIn("Shorter screen note", state["settings"]["changelog"])
+            self.assertEqual(state["settings"]["content_line"], "Content pack 2026.10.1 is installed.")
+            # A click on the note dismisses it. The pack stays installed.
+            app.dismiss_banner()
+            self.assertEqual(app.snapshot()["banner"], "")
         finally:
             root.destroy()
 
-
-def _button_labels(widget) -> list[str]:
-    found = []
-    for child in widget.winfo_children():
-        if child.winfo_class() in ("TButton", "Button"):
-            found.append(child.cget("text"))
-        found.extend(_button_labels(child))
-    return found
-
+    def test_a_folder_that_is_not_a_pack_is_refused(self):
+        root = Loop()
+        try:
+            app = root.open_desk()
+            before = app.snapshot()["settings"]["content_root"]
+            app.save_content_root(str(Path(tempfile.mkdtemp(prefix="fpfa-not-a-pack-"))))
+            settings = app.snapshot()["settings"]
+            self.assertIn("needs skills/", settings["content_line"])
+            self.assertEqual(settings["content_root"], before)
+        finally:
+            root.destroy()
 
 if __name__ == "__main__":
     unittest.main()

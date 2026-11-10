@@ -43,7 +43,8 @@ USE_NOTICE = (
 LICENSE_FILE = "LICENSE.txt"
 NOTICES_FILE = "THIRD-PARTY-NOTICES.txt"
 
-DEPENDENCIES = ("anthropic", "python-docx", "keyring", "pywin32-ctypes", "pyinstaller")
+# pywebview and pythonnet show the window (WebView2); the page adds the WebView2 version it runs in.
+DEPENDENCIES = ("anthropic", "python-docx", "keyring", "pywin32-ctypes", "pywebview", "pythonnet", "pyinstaller")
 
 
 def _dist_version(name: str) -> str:

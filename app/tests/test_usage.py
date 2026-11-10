@@ -21,6 +21,9 @@ REPO = APP_DIR.parent
 if str(APP_DIR) not in sys.path:
     sys.path.insert(0, str(APP_DIR))
 
+from desk_loop import Loop  # noqa: E402
+
+
 
 class Block:
     def __init__(self, **kwargs):
@@ -295,59 +298,51 @@ class AboutTests(unittest.TestCase):
         self.assertEqual(lines[-1], "Record schema 3")
 
     def test_the_versions_flag_prints_and_exits_without_a_window(self):
-        from fpfa.ui import main
+        from fpfa.web.shell import main
 
         out = io.StringIO()
-        with patch("fpfa.ui.tk.Tk") as tk_root, redirect_stdout(out):
+        with patch("fpfa.web.shell.Desk") as desk, patch("fpfa.web.shell.WindowServer") as server, redirect_stdout(out):
             main(["--versions"])
-        tk_root.assert_not_called()
+        desk.assert_not_called()
+        server.assert_not_called()
         self.assertIn("+Cynosure", out.getvalue())
         self.assertIn("Record schema", out.getvalue())
 
 
 class UsageWindowTests(unittest.TestCase):
     def _app(self):
-        if not os.environ.get("DISPLAY"):
-            self.skipTest("no display")
         data = Path(tempfile.mkdtemp(prefix="fpfa-usage-ui-"))
         os.environ["FPFA_DATA_DIR"] = str(data)
         os.environ["FPFA_CONTENT_UPDATES"] = "0"
-        import tkinter as tk
 
         from fpfa.paths import write_config
-        from fpfa.ui import App
-
+        
         write_config({"key_backend": "file"})
-        root = tk.Tk()
+        root = Loop()
         self.addCleanup(root.destroy)
-        app = App(root)
+        app = root.open_desk()
         root.update()
         return app
 
     def test_slash_usage_posts_the_report_and_the_menu_has_the_entries(self):
         app = self._app()
-        labels = [app.more_menu.entrycget(i, "label") for i in range(app.more_menu.index("end") + 1)
-                  if app.more_menu.type(i) == "command"]
-        self.assertIn("Usage and cost", labels)
-        self.assertIn("About and versions", labels)
         app.ask_claude.set(False)
         app.start_sample_di()
-        app.root.update()
+        app.pump()
         project_id = app.project["id"]
         app.record.log_event(project_id, "turn", {"usage": {"rounds": 2, "input_tokens": 1200, "output_tokens": 300},
                                                    "delegations": 1, "checks": 1, "cancelled": False}, agent="lead")
-        app.chat_entry.insert(0, "/usage")
-        app.send_chat()
-        app.root.update()
-        thread = app.chat_view.get("1.0", "end")
+        app.send_chat("/usage")
+        app.pump()
+        thread = app.thread_text()
         self.assertIn("Usage and cost for", thread)
         self.assertIn("lead turn, 1 delegation, 1 check", thread)
         self.assertIn("Estimated cost $", thread)
         self.assertIn("/usage", app.project["chat"][-2]["text"])
-        with patch("fpfa.ui.dialogs.showtext") as shown:
-            app.show_about()
-        self.assertEqual(shown.call_args.args[0], "About +Cynosure")
-        about = shown.call_args.args[1]
+        # About and versions: the page reads this text from the server's /api/text/about.
+        from fpfa.web.server import TEXTS
+
+        about = TEXTS["about"]()
         self.assertIn("+Cynosure", about)
         self.assertIn("Record schema 3", about)
         # The About box says what the license allows and that the output is a draft.

@@ -1,6 +1,8 @@
-"""Colour schemes, generated pictures, and the ttk theme.
+"""Colour schemes, the stylesheet that carries them, and the app icon.
 
-The first two classes need no display. The window tests skip without one.
+The schemes are listed in fpfa/theme.py and defined for the page in
+app/frontend/src/styles.css; the two must agree token for token. None of
+this needs a display.
 """
 
 from __future__ import annotations
@@ -49,51 +51,6 @@ class ShapeTests(unittest.TestCase):
         offset = (y * width + x) * 4
         return tuple(pixels[offset:offset + 4])
 
-    def test_rounded_rect_has_clear_corners_a_border_and_a_solid_middle(self):
-        from fpfa import shapes
-
-        data = shapes.rounded_rect(24, 24, 8, "#3a3936", border="#45443f")
-        self.assertEqual(self._pixel(data, 0, 0)[3], 0)
-        self.assertEqual(self._pixel(data, 23, 23)[3], 0)
-        self.assertEqual(self._pixel(data, 12, 12), (0x3A, 0x39, 0x36, 255))
-        # The top edge, away from a corner, is the border colour.
-        self.assertEqual(self._pixel(data, 12, 0), (0x45, 0x44, 0x3F, 255))
-        # A corner pixel on the curve is partly covered: that is the smoothing.
-        partial = [self._pixel(data, x, y)[3] for x in range(8) for y in range(8)]
-        self.assertTrue(any(0 < alpha < 255 for alpha in partial))
-        # Four equal corners: the picture is the same in every quarter.
-        for x, y in ((2, 3), (5, 1), (7, 7)):
-            self.assertEqual(self._pixel(data, x, y), self._pixel(data, 23 - x, y))
-            self.assertEqual(self._pixel(data, x, y), self._pixel(data, x, 23 - y))
-
-    def test_a_corner_can_be_tighter_than_the_others(self):
-        from fpfa import shapes
-
-        data = shapes.rounded_rect(40, 40, (16, 16, 4, 16), "#ff0000")
-        # Three pixels in from the bottom-right: inside a 4 px corner, outside a 16 px one.
-        self.assertEqual(self._pixel(data, 36, 36)[3], 255)
-        self.assertEqual(self._pixel(data, 3, 3)[3], 0)
-        with self.assertRaises(ValueError):
-            shapes.rounded_rect(10, 10, (1, 2, 3), "#000000")
-
-    def test_ring_overlay_extend_and_icons(self):
-        from fpfa import shapes
-
-        ring = shapes.rounded_rect(24, 24, 8, None, border="#112233")
-        self.assertEqual(self._pixel(ring, 12, 12)[3], 0)
-        self.assertEqual(self._pixel(ring, 12, 0), (0x11, 0x22, 0x33, 255))
-        box = shapes.rounded_rect(18, 18, 5, "#d97757")
-        tick = shapes.icon("check", 18, "#ffffff")
-        marked = shapes.overlay(box, tick)
-        whites = sum(1 for x in range(18) for y in range(18) if self._pixel(marked, x, y)[:3] == (255, 255, 255))
-        self.assertGreater(whites, 6)
-        wide = shapes.extend(box, right=8)
-        self.assertEqual(shapes.png_size(wide), (26, 18))
-        self.assertEqual(self._pixel(wide, 25, 9)[3], 0)
-        self.assertEqual(self._pixel(wide, 9, 9), (0xD9, 0x77, 0x57, 255))
-        for name in shapes.ICONS:
-            self.assertEqual(shapes.png_size(shapes.icon(name, 18, "#eceae4")), (18, 18))
-
     def test_star_mark_and_icon_file(self):
         from fpfa import shapes
 
@@ -119,13 +76,6 @@ class ShapeTests(unittest.TestCase):
 
 
 class SchemeTests(unittest.TestCase):
-    def setUp(self):
-        # The schemes live beside the ttk styles, so the module needs tkinter, though no display.
-        try:
-            import tkinter  # noqa: F401
-        except ImportError:
-            self.skipTest("tkinter is not installed")
-
     def test_the_five_schemes_carry_the_sibling_apps_colours(self):
         from fpfa import theme
 
@@ -162,7 +112,7 @@ class SchemeTests(unittest.TestCase):
             for scheme_id in theme.SCHEME_ORDER:
                 theme.colors.use(scheme_id)
                 c = theme.colors
-                # A button, a tab, a check box; a well on a card; a selected toolbar pill.
+                # The page's ring (:focus-visible) on a button, a well on a card, a selected toolbar pill.
                 for fill in (c.raised_hover, c.bg, c.accent_soft):
                     self.assertGreaterEqual(contrast(c.accent, fill), 3.0, (scheme_id, fill))
                 # On the accent itself the ring is the colour of the text on it.
@@ -217,213 +167,79 @@ class SchemeTests(unittest.TestCase):
             os.environ.pop("FPFA_THEME", None)
         self.assertEqual(theme.saved_scheme(), "carbon")
 
-    def test_every_picture_is_drawn_and_a_stretched_one_has_a_middle(self):
-        from fpfa import shapes, theme
-
-        theme.colors.use("clay")
-        pictures = theme._pictures(lambda value: int(round(value)))
-        for name in ("btn_accent", "btn_soft", "field", "field_focus", "card", "paper", "composer", "bubble",
-                     "chip", "thumb_v", "check_on", "icon_more", "dot_0", "dot_4", "mark", "mark_large",
-                     "btn_focus", "btn_accent_focus", "btn_well_focus", "pill_selected_focus",
-                     "swatch_focus", "swatch_selected_focus", "check_off_focus", "check_on_focus"):
-            self.assertIn(name, pictures)
-        # A scheme card's labels sit on the card colour, so no state of the card may change its fill.
-        middles = {name: shapes.decode_png(pictures[name]) for name in
-                   ("swatch", "swatch_hover", "swatch_selected", "swatch_focus", "swatch_selected_focus")}
-        fills = set()
-        for name, (width, height, pixels) in middles.items():
-            at = (height // 2) * width + width // 2
-            fills.add(tuple(pixels[at * 4:at * 4 + 4]))
-        self.assertEqual(len(fills), 1, fills)
-        # A nine-slice picture keeps a stretchable middle between its two slices.
-        px = lambda value: int(round(value))  # noqa: E731
-        for name, radius in (("btn_accent", theme.RADIUS), ("card", theme.RADIUS_CARD),
-                             ("composer", theme.RADIUS_COMPOSER), ("bubble", theme.RADIUS_BUBBLE)):
-            width, height = shapes.png_size(pictures[name])
-            self.assertGreater(width, 2 * theme._slice(px, radius), name)
-            self.assertGreater(height, 2 * theme._slice(px, radius), name)
-        bigger = theme._pictures(lambda value: int(round(value * 2)))
-        self.assertEqual(shapes.png_size(bigger["btn_accent"])[0], 2 * shapes.png_size(pictures["btn_accent"])[0])
+STYLES = APP_DIR / "frontend" / "src" / "styles.css"
 
 
-class ThemeWindowTests(unittest.TestCase):
-    def _root(self):
-        if not os.environ.get("DISPLAY"):
-            self.skipTest("no display")
-        try:
-            import tkinter as tk
-        except ImportError:
-            self.skipTest("tkinter is not installed")
+def _css_schemes() -> dict[str, dict[str, str]]:
+    """Each scheme's tokens as styles.css defines them, by scheme id."""
+    text = STYLES.read_text(encoding="utf-8")
+    found: dict[str, dict[str, str]] = {}
+    for selectors, body in __import__("re").findall(r"([^{}]+)\{([^{}]*)\}", text):
+        ids = __import__("re").findall(r'data-theme="([a-z]+)"', selectors)
+        if not ids:
+            continue
+        tokens = dict(__import__("re").findall(r"--([a-z-]+):\s*(#[0-9a-fA-F]{6})\s*;", body))
+        for scheme_id in ids:
+            found.setdefault(scheme_id, {}).update({name.replace("-", "_"): value.lower() for name, value in tokens.items()})
+    return found
+
+
+class StylesheetTests(unittest.TestCase):
+    def test_the_stylesheet_defines_every_scheme_token_for_token(self):
+        from fpfa import theme
+
+        css = _css_schemes()
+        self.assertEqual(sorted(css), sorted(theme.SCHEME_ORDER))
+        for scheme_id, scheme in theme.SCHEMES.items():
+            self.assertEqual(css[scheme_id], {token: value.lower() for token, value in scheme.colors.items()}, scheme_id)
+
+    def test_warm_clay_is_also_the_default_of_root(self):
+        text = STYLES.read_text(encoding="utf-8")
+        self.assertIn(':root,\n:root[data-theme="clay"] {', text)
+
+    def test_a_rule_names_no_colour_of_its_own(self):
+        """Outside the scheme blocks, every colour is a token or a mix of tokens."""
+        import re
+
+        text = STYLES.read_text(encoding="utf-8")
+        outside = re.sub(r':root(?:\[data-theme="[a-z]+"\])?(?:,\s*:root\[data-theme="[a-z]+"\])?\s*\{[^{}]*?--bg:[^{}]*\}', "", text)
+        self.assertEqual(re.findall(r"#[0-9a-fA-F]{3,8}\b", outside), [])
+        self.assertEqual(re.findall(r"\brgba?\(|\bhsla?\(", outside), [])
+        for word in ("black", "white", "gray", "grey"):
+            self.assertNotRegex(outside, rf":\s*[^;]*\b{word}\b")
+
+
+class DeskSchemeTests(unittest.TestCase):
+    def test_settings_saves_the_scheme_and_the_page_reads_it(self):
         _isolate_data()
-        root = tk.Tk()
-        self.addCleanup(root.destroy)
-        return root
-
-    def test_apply_theme_builds_the_styles_and_a_scheme_change_repaints(self):
-        import tkinter as tk
-        from tkinter import ttk
-
-        from fpfa import theme
-
-        root = self._root()
-        look = theme.apply_theme(root, "clay")
-        self.assertIs(theme.theme_of(root), look)
-        self.assertIs(theme.apply_theme(root, "clay"), look)
-        style = ttk.Style(root)
-        self.assertEqual(style.theme_use(), "cynosure")
-        self.assertEqual(style.lookup("TLabel", "foreground"), "#eceae4")
-        self.assertEqual(style.lookup("OnSide.TFrame", "background"), "#2f2f2d")
-        self.assertEqual(style.lookup("OnPaper.TLabel", "foreground"), "#2c2b27")
-        self.assertIn("Accent.button", str(style.layout("Accent.TButton")))
-        self.assertIn("Field.field", str(style.layout("TEntry")))
-        painted = look.paint(tk.Label(root, text="x"), bg="surface", fg="ink_dim")
-        self.assertEqual((str(painted.cget("bg")), str(painted.cget("fg"))), ("#2f2f2d", "#a8a49a"))
-        picture = look.image("btn_accent")
-        heard = []
-        look.on_change(lambda: heard.append(theme.colors.scheme))
-
-        self.assertEqual(look.set_scheme("linen"), "linen")
-        self.assertEqual(heard, ["linen"])
-        self.assertEqual((str(painted.cget("bg")), str(painted.cget("fg"))), ("#ece6dc", "#5f564b"))
-        self.assertEqual(style.lookup("TLabel", "foreground"), "#2a2620")
-        self.assertEqual(str(root.cget("bg")), "#f5f1ea")
-        # The same picture object, redrawn: every control that uses it follows.
-        self.assertIs(look.image("btn_accent"), picture)
-        red, green, blue = picture.get(picture.width() // 2, picture.height() // 2)
-        self.assertEqual("#%02x%02x%02x" % (red, green, blue), "#a64b29")
-        # A destroyed widget is dropped without stopping the repaint.
-        painted.destroy()
-        self.assertEqual(look.set_scheme("clay"), "clay")
-        if sys.platform != "win32":
-            # Only Windows has a title bar the app can colour.
-            self.assertFalse(theme.style_title_bar(root))
-
-    def test_tab_gives_a_control_the_ring_and_a_click_takes_it_off(self):
-        from tkinter import ttk
-
-        from fpfa import theme
-
-        root = self._root()
-        look = theme.apply_theme(root, "clay")
-        first = ttk.Button(root, text="First")
-        second = ttk.Button(root, text="Second")
-        third = ttk.Checkbutton(root, text="Third")
-        for widget in (first, second, third):
-            widget.pack()
-        root.update()
-        first.focus_force()
-        root.update()
-        if root.focus_get() is not first:
-            self.skipTest("this display gives no keyboard focus")
-        ring = theme.KEYBOARD_FOCUS
-        # Focus the program gave, before any Tab: no ring.
-        self.assertFalse(look.keyboard)
-        self.assertFalse(first.instate([ring]))
-        first.event_generate("<Key-Tab>")
-        root.update()
-        self.assertIs(root.focus_get(), second)
-        self.assertTrue(look.keyboard)
-        self.assertTrue(second.instate([ring]))
-        self.assertFalse(first.instate([ring]))
-        second.event_generate("<Key-Tab>")
-        root.update()
-        self.assertTrue(third.instate([ring]))
-        self.assertFalse(second.instate([ring]))
-        third.event_generate("<Shift-Key-Tab>")
-        root.update()
-        self.assertIs(root.focus_get(), second)
-        self.assertTrue(second.instate([ring]))
-        self.assertFalse(third.instate([ring]))
-        # A click is the pointer again: the button clicked takes the focus and wears no ring.
-        first.event_generate("<ButtonPress-1>", x=4, y=4)
-        first.event_generate("<ButtonRelease-1>", x=4, y=4)
-        root.update()
-        self.assertFalse(look.keyboard)
-        self.assertIs(root.focus_get(), first)
-        for widget in (first, second, third):
-            self.assertFalse(widget.instate([ring]), widget)
-        # Every control the ring is drawn for has a picture for it in its element.
-        style = ttk.Style(root)
-        for element in ("Accent.button", "Soft.button", "Ghost.button", "Danger.button", "Outline.button",
-                        "Pill.button", "Well.button", "Check.indicator", "Pill.tab", "Swatch.frame"):
-            self.assertIn(element, style.element_names(), element)
-        for name in ("btn_focus", "btn_accent_focus", "swatch_focus", "check_on_focus"):
-            self.assertIn(name, look.images)
-
-    def test_a_scheme_card_is_picked_from_the_keyboard(self):
-        from fpfa import theme
-        from fpfa.paths import read_config, write_config
-        from fpfa.ui import App
-
-        root = self._root()
         os.environ["FPFA_CONTENT_UPDATES"] = "0"
-        write_config({"key_backend": "file"})
-        app = App(root)
-        root.update()
-        self.assertEqual(app.theme.scheme, "clay")
-        app.open_settings()
-        root.update()
-        cards = [child for child in _walk(app._settings_window) if child.winfo_class() == "TFrame"
-                 and "Swatch" in str(child.cget("style"))]
-        # Tab stops at every card.
-        self.assertTrue(all(str(card.cget("takefocus")) in ("1", "True") for card in cards))
-        linen = cards[theme.SCHEME_ORDER.index("linen")]
-        blueprint = cards[theme.SCHEME_ORDER.index("blueprint")]
-        blueprint.focus_force()
-        root.update()
-        if root.focus_get() is not blueprint:
-            self.skipTest("this display gives no keyboard focus")
-        blueprint.event_generate("<Key-space>")
-        root.update()
-        self.assertEqual(app.theme.scheme, "blueprint")
-        self.assertEqual(read_config()["appearance"], "blueprint")
-        self.assertTrue(blueprint.instate(["selected"]))
-        linen.focus_force()
-        root.update()
-        linen.event_generate("<Key-Return>")
-        root.update()
-        self.assertEqual(app.theme.scheme, "linen")
-        self.assertEqual(read_config()["appearance"], "linen")
-        self.assertEqual([card.instate(["selected"]) for card in cards],
-                         [name == "linen" for name in theme.SCHEME_ORDER])
-
-    def test_the_window_opens_in_the_saved_scheme_and_settings_changes_it(self):
-        from fpfa import theme
+        from fpfa.desk import Desk
         from fpfa.paths import read_config, write_config
-        from fpfa.ui import App
 
-        root = self._root()
-        os.environ["FPFA_CONTENT_UPDATES"] = "0"
         write_config({"key_backend": "file", "appearance": "graphite"})
-        app = App(root)
-        root.update()
-        self.assertEqual(app.theme.scheme, "graphite")
-        self.assertEqual(str(app.chat_view.cget("bg")), "#1b1d1f")
-        self.assertEqual(root.title(), "+Cynosure")
-        app.open_settings()
-        root.update()
-        cards = [child for child in _walk(app._settings_window) if child.winfo_class() == "TFrame"
-                 and "Swatch" in str(child.cget("style"))]
-        self.assertEqual(len(cards), 5)
-        selected = [card for card in cards if card.instate(["selected"])]
-        self.assertEqual(len(selected), 1)
-        # Clicking the Carbon card recolours the window at once and saves the choice.
-        cards[theme.SCHEME_ORDER.index("carbon")].event_generate("<Button-1>")
-        root.update()
-        self.assertEqual(app.theme.scheme, "carbon")
+        desk = Desk()
+        self.addCleanup(desk.close)
+        state = desk.snapshot()
+        self.assertEqual(state["settings"]["scheme"], "graphite")
+        self.assertEqual([item["id"] for item in state["settings"]["schemes"]], list(SWATCHES))
+        self.assertEqual(state["settings"]["schemes"][0]["colors"]["accent"], "#d97757")
+        shell_calls = []
+        desk.shell.scheme_changed = shell_calls.append
+        self.assertEqual(desk.set_scheme("carbon"), "carbon")
         self.assertEqual(read_config()["appearance"], "carbon")
-        self.assertEqual(str(app.chat_view.cget("bg")), "#0b0b0c")
-        self.assertEqual(str(app.chat_view.tag_cget("body", "foreground")), "#f4f4f5")
-        self.assertEqual(str(app.results.cget("bg")), "#ffffff")
-        self.assertTrue(cards[theme.SCHEME_ORDER.index("carbon")].instate(["selected"]))
-        self.assertFalse(cards[theme.SCHEME_ORDER.index("graphite")].instate(["selected"]))
-        self.assertIn("Carbon & Hi-Vis", app.status.get())
+        self.assertEqual(desk.snapshot()["settings"]["scheme"], "carbon")
+        self.assertEqual(shell_calls, ["carbon"])
+        self.assertIn("Carbon & Hi-Vis", desk.status.get())
+        # An unknown id falls back to the default rather than saving nonsense.
+        self.assertEqual(desk.set_scheme("mauve"), "clay")
 
+    def test_the_title_bar_call_is_harmless_off_windows(self):
+        from fpfa import theme
 
-def _walk(widget):
-    for child in widget.winfo_children():
-        yield child
-        yield from _walk(child)
+        if sys.platform == "win32":
+            self.skipTest("Windows takes the call")
+        self.assertFalse(theme.style_title_bar(1234, "linen"))
+        self.assertFalse(theme.style_title_bar(0, "linen"))
 
 
 if __name__ == "__main__":

@@ -250,9 +250,14 @@ def key_storage_help() -> str:
     )
 
 
-def key_status() -> str:
-    """One line for the status bar and Settings. Names the store that holds the key."""
-    if not load_api_key():
+def key_status(key: str | None = None) -> str:
+    """One line for the status bar and Settings. Names the store that holds the key.
+
+    key is a key already read from the store. The window passes the one it keeps,
+    so a status line never asks the key store again (on a source run on Windows
+    that is a child Python process).
+    """
+    if not (load_api_key() if key is None else key):
         return "No API key saved."
     backend = key_backend() or "file"
     if backend == "keyring" and sys.platform == "win32":

@@ -16,7 +16,10 @@ APP_DIR = Path(__file__).resolve().parents[1]
 REPO = APP_DIR.parent
 sys.path.insert(0, str(APP_DIR))
 
+from desk_loop import Loop  # noqa: E402
+
 os.environ.setdefault("FPFA_DATA_DIR", tempfile.mkdtemp(prefix="fpfa-test-"))
+
 
 
 def _bullet_slugs(text: str, start: str, end: str) -> list[str]:
@@ -537,7 +540,7 @@ class WorkflowTests(unittest.TestCase):
 class ChatRequestTests(unittest.TestCase):
     def test_slash_commands_and_sample_di_aliases(self):
         from fpfa.spec_docx import DRAFT_SECTION
-        from fpfa.ui import chat_run_summary, parse_slash_command, slash_help_text, unknown_slash_text
+        from fpfa.desk import chat_run_summary, parse_slash_command, slash_help_text, unknown_slash_text
 
         self.assertEqual(parse_slash_command("/sample-di"), ("sample-di", ""))
         self.assertEqual(parse_slash_command("  /SAMPLE_DI  "), ("sample-di", ""))
@@ -576,7 +579,7 @@ class ChatRequestTests(unittest.TestCase):
         self.assertNotIn("21 13 " + "16", summary)
 
     def test_follow_up_includes_prior_turns(self):
-        from fpfa.ui import format_chat_request
+        from fpfa.desk import format_chat_request
 
         text = format_chat_request(
             [
@@ -592,7 +595,7 @@ class ChatRequestTests(unittest.TestCase):
         self.assertIn("explain that recommendation", text)
         self.assertIn("Earlier turns:", text)
         self.assertIn("Use tools for any gallons", text)
-        from fpfa.ui import chat_request_text
+        from fpfa.desk import chat_request_text
 
         hosted = chat_request_text([], {"insurer": "FM"}, {"zone_id": "DH-1"}, "review", hosted=True)
         everyday = chat_request_text([], {"insurer": "FM"}, {"zone_id": "DH-1"}, "review")
@@ -1338,7 +1341,7 @@ class EverydayPathTests(unittest.TestCase):
         from unittest.mock import patch
 
         from fpfa.sample_data import EXAMPLE_BASIS, EXAMPLE_DI
-        from fpfa.ui import chat_request_text
+        from fpfa.desk import chat_request_text
         from fpfa.workflow import govern_note, run_di_zone
 
         result = run_di_zone(self.root, EXAMPLE_DI, EXAMPLE_BASIS)
@@ -1481,7 +1484,7 @@ class ModeBehaviorTests(unittest.TestCase):
 
     def test_labels_stay_distinct(self):
         from fpfa.sample_data import EXAMPLE_BASIS, EXAMPLE_DI
-        from fpfa.ui import chat_request_text, describe_modes
+        from fpfa.desk import chat_request_text, describe_modes
         from fpfa.workflow import (
             form_assumption_lines,
             judgment_label_line,
@@ -1546,20 +1549,16 @@ class ModeBehaviorTests(unittest.TestCase):
 
 class UiSmokeTests(unittest.TestCase):
     def test_demo_run_and_export(self):
-        if not os.environ.get("DISPLAY"):
-            self.skipTest("no display")
         _isolate_data()
-        import tkinter as tk
 
-        from fpfa.ui import App
-
-        root = tk.Tk()
+        
+        root = Loop()
         try:
-            app = App(root)
+            app = root.open_desk()
             app.load_demo()
             root.update()
-            self.assertEqual(len(app.pipes.get_children()), 4)
-            narrative = app.results.get("1.0", "end")
+            self.assertEqual(len(app.segments), 4)
+            narrative = app.results_text
             self.assertIn("Zone total is", narrative)
             self.assertIn("5.0 gal trim ASSUMED", narrative)
             self.assertIn("Screen limit 30.0 s — ASSUMED from time basis FM", narrative)
@@ -1575,19 +1574,15 @@ class UiSmokeTests(unittest.TestCase):
                 written = app.export_to(Path(tmp) / "draft.docx", create=_support_every_claim())
                 self.assertTrue(written.is_file())
                 self.assertGreater(written.stat().st_size, 1000)
-                self.assertIn("| claim |", app.chat_view.get("1.0", "end"))
+                self.assertIn("| claim |", app.thread_text())
         finally:
             root.destroy()
 
     def test_async_results_stay_on_the_project_that_started_them(self):
-        if not os.environ.get("DISPLAY"):
-            self.skipTest("no display")
         _isolate_data()
-        import tkinter as tk
 
         from fpfa.projects import load_project, new_project, save_project
-        from fpfa.ui import App
-
+        
         result = {
             "source": "tool-plan",
             "narrative": "ORIGIN-RESULT",
@@ -1599,16 +1594,16 @@ class UiSmokeTests(unittest.TestCase):
                 "elect_di_trim": {"family": "El/El"},
             },
         }
-        root = tk.Tk()
+        root = Loop()
         try:
-            app = App(root)
+            app = root.open_desk()
             origin = new_project("Origin job")
             other = new_project("Other job")
             app.open_project(other["id"])
             app._finish_run(origin["id"], result, None)
             self.assertEqual(load_project(origin["id"])["last_run"]["narrative"], "ORIGIN-RESULT")
             self.assertIsNone(load_project(other["id"]).get("last_run"))
-            self.assertNotIn("ORIGIN-RESULT", app.results.get("1.0", "end"))
+            self.assertNotIn("ORIGIN-RESULT", app.results_text)
 
             app.open_project(origin["id"])
             app.chat_log = [{"role": "user", "text": "Which trim family?"}]
@@ -1622,24 +1617,18 @@ class UiSmokeTests(unittest.TestCase):
             self.assertEqual(saved[0]["text"], "Which trim family?")
             self.assertEqual(saved[-1]["text"], "El/El holds the prime with the solenoid.")
             self.assertEqual(app.chat_log[-1]["text"], "unrelated")
-            self.assertNotIn("solenoid", app.chat_view.get("1.0", "end"))
+            self.assertNotIn("solenoid", app.thread_text())
         finally:
             root.destroy()
 
     def test_poll_continues_after_a_callback_raises(self):
-        if not os.environ.get("DISPLAY"):
-            self.skipTest("no display")
         _isolate_data()
-        import tkinter as tk
 
         from fpfa.projects import new_project
-        from fpfa.ui import App
-
-        root = tk.Tk()
+        
+        root = Loop()
         try:
-            app = App(root)
-            for after_id in list(root.tk.call("after", "info")):
-                root.after_cancel(after_id)
+            app = root.open_desk()
             seen = []
 
             def bad():
@@ -1654,7 +1643,6 @@ class UiSmokeTests(unittest.TestCase):
             app._poll()
             self.assertEqual(seen, ["bad", "good"])
             self.assertIn("ValueError", app.status.get())
-            self.assertTrue(root.tk.call("after", "info"))
 
             origin = new_project("Poll job")
             app.open_project(origin["id"])
@@ -1671,118 +1659,62 @@ class UiSmokeTests(unittest.TestCase):
                     "elect_di_trim": {"family": "El/El"},
                 },
             }
-            for after_id in list(root.tk.call("after", "info")):
-                root.after_cancel(after_id)
             seen.clear()
             app.queue.put(lambda: app._finish_run(origin["id"], result, None))
             app.queue.put(lambda: seen.append("after-run"))
             app._poll()
             self.assertEqual(seen, ["after-run"])
-            self.assertTrue(root.tk.call("after", "info"))
             self.assertEqual(app.project["last_run"]["narrative"], "KEPT")
-            self.assertIn("KEPT", app.results.get("1.0", "end"))
+            self.assertIn("KEPT", app.results_text)
         finally:
             root.destroy()
 
-    def _button_labels(self, root, *, visible_only: bool = False) -> list[str]:
-        labels = []
-
-        def walk(widget):
-            for child in widget.winfo_children():
-                if child.winfo_class() in ("TButton", "Button"):
-                    if not visible_only or child.winfo_viewable():
-                        labels.append(str(child.cget("text")))
-                walk(child)
-
-        walk(root)
-        return labels
-
-    def _menu_labels(self, menu) -> list[str]:
-        last = menu.index("end")
-        labels = []
-        for index in range(0 if last is None else last + 1):
-            if menu.type(index) in ("command", "checkbutton", "radiobutton", "cascade"):
-                labels.append(str(menu.entrycget(index, "label")))
-        return labels
-
-    def _invoke_menu(self, menu, label: str) -> None:
-        last = menu.index("end")
-        for index in range(0 if last is None else last + 1):
-            if menu.type(index) == "command" and menu.entrycget(index, "label") == label:
-                menu.invoke(index)
-                return
-        self.fail(f"menu entry {label!r} not found in {self._menu_labels(menu)}")
-
     def test_chat_is_the_primary_pane(self):
-        if not os.environ.get("DISPLAY"):
-            self.skipTest("no display")
+        """The window opens on the thread. What the page draws comes from this state.
+
+        The buttons, the menus, and the drawer are the page's; tests/test_web.py
+        drives them in a browser.
+        """
         _isolate_data()
-        import tkinter as tk
 
-        from fpfa.spec_docx import DRAFT_SECTION
-        from fpfa.ui import THREAD_HINT, App
+        from fpfa.desk import THREAD_HINT
 
-        root = tk.Tk()
+        root = Loop()
         try:
-            app = App(root)
-            root.update_idletasks()
+            app = root.open_desk()
             root.update()
-            app._prefer_chat()
-            root.update_idletasks()
-            root.update()
-            # Zone details is a closed drawer until the designer opens it.
-            self.assertFalse(app.tabs.winfo_viewable())
-            self.assertGreater(app.chat_view.winfo_height(), app.tabs.winfo_height())
-            welcome = app.chat_view.get("1.0", "end")
-            self.assertIn("/sample-di", welcome)
+            state = app.snapshot()
+            welcome = app.thread_text()
             self.assertIn(THREAD_HINT.splitlines()[0], welcome)
-            self.assertIn("Add your Anthropic API key", welcome)
-            self.assertTrue(app.chat_view.tag_ranges("link_sample_di"))
-            # Three plain buttons on screen. Everything else is a menu or the drawer.
-            visible = self._button_labels(root, visible_only=True)
-            self.assertEqual(sorted(visible), sorted(["+  New chat", "Settings", "Send"]))
-            labels = self._button_labels(root)
-            self.assertNotIn("Run DI zone", labels)
-            self.assertNotIn("Sample DI", labels)
-            self.assertNotIn("Sample BESS", labels)
-            more = self._menu_labels(app.more_menu)
-            self.assertIn("Sample DI zone", more)
-            self.assertIn("Sample BESS room", more)
-            self.assertIn(f"Export draft Section {DRAFT_SECTION}…", more)
-            self.assertIn("Settings…", more)
-            self.assertIn("Narrate zone runs with Claude", more)
+            self.assertEqual(state["welcome"]["title"], THREAD_HINT.splitlines()[0])
+            links = [link["action"] for link in state["welcome"]["links"]]
+            self.assertEqual(links, ["settings", "sample-di"])
+            self.assertIn("/sample-di", " ".join(link["text"] for link in state["welcome"]["links"]))
+            self.assertIn("Add your Anthropic API key", state["welcome"]["links"][0]["text"])
             self.assertEqual(app.mode_slug.get(), "mixed")
-            self.assertEqual(str(app.mode_button.cget("text")), "Mode: mixed")
+            self.assertEqual(state["mode"]["slug"], "mixed")
             for slug in ("calculator", "brainstorm", "synthesis", "mixed"):
                 self.assertIn(slug, app.mode_choices())
-            app.mode_slug.set("calculator")
-            self.assertEqual(str(app.mode_button.cget("text")), "Mode: calculator")
-            self.assertEqual(app.chat_entry.focus_get(), app.chat_entry)
-            self.assertEqual(app.job_title.get(), "New chat")
-            self.assertFalse(app.activity.winfo_viewable())
-
-            app.show_details(True)
-            root.update()
-            self.assertTrue(app.tabs.winfo_viewable())
-            self.assertTrue(app.details_open.get())
-            app.toggle_details()
-            root.update()
-            self.assertFalse(app.tabs.winfo_viewable())
-            self.assertFalse(app.details_open.get())
+            app.set_mode("calculator")
+            self.assertEqual(app.snapshot()["mode"]["slug"], "calculator")
+            app.set_mode("not-a-mode")
+            self.assertEqual(app.mode_slug.get(), "calculator")
+            self.assertEqual(state["title"], "New chat")
+            self.assertEqual(state["activity"], [])
+            self.assertEqual(state["turns"] if "turns" in state else state["thread"]["turns"], [])
+            # The starters: the sample, and the commands. A question chip needs a key.
+            self.assertEqual([chip["action"] for chip in state["chips"]], ["/sample-di", "/help"])
         finally:
             root.destroy()
 
     def test_first_chat_turn_needs_no_sample(self):
         """With a key saved, open the app and ask. Sample DI never runs."""
-        if not os.environ.get("DISPLAY"):
-            self.skipTest("no display")
         _isolate_data()
-        import tkinter as tk
         from unittest.mock import patch
 
         from fpfa.keystore import save_api_key
         from fpfa.projects import list_projects, load_project
-        from fpfa.ui import THREAD_HINT, WELCOME_KEY_LINK, App
+        from fpfa.desk import THREAD_HINT, WELCOME_KEY_LINK
 
         save_api_key("sk-ant-local-test")
         seen = []
@@ -1801,20 +1733,19 @@ class UiSmokeTests(unittest.TestCase):
                     )],
                 )
 
-        root = tk.Tk()
+        root = Loop()
         try:
-            app = App(root)
+            app = root.open_desk()
             root.update()
-            welcome = app.chat_view.get("1.0", "end")
+            welcome = app.thread_text()
             self.assertIn(THREAD_HINT.splitlines()[0], welcome)
             self.assertNotIn(WELCOME_KEY_LINK, welcome)
             self.assertIsNone(app.project)
             self.assertEqual(list_projects(), [])
-            with patch("fpfa.ui.AnthropicMessages", Fast):
-                app.chat_entry.insert(0, "How should I split a 40,000 ft2 data hall into DI zones?")
-                app.send_chat()
+            with patch("fpfa.desk.AnthropicMessages", Fast):
+                app.send_chat("How should I split a 40,000 ft2 data hall into DI zones?")
                 self._wait_for(app, "Short answer")
-            thread = app.chat_view.get("1.0", "end")
+            thread = app.thread_text()
             self.assertNotIn(THREAD_HINT.splitlines()[0], thread)
             self.assertIn("How should I split", thread)
             self.assertIn("• Trim is ASSUMED", thread)
@@ -1825,28 +1756,24 @@ class UiSmokeTests(unittest.TestCase):
             self.assertEqual(len(projects), 1)
             self.assertNotIn("Sample", projects[0]["name"])
             self.assertEqual(app.project["name"], "How should I split a 40,000 ft2 data hall into…")
-            self.assertEqual(app.job_title.get(), app.project["name"])
+            self.assertEqual(app.snapshot()["title"], app.project["name"])
             saved = load_project(app.project["id"])
             self.assertIsNone(saved.get("last_run"))
             self.assertIsNone(saved.get("bess_run"))
             self.assertEqual([turn["role"] for turn in saved["chat"]], ["user", "assistant"])
             kinds = [job.kind for job in app.jobs.snapshot()]
             self.assertEqual(kinds, ["chat"])
-            self.assertTrue(app._activity_shown)
+            self.assertTrue(bool(app.activity_rows))
         finally:
             root.destroy()
 
     def test_pending_line_shows_while_a_reply_is_out(self):
-        if not os.environ.get("DISPLAY"):
-            self.skipTest("no display")
         _isolate_data()
         import threading
-        import tkinter as tk
         from unittest.mock import patch
 
         from fpfa.keystore import save_api_key
-        from fpfa.ui import App
-
+        
         save_api_key("sk-ant-local-test")
         release = threading.Event()
 
@@ -1861,75 +1788,58 @@ class UiSmokeTests(unittest.TestCase):
                     content=[SimpleNamespace(type="text", text="pending reply")],
                 )
 
-        root = tk.Tk()
+        root = Loop()
         try:
-            app = App(root)
+            app = root.open_desk()
             root.update()
-            with patch("fpfa.ui.AnthropicMessages", Blocking):
-                app.chat_entry.insert(0, "Which trim family?")
-                app.send_chat()
-                self.assertIn("Working on it…", app.chat_view.get("1.0", "end"))
-                self.assertEqual(app.chat_entry.get(), "")
+            with patch("fpfa.desk.AnthropicMessages", Blocking):
+                app.send_chat("Which trim family?")
+                self.assertIn("Working on it…", app.thread_text())
                 release.set()
                 self._wait_for(app, "pending reply")
                 import time
 
                 deadline = time.time() + 2
-                while time.time() < deadline and "Working on it…" in app.chat_view.get("1.0", "end"):
+                while time.time() < deadline and "Working on it…" in app.thread_text():
                     app._poll()
                     time.sleep(0.02)
-            self.assertNotIn("Working on it…", app.chat_view.get("1.0", "end"))
+            self.assertNotIn("Working on it…", app.thread_text())
         finally:
             release.set()
             root.destroy()
 
-    def test_composer_keys_and_entry_calls(self):
-        if not os.environ.get("DISPLAY"):
-            self.skipTest("no display")
+    def test_composer_sends_slash_commands_and_questions(self):
+        """What the composer sends. Enter, Shift+Enter, and the growing box are the page's (tests/test_web.py)."""
         _isolate_data()
-        import tkinter as tk
 
-        from fpfa.ui import App
-
-        root = tk.Tk()
+        root = Loop()
         try:
-            app = App(root)
+            app = root.open_desk()
             root.update()
-            entry = app.chat_entry
-            entry.insert(0, "first line")
-            self.assertEqual(entry.get(), "first line")
-            entry.focus_force()
+            app.send_chat("   ")
+            self.assertIsNone(app.project)
+            app.send_chat("/help")
             root.update()
-            entry.mark_set("insert", "end")
-            entry.event_generate("<Shift-Return>")
-            entry.insert("end", "second line")
-            self.assertEqual(entry.get(), "first line\nsecond line")
-            entry.delete(0, "end")
-            self.assertEqual(entry.get(), "")
-            entry.insert(0, "/help")
-            entry.event_generate("<Return>")
-            root.update()
-            self.assertEqual(entry.get(), "")
-            self.assertIn("/sample-di —", app.chat_view.get("1.0", "end"))
-            self.assertNotIn("## Commands", app.chat_view.get("1.0", "end"))
+            self.assertIn("/sample-di —", app.thread_text())
+            self.assertNotIn("## Commands", app.thread_text())
             # /help is a slash command, so the job keeps its default name.
             self.assertEqual(app.project["name"], "Untitled job")
+            # A chip sends exactly the message it stands for.
+            app._use_chip("/help")
+            self.assertEqual([turn["text"] for turn in app.chat_log if turn["role"] == "user"], ["/help", "/help"])
         finally:
             root.destroy()
 
     def test_new_chat_rename_and_delete(self):
-        if not os.environ.get("DISPLAY"):
-            self.skipTest("no display")
         _isolate_data()
-        import tkinter as tk
         from unittest.mock import patch
 
         from fpfa.projects import list_projects, load_project
-        from fpfa.ui import THREAD_HINT, App
+        from fpfa.desk import THREAD_HINT
 
-        root = tk.Tk()
+        root = Loop()
         try:
-            app = App(root)
+            app = root.open_desk()
             root.update()
             app.new_job()
             first = app.project["id"]
@@ -1938,41 +1848,35 @@ class UiSmokeTests(unittest.TestCase):
             app.new_job()
             self.assertEqual(app.project["id"], first)
             self.assertEqual(len(list_projects()), 1)
-            app.chat_entry.insert(0, "hello there")
-            app.send_chat()
+            app.send_chat("hello there")
             self.assertEqual(app.project["name"], "hello there")
-            with patch("fpfa.ui.simpledialog.askstring", return_value="  Hall 2  zoning "):
-                app.rename_job()
+            app.rename_job(None, "  Hall 2  zoning ")
             self.assertEqual(load_project(first)["name"], "Hall 2 zoning")
-            self.assertEqual(app.job_title.get(), "Hall 2 zoning")
-            self.assertIn("Hall 2 zoning", app.project_list.get(0, "end"))
+            self.assertEqual(app.snapshot()["title"], "Hall 2 zoning")
+            self.assertIn("Hall 2 zoning", [row["name"] for row in app.project_rows])
             app.new_job()
             self.assertNotEqual(app.project["id"], first)
-            self.assertIn(THREAD_HINT.splitlines()[0], app.chat_view.get("1.0", "end"))
+            self.assertIn(THREAD_HINT.splitlines()[0], app.thread_text())
             app.open_project(first)
-            self.assertIn("hello there", app.chat_view.get("1.0", "end"))
-            with patch("fpfa.ui.messagebox.askyesno", return_value=True):
-                app.delete_job(first)
+            self.assertIn("hello there", app.thread_text())
+            # The page asks the designer first; the desk deletes what it is told to.
+            app.delete_job(first)
             self.assertIsNone(app.project)
             self.assertEqual(app.chat_log, [])
-            self.assertNotIn("hello there", app.chat_view.get("1.0", "end"))
-            self.assertIn(THREAD_HINT.splitlines()[0], app.chat_view.get("1.0", "end"))
+            self.assertNotIn("hello there", app.thread_text())
+            self.assertIn(THREAD_HINT.splitlines()[0], app.thread_text())
             self.assertNotIn(first, [row["id"] for row in list_projects()])
         finally:
             root.destroy()
 
     def test_mode_menu_is_saved_and_shapes_the_request(self):
-        if not os.environ.get("DISPLAY"):
-            self.skipTest("no display")
         _isolate_data()
-        import tkinter as tk
         from types import SimpleNamespace
         from unittest.mock import patch
 
         from fpfa.keystore import save_api_key
         from fpfa.projects import load_project, new_project, save_project
-        from fpfa.ui import App
-
+        
         save_api_key("sk-ant-local-test")
         seen = []
 
@@ -1987,15 +1891,14 @@ class UiSmokeTests(unittest.TestCase):
                     content=[SimpleNamespace(type="text", text="Calculator quote only.")],
                 )
 
-        root = tk.Tk()
+        root = Loop()
         try:
-            app = App(root)
+            app = root.open_desk()
             root.update()
-            app.chat_entry.insert(0, "/mode calculator")
-            app.send_chat()
+            app.send_chat("/mode calculator")
             self.assertEqual(app.mode_slug.get(), "calculator")
-            self.assertIn("Active mode: calculator.", app.chat_view.get("1.0", "end"))
-            self.assertNotIn("This mode answers with tool figures.", app.chat_view.get("1.0", "end"))
+            self.assertIn("Active mode: calculator.", app.thread_text())
+            self.assertNotIn("This mode answers with tool figures.", app.thread_text())
             self.assertEqual(app.project["mode"], "calculator")
             self.assertEqual(load_project(app.project["id"])["mode"], "calculator")
             other = new_project("Other mode job")
@@ -2004,10 +1907,9 @@ class UiSmokeTests(unittest.TestCase):
             app.open_project(other["id"])
             self.assertEqual(app.mode_slug.get(), "brainstorm")
             app.open_project(load_project(app.project["id"])["id"])
-            with patch("fpfa.ui.AnthropicMessages", Fast):
+            with patch("fpfa.desk.AnthropicMessages", Fast):
                 app.mode_slug.set("synthesis")
-                app.chat_entry.insert(0, "draft the zone")
-                app.send_chat()
+                app.send_chat("draft the zone")
                 self._wait_for(app, "Calculator quote only.")
             self.assertIn("Active mode: synthesis.", seen[0]["messages"][0]["content"])
             self.assertIn(
@@ -2021,25 +1923,18 @@ class UiSmokeTests(unittest.TestCase):
 
     def test_mode_persists_when_optional_form_number_is_invalid(self):
         """A bad optional-form number must not discard a mode change or the chat."""
-        if not os.environ.get("DISPLAY"):
-            self.skipTest("no display")
         _isolate_data()
-        import tkinter as tk
         from unittest.mock import patch
 
         from fpfa.projects import load_project, new_project, save_project
-        from fpfa.ui import App
-
+        
         def select_project(app, project_id: str) -> None:
             app.refresh_projects()
-            index = app._ids.index(project_id)
-            app.project_list.selection_clear(0, "end")
-            app.project_list.selection_set(index)
-            app.project_list.event_generate("<<ListboxSelect>>")
+            app.select_project(project_id)
 
-        root = tk.Tk()
+        root = Loop()
         try:
-            app = App(root)
+            app = root.open_desk()
             root.update()
             job = new_project("Mode job")
             job["mode"] = "mixed"
@@ -2051,9 +1946,8 @@ class UiSmokeTests(unittest.TestCase):
             app.open_project(job["id"])
             app.density.set("not-a-number")
 
-            app.chat_entry.insert(0, "/mode calculator")
-            app.send_chat()
-            chat = app.chat_view.get("1.0", "end")
+            app.send_chat("/mode calculator")
+            chat = app.thread_text()
             self.assertEqual(app.mode_slug.get(), "calculator")
             self.assertIn("Active mode: calculator.", chat)
             self.assertIn("keep this thread", chat)
@@ -2071,13 +1965,14 @@ class UiSmokeTests(unittest.TestCase):
             select_project(app, job["id"])
             self.assertEqual(app.mode_slug.get(), "calculator")
             self.assertEqual(load_project(job["id"])["mode"], "calculator")
-            self.assertIn("keep this thread", app.chat_view.get("1.0", "end"))
+            self.assertIn("keep this thread", app.thread_text())
 
             app.density.set("not-a-number")
             app.mode_slug.set("synthesis")
-            with patch("fpfa.ui.messagebox.showerror") as shown:
-                app.save_current()
-            self.assertTrue(shown.called)
+            app.notices.clear()
+            app.save_current()
+            # The page shows the notice in a dialog of its own.
+            self.assertEqual([notice["title"] for notice in app.notices], ["Save"])
             saved = load_project(job["id"])
             self.assertEqual(saved["mode"], "synthesis")
             self.assertIn("keep this thread", [turn.get("text") for turn in saved["chat"]])
@@ -2094,28 +1989,23 @@ class UiSmokeTests(unittest.TestCase):
             self.assertEqual(reopened["mode"], "brainstorm")
             self.assertIn("keep this thread", [turn.get("text") for turn in reopened["chat"]])
             self.assertIn("/mode calculator", [turn.get("text") for turn in reopened["chat"]])
-            self.assertIn("keep this thread", app.chat_view.get("1.0", "end"))
+            self.assertIn("keep this thread", app.thread_text())
         finally:
             root.destroy()
 
     def test_sample_di_slash_loads_and_runs_the_zone(self):
-        if not os.environ.get("DISPLAY"):
-            self.skipTest("no display")
         _isolate_data()
-        import tkinter as tk
 
         from fpfa.spec_docx import DRAFT_SECTION
-        from fpfa.ui import App
-
-        root = tk.Tk()
+        
+        root = Loop()
         try:
-            app = App(root)
+            app = root.open_desk()
             root.update()
-            app.chat_entry.insert(0, "/sample-di")
-            app.send_chat()
-            chat = app.chat_view.get("1.0", "end")
-            results = app.results.get("1.0", "end")
-            self.assertEqual(len(app.pipes.get_children()), 4)
+            app.send_chat("/sample-di")
+            chat = app.thread_text()
+            results = app.results_text
+            self.assertEqual(len(app.segments), 4)
             self.assertIn("/sample-di", chat)
             self.assertIn("5.0 gal trim ASSUMED", chat)
             self.assertIn("Screen limit 30.0 s — ASSUMED from time basis FM", chat)
@@ -2133,57 +2023,47 @@ class UiSmokeTests(unittest.TestCase):
             root.destroy()
 
     def test_sample_di_menu_runs_the_same_path(self):
-        if not os.environ.get("DISPLAY"):
-            self.skipTest("no display")
         _isolate_data()
-        import tkinter as tk
 
-        from fpfa.ui import App
-
-        root = tk.Tk()
+        
+        root = Loop()
         try:
-            app = App(root)
+            app = root.open_desk()
             root.update()
-            self._invoke_menu(app.more_menu, "Sample DI zone")
-            chat = app.chat_view.get("1.0", "end")
+            # The menu row and the welcome link post the same action as /sample-di.
+            app.start_sample_di()
+            chat = app.thread_text()
             self.assertIn("/sample-di", chat)
             self.assertIn("5.0 gal trim ASSUMED", chat)
-            self.assertEqual(len(app.pipes.get_children()), 4)
+            self.assertEqual(len(app.segments), 4)
             self.assertIsNotNone(app.project["last_run"])
-            self.assertIn("Zone total is", app.results.get("1.0", "end"))
+            self.assertIn("Zone total is", app.results_text)
         finally:
             root.destroy()
 
     def test_sample_di_seeds_its_own_thread_when_chosen(self):
         """Sample DI is optional. When chosen it opens its own job and says what it loaded."""
-        if not os.environ.get("DISPLAY"):
-            self.skipTest("no display")
         _isolate_data()
-        import tkinter as tk
 
         from fpfa.projects import load_project
-        from fpfa.ui import App, sample_di_seed
+        from fpfa.desk import sample_di_seed
 
-        root = tk.Tk()
+        root = Loop()
         try:
-            app = App(root)
+            app = root.open_desk()
             root.update()
-            app.chat_entry.insert(0, "/help")
-            app.send_chat()
+            app.send_chat("/help")
             first = app.project["id"]
             app.new_job()
             self.assertNotEqual(app.project["id"], first)
             root.update()
-            # Click the welcome link. It runs the same starter as /sample-di.
-            start = app.chat_view.tag_ranges("link_sample_di")[0]
-            box = app.chat_view.bbox(f"{start}+3c")
-            self.assertIsNotNone(box)
-            app.chat_view.event_generate("<Motion>", x=box[0] + 2, y=box[1] + 2)
-            app.chat_view.event_generate("<Button-1>", x=box[0] + 2, y=box[1] + 2)
+            # The welcome link runs the same starter as /sample-di.
+            self.assertIn("sample-di", [link["action"] for link in app.snapshot()["welcome"]["links"]])
+            app.start_sample_di()
             root.update()
             self.assertNotEqual(app.project["id"], first)
             self.assertEqual(app.project["name"], "Sample data hall DI zone")
-            self.assertEqual(app.job_title.get(), "Sample data hall DI zone")
+            self.assertEqual(app.snapshot()["title"], "Sample data hall DI zone")
             reply = app.chat_log[1]["text"]
             self.assertTrue(reply.splitlines()[1].startswith("Sample loaded: data-hall double-interlock zone DH-1"))
             self.assertIn(sample_di_seed(), reply)
@@ -2199,58 +2079,45 @@ class UiSmokeTests(unittest.TestCase):
                 ["/help"],
             )
             # A second run of the same zone is not labeled as a fresh sample.
-            app.chat_entry.insert(0, "/run")
-            app.send_chat()
+            app.send_chat("/run")
             self.assertNotIn("Sample loaded", app.chat_log[-1]["text"])
             self.assertIn("Zone total is", app.chat_log[-1]["text"])
         finally:
             root.destroy()
 
     def test_chat_does_not_require_a_filled_zone_form(self):
-        if not os.environ.get("DISPLAY"):
-            self.skipTest("no display")
         _isolate_data()
-        import tkinter as tk
 
-        from fpfa.ui import App
-
-        root = tk.Tk()
+        
+        root = Loop()
         try:
-            app = App(root)
+            app = root.open_desk()
             root.update()
-            app.chat_entry.insert(0, "hello")
-            app.send_chat()
-            chat = app.chat_view.get("1.0", "end")
+            app.send_chat("hello")
+            chat = app.thread_text()
             self.assertIn("hello", chat)
             self.assertIn("API key", chat)
             self.assertIn("/sample-di", chat)
-            self.assertEqual(app.pipes.get_children(), ())
+            self.assertEqual(app.segments, [])
             self.assertIsNone(app.project.get("last_run"))
-            app.chat_entry.insert(0, "/help")
-            app.send_chat()
-            self.assertIn("/sample-di —", app.chat_view.get("1.0", "end"))
-            app.chat_entry.insert(0, "/not-a-tool")
-            app.send_chat()
-            self.assertIn("/not-a-tool is not a command", app.chat_view.get("1.0", "end"))
-            app.chat_entry.insert(0, "/run")
-            app.send_chat()
-            self.assertIn("Add at least one pipe segment.", app.chat_view.get("1.0", "end"))
+            app.send_chat("/help")
+            self.assertIn("/sample-di —", app.thread_text())
+            app.send_chat("/not-a-tool")
+            self.assertIn("/not-a-tool is not a command", app.thread_text())
+            app.send_chat("/run")
+            self.assertIn("Add at least one pipe segment.", app.thread_text())
         finally:
             root.destroy()
 
     def test_ask_claude_returns_before_the_reply(self):
-        if not os.environ.get("DISPLAY"):
-            self.skipTest("no display")
         _isolate_data()
         import threading
         import time
-        import tkinter as tk
         from types import SimpleNamespace
         from unittest.mock import patch
 
         from fpfa.keystore import save_api_key
-        from fpfa.ui import App
-
+        
         save_api_key("sk-ant-local-test")
         started = threading.Event()
         release = threading.Event()
@@ -2267,42 +2134,34 @@ class UiSmokeTests(unittest.TestCase):
                     content=[SimpleNamespace(type="text", text="threaded reply")],
                 )
 
-        root = tk.Tk()
+        root = Loop()
         try:
-            app = App(root)
+            app = root.open_desk()
             root.update()
-            app.chat_entry.insert(0, "Which trim family?")
-            with patch("fpfa.ui.AnthropicMessages", Blocking):
-                app.send_chat()
+            with patch("fpfa.desk.AnthropicMessages", Blocking):
+                app.send_chat("Which trim family?")
                 self.assertTrue(started.wait(2))
-                self.assertNotIn("threaded reply", app.chat_view.get("1.0", "end"))
+                self.assertNotIn("threaded reply", app.thread_text())
                 self.assertIn("Asking", app.status.get())
-                app.chat_entry.insert(0, "still typing")
-                self.assertEqual(app.chat_entry.get(), "still typing")
-                app.chat_entry.delete(0, "end")
                 release.set()
                 deadline = time.time() + 2
                 while time.time() < deadline:
                     app._poll()
-                    if "threaded reply" in app.chat_view.get("1.0", "end"):
+                    if "threaded reply" in app.thread_text():
                         break
                     time.sleep(0.02)
-                self.assertIn("threaded reply", app.chat_view.get("1.0", "end"))
-                self.assertIn("Which trim family?", app.chat_view.get("1.0", "end"))
+                self.assertIn("threaded reply", app.thread_text())
+                self.assertIn("Which trim family?", app.thread_text())
         finally:
             root.destroy()
 
     def test_follow_up_send_includes_earlier_turns(self):
-        if not os.environ.get("DISPLAY"):
-            self.skipTest("no display")
         _isolate_data()
-        import tkinter as tk
         from types import SimpleNamespace
         from unittest.mock import patch
 
         from fpfa.keystore import save_api_key
-        from fpfa.ui import App
-
+        
         save_api_key("sk-ant-local-test")
         seen = []
         seen_meta = []
@@ -2320,16 +2179,14 @@ class UiSmokeTests(unittest.TestCase):
                     content=[SimpleNamespace(type="text", text=text)],
                 )
 
-        root = tk.Tk()
+        root = Loop()
         try:
-            app = App(root)
+            app = root.open_desk()
             root.update()
-            with patch("fpfa.ui.AnthropicMessages", Fast):
-                app.chat_entry.insert(0, "Which trim family?")
-                app.send_chat()
+            with patch("fpfa.desk.AnthropicMessages", Fast):
+                app.send_chat("Which trim family?")
                 self._wait_for(app, "El/El holds the prime.")
-                app.chat_entry.insert(0, "explain that recommendation")
-                app.send_chat()
+                app.send_chat("explain that recommendation")
                 self._wait_for(app, "That follows the first answer.")
             self.assertGreaterEqual(len(seen), 2)
             self.assertIn("Which trim family?", seen[1])
@@ -2363,17 +2220,13 @@ class UiSmokeTests(unittest.TestCase):
             root.destroy()
 
     def test_implicit_project_keeps_the_optional_form(self):
-        if not os.environ.get("DISPLAY"):
-            self.skipTest("no display")
         _isolate_data()
-        import tkinter as tk
 
         from fpfa.projects import load_project
-        from fpfa.ui import App
-
-        root = tk.Tk()
+        
+        root = Loop()
         try:
-            app = App(root)
+            app = root.open_desk()
             root.update()
             app.zone_id.set("KEEP-1")
             app.ahj.set("Kept AHJ")
@@ -2384,12 +2237,11 @@ class UiSmokeTests(unittest.TestCase):
                 "length_ft": 10,
                 "d_in": 1.049,
             })
-            app.chat_entry.insert(0, "/run")
-            app.send_chat()
-            chat = app.chat_view.get("1.0", "end")
+            app.send_chat("/run")
+            chat = app.thread_text()
             self.assertEqual(app.zone_id.get(), "KEEP-1")
             self.assertEqual(app.ahj.get(), "Kept AHJ")
-            self.assertEqual(len(app.pipes.get_children()), 1)
+            self.assertEqual(len(app.segments), 1)
             self.assertNotIn("Add at least one pipe segment.", chat)
             self.assertEqual(app.project["di"]["zone_id"], "KEEP-1")
             self.assertEqual(app.project["basis"]["ahj"], "Kept AHJ")
@@ -2402,35 +2254,33 @@ class UiSmokeTests(unittest.TestCase):
         finally:
             root.destroy()
 
-        root = tk.Tk()
+        root = Loop()
         try:
-            app = App(root)
+            app = root.open_desk()
             root.update()
             app.zone_id.set("HELP-9")
-            app.chat_entry.insert(0, "/help")
-            app.send_chat()
+            app.send_chat("/help")
             self.assertEqual(app.zone_id.get(), "HELP-9")
             self.assertEqual(app.project["di"]["zone_id"], "HELP-9")
-            self.assertIn("/sample-di", app.chat_view.get("1.0", "end"))
+            self.assertIn("/sample-di", app.thread_text())
         finally:
             root.destroy()
 
-        root = tk.Tk()
+        root = Loop()
         try:
-            app = App(root)
+            app = root.open_desk()
             root.update()
             app.zone_id.set("CHAT-1")
-            app.chat_entry.insert(0, "hello there")
-            app.send_chat()
+            app.send_chat("hello there")
             self.assertEqual(app.zone_id.get(), "CHAT-1")
             self.assertEqual(load_project(app.project["id"])["di"]["zone_id"], "CHAT-1")
-            self.assertIn("hello there", app.chat_view.get("1.0", "end"))
+            self.assertIn("hello there", app.thread_text())
         finally:
             root.destroy()
 
-        root = tk.Tk()
+        root = Loop()
         try:
-            app = App(root)
+            app = root.open_desk()
             root.update()
             app.zone_id.set("NAMED-1")
             app._slash_new("/new Hall zone", "Hall zone")
@@ -2441,36 +2291,30 @@ class UiSmokeTests(unittest.TestCase):
             root.destroy()
 
     def test_close_and_ctrl_s_save_form_edits(self):
-        if not os.environ.get("DISPLAY"):
-            self.skipTest("no display")
         _isolate_data()
-        import tkinter as tk
 
         from fpfa.projects import list_projects, load_project, new_project
-        from fpfa.ui import App
-
-        root = tk.Tk()
+        
+        root = Loop()
         try:
-            app = App(root)
+            app = root.open_desk()
             root.update()
             app._on_close()
             self.assertEqual(list_projects(), [])
         finally:
-            try:
-                root.destroy()
-            except tk.TclError:
-                pass
+            root.destroy()
 
-        root = tk.Tk()
+        root = Loop()
         try:
-            app = App(root)
+            app = root.open_desk()
             root.update()
             origin = new_project("Close job")
             app.open_project(origin["id"])
             app.refresh_projects(origin["id"])
             app.zone_id.set("CLOSED-2")
             app.ahj.set("Close AHJ")
-            app.project_list.event_generate("<<ListboxSelect>>")
+            # Choosing the open job again changes nothing.
+            app.select_project(origin["id"])
             root.update()
             self.assertEqual(app.zone_id.get(), "CLOSED-2")
             app._on_close()
@@ -2478,18 +2322,15 @@ class UiSmokeTests(unittest.TestCase):
             self.assertEqual(saved["di"]["zone_id"], "CLOSED-2")
             self.assertEqual(saved["basis"]["ahj"], "Close AHJ")
         finally:
-            try:
-                root.destroy()
-            except tk.TclError:
-                pass
+            root.destroy()
 
-        root = tk.Tk()
+        root = Loop()
         try:
-            app = App(root)
+            app = root.open_desk()
             root.update()
             app.zone_id.set("KEY-3")
-            app.chat_entry.focus_set()
-            app.chat_entry.event_generate("<Control-s>")
+            # Ctrl+S in the page posts save.
+            app.save_current()
             root.update()
             self.assertIsNotNone(app.project)
             self.assertEqual(app.zone_id.get(), "KEY-3")
@@ -2499,26 +2340,21 @@ class UiSmokeTests(unittest.TestCase):
             root.destroy()
 
     def test_chat_does_not_replace_the_tool_plan(self):
-        if not os.environ.get("DISPLAY"):
-            self.skipTest("no display")
         _isolate_data()
-        import tkinter as tk
         from types import SimpleNamespace
         from unittest.mock import patch
 
         from fpfa.keystore import save_api_key
-        from fpfa.ui import App
-
-        root = tk.Tk()
+        
+        root = Loop()
         seen = []
         try:
-            app = App(root)
+            app = root.open_desk()
             root.update()
-            app.chat_entry.insert(0, "/sample-di")
-            app.send_chat()
+            app.send_chat("/sample-di")
             root.update()
             zone_gal = app.project["last_run"]["tools"]["zone_trapped_volume"]["zone_gal"]
-            self.assertIn("281.3", app.results.get("1.0", "end"))
+            self.assertIn("281.3", app.results_text)
             save_api_key("sk-ant-local-test")
 
             class Fast:
@@ -2532,13 +2368,12 @@ class UiSmokeTests(unittest.TestCase):
                         content=[SimpleNamespace(type="text", text="I estimate about 40 gallons and 12 seconds.")],
                     )
 
-            with patch("fpfa.ui.AnthropicMessages", Fast):
-                app.chat_entry.insert(0, "revise the volume")
-                app.send_chat()
+            with patch("fpfa.desk.AnthropicMessages", Fast):
+                app.send_chat("revise the volume")
                 self._wait_for(app, "I estimate about 40 gallons and 12 seconds.")
             self.assertEqual(app.project["last_run"]["tools"]["zone_trapped_volume"]["zone_gal"], zone_gal)
-            self.assertIn("281.3", app.results.get("1.0", "end"))
-            self.assertIn("5.0 gal trim ASSUMED", app.results.get("1.0", "end"))
+            self.assertIn("281.3", app.results_text)
+            self.assertIn("5.0 gal trim ASSUMED", app.results_text)
             self.assertIn("Governing zone total text: 281.3.", seen[0])
             self.assertIn("38.1", seen[0])
             self.assertIn("5.0 gal trim ASSUMED", seen[0])
@@ -2548,20 +2383,15 @@ class UiSmokeTests(unittest.TestCase):
             root.destroy()
 
     def test_local_zone_is_labeled_on_the_inbox(self):
-        if not os.environ.get("DISPLAY"):
-            self.skipTest("no display")
         _isolate_data()
-        import tkinter as tk
         from docx import Document
 
-        from fpfa.ui import App
-
-        root = tk.Tk()
+        
+        root = Loop()
         try:
-            app = App(root)
+            app = root.open_desk()
             root.update()
-            app.chat_entry.insert(0, "/sample-di")
-            app.send_chat()
+            app.send_chat("/sample-di")
             run = app.project["last_run"]
             job_id = run["job_id"]
             reply = app.chat_log[1]["text"]
@@ -2574,58 +2404,46 @@ class UiSmokeTests(unittest.TestCase):
             self.assertTrue(run["narrative"].startswith("Zone "))
             self.assertNotIn(job_id, run["narrative"])
             self.assertEqual(run["source"], "tool-plan")
-            inbox = "\n".join(app.inbox_list.get(0, "end"))
+            inbox = "\n".join(app.inbox_lines)
             self.assertIn(job_id, inbox)
             self.assertIn("done", inbox)
             self.assertIn("zone", inbox)
-            self.assertNotEqual(str(app.chat_entry.cget("state")), "disabled")
-            self.assertNotEqual(str(app.send_button.cget("state")), "disabled")
             with tempfile.TemporaryDirectory() as tmp:
                 written = app.export_to(Path(tmp) / "draft.docx", create=_support_every_claim())
                 doc = Document(written)
                 text = "\n".join(p.text for p in doc.paragraphs)
                 self.assertIn("Section 21 13 19", text)
                 self.assertNotIn(job_id, text)
-                self.assertIn("| claim |", app.chat_view.get("1.0", "end"))
+                self.assertIn("| claim |", app.thread_text())
         finally:
             root.destroy()
 
     def test_failed_zone_stays_labeled_on_its_job(self):
-        if not os.environ.get("DISPLAY"):
-            self.skipTest("no display")
         _isolate_data()
-        import tkinter as tk
 
-        from fpfa.ui import App
-
-        root = tk.Tk()
+        
+        root = Loop()
         try:
-            app = App(root)
+            app = root.open_desk()
             root.update()
-            app.chat_entry.insert(0, "/run")
-            app.send_chat()
+            app.send_chat("/run")
             reply = app.chat_log[-1]["text"]
             job_id = app.chat_log[-1]["job_id"]
             self.assertIn("Add at least one pipe segment.", reply)
             self.assertIn(job_id, reply)
             self.assertIn("| zone |", reply)
             self.assertIn("Untitled job", reply)
-            inbox = "\n".join(app.inbox_list.get(0, "end"))
+            inbox = "\n".join(app.inbox_lines)
             self.assertIn("error", inbox)
             self.assertIn(job_id, inbox)
-            self.assertNotEqual(str(app.chat_entry.cget("state")), "disabled")
         finally:
             root.destroy()
 
     def test_job_result_cannot_land_on_a_different_project(self):
-        if not os.environ.get("DISPLAY"):
-            self.skipTest("no display")
         _isolate_data()
-        import tkinter as tk
 
         from fpfa.projects import load_project, new_project
-        from fpfa.ui import App
-
+        
         result = {
             "source": "tool-plan",
             "narrative": "ORIGIN-RESULT",
@@ -2642,9 +2460,9 @@ class UiSmokeTests(unittest.TestCase):
                 "elect_di_trim": {"family": "El/El"},
             },
         }
-        root = tk.Tk()
+        root = Loop()
         try:
-            app = App(root)
+            app = root.open_desk()
             root.update()
             origin = new_project("Origin job")
             other = new_project("Other job")
@@ -2675,24 +2493,20 @@ class UiSmokeTests(unittest.TestCase):
             self.assertTrue(any(turn.get("job_id") == chat_job.id for turn in saved["chat"]))
             self.assertIsNone(load_project(other["id"]).get("last_run"))
             self.assertEqual(load_project(other["id"]).get("chat") or [], [])
-            visible = app.chat_view.get("1.0", "end")
+            visible = app.thread_text()
             self.assertNotIn("ORIGIN-CHAT", visible)
-            self.assertNotIn("ORIGIN-RESULT", app.results.get("1.0", "end"))
+            self.assertNotIn("ORIGIN-RESULT", app.results_text)
         finally:
             root.destroy()
 
     def test_composer_stays_usable_while_a_zone_job_runs(self):
-        if not os.environ.get("DISPLAY"):
-            self.skipTest("no display")
         _isolate_data()
         import threading
-        import tkinter as tk
         from types import SimpleNamespace
         from unittest.mock import patch
 
         from fpfa.keystore import save_api_key
-        from fpfa.ui import App
-
+        
         save_api_key("sk-ant-local-test")
         zone_started = threading.Event()
         zone_release = threading.Event()
@@ -2718,32 +2532,24 @@ class UiSmokeTests(unittest.TestCase):
                     content=[SimpleNamespace(type="text", text="zone narrative without the governing figures")],
                 )
 
-        root = tk.Tk()
+        root = Loop()
         try:
-            app = App(root)
+            app = root.open_desk()
             root.update()
             app.ask_claude.set(True)
-            app.chat_entry.insert(0, "/sample-di")
-            with patch("fpfa.ui.AnthropicMessages", Blocking):
-                app.send_chat()
+            with patch("fpfa.desk.AnthropicMessages", Blocking):
+                app.send_chat("/sample-di")
                 self.assertTrue(zone_started.wait(3))
-                self.assertNotIn("5.0 gal trim ASSUMED", app.chat_view.get("1.0", "end"))
-                self.assertNotEqual(str(app.chat_entry.cget("state")), "disabled")
-                self.assertNotEqual(str(app.send_button.cget("state")), "disabled")
-                app.chat_entry.insert(0, "still typing")
-                self.assertEqual(app.chat_entry.get(), "still typing")
-                app.chat_entry.delete(0, "end")
-                app.chat_entry.insert(0, "CHAT-WHILE-ZONE")
-                app.send_chat()
+                self.assertNotIn("5.0 gal trim ASSUMED", app.thread_text())
+                app.send_chat("CHAT-WHILE-ZONE")
                 self._wait_for(app, "CHAT-WHILE-REPLY", timeout=3)
-                mid = app.chat_view.get("1.0", "end")
+                mid = app.thread_text()
                 self.assertIn("CHAT-WHILE-REPLY", mid)
                 self.assertIn("| chat\n", mid)
                 self.assertNotIn("5.0 gal trim ASSUMED", mid)
-                self.assertEqual(str(app.chat_entry.cget("state")), "normal")
                 zone_release.set()
                 self._wait_for(app, "5.0 gal trim ASSUMED", timeout=3)
-            thread = app.chat_view.get("1.0", "end")
+            thread = app.thread_text()
             self.assertIn("| zone |", thread)
             self.assertIn("| chat\n", thread)
             self.assertIn("CHAT-WHILE-REPLY", thread)
@@ -2751,7 +2557,7 @@ class UiSmokeTests(unittest.TestCase):
             self.assertEqual(app.project["last_run"]["source"], "tool-plan")
             self.assertIn("281.3", f"{app.project['last_run']['tools']['zone_trapped_volume']['zone_gal']:.1f}")
             self.assertNotIn(app.project["last_run"]["job_id"], app.project["last_run"]["narrative"])
-            inbox = "\n".join(app.inbox_list.get(0, "end"))
+            inbox = "\n".join(app.inbox_lines)
             self.assertIn("zone", inbox)
             self.assertIn("chat", inbox)
             self.assertIn("Sample data hall DI zone", inbox)
@@ -2760,18 +2566,14 @@ class UiSmokeTests(unittest.TestCase):
             root.destroy()
 
     def test_out_of_order_replies_are_labeled_on_their_projects(self):
-        if not os.environ.get("DISPLAY"):
-            self.skipTest("no display")
         _isolate_data()
         import threading
-        import tkinter as tk
         from types import SimpleNamespace
         from unittest.mock import patch
 
         from fpfa.keystore import save_api_key
         from fpfa.projects import load_project
-        from fpfa.ui import App
-
+        
         save_api_key("sk-ant-local-test")
         slow_release = threading.Event()
         fast_release = threading.Event()
@@ -2803,23 +2605,20 @@ class UiSmokeTests(unittest.TestCase):
                     content=[SimpleNamespace(type="text", text=text)],
                 )
 
-        root = tk.Tk()
+        root = Loop()
         try:
-            app = App(root)
+            app = root.open_desk()
             root.update()
-            with patch("fpfa.ui.AnthropicMessages", Blocking):
+            with patch("fpfa.desk.AnthropicMessages", Blocking):
                 app._start_named_job("Alpha hall")
                 alpha_id = app.project["id"]
-                app.chat_entry.insert(0, "SLOW-QUESTION")
-                app.send_chat()
+                app.send_chat("SLOW-QUESTION")
                 self.assertTrue(slow_started.wait(3))
-                self.assertNotEqual(str(app.chat_entry.cget("state")), "disabled")
-                app.chat_entry.insert(0, "FAST-QUESTION")
-                app.send_chat()
+                app.send_chat("FAST-QUESTION")
                 self.assertTrue(fast_started.wait(3))
                 fast_release.set()
                 self._wait_for(app, "FAST-REPLY", timeout=3)
-                early = app.chat_view.get("1.0", "end")
+                early = app.thread_text()
                 self.assertIn("FAST-REPLY", early)
                 self.assertIn("| chat\n", early)
                 self.assertNotIn("SLOW-REPLY", early)
@@ -2829,7 +2628,7 @@ class UiSmokeTests(unittest.TestCase):
                 self.assertIn(turns[0]["job_id"], turns[0]["text"])
                 slow_release.set()
                 self._wait_for(app, "SLOW-REPLY", timeout=3)
-            visible = app.chat_view.get("1.0", "end")
+            visible = app.thread_text()
             self.assertIn("FAST-REPLY", visible)
             self.assertIn("SLOW-REPLY", visible)
             saved = load_project(alpha_id)
@@ -2847,29 +2646,27 @@ class UiSmokeTests(unittest.TestCase):
             fast_release.set()
             root.destroy()
 
-        root = tk.Tk()
+        root = Loop()
         try:
-            app = App(root)
+            app = root.open_desk()
             root.update()
-            with patch("fpfa.ui.AnthropicMessages", Blocking):
+            with patch("fpfa.desk.AnthropicMessages", Blocking):
                 slow_release.clear()
                 fast_release.clear()
                 slow_started.clear()
                 fast_started.clear()
                 app._start_named_job("Alpha hall")
                 alpha_id = app.project["id"]
-                app.chat_entry.insert(0, "SLOW-QUESTION")
-                app.send_chat()
+                app.send_chat("SLOW-QUESTION")
                 self.assertTrue(slow_started.wait(3))
                 app._start_named_job("Beta hall")
                 beta_id = app.project["id"]
                 self.assertNotEqual(alpha_id, beta_id)
-                app.chat_entry.insert(0, "FAST-QUESTION")
-                app.send_chat()
+                app.send_chat("FAST-QUESTION")
                 self.assertTrue(fast_started.wait(3))
                 fast_release.set()
                 self._wait_for(app, "FAST-REPLY", timeout=3)
-                on_beta = app.chat_view.get("1.0", "end")
+                on_beta = app.thread_text()
                 self.assertIn("FAST-REPLY", on_beta)
                 self.assertIn("Beta hall", on_beta)
                 self.assertNotIn("SLOW-REPLY", on_beta)
@@ -2901,8 +2698,8 @@ class UiSmokeTests(unittest.TestCase):
             self.assertIn("FAST-REPLY", beta_text)
             self.assertIn("Beta hall", beta_text)
             self.assertNotIn("SLOW-REPLY", beta_text)
-            self.assertNotIn("SLOW-REPLY", app.chat_view.get("1.0", "end"))
-            self.assertNotIn("Alpha hall", app.chat_view.get("1.0", "end"))
+            self.assertNotIn("SLOW-REPLY", app.thread_text())
+            self.assertNotIn("Alpha hall", app.thread_text())
         finally:
             slow_release.set()
             fast_release.set()
@@ -2968,38 +2765,31 @@ class UiSmokeTests(unittest.TestCase):
             return on_second()
 
         def start():
-            app.chat_entry.insert(0, "/run")
-            app.send_chat()
+            app.send_chat("/run")
             self.assertTrue(entered[0].wait(3), "first zone run did not start")
-            self.assertNotEqual(str(app.chat_entry.cget("state")), "disabled")
-            app.chat_entry.insert(0, "/run")
-            app.send_chat()
+            app.send_chat("/run")
             self.assertTrue(entered[1].wait(3), "second zone run did not start")
             jobs = [job for job in app.jobs.snapshot() if job.kind == "zone"]
             self.assertEqual(len(jobs), 2)
             self.assertEqual(app.jobs.get(jobs[1].id).status, "running")
             return jobs
 
-        return patch("fpfa.ui.run_di_zone", fake_zone), entered, release, start
+        return patch("fpfa.desk.run_di_zone", fake_zone), entered, release, start
 
     def test_overlapping_zone_runs_each_post_a_labeled_result(self):
         """Two /run jobs on one project each add their own labeled result."""
-        if not os.environ.get("DISPLAY"):
-            self.skipTest("no display")
         _isolate_data()
-        import tkinter as tk
 
         from fpfa.keystore import save_api_key
         from fpfa.projects import load_project
-        from fpfa.ui import App
-
+        
         save_api_key("sk-ant-local-test")
-        root = tk.Tk()
+        root = Loop()
         patcher = None
         patch_started = False
         release = [None, None]
         try:
-            app = App(root)
+            app = root.open_desk()
             root.update()
             origin_id = self._prepare_zone_form(app, "Overlap hall")
             patcher, _entered, release, start = self._hold_overlapping_runs(
@@ -3010,7 +2800,7 @@ class UiSmokeTests(unittest.TestCase):
             jobs = start()
             release[0].set()
             self._wait_for(app, "FIRST-ZONE-RESULT", timeout=3)
-            mid = app.chat_view.get("1.0", "end")
+            mid = app.thread_text()
             self.assertIn("FIRST-ZONE-RESULT", mid)
             self.assertIn(jobs[0].id, mid)
             self.assertNotIn("SECOND-ZONE-RESULT", mid)
@@ -3033,7 +2823,7 @@ class UiSmokeTests(unittest.TestCase):
             self.assertIn("Overlap hall", assistant[1]["text"])
             self.assertIn("| zone |", assistant[1]["text"])
             self.assertNotIn(jobs[0].id, assistant[1]["text"])
-            visible = app.chat_view.get("1.0", "end")
+            visible = app.thread_text()
             self.assertIn("FIRST-ZONE-RESULT", visible)
             self.assertIn("SECOND-ZONE-RESULT", visible)
         finally:
@@ -3046,24 +2836,20 @@ class UiSmokeTests(unittest.TestCase):
 
     def test_zone_error_after_project_switch_is_saved_on_that_project(self):
         """A second overlapping /run that fails after a switch still lands on its project."""
-        if not os.environ.get("DISPLAY"):
-            self.skipTest("no display")
         _isolate_data()
         import time
-        import tkinter as tk
         from unittest.mock import patch
 
         from fpfa.keystore import save_api_key
         from fpfa.projects import load_project
-        from fpfa.ui import App
-
+        
         save_api_key("sk-ant-local-test")
-        root = tk.Tk()
+        root = Loop()
         patcher = None
         patch_started = False
         release = [None, None]
         try:
-            app = App(root)
+            app = root.open_desk()
             root.update()
             origin_id = self._prepare_zone_form(app, "Overlap hall")
 
@@ -3071,17 +2857,18 @@ class UiSmokeTests(unittest.TestCase):
                 raise RuntimeError("SECOND-ZONE-FAILED")
 
             patcher, _entered, release, start = self._hold_overlapping_runs(app, fail_second)
-            with patch("fpfa.ui.messagebox.showerror") as shown:
+            app.notices.clear()
+            if True:
                 patcher.start()
                 patch_started = True
                 jobs = start()
                 release[0].set()
                 self._wait_for(app, "FIRST-ZONE-RESULT", timeout=3)
-                self.assertNotIn("SECOND-ZONE-FAILED", app.chat_view.get("1.0", "end"))
+                self.assertNotIn("SECOND-ZONE-FAILED", app.thread_text())
                 app._start_named_job("Other hall")
                 other_id = app.project["id"]
                 self.assertNotEqual(other_id, origin_id)
-                self.assertNotIn("FIRST-ZONE-RESULT", app.chat_view.get("1.0", "end"))
+                self.assertNotIn("FIRST-ZONE-RESULT", app.thread_text())
                 release[1].set()
                 deadline = time.time() + 3
                 saved_text = ""
@@ -3093,7 +2880,8 @@ class UiSmokeTests(unittest.TestCase):
                         break
                     time.sleep(0.02)
                 self.assertIn("SECOND-ZONE-FAILED", saved_text)
-                self.assertFalse(shown.called)
+                # No dialog: the error went to the thread of the job that started the run.
+                self.assertEqual(app.notices, [])
             saved = load_project(origin_id)
             assistant = [turn for turn in saved["chat"] if turn.get("role") == "assistant"]
             self.assertEqual(len(assistant), 2)
@@ -3112,9 +2900,9 @@ class UiSmokeTests(unittest.TestCase):
             other_text = "\n".join(turn.get("text") or "" for turn in other.get("chat") or [])
             self.assertNotIn("SECOND-ZONE-FAILED", other_text)
             self.assertNotIn("FIRST-ZONE-RESULT", other_text)
-            self.assertNotIn("SECOND-ZONE-FAILED", app.chat_view.get("1.0", "end"))
+            self.assertNotIn("SECOND-ZONE-FAILED", app.thread_text())
             app.open_project(origin_id)
-            reopened = app.chat_view.get("1.0", "end")
+            reopened = app.thread_text()
             self.assertIn("FIRST-ZONE-RESULT", reopened)
             self.assertIn("SECOND-ZONE-FAILED", reopened)
             self.assertIn(jobs[1].id, reopened)
@@ -3133,7 +2921,7 @@ class UiSmokeTests(unittest.TestCase):
         deadline = time.time() + timeout
         while time.time() < deadline:
             app._poll()
-            if needle in app.chat_view.get("1.0", "end"):
+            if needle in app.thread_text():
                 return
             time.sleep(0.02)
         self.fail(f"timed out waiting for {needle!r}")
@@ -3306,7 +3094,7 @@ class BessStarterTests(unittest.TestCase):
         self.assertNotIn("did not invent gallons", joined["narrative"])
         self.assertEqual(zone["tools"]["zone_trapped_volume"]["zone_gal"], before)
         self.assertAlmostEqual(before, 281.3, places=1)
-        from fpfa.ui import chat_request_text
+        from fpfa.desk import chat_request_text
 
         follow = chat_request_text([], {}, {}, "revise the setpoint", zone, "synthesis", joined)
         self.assertIn("Mixture LFL 4.11 vol% is calculated (fuel-only).", follow)
@@ -3400,24 +3188,18 @@ class BessStarterTests(unittest.TestCase):
                 read_starter_cites(root, "ess-isolation-venting-and-duration")
 
     def test_sample_bess_slash_and_chip_run_the_starter(self):
-        if not os.environ.get("DISPLAY"):
-            self.skipTest("no display")
-        import tkinter as tk
 
         from fpfa.projects import load_project
-        from fpfa.ui import App
-
-        root = tk.Tk()
+        
+        root = Loop()
         try:
-            app = App(root)
+            app = root.open_desk()
             root.update()
-            app.chat_entry.insert(0, "/mode calculator")
-            app.send_chat()
+            app.send_chat("/mode calculator")
             app.density.set("not-a-number")
             old_id = app.project["id"]
-            app.chat_entry.insert(0, "/sample-bess")
-            app.send_chat()
-            chat = app.chat_view.get("1.0", "end")
+            app.send_chat("/sample-bess")
+            chat = app.thread_text()
             self.assertIn("/sample-bess", chat)
             self.assertIn("Mixture LFL 4.11 vol% is calculated (fuel-only).", chat)
             self.assertIn("Explosion-control election ASSUMED:", chat)
@@ -3430,26 +3212,23 @@ class BessStarterTests(unittest.TestCase):
             self.assertIsNone(app.project.get("last_run"))
             self.assertEqual(app.project["bess_run"]["source"], "tool-plan")
             self.assertEqual(app.project["bess_run"]["kind"], "bess")
-            self.assertEqual(app.pipes.get_children(), ())
-            self.assertIn("NFPA 69 8.3.1", app.results.get("1.0", "end"))
+            self.assertEqual(app.segments, [])
+            self.assertIn("NFPA 69 8.3.1", app.results_text)
             saved_old = load_project(old_id)
             self.assertEqual(saved_old["mode"], "calculator")
             self.assertNotIn("not-a-number", json.dumps(saved_old.get("di")))
-            app.chat_entry.insert(0, "still typing")
-            self.assertEqual(app.chat_entry.get(), "still typing")
             kinds = [job.kind for job in app.jobs.snapshot()]
             self.assertIn("bess", kinds)
         finally:
             root.destroy()
 
-        root = tk.Tk()
+        root = Loop()
         try:
-            app = App(root)
+            app = root.open_desk()
             root.update()
-            last = app.more_menu.index("end")
-            labels = [app.more_menu.entrycget(i, "label") if app.more_menu.type(i) == "command" else "" for i in range(last + 1)]
-            app.more_menu.invoke(labels.index("Sample BESS room"))
-            chat = app.chat_view.get("1.0", "end")
+            # The menu row posts the same action as /sample-bess.
+            app.start_sample_bess()
+            chat = app.thread_text()
             self.assertIn("/sample-bess", chat)
             self.assertIn("4.11", chat)
             self.assertEqual(app.project["mode"], "synthesis")
@@ -3458,16 +3237,12 @@ class BessStarterTests(unittest.TestCase):
             root.destroy()
 
     def test_bess_job_that_calls_claude_stays_off_the_ui_thread(self):
-        if not os.environ.get("DISPLAY"):
-            self.skipTest("no display")
         import threading
         import time
-        import tkinter as tk
         from unittest.mock import patch
 
         from fpfa.keystore import save_api_key
-        from fpfa.ui import App
-
+        
         save_api_key("sk-ant-local-test")
         started = threading.Event()
         release = threading.Event()
@@ -3486,19 +3261,15 @@ class BessStarterTests(unittest.TestCase):
                     content=[SimpleNamespace(type="text", text="short draft without the tool figures")],
                 )
 
-        root = tk.Tk()
+        root = Loop()
         try:
-            app = App(root)
+            app = root.open_desk()
             root.update()
             app.ask_claude.set(True)
-            app.chat_entry.insert(0, "/sample-bess")
-            with patch("fpfa.ui.AnthropicMessages", Blocking):
-                app.send_chat()
+            with patch("fpfa.desk.AnthropicMessages", Blocking):
+                app.send_chat("/sample-bess")
                 self.assertTrue(started.wait(2))
-                self.assertNotIn("4.11", app.chat_view.get("1.0", "end"))
-                app.chat_entry.insert(0, "still typing")
-                self.assertEqual(app.chat_entry.get(), "still typing")
-                app.chat_entry.delete(0, "end")
+                self.assertNotIn("4.11", app.thread_text())
                 self.assertEqual(seen[0]["model"], "claude-opus-5-5")
                 self.assertNotIn("tool_choice", seen[0])
                 self.assertNotIn("temperature", seen[0])
@@ -3509,13 +3280,13 @@ class BessStarterTests(unittest.TestCase):
                 deadline = time.time() + 2
                 while time.time() < deadline:
                     app._poll()
-                    if "4.11" in app.chat_view.get("1.0", "end"):
+                    if "4.11" in app.thread_text():
                         break
                     time.sleep(0.02)
-            chat = app.chat_view.get("1.0", "end")
+            chat = app.thread_text()
             self.assertIn("4.11", chat)
             self.assertIn("| bess |", chat)
-            self.assertIn("did not quote the LFL tool plan", app.results.get("1.0", "end"))
+            self.assertIn("did not quote the LFL tool plan", app.results_text)
             self.assertIsNone(app.project.get("last_run"))
             self.assertEqual(app.project["bess_run"]["source"], "tool-plan")
         finally:
@@ -4095,7 +3866,7 @@ class ManagedAgentTests(unittest.TestCase):
             text = (REPO / "app" / "fpfa" / name).read_text(encoding="utf-8")
             self.assertNotIn("managed-agents", text, name)
             self.assertNotIn("run_heavy_job", text, name)
-        ui = (REPO / "app" / "fpfa" / "ui.py").read_text(encoding="utf-8")
+        ui = (REPO / "app" / "fpfa" / "desk.py").read_text(encoding="utf-8")
         for name in (
             "_send_chat_message",
             "run_zone",
@@ -4124,22 +3895,18 @@ class ManagedAgentTests(unittest.TestCase):
         deadline = time.time() + timeout
         while time.time() < deadline:
             app._poll()
-            if needle in app.chat_view.get("1.0", "end"):
+            if needle in app.thread_text():
                 return
             time.sleep(0.02)
         self.fail(f"timed out waiting for {needle!r}")
 
     def test_heavy_reply_lands_in_the_same_thread(self):
-        if not os.environ.get("DISPLAY"):
-            self.skipTest("no display")
         import threading
-        import tkinter as tk
         from unittest.mock import patch
 
         from fpfa.keystore import save_api_key
         from fpfa.projects import list_projects
-        from fpfa.ui import App
-
+        
         save_api_key("sk-ant-local-test")
         seen = {}
 
@@ -4157,18 +3924,16 @@ class ManagedAgentTests(unittest.TestCase):
             def __init__(self, *_args, **_kwargs):
                 raise AssertionError("ordinary Messages client")
 
-        root = tk.Tk()
+        root = Loop()
         try:
-            app = App(root)
+            app = root.open_desk()
             root.update()
             project_id = None
-            app.chat_entry.insert(0, "/new Hall zone")
-            app.send_chat()
+            app.send_chat("/new Hall zone")
             project_id = app.project["id"]
             before = [row["id"] for row in list_projects()]
-            app.chat_entry.insert(0, "/heavy check the room")
-            with patch("fpfa.ui.run_heavy_job", fake_ok), patch("fpfa.ui.AnthropicMessages", Boom):
-                app.send_chat()
+            with patch("fpfa.desk.run_heavy_job", fake_ok), patch("fpfa.desk.AnthropicMessages", Boom):
+                app.send_chat("/heavy check the room")
                 self._wait_for(app, "HEAVY-REPLY")
             self.assertEqual(app.project["id"], project_id)
             self.assertEqual([row["id"] for row in list_projects()], before)
@@ -4194,23 +3959,18 @@ class ManagedAgentTests(unittest.TestCase):
             self.assertTrue(reply.startswith(f"Job {job_id} |"))
             self.assertIsNone(app.project.get("last_run"))
             self.assertIsNone(app.project.get("bess_run"))
-            self.assertNotEqual(str(app.chat_entry.cget("state")), "disabled")
-            inbox = "\n".join(app.inbox_list.get(0, "end"))
+            inbox = "\n".join(app.inbox_lines)
             self.assertIn("heavy", inbox)
             self.assertIn("back in this thread", app.status.get())
         finally:
             root.destroy()
 
     def test_ordinary_paths_do_not_call_the_hosted_runtime(self):
-        if not os.environ.get("DISPLAY"):
-            self.skipTest("no display")
-        import tkinter as tk
         from types import SimpleNamespace
         from unittest.mock import patch
 
         from fpfa.keystore import save_api_key
-        from fpfa.ui import App
-
+        
         save_api_key("sk-ant-local-test")
 
         def explode(*_args, **_kwargs):
@@ -4226,22 +3986,19 @@ class ManagedAgentTests(unittest.TestCase):
                     content=[SimpleNamespace(type="text", text="CHAT-REPLY")],
                 )
 
-        root = tk.Tk()
+        root = Loop()
         try:
-            app = App(root)
+            app = root.open_desk()
             root.update()
             app.ask_claude.set(False)
-            with patch("fpfa.ui.run_heavy_job", explode):
-                app.chat_entry.insert(0, "/sample-di")
-                app.send_chat()
-                self.assertIn("281.3", app.chat_view.get("1.0", "end"))
+            with patch("fpfa.desk.run_heavy_job", explode):
+                app.send_chat("/sample-di")
+                self.assertIn("281.3", app.thread_text())
                 app.ask_claude.set(False)
-                app.chat_entry.insert(0, "/sample-bess")
-                app.send_chat()
-                self.assertIn("4.11", app.chat_view.get("1.0", "end"))
-                app.chat_entry.insert(0, "which trim")
-                with patch("fpfa.ui.AnthropicMessages", Fast):
-                    app.send_chat()
+                app.send_chat("/sample-bess")
+                self.assertIn("4.11", app.thread_text())
+                with patch("fpfa.desk.AnthropicMessages", Fast):
+                    app.send_chat("which trim")
                     self._wait_for(app, "CHAT-REPLY")
             kinds = {job.kind for job in app.jobs.snapshot()}
             self.assertIn("zone", kinds)
@@ -4252,14 +4009,10 @@ class ManagedAgentTests(unittest.TestCase):
             root.destroy()
 
     def test_heavy_keeps_the_tool_plan_and_the_mode(self):
-        if not os.environ.get("DISPLAY"):
-            self.skipTest("no display")
-        import tkinter as tk
         from unittest.mock import patch
 
         from fpfa.keystore import save_api_key
-        from fpfa.ui import App
-
+        
         save_api_key("sk-ant-local-test")
         seen = {}
 
@@ -4268,25 +4021,22 @@ class ManagedAgentTests(unittest.TestCase):
             seen["system"] = system
             return {"text": "HEAVY-REPLY", "model": "claude-opus-5-5", "runtime": "managed-agents"}
 
-        root = tk.Tk()
+        root = Loop()
         try:
-            app = App(root)
+            app = root.open_desk()
             root.update()
             app.ask_claude.set(False)
-            app.chat_entry.insert(0, "/sample-di")
-            app.send_chat()
+            app.send_chat("/sample-di")
             zone_gal = app.project["last_run"]["tools"]["zone_trapped_volume"]["zone_gal"]
-            app.chat_entry.insert(0, "/mode calculator")
-            app.send_chat()
+            app.send_chat("/mode calculator")
             app.density.set("not-a-number")
-            app.chat_entry.insert(0, "/heavy review the zone")
-            with patch("fpfa.ui.run_heavy_job", fake_ok):
-                app.send_chat()
+            with patch("fpfa.desk.run_heavy_job", fake_ok):
+                app.send_chat("/heavy review the zone")
                 self._wait_for(app, "HEAVY-REPLY")
             self.assertEqual(app.mode_slug.get(), "calculator")
             self.assertEqual(app.project["mode"], "calculator")
             self.assertEqual(app.project["last_run"]["tools"]["zone_trapped_volume"]["zone_gal"], zone_gal)
-            self.assertIn("281.3", app.results.get("1.0", "end"))
+            self.assertIn("281.3", app.results_text)
             self.assertIn("Governing zone total text: 281.3.", seen["user_text"])
             self.assertIn("38.1", seen["user_text"])
             self.assertIn("Active mode: calculator.", seen["user_text"])
@@ -4296,50 +4046,41 @@ class ManagedAgentTests(unittest.TestCase):
 
             self.assertEqual(seen["system"], session_system())
             self.assertNotIn("Call the calc tool", seen["system"])
-            self.assertIn("| heavy |", app.chat_view.get("1.0", "end"))
+            self.assertIn("| heavy |", app.thread_text())
             saved = json.dumps(app.project.get("di"))
             self.assertNotIn("not-a-number", saved)
         finally:
             root.destroy()
 
     def test_heavy_without_a_key_stays_local(self):
-        if not os.environ.get("DISPLAY"):
-            self.skipTest("no display")
-        import tkinter as tk
         from unittest.mock import patch
 
         from fpfa.keystore import clear_api_key
-        from fpfa.ui import App
-
+        
         clear_api_key()
 
         def explode(*_args, **_kwargs):
             raise AssertionError("hosted runtime")
 
-        root = tk.Tk()
+        root = Loop()
         try:
-            app = App(root)
+            app = root.open_desk()
             root.update()
-            app.chat_entry.insert(0, "/heavy check the room")
-            with patch("fpfa.ui.run_heavy_job", explode):
-                app.send_chat()
-            self.assertIn("Settings", app.chat_view.get("1.0", "end"))
+            with patch("fpfa.desk.run_heavy_job", explode):
+                app.send_chat("/heavy check the room")
+            self.assertIn("Settings", app.thread_text())
             self.assertNotIn("heavy", [job.kind for job in app.jobs.snapshot()])
             self.assertEqual(len(list_projects_ids(app)), 1)
         finally:
             root.destroy()
 
     def test_heavy_reply_stays_on_the_project_that_started_it(self):
-        if not os.environ.get("DISPLAY"):
-            self.skipTest("no display")
         import threading
-        import tkinter as tk
         from unittest.mock import patch
 
         from fpfa.keystore import save_api_key
         from fpfa.projects import load_project
-        from fpfa.ui import App
-
+        
         save_api_key("sk-ant-local-test")
         started = threading.Event()
         release = threading.Event()
@@ -4349,23 +4090,16 @@ class ManagedAgentTests(unittest.TestCase):
             release.wait(3)
             return {"text": "HEAVY-REPLY", "model": "claude-opus-5-5", "runtime": "managed-agents"}
 
-        root = tk.Tk()
+        root = Loop()
         try:
-            app = App(root)
+            app = root.open_desk()
             root.update()
-            app.chat_entry.insert(0, "/new Origin hall")
-            app.send_chat()
+            app.send_chat("/new Origin hall")
             origin_id = app.project["id"]
-            app.chat_entry.insert(0, "/heavy check the room")
-            with patch("fpfa.ui.run_heavy_job", blocking):
-                app.send_chat()
+            with patch("fpfa.desk.run_heavy_job", blocking):
+                app.send_chat("/heavy check the room")
                 self.assertTrue(started.wait(2))
-                self.assertNotEqual(str(app.chat_entry.cget("state")), "disabled")
-                app.chat_entry.insert(0, "still typing")
-                self.assertEqual(app.chat_entry.get(), "still typing")
-                app.chat_entry.delete(0, "end")
-                app.chat_entry.insert(0, "/new Other hall")
-                app.send_chat()
+                app.send_chat("/new Other hall")
                 other_id = app.project["id"]
                 self.assertNotEqual(other_id, origin_id)
                 release.set()
@@ -4381,7 +4115,7 @@ class ManagedAgentTests(unittest.TestCase):
                     time.sleep(0.02)
             self.assertIn("HEAVY-REPLY", saved)
             self.assertIn("| heavy |", saved)
-            self.assertNotIn("HEAVY-REPLY", app.chat_view.get("1.0", "end"))
+            self.assertNotIn("HEAVY-REPLY", app.thread_text())
             self.assertEqual(load_project(other_id).get("last_run"), None)
             other_chat = json.dumps(load_project(other_id).get("chat") or [])
             self.assertNotIn("HEAVY-REPLY", other_chat)
@@ -4581,30 +4315,25 @@ class BlindClaimCheckTests(unittest.TestCase):
         self.assertTrue(outcome["verdict"].startswith("1. Not supported."))
 
     def test_export_writes_sidecars_only_after_support(self):
-        if not os.environ.get("DISPLAY"):
-            self.skipTest("no display")
-        import tkinter as tk
         from unittest.mock import patch
 
         from docx import Document
 
         from fpfa.claim_check import claim_dir, claims_filename, verdict_filename
         from fpfa.projects import list_projects
-        from fpfa.ui import App
-
-        root = tk.Tk()
+        
+        root = Loop()
         try:
-            app = App(root)
+            app = root.open_desk()
             root.update()
-            app.chat_entry.insert(0, "/sample-di")
-            app.send_chat()
+            app.send_chat("/sample-di")
             origin_id = app.project["id"]
             before = [row["id"] for row in list_projects()]
 
             def explode(*_args, **_kwargs):
                 raise AssertionError("hosted runtime")
 
-            with tempfile.TemporaryDirectory() as tmp, patch("fpfa.ui.run_heavy_job", explode):
+            with tempfile.TemporaryDirectory() as tmp, patch("fpfa.desk.run_heavy_job", explode):
                 blocked = Path(tmp) / "blocked.docx"
                 with self.assertRaises(RuntimeError) as caught:
                     app.export_to(blocked)
@@ -4628,7 +4357,7 @@ class BlindClaimCheckTests(unittest.TestCase):
                 user = create.seen[0]["messages"][0]["content"]
                 self.assertNotIn("Draft for the engineer of record", user)
                 self.assertNotIn("tools", create.seen[0])
-            chat = app.chat_view.get("1.0", "end")
+            chat = app.thread_text()
             self.assertIn("| claim |", chat)
             self.assertIn("did not compare the narrative to the standard", chat)
             self.assertIn("Engineer-of-record review still applies", chat)
@@ -4645,17 +4374,13 @@ class BlindClaimCheckTests(unittest.TestCase):
             root.destroy()
 
     def test_claim_job_stays_on_the_project_that_started_it(self):
-        if not os.environ.get("DISPLAY"):
-            self.skipTest("no display")
         import threading
         import time
-        import tkinter as tk
         from unittest.mock import patch
 
         from fpfa.keystore import save_api_key
         from fpfa.projects import list_projects, load_project
-        from fpfa.ui import App
-
+        
         started = threading.Event()
         release = threading.Event()
         seen = {}
@@ -4685,13 +4410,12 @@ class BlindClaimCheckTests(unittest.TestCase):
                     content=[SimpleNamespace(type="text", text="\n".join(lines))],
                 )
 
-        root = tk.Tk()
+        root = Loop()
         try:
-            app = App(root)
+            app = root.open_desk()
             root.update()
             app.ask_claude.set(False)
-            app.chat_entry.insert(0, "/sample-di")
-            app.send_chat()
+            app.send_chat("/sample-di")
             origin_id = app.project["id"]
             save_api_key("sk-ant-local-test")
 
@@ -4704,15 +4428,15 @@ class BlindClaimCheckTests(unittest.TestCase):
                 dialogs.append("dialog")
                 return ""
 
-            with patch("fpfa.ui.run_heavy_job", explode), patch("fpfa.ui.AnthropicMessages", Hold), patch(
-                "fpfa.ui.filedialog.asksaveasfilename", no_dialog
+            # The save dialog is the window's (pywebview's). It must not open for a check
+            # that finished on a job no longer open.
+            with patch("fpfa.desk.run_heavy_job", explode), patch("fpfa.desk.AnthropicMessages", Hold), patch.object(
+                app.shell, "ask_save_path", no_dialog
             ):
                 app.export_docx()
                 self.assertTrue(started.wait(2))
                 self.assertTrue(seen["thread"].startswith("fpfa-worker-"))
-                self.assertNotEqual(str(app.chat_entry.cget("state")), "disabled")
-                app.chat_entry.insert(0, "/new Other hall")
-                app.send_chat()
+                app.send_chat("/new Other hall")
                 other_id = app.project["id"]
                 self.assertNotEqual(other_id, origin_id)
                 before = [row["id"] for row in list_projects()]
@@ -4729,7 +4453,7 @@ class BlindClaimCheckTests(unittest.TestCase):
             self.assertIn("did not compare the narrative to the standard", saved)
             self.assertIn("Engineer-of-record review still applies", saved)
             self.assertNotIn("Every claim is Supported.", saved)
-            self.assertNotIn("| claim |", app.chat_view.get("1.0", "end"))
+            self.assertNotIn("| claim |", app.thread_text())
             self.assertEqual(load_project(origin_id)["claim_check"]["all_supported"], True)
             self.assertEqual(load_project(origin_id)["claim_check"]["checked_against_standard"], False)
             self.assertIsNone(load_project(other_id).get("claim_check"))
@@ -4748,19 +4472,15 @@ class BlindClaimCheckTests(unittest.TestCase):
             root.destroy()
 
     def test_export_keeps_the_draft_that_was_checked(self):
-        if not os.environ.get("DISPLAY"):
-            self.skipTest("no display")
         import threading
         import time
-        import tkinter as tk
         from unittest.mock import patch
 
         from docx import Document
 
         from fpfa.claim_check import numbered_bodies, split_checker_request
         from fpfa.keystore import save_api_key
-        from fpfa.ui import App
-
+        
         started = threading.Event()
         release = threading.Event()
 
@@ -4782,13 +4502,12 @@ class BlindClaimCheckTests(unittest.TestCase):
                     content=[SimpleNamespace(type="text", text="\n".join(lines))],
                 )
 
-        root = tk.Tk()
+        root = Loop()
         try:
-            app = App(root)
+            app = root.open_desk()
             root.update()
             app.ask_claude.set(False)
-            app.chat_entry.insert(0, "/sample-di")
-            app.send_chat()
+            app.send_chat("/sample-di")
             save_api_key("sk-ant-local-test")
             with tempfile.TemporaryDirectory() as tmp:
                 target = Path(tmp) / "draft.docx"
@@ -4796,9 +4515,7 @@ class BlindClaimCheckTests(unittest.TestCase):
                 def save_as(*_args, **_kwargs):
                     return str(target)
 
-                with patch("fpfa.ui.AnthropicMessages", Hold), patch(
-                    "fpfa.ui.filedialog.asksaveasfilename", save_as
-                ):
+                with patch("fpfa.desk.AnthropicMessages", Hold), patch.object(app.shell, "ask_save_path", save_as):
                     app.export_docx()
                     self.assertTrue(started.wait(2))
                     app.project["last_run"]["narrative"] = "MUTATED-NARRATIVE"

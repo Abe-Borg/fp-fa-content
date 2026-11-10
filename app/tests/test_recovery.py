@@ -24,6 +24,9 @@ REPO = APP_DIR.parent
 if str(APP_DIR) not in sys.path:
     sys.path.insert(0, str(APP_DIR))
 
+from desk_loop import Loop  # noqa: E402
+
+
 
 class Block:
     def __init__(self, **kwargs):
@@ -389,20 +392,16 @@ class RecoveryWindowTests(unittest.TestCase):
         return data
 
     def _app(self, *, key: bool = False):
-        if not os.environ.get("DISPLAY"):
-            self.skipTest("no display")
-        import tkinter as tk
 
         from fpfa.keystore import save_api_key
         from fpfa.paths import write_config
-        from fpfa.ui import App
-
+        
         write_config({"key_backend": "file"})
         if key:
             save_api_key("sk-ant-local-test")
-        root = tk.Tk()
+        root = Loop()
         self.addCleanup(self._destroy, root)
-        app = App(root)
+        app = root.open_desk()
         root.update()
         return app
 
@@ -416,7 +415,7 @@ class RecoveryWindowTests(unittest.TestCase):
     def _settle(self, app, rounds: int = 5) -> None:
         for _ in range(rounds):
             app._poll()
-            app.root.update()
+            app.pump()
             time.sleep(0.02)
 
     def test_window_jobs_are_written_to_the_record(self):
@@ -449,35 +448,35 @@ class RecoveryWindowTests(unittest.TestCase):
         waiting = record.create_handoff(project_id, from_agent="fp-sprinkler", to_agent="fa-releasing",
                                         brief="Confirm the releasing sequence")
         first._persist_open_work()
-        first.root.destroy()
+        first.close()
 
         # A launch that never opens the job still owes its note to the next one.
         middle = self._app()
         self.assertIn("Recovered after a relaunch: 1 job interrupted, 1 handoff re-queued", middle.status.get())
         self.assertEqual(middle.jobs.get("chat9").status, "interrupted")
         self.assertEqual(middle.record.recover(), {})
-        middle.root.destroy()
+        middle.close()
 
         app = self._app()
         self.assertIn("Recovered after a relaunch: 1 job interrupted, 1 handoff re-queued", app.status.get())
-        lines = tuple(app.inbox_list.get(0, "end"))
+        lines = tuple(app.inbox_lines)
         self.assertTrue(any(line.startswith("interrupted chat") and line.endswith("chat9") for line in lines), lines)
         self.assertEqual(app.jobs.get("chat9").status, "interrupted")
         self.assertEqual(app.record.jobs(project_id, status="interrupted")[0]["id"], "chat9")
-        self.assertNotIn("Recovered", app.chat_view.get("1.0", "end"), "the note waits for the job to open")
+        self.assertNotIn("Recovered", app.thread_text(), "the note waits for the job to open")
 
         app.open_project(project_id)
         self._settle(app)
-        thread = app.chat_view.get("1.0", "end")
+        thread = app.thread_text()
         self.assertIn("Recovered after a relaunch.", thread)
         self.assertIn('The chat job "Size the DH-1 zone" was interrupted.', thread)
         self.assertIn("handoff from lead to fp-sprinkler (Check the trim volume) was re-queued", thread)
         self.assertEqual(thread.count("Recovered after a relaunch."), 1)
-        roster = app.team_panel.roster_text.get("1.0", "end")
+        roster = app.team["roster_text"]
         self.assertIn("! Lead (lead) interrupted", roster)
         self.assertIn("! Sprinkler specialist (fp-sprinkler) interrupted", roster)
         self.assertIn("✓ Tool plan (tool-plan) done", roster)
-        blockers = app.team_panel.blockers_text.get("1.0", "end")
+        blockers = app.team["blockers_text"]
         self.assertIn("handoff waiting for fp-sprinkler (re-queued after a relaunch): Check the trim volume", blockers)
         self.assertIn("handoff waiting for fa-releasing: Confirm the releasing sequence", blockers)
         self.assertIn("chat job interrupted by a relaunch: Size the DH-1 zone", blockers)
@@ -490,31 +489,27 @@ class RecoveryWindowTests(unittest.TestCase):
         saved = app.project
         app.open_project(project_id)
         self._settle(app)
-        self.assertEqual(app.chat_view.get("1.0", "end").count("Recovered after a relaunch."), 1)
+        self.assertEqual(app.thread_text().count("Recovered after a relaunch."), 1)
         self.assertEqual(sum(1 for turn in saved["chat"] if "Recovered after a relaunch" in turn.get("text", "")), 1)
         self.assertEqual(app.record.unnoted_recoveries(), {})
         app._persist_open_work()
-        app.root.destroy()
+        app.close()
 
         # Once the note has been read, a later launch owes nothing and lists nothing.
         fourth = self._app()
         self.assertNotIn("Recovered", fourth.status.get())
-        self.assertEqual(tuple(fourth.inbox_list.get(0, "end")), ())
+        self.assertEqual(tuple(fourth.inbox_lines), ())
         fourth.open_project(project_id)
         self._settle(fourth)
-        self.assertEqual(fourth.chat_view.get("1.0", "end").count("Recovered after a relaunch."), 1)
+        self.assertEqual(fourth.thread_text().count("Recovered after a relaunch."), 1)
         self.assertEqual(fourth.record.jobs(project_id, status="interrupted")[0]["id"], "chat9")
 
     def test_a_second_window_on_the_same_data_directory_is_refused_and_recovers_nothing(self):
-        import tkinter as tk
 
         from fpfa.instance_lock import LOCK_NAME, InstanceLock, InstanceLockError
         from fpfa.record import Record
-        from fpfa.ui import App
-
+        
         data = self._data_dir()
-        if not os.environ.get("DISPLAY"):
-            self.skipTest("no display")
         # The first window's live work, as its record shows it while it runs.
         record = Record(data / "fpfa.db")
         record.ensure_project("p1", "Live job")
@@ -522,10 +517,10 @@ class RecoveryWindowTests(unittest.TestCase):
         record.set_agent("p1", name="Lead", role_slug="lead", status="working")
         holder = InstanceLock(data / LOCK_NAME)
         self.assertTrue(holder.acquire())
-        root = tk.Tk()
+        root = Loop()
         self.addCleanup(self._destroy, root)
         with self.assertRaises(InstanceLockError) as caught:
-            App(root)
+            root.open_desk()
         self.assertIn("already open on this data directory", str(caught.exception))
         self.assertEqual(record.jobs("p1")[0]["status"], "running", "the live job was not touched")
         self.assertEqual(record.agents("p1")[0]["status"], "working")
@@ -536,7 +531,7 @@ class RecoveryWindowTests(unittest.TestCase):
         self.assertTrue(app.instance_lock.held)
         self.assertIn("Recovered after a relaunch: 1 job interrupted", app.status.get())
         self.assertEqual(app.record.jobs("p1")[0]["status"], "interrupted")
-        app.root.destroy()
+        app.close()
         self.assertFalse(app.instance_lock.held, "destroying the window releases the directory")
 
     def test_a_long_gap_between_polls_is_reported_as_a_resume(self):

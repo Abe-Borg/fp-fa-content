@@ -7,6 +7,13 @@ app checks the release feed on launch. On Windows,
 packaging/build_installer.ps1 compiles the setup exe after this script.
 Upload Cynosure-Setup-<version>.exe to a GitHub Release.
 
+The window is a web page (fpfa/web/static, built from app/frontend and
+committed) shown in Microsoft's WebView2 through pywebview. The page goes in
+as data. pywebview picks its Windows backend (WebView2 through pythonnet) at
+run time, where static analysis cannot see it, so webview, clr_loader, and
+pythonnet are collected whole and clr is named. The WebView2 runtime itself
+ships with Windows 10 and 11 and is not bundled.
+
 The folder carries its license terms. After PyInstaller finishes, this
 script copies the repository's LICENSE into the folder as LICENSE.txt and
 writes THIRD-PARTY-NOTICES.txt beside it (third_party_notices.py), so the
@@ -85,6 +92,31 @@ def keyring_bundle_flags(*, windows: bool) -> list[str]:
     return flags
 
 
+STATIC = APP_DIR / "fpfa" / "web" / "static"
+
+
+def window_bundle_flags(*, windows: bool) -> list[str]:
+    """PyInstaller flags for the window: the built page, and pywebview with its Windows backend."""
+    if not (STATIC / "index.html").is_file():
+        raise SystemExit(
+            f"The window's page is not built ({STATIC}). From app/frontend: npm ci, then npm run build."
+        )
+    flags = [
+        "--add-data", f"{STATIC}{os.pathsep}fpfa/web/static",
+        "--hidden-import", "fpfa.web.shell",
+        "--hidden-import", "fpfa.web.server",
+        "--collect-all", "webview",
+        # The window is WebView2. Nothing imports tkinter, and the build makes sure none is bundled,
+        # so the notices list no Tcl or Tk.
+        "--exclude-module", "tkinter",
+        "--exclude-module", "_tkinter",
+    ]
+    if windows:
+        # The interop DLLs under webview/lib, Python.Runtime.dll, and clr_loader's runtimes.
+        flags += ["--collect-all", "clr_loader", "--collect-all", "pythonnet", "--hidden-import", "clr"]
+    return flags
+
+
 def version_metadata_flags(*, windows: bool) -> list[str]:
     """Package metadata the About box reads, so a packaged app reports its dependency versions.
 
@@ -92,9 +124,9 @@ def version_metadata_flags(*, windows: bool) -> list[str]:
     says "not installed" for a package that is in fact bundled. keyring's
     metadata is already copied for its backends.
     """
-    names = ["anthropic", "python-docx"]
+    names = ["anthropic", "python-docx", "pywebview"]
     if windows:
-        names.append("pywin32-ctypes")
+        names += ["pywin32-ctypes", "pythonnet"]
     flags: list[str] = []
     for name in names:
         flags += ["--copy-metadata", name]
@@ -135,6 +167,7 @@ def pyinstaller_command(
         "--hidden-import",
         "keyring",
         *keyring_bundle_flags(windows=windows),
+        *window_bundle_flags(windows=windows),
         *version_metadata_flags(windows=windows),
         "--windowed" if windowed else "--console",
     ]

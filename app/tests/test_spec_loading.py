@@ -23,12 +23,15 @@ APP_DIR = Path(__file__).resolve().parents[1]
 REPO = APP_DIR.parent
 sys.path.insert(0, str(APP_DIR))
 
+from desk_loop import Loop  # noqa: E402
+
 os.environ.setdefault("FPFA_DATA_DIR", tempfile.mkdtemp(prefix="fpfa-test-"))
 
 FA_SPEC = "28-31-00-fire-detection-and-alarm.md"
 # The caps this change removed. Fixtures go past both.
 OLD_CHAR_CAP = 16000
 OLD_FILE_CAP = 12
+
 
 
 def _isolate_data() -> Path:
@@ -465,24 +468,20 @@ class ChatWindowTests(unittest.TestCase):
         deadline = time.time() + timeout
         while time.time() < deadline:
             app._poll()
-            if needle in app.chat_view.get("1.0", "end"):
+            if needle in app.thread_text():
                 return
             time.sleep(0.02)
         self.fail(f"timed out waiting for {needle!r}")
 
     def _app(self):
-        if not os.environ.get("DISPLAY"):
-            self.skipTest("no display")
         _isolate_data()
-        import tkinter as tk
 
         from fpfa.keystore import save_api_key
-        from fpfa.ui import App
-
+        
         save_api_key("sk-ant-local-test")
-        root = tk.Tk()
+        root = Loop()
         self.addCleanup(root.destroy)
-        app = App(root)
+        app = root.open_desk()
         root.update()
         return app
 
@@ -503,11 +502,10 @@ class ChatWindowTests(unittest.TestCase):
                     content=[SimpleNamespace(type="text", text="Partial answer about the microphone")],
                 )
 
-        with patch("fpfa.ui.AnthropicMessages", Cut):
-            app.chat_entry.insert(0, "What does 3.9 say about the microphone?")
-            app.send_chat()
+        with patch("fpfa.desk.AnthropicMessages", Cut):
+            app.send_chat("What does 3.9 say about the microphone?")
             self._wait_for(app, "Partial answer about the microphone")
-        thread = app.chat_view.get("1.0", "end")
+        thread = app.thread_text()
         self.assertIn("Incomplete reply.", thread)
         self.assertIn("stop_reason max_tokens", thread)
         self.assertLess(thread.index("Incomplete reply."), thread.index("Partial answer about"))
@@ -529,14 +527,13 @@ class ChatWindowTests(unittest.TestCase):
                 self._client = inner
 
         clock = _no_sleep()
-        with patch("fpfa.ui.AnthropicMessages", TooLarge), patch("fpfa.claude_client.time", clock):
-            app.chat_entry.insert(0, "Summarize 28 31 00 in full.")
-            app.send_chat()
+        with patch("fpfa.desk.AnthropicMessages", TooLarge), patch("fpfa.claude_client.time", clock):
+            app.send_chat("Summarize 28 31 00 in full.")
             self._wait_for(app, "Claude rejected the request as too large")
         clock.sleep.assert_not_called()
         self.assertEqual(len(inner.calls), 1)
         self.assertIn((REPO / "specs" / FA_SPEC).read_text(encoding="utf-8"), _system_text(inner.calls[0]))
-        thread = app.chat_view.get("1.0", "end")
+        thread = app.thread_text()
         self.assertIn("did not trim the request or resend it with parts missing", thread)
         self.assertEqual([job.status for job in app.jobs.snapshot()], ["error"])
         saved = load_project(app.project["id"])

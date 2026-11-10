@@ -1,7 +1,9 @@
 """Light markdown for the chat thread.
 
-Claude replies in markdown. The thread is a tkinter Text widget, so a reply
-is turned into (text, tags) runs here and ui.py inserts them. Headings,
+Claude replies in markdown. The page draws it (app/frontend/src/markdown.ts,
+the same rules); this module turns a reply into (text, tags) runs for the
+thread's plain text, which is what Select all and Copy take and what the
+tests read. Headings,
 bullets, numbered lists, fenced code, table rows, **bold**, and `code` are
 handled. Single asterisks and underscores are left alone so names such as
 t_total and zone_gal stay intact. Only the markers change. The words, the
@@ -172,3 +174,36 @@ def markdown_segments(text: str, *, caption: bool = True) -> list[Segment]:
 def plain_text(text: str) -> str:
     """What the thread shows for a reply, without tags. Used by tests."""
     return "".join(chunk for chunk, _tags in markdown_segments(text))
+
+
+CARET = "▍"
+
+
+def _is_fence(line: str) -> bool:
+    return line.strip().startswith("```")
+
+
+def settle_inline(text: str) -> str:
+    """The growing end of a reply with a half-written bold or code span closed.
+
+    While words are still arriving, "the **double-interl" would show two
+    asterisks and then jump to bold when the closing pair lands. Closing the
+    span for the moment draws the words as they will end up. A marker with
+    nothing after it yet is held back instead. Text inside an open code
+    fence is left alone. settleInline in the page's markdown.ts does the same.
+    """
+    if not text:
+        return text
+    lines = text.split("\n")
+    if sum(1 for line in lines if _is_fence(line)) % 2:
+        return text
+    last = lines[-1]
+    # One asterisk at the end is the first half of a pair that has not arrived.
+    trailing = len(last) - len(last.rstrip("*"))
+    if trailing % 2:
+        last = last[:-1]
+    if last.count("**") % 2:
+        last = last[:-2] if last.endswith("**") else last + "**"
+    if last.count("`") % 2:
+        last = last[:-1] if last.endswith("`") else last + "`"
+    return "\n".join(lines[:-1] + [last])

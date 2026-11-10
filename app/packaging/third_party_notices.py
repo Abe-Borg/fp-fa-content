@@ -3,13 +3,14 @@
 
 Adapted from Build-a-Spec's packaging/windows/third_party_notices.py (the
 practice's copy-and-adapt reuse): the same strict posture, sized for this
-app. There is no JavaScript here and no WebView2. tkinter is bundled, so the
-Tcl and Tk license terms are always required.
+app. The window is a web page shown in Microsoft's WebView2 through
+pywebview, so the page's JavaScript and the WebView2 SDK that pywebview
+carries are listed too. tkinter is not bundled (build_app.py excludes it).
 
-Why this exists. The PyInstaller build bundles the Python interpreter, Tcl
-and Tk, and every Python package the app imports with its dependencies.
-Their licenses (PSF, the Tcl/Tk license, MIT, BSD, Apache-2.0, and others)
-ask that their copyright and license text travel with a binary. This module
+Why this exists. The PyInstaller build bundles the Python interpreter, every
+Python package the app imports with its dependencies, and the built page.
+Their licenses (PSF, MIT, BSD, Apache-2.0, and others) ask that their
+copyright and license text travel with a binary. This module
 writes one THIRD-PARTY-NOTICES.txt holding all of them. build_app.py puts it
 in the app folder beside the exe, so the installer and the portable zip both
 carry it. +Cynosure's own license ships beside it as LICENSE.txt.
@@ -25,12 +26,17 @@ What is listed.
 * PyInstaller, because its bootloader is the exe.
 * The interpreter, from the LICENSE.txt in its install directory. On the
   python.org Windows build that file also carries the terms of the libraries
-  the build ships (OpenSSL, bzip2, libffi, Tcl, Tk).
-* Tcl and Tk, from license.terms in their library directories, else from the
-  blocks in the interpreter's license file.
+  the build ships (OpenSSL, bzip2, libffi).
+* The Microsoft WebView2 SDK DLLs inside pywebview (webview/lib), at the
+  version those DLLs report, from third_party_licenses/Microsoft.Web.WebView2-
+  <version>.txt (the LICENSE.txt and NOTICE.txt of that NuGet package). The
+  WebView2 runtime itself is part of Windows and is not bundled.
+* The npm packages whose code is in the page, from fpfa/web/static/licenses.json,
+  which the page's build (app/frontend/vite.config.ts) writes from node_modules.
 
 It is strict. A listed package with no license text, an interpreter without
-its license file, or Tcl/Tk terms that cannot be found raises NoticesError
+its license file, a WebView2 SDK without its text, or a page bundle whose
+license list is missing or incomplete raises NoticesError
 naming every gap at once, and no file is written. An installer that leaves a
 license out must not ship. When a package really ships no license text, the
 remedy is its text from that project's source at exactly that version, saved
@@ -46,6 +52,7 @@ Run it directly to check an environment before the long build:
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import pathlib
 import platform
@@ -69,18 +76,10 @@ LICENSE_OVERRIDES_DIR = _PACKAGING_DIR / "third_party_licenses"
 
 # Heading every CPython license file carries, so another LICENSE.txt is never passed off as Python's.
 PSF_LICENSE_MARKER = "PYTHON SOFTWARE FOUNDATION LICENSE VERSION 2"
-# Tcl 8.6's and Tk 8.6's terms open by naming their copyright holders and end with the same sentence.
-TCL_TERMS_OPENING = (
-    "This software is copyrighted by the Regents of the University of "
-    "California, Sun Microsystems, Inc., Scriptics Corporation, ActiveState "
-    "Corporation and other parties."
-)
-TK_TERMS_OPENING = (
-    "This software is copyrighted by the Regents of the University of "
-    "California, Sun Microsystems, Inc., Scriptics Corporation, ActiveState "
-    "Corporation, Apple Inc. and other parties."
-)
-TCL_TK_TERMS_CLOSING = "terms specified in this license."
+# The page's bundled npm packages, written by its build.
+PAGE_LICENSES = _APP_DIR / "fpfa" / "web" / "static" / "licenses.json"
+# The WebView2 SDK's main DLL inside pywebview; its version names the license file.
+WEBVIEW2_DLL = "webview/lib/Microsoft.Web.WebView2.Core.dll"
 
 _LICENSE_NAME_RE = re.compile(r"^(licen[cs]e|copying|notice|copyright|authors)", re.IGNORECASE)
 # A module named license.py is code, not a license text.
@@ -137,10 +136,6 @@ def _read_text(path: str | os.PathLike[str]) -> str | None:
     text = text.replace("\r\n", "\n").replace("\r", "\n").lstrip("\n").rstrip()
     return text or None
 
-
-def _flexible(phrase: str) -> str:
-    """Regex for phrase with any run of whitespace between its words."""
-    return r"\s+".join(re.escape(word) for word in phrase.split())
 
 
 def requirement_names(path: str | os.PathLike[str] = REQUIREMENTS) -> list[tuple[str, bool]]:
@@ -360,64 +355,12 @@ def interpreter_license_path(
     ])
 
 
-def tcl_tk_directories() -> tuple[pathlib.Path | None, pathlib.Path | None]:
-    """The Tcl and Tk library directories of this interpreter. No window is opened."""
-    try:
-        import tkinter
-
-        tcl_dir = pathlib.Path(tkinter.Tcl().eval("info library"))
-    except Exception:
-        return None, None
-    version = tcl_dir.name[3:] if tcl_dir.name.lower().startswith("tcl") else ""
-    tk_dir = tcl_dir.parent / f"tk{version}"
-    return tcl_dir, (tk_dir if tk_dir.is_dir() else None)
-
-
-# Where a Linux distribution keeps the license of a system package.
-SYSTEM_DOCS = pathlib.Path("/usr/share/doc")
-
-
-def _terms(
-    label: str,
-    library_dir: pathlib.Path | None,
-    opening: str,
-    interpreter_text: str | None,
-    system_docs: pathlib.Path | None = SYSTEM_DOCS,
-):
-    """The Tcl or Tk license terms, from the first place that has them.
-
-    license.terms in the library directory, then the block in Python's
-    license file (the python.org Windows build appends it there), then the
-    system package's copyright file, which is where a Linux distribution
-    keeps the terms of its own Tcl and Tk.
-    """
-    if library_dir is not None:
-        text = _read_text(library_dir / "license.terms")
-        if text:
-            return LicenseText(f"license.terms in the bundled {library_dir.name} library directory", text)
-    if interpreter_text:
-        pattern = _flexible(opening) + r".*?" + _flexible(TCL_TK_TERMS_CLOSING)
-        match = re.search(pattern, interpreter_text, re.DOTALL)
-        if match:
-            return LicenseText(f"the {label} license terms in the interpreter's LICENSE.txt", match.group(0))
-    if library_dir is not None and system_docs is not None:
-        for package in (library_dir.name, "lib" + library_dir.name):
-            packaged = pathlib.Path(system_docs) / package / "copyright"
-            text = _read_text(packaged)
-            if text:
-                return LicenseText(f"{packaged} (the system's {label} package)", text)
-    return None
-
-
 def base_components(
     *,
     interpreter_license: str | os.PathLike[str] | None = None,
-    tcl_dir: str | os.PathLike[str] | None = None,
-    tk_dir: str | os.PathLike[str] | None = None,
     python_version: str | None = None,
-    system_docs: str | os.PathLike[str] | None = SYSTEM_DOCS,
 ) -> list[Component]:
-    """The interpreter, Tcl, and Tk. Raises naming every gap."""
+    """The interpreter. Raises naming the gap."""
     problems: list[str] = []
     interpreter_text = None
     try:
@@ -432,42 +375,89 @@ def base_components(
         elif PSF_LICENSE_MARKER not in interpreter_text:
             problems.append(f"{path} is not the Python license (it lacks {PSF_LICENSE_MARKER!r})")
             interpreter_text = None
-    components = []
-    if interpreter_text:
-        components.append(Component(
-            "Python", python_version or platform.python_version(), "PSF-2.0",
-            (LicenseText("LICENSE.txt from the interpreter's install directory", interpreter_text),),
-            kind="runtime", note="the bundled interpreter",
-        ))
-    found_tcl, found_tk = tcl_tk_directories() if tcl_dir is None and tk_dir is None else (None, None)
-    for label, given, found, opening in (
-        ("Tcl", tcl_dir, found_tcl, TCL_TERMS_OPENING),
-        ("Tk", tk_dir, found_tk, TK_TERMS_OPENING),
-    ):
-        library_dir = pathlib.Path(given) if given is not None else found
-        terms = _terms(
-            label, library_dir, opening, interpreter_text,
-            None if system_docs is None else pathlib.Path(system_docs),
-        )
-        if terms is None:
-            where = f"{library_dir / 'license.terms'}" if library_dir is not None else "its library directory"
-            problems.append(
-                f"the {label} license terms were found neither in {where} nor in the interpreter's license file"
-            )
+    if problems:
+        raise NoticesError(problems)
+    return [Component(
+        "Python", python_version or platform.python_version(), "PSF-2.0",
+        (LicenseText("LICENSE.txt from the interpreter's install directory", interpreter_text),),
+        kind="runtime", note="the bundled interpreter",
+    )]
+
+
+def dll_file_version(path: str | os.PathLike[str]) -> str:
+    """The FileVersion a Windows DLL records in its version resource, read from its bytes. "" when absent."""
+    try:
+        data = pathlib.Path(path).read_bytes()
+    except OSError:
+        return ""
+    key = "FileVersion".encode("utf-16-le")
+    at = data.find(key)
+    if at < 0:
+        return ""
+    # The value follows the key's terminator and padding, as UTF-16 digits and dots.
+    tail = data[at + len(key): at + len(key) + 96].decode("utf-16-le", "ignore")
+    match = re.search(r"(\d+(?:\.\d+){1,3})", tail)
+    return match.group(1) if match else ""
+
+
+def webview2_components(
+    dists: Iterable[metadata.Distribution],
+    *,
+    overrides_dir: str | os.PathLike[str] | None = LICENSE_OVERRIDES_DIR,
+) -> list[Component]:
+    """The WebView2 SDK inside pywebview, when pywebview is bundled. Raises when its text is missing."""
+    for dist in dists:
+        if canonical_name(dist.metadata.get("Name") or "") != "pywebview":
             continue
-        version = ""
-        if library_dir is not None:
-            match = re.match(r"^(?:tcl|tk)(\d+(?:\.\d+)*)$", library_dir.name, re.IGNORECASE)
-            version = match.group(1) if match else ""
+        dll = next((file for file in dist.files or () if file.as_posix() == WEBVIEW2_DLL), None)
+        if dll is None:
+            return []
+        version = dll_file_version(dist.locate_file(dll))
+        name = f"Microsoft.Web.WebView2-{version}.txt"
+        text = _read_text(pathlib.Path(overrides_dir) / name) if overrides_dir is not None and version else None
+        if not text:
+            raise NoticesError([
+                f"pywebview {dist.version} carries the Microsoft WebView2 SDK {version or '(version unread)'}. "
+                f"Save the LICENSE.txt and NOTICE.txt of the Microsoft.Web.WebView2 {version} NuGet package as "
+                f"packaging/third_party_licenses/{name}"
+            ])
+        return [Component(
+            "Microsoft Edge WebView2 SDK", version, "BSD-3-Clause (Microsoft)",
+            (LicenseText(f"packaging/third_party_licenses/{name}", text),),
+            kind="runtime",
+            note=f"the WebView2 DLLs inside pywebview {dist.version}; the WebView2 runtime is part of Windows",
+        )]
+    return []
+
+
+def page_components(licenses: str | os.PathLike[str] = PAGE_LICENSES) -> list[Component]:
+    """The npm packages whose code is in the window's page. Raises when the list or a text is missing."""
+    path = pathlib.Path(licenses)
+    try:
+        packages = json.loads(path.read_text(encoding="utf-8"))["packages"]
+    except (OSError, ValueError, KeyError, TypeError):
+        raise NoticesError([
+            f"{path} is missing or unreadable. Build the page (app/frontend: npm ci, npm run build) and commit it."
+        ]) from None
+    components, problems = [], []
+    for item in packages:
+        name, version = str(item.get("name") or ""), str(item.get("version") or "")
+        text = str(item.get("text") or "").replace("\r\n", "\n").strip()
+        if not text:
+            problems.append(f"the page bundles {name} {version}, and its package ships no license text")
+            continue
         components.append(Component(
-            label, version, "TCL (the Tcl/Tk license)", (terms,), kind="runtime", note="the window toolkit",
+            name, version, str(item.get("license") or "not declared"),
+            (LicenseText(f"node_modules/{name}, bundled into the page", text),), kind="javascript",
         ))
+    if not components and not problems:
+        problems.append(f"{path} lists no packages; the page cannot have been built from app/frontend")
     if problems:
         raise NoticesError(problems)
     return components
 
 
-_GROUPS = (("runtime", "Runtime"), ("python", "Python packages"))
+_GROUPS = (("runtime", "Runtime"), ("python", "Python packages"), ("javascript", "The window's page (JavaScript)"))
 
 
 def render_notices(components: Sequence[Component]) -> str:
@@ -476,10 +466,12 @@ def render_notices(components: Sequence[Component]) -> str:
         "THIRD-PARTY NOTICES",
         "",
         f"{APP_NAME} for Windows is built with PyInstaller and bundles the components",
-        "listed below: the Python interpreter, the Tcl and Tk window toolkit, and",
-        "Python packages. Each remains under its own license, and its full text is",
-        f"reproduced in this file as the component distributes it. {APP_NAME}'s own",
-        "license is in LICENSE.txt, in this folder.",
+        "listed below: the Python interpreter, Python packages, the WebView2 SDK that",
+        "shows the window, and the JavaScript packages in the window's page. Each",
+        "remains under its own license, and its full text is reproduced in this file",
+        f"as the component distributes it. {APP_NAME}'s own license is in LICENSE.txt,",
+        "in this folder. The Microsoft Edge WebView2 runtime that draws the window is",
+        "part of Windows and is not bundled.",
     ]
     for kind, heading in _GROUPS:
         members = [item for item in components if item.kind == kind]
@@ -500,21 +492,27 @@ def build_notices(
     *,
     roots: Iterable[str] | None = None,
     interpreter_license: str | os.PathLike[str] | None = None,
-    tcl_dir: str | os.PathLike[str] | None = None,
-    tk_dir: str | os.PathLike[str] | None = None,
     overrides_dir: str | os.PathLike[str] | None = LICENSE_OVERRIDES_DIR,
+    page_licenses: str | os.PathLike[str] = PAGE_LICENSES,
 ) -> tuple[str, list[Component]]:
     """Render the notices for this environment. Raises naming every missing text."""
     problems: list[str] = []
     components: list[Component] = []
     try:
-        components += base_components(interpreter_license=interpreter_license, tcl_dir=tcl_dir, tk_dir=tk_dir)
+        components += base_components(interpreter_license=interpreter_license)
     except NoticesError as exc:
         problems += exc.problems
+    dists: list[metadata.Distribution] = []
     try:
-        components += distribution_components(bundled_distributions(roots), overrides_dir=overrides_dir)
+        dists = bundled_distributions(roots)
+        components += distribution_components(dists, overrides_dir=overrides_dir)
     except NoticesError as exc:
         problems += exc.problems
+    for gather in (lambda: webview2_components(dists, overrides_dir=overrides_dir), lambda: page_components(page_licenses)):
+        try:
+            components += gather()
+        except NoticesError as exc:
+            problems += exc.problems
     if problems:
         raise NoticesError(problems)
     return render_notices(components), components

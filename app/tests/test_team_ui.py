@@ -20,6 +20,9 @@ REPO = APP_DIR.parent
 if str(APP_DIR) not in sys.path:
     sys.path.insert(0, str(APP_DIR))
 
+from desk_loop import Loop  # noqa: E402
+
+
 
 class Block:
     def __init__(self, **kwargs):
@@ -203,7 +206,7 @@ class TeamWindowTests(unittest.TestCase):
         deadline = time.time() + timeout
         while time.time() < deadline:
             app._poll()
-            if needle in app.chat_view.get("1.0", "end"):
+            if needle in app.thread_text():
                 return
             time.sleep(0.02)
         self.fail(f"timed out waiting for {needle!r}")
@@ -212,61 +215,50 @@ class TeamWindowTests(unittest.TestCase):
         deadline = time.time() + timeout
         while time.time() < deadline:
             app._poll()
-            app.root.update()
+            app.pump()
             if predicate():
                 return
             time.sleep(0.02)
         self.fail("timed out")
 
     def _app(self, *, key: bool = True):
-        if not os.environ.get("DISPLAY"):
-            self.skipTest("no display")
         data = Path(tempfile.mkdtemp(prefix="fpfa-team-ui-data-"))
         os.environ["FPFA_DATA_DIR"] = str(data)
         os.environ["FPFA_CONTENT_UPDATES"] = "0"
-        import tkinter as tk
 
         from fpfa.keystore import save_api_key
         from fpfa.paths import write_config
-        from fpfa.ui import App
-
+        
         write_config({"key_backend": "file"})
         if key:
             save_api_key("sk-ant-local-test")
-        root = tk.Tk()
+        root = Loop()
         self.addCleanup(root.destroy)
-        app = App(root)
+        app = root.open_desk()
         root.update()
         return app
 
     def test_team_tab_roster_and_sidebar_after_the_sample_run(self):
         app = self._app(key=False)
-        tabs = [app.tabs.tab(i, "text") for i in app.tabs.tabs()]
-        self.assertEqual(tabs, ["Basis", "Zone", "Results", "Team"])
-        self.assertFalse(app._team_shown)
-        self.assertIn("No team activity", app.team_panel.roster_text.get("1.0", "end"))
+        self.assertFalse(bool(app.team["roster"]))
+        self.assertIn("No team activity", app.team["roster_text"])
         app.ask_claude.set(False)
         app.start_sample_di()
-        app.root.update()
-        roster = app.team_panel.roster_text.get("1.0", "end")
+        app.pump()
+        roster = app.team["roster_text"]
         self.assertIn("✓ Tool plan (tool-plan) done", roster)
-        self.assertTrue(app._team_shown)
-        self.assertEqual(tuple(app.team_list.get(0, "end")), ("✓ Tool plan (tool-plan) done",))
-        self.assertIn("Blind check: nothing to check yet.", app.team_panel.blockers_text.get("1.0", "end"))
-        self.assertEqual(str(app.team_panel.cancel_button.cget("state")), "disabled")
-        labels = [app.more_menu.entrycget(i, "label") for i in range(app.more_menu.index("end") + 1)
-                  if app.more_menu.type(i) == "command"]
-        self.assertIn("Team panel", labels)
-        app.show_team()
-        app.root.update()
-        self.assertTrue(app._details_shown)
-        self.assertEqual(app.tabs.tab(app.tabs.select(), "text"), "Team")
+        self.assertTrue(bool(app.team["roster"]))
+        self.assertEqual(tuple(app.team["roster"]), ("✓ Tool plan (tool-plan) done",))
+        self.assertIn("Blind check: nothing to check yet.", app.team["blockers_text"])
+        self.assertFalse(app._pending_here())
+        # The page draws the Team tab and the sidebar roster from this view.
+        self.assertEqual(app.snapshot()["team"]["roster"], ["✓ Tool plan (tool-plan) done"])
 
     def test_handoff_rows_show_and_selecting_one_opens_the_detail(self):
         app = self._app(key=False)
         app.ask_claude.set(False)
         app.start_sample_di()
-        app.root.update()
+        app.pump()
         project_id = app.project["id"]
         handoff = app.record.create_handoff(project_id, from_agent="fp-sprinkler", to_agent="fa-releasing",
                                             brief="Trim family El/El with a 15 psi low-air switch",
@@ -274,37 +266,35 @@ class TeamWindowTests(unittest.TestCase):
         app.record.set_handoff(project_id, handoff["id"], status="returned", result="Boolean written.")
         app.record.open_question(project_id, raised_by="fp-sprinkler", text="Trim volume from the valve sheet?")
         app._refresh_team()
-        app.root.update()
-        rows = app.team_panel.tree.get_children()
-        self.assertEqual(list(rows), [handoff["id"]])
-        values = app.team_panel.tree.item(handoff["id"], "values")
-        self.assertEqual(values[1], "fp-sprinkler")
-        self.assertEqual(values[2], "fa-releasing")
-        self.assertEqual(values[3], "✓ returned")
-        self.assertIn("Select a handoff", app.team_panel.detail.get("1.0", "end"))
-        app.team_panel.tree.selection_set(handoff["id"])
-        app.team_panel.tree.event_generate("<<TreeviewSelect>>")
-        app.root.update()
-        detail = app.team_panel.detail.get("1.0", "end")
+        app.pump()
+        rows = app.team["handoffs"]
+        self.assertEqual([row["id"] for row in rows], [str(handoff["id"])])
+        row = rows[0]
+        self.assertEqual(row["from"], "fp-sprinkler")
+        self.assertEqual(row["to"], "fa-releasing")
+        self.assertEqual(row["status"], "✓ returned")
+        self.assertIn("Trim family El/El", row["brief"])
+        # Selecting the row in the page opens this detail.
+        detail = row["detail"]
         self.assertIn("fp-sprinkler → fa-releasing: returned", detail)
         self.assertIn('"low_air_psi": 15', detail)
         self.assertIn("Boolean written.", detail)
-        self.assertIn("? Trim volume from the valve sheet?", app.team_panel.blockers_text.get("1.0", "end"))
-        # A refresh keeps the selection and the detail.
+        self.assertIn("? Trim volume from the valve sheet?", app.team["blockers_text"])
+        # A refresh keeps the row and its detail.
         app._refresh_team()
-        self.assertIn("Boolean written.", app.team_panel.detail.get("1.0", "end"))
+        self.assertIn("Boolean written.", app.team["handoffs"][0]["detail"])
 
     def test_run_blind_check_posts_the_verdict_and_updates_the_panel(self):
         app = self._app()
         app.ask_claude.set(False)
         app.start_sample_di()
-        app.root.update()
+        app.pump()
         project_id = app.project["id"]
         calc_id = app.record.calcs(project_id)[0]["id"]
         app.record.record_finding(project_id, agent="fp-sprinkler", text="Zone total 281.3 gal", label="calculated",
                                   supports=[calc_id])
         app._refresh_team()
-        self.assertIn("Blind check: not run", app.team_panel.blockers_text.get("1.0", "end"))
+        self.assertIn("Blind check: not run", app.team["blockers_text"])
 
         class Checker:
             def __init__(self, _key):
@@ -313,11 +303,11 @@ class TeamWindowTests(unittest.TestCase):
             def create(self, **kwargs):
                 return SimpleNamespace(content=[Block(type="text", text='1. Supported. Cite: "281.3"')])
 
-        with patch("fpfa.ui.AnthropicMessages", Checker):
+        with patch("fpfa.desk.AnthropicMessages", Checker):
             app.start_record_check()
             self._wait_for(app, "every one of the 1 findings is Supported")
         self.assertEqual([job.kind for job in app.jobs.snapshot() if job.kind == "claim"], ["claim"])
-        self.assertIn("every one of the 1 findings is Supported", app.team_panel.blockers_text.get("1.0", "end"))
+        self.assertIn("every one of the 1 findings is Supported", app.team["blockers_text"])
         self.assertEqual(app.record.findings(project_id)[0]["status"], "Supported")
         self.assertEqual(app.design_basis_ready(), "")
 
@@ -325,12 +315,12 @@ class TeamWindowTests(unittest.TestCase):
         app = self._app(key=False)
         app.ask_claude.set(False)
         app.start_sample_di()
-        app.root.update()
+        app.pump()
         app.start_record_check()
-        self.assertIn("no findings to check yet", app.chat_view.get("1.0", "end"))
+        self.assertIn("no findings to check yet", app.thread_text())
         app.record.record_finding(app.project["id"], agent="lead", text="x", label="PRACTICE")
         app.start_record_check()
-        self.assertIn("Save an Anthropic API key", app.chat_view.get("1.0", "end"))
+        self.assertIn("Save an Anthropic API key", app.thread_text())
 
     def test_cancel_stops_a_running_chat_turn(self):
         app = self._app()
@@ -349,20 +339,19 @@ class TeamWindowTests(unittest.TestCase):
                 return _turn("tool_use", Block(type="tool_use", id="t1", name="hose_duration",
                                                input={"hazard": "ordinary", "supervised": True}))
 
-        with patch("fpfa.ui.AnthropicMessages", Blocking):
-            app.chat_entry.insert(0, "What duration applies?")
-            app.send_chat()
+        with patch("fpfa.desk.AnthropicMessages", Blocking):
+            app.send_chat("What duration applies?")
             self.assertTrue(entered.wait(3), "the turn did not start")
-            self._wait_until(app, lambda: str(app.team_panel.cancel_button.cget("state")) == "normal")
+            self._wait_until(app, lambda: app._pending_here())
             app.cancel_running_jobs()
             self.assertIn("Cancel requested for 1 job", app.status.get())
             release.set()
             self._wait_for(app, "Cancelled.")
-        thread = app.chat_view.get("1.0", "end")
+        thread = app.thread_text()
         self.assertIn("Cancelled by the designer before the next model round", thread)
         chat_jobs = [job for job in app.jobs.snapshot() if job.kind == "chat"]
         self.assertEqual([job.status for job in chat_jobs], ["cancelled"])
-        self.assertEqual(str(app.team_panel.cancel_button.cget("state")), "disabled")
+        self.assertFalse(app._pending_here())
         self.assertEqual(app._cancel_events, {})
         # The one tool that ran before the cancel still recorded itself as the lead.
         self.assertEqual([row["agent"] for row in app.record.calcs(app.project["id"])], ["lead"])
@@ -393,17 +382,16 @@ class TeamWindowTests(unittest.TestCase):
                 script = self.specialist if "# Sprinkler specialist" in system else self.lead
                 return script.pop(0)
 
-        with patch("fpfa.ui.AnthropicMessages", Scripted):
-            app.chat_entry.insert(0, "Give me the design basis for zone DH-1.")
-            app.send_chat()
+        with patch("fpfa.desk.AnthropicMessages", Scripted):
+            app.send_chat("Give me the design basis for zone DH-1.")
             self._wait_for(app, "Design basis follows.")
-        thread = app.chat_view.get("1.0", "end")
+        thread = app.thread_text()
         self.assertIn("Team", thread)
         self.assertIn("fp-sprinkler: 1 finding, 1 calc record", thread)
-        roster = app.team_panel.roster_text.get("1.0", "end")
+        roster = app.team["roster_text"]
         self.assertIn("✓ Sprinkler specialist (fp-sprinkler) done · 1 finding", roster)
         self.assertIn("✓ Lead (lead) done", roster)
-        self.assertEqual(len(app.team_panel.tree.get_children()), 1)
+        self.assertEqual(len(app.team["handoffs"]), 1)
         self.assertIn("rounds", app.status.get())
 
     def test_cancelling_a_narrated_zone_run_keeps_the_figures_and_marks_the_job(self):
@@ -423,14 +411,14 @@ class TeamWindowTests(unittest.TestCase):
                 return _turn("tool_use", Block(type="tool_use", id="t1", name="hose_duration",
                                                input={"hazard": "ordinary", "supervised": True}))
 
-        with patch("fpfa.ui.AnthropicMessages", Blocking):
+        with patch("fpfa.desk.AnthropicMessages", Blocking):
             app.start_sample_di()
             self.assertTrue(entered.wait(3), "the narration did not start")
-            self._wait_until(app, lambda: str(app.team_panel.cancel_button.cget("state")) == "normal")
+            self._wait_until(app, lambda: app._pending_here())
             app.cancel_running_jobs()
             release.set()
             self._wait_for(app, "Cancelled. The designer stopped the narration")
-        thread = app.chat_view.get("1.0", "end")
+        thread = app.thread_text()
         self.assertIn("Zone total is 281.3 gal", thread)
         zone_jobs = [job for job in app.jobs.snapshot() if job.kind == "zone"]
         self.assertEqual([job.status for job in zone_jobs], ["cancelled"])
@@ -443,7 +431,7 @@ class TeamWindowTests(unittest.TestCase):
         app = self._app()
         app.ask_claude.set(False)
         app.start_sample_di()
-        app.root.update()
+        app.pump()
         project_id = app.project["id"]
         calc_id = app.record.calcs(project_id)[0]["id"]
         app.record.record_finding(project_id, agent="fp-sprinkler", text="Zone total 281.3 gal",
@@ -469,7 +457,7 @@ class TeamWindowTests(unittest.TestCase):
             def create(self, **kwargs):
                 raise AssertionError("a cancelled check must not call the model")
 
-        with patch("fpfa.ui.AnthropicMessages", Boom):
+        with patch("fpfa.desk.AnthropicMessages", Boom):
             app.start_record_check()
             claim = [job for job in app.jobs.snapshot() if job.kind == "claim"]
             self.assertEqual([job.status for job in claim], ["queued"])
