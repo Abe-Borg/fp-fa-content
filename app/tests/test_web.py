@@ -31,7 +31,7 @@ STATIC = APP_DIR / "fpfa" / "web" / "static"
 
 ANSWER = (
     "## Design basis for zone DH-1\n\n"
-    "The zone is a **double-interlock preaction** system with `t_total` of 38.1 s.\n\n"
+    "The zone is a **double-interlock preaction** system with `t_total` of 38.1 s. 🧯 𝐂 = 100.\n\n"
     "| Item | Value |\n| --- | --- |\n| Zone total | 281.3 gal |\n| t_total | 38.1 s |\n\n"
     + "\n\n".join(f"Paragraph {n}: the releasing panel waits for the detection leg and the low-air switch." for n in range(1, 25))
     + "\n\n1. Confirm the trim volume.\n2. Confirm the AHJ."
@@ -287,14 +287,19 @@ class EventStreamTests(ServerCase):
         reader.join(5)
         lives = [data for kind, data in events if kind == "live"]
         self.assertGreater(len(lives), 3, "the words come in several messages")
-        # Each message carries on exactly where the last one ended.
+        # Each message carries on exactly where the last one ended, counted as the page counts:
+        # in UTF-16 units, so the emoji and the mathematical C (two units each) do not throw it off.
+        from fpfa.web.server import utf16_length
+
+        self.assertEqual(utf16_length("🧯𝐂a"), 5)
         text = ""
         for data in lives:
             if data["start"] == 0:
                 text = data["text"]
             else:
-                self.assertEqual(data["start"], len(text))
+                self.assertEqual(data["start"], utf16_length(text))
                 text += data["text"]
+        self.assertIn("🧯 𝐂 = 100.", text)
         self.assertTrue(text.startswith("Job "))
         self.assertIn("| chat", text.splitlines()[0])
         self.assertTrue(ANSWER.startswith(text.split("\n", 1)[1][: len(ANSWER)]))
@@ -387,6 +392,32 @@ class BuiltPageTests(unittest.TestCase):
                       "Usage and cost", "Narrate zone runs with Claude", "Rename job…", "Settings…", "Commands",
                       "About and versions", "Cancel running job", "Run blind check", "Export basis…"):
             self.assertIn(label, bundle)
+
+
+class KeyStoreTests(unittest.TestCase):
+    def test_drawing_the_state_never_asks_the_key_store(self):
+        """On a Windows source run each ask is a child Python that can wait 8 s, and the state is drawn often."""
+        _isolate()
+        from fpfa.desk import Desk
+
+        desk = Desk()
+        self.addCleanup(desk.close)
+        with patch("fpfa.desk.load_api_key", side_effect=AssertionError("asked the key store")) as asked:
+            for _ in range(3):
+                state = desk.snapshot()
+            desk.send_chat("/help")
+            desk.pump()
+            desk.snapshot()
+        asked.assert_not_called()
+        self.assertFalse(state["settings"]["key_saved"])
+        self.assertEqual([chip["action"] for chip in state["chips"]], ["/sample-di", "/help"])
+        # A question, which needs a key, does ask, so a key saved since is found.
+        from fpfa.keystore import save_api_key
+
+        save_api_key("sk-ant-local-test")
+        with patch("fpfa.desk.AnthropicMessages", Streaming):
+            desk.send_chat("Which trim family?")
+        self.assertTrue(desk.snapshot()["settings"]["key_saved"])
 
 
 class EntryPointTests(unittest.TestCase):

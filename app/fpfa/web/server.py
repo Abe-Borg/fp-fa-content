@@ -103,6 +103,13 @@ TEXTS: dict[str, Callable[[], str]] = {
 }
 
 
+def utf16_length(text: str) -> int:
+    """The length of text as JavaScript counts it, in UTF-16 code units: a character outside the
+    Basic Multilingual Plane (an emoji, a mathematical letter) is two of them. The live events
+    give their offsets in these units, so the page's text.length always agrees with them."""
+    return len(text) + sum(1 for char in text if ord(char) > 0xFFFF)
+
+
 def new_token() -> str:
     return secrets.token_urlsafe(24)
 
@@ -338,7 +345,8 @@ class Handler(BaseHTTPRequestHandler):
         sent_thread = -1
         sent_live_rev = -1
         sent_project: str | None = None
-        sent_lives: dict[str, tuple[int, int]] = {}
+        # Per reply: its generation, how many characters of it were sent, and the same in UTF-16 units.
+        sent_lives: dict[str, tuple[int, int, int]] = {}
         try:
             while not server.stopping.is_set():
                 with desk.changed:
@@ -373,19 +381,19 @@ class Handler(BaseHTTPRequestHandler):
                 for item in lives:
                     job_id = item["job_id"]
                     live_ids.add(job_id)
-                    gen, length = sent_lives.get(job_id, (-1, 0))
+                    gen, length, units = sent_lives.get(job_id, (-1, 0, 0))
                     text = item["text"]
                     if gen != item["gen"] or len(text) < length:
-                        start = 0
-                    else:
-                        start = length
-                    if start == len(text) and gen == item["gen"]:
+                        length, units = 0, 0
+                    if length == len(text) and gen == item["gen"]:
                         continue
+                    piece = text[length:]
+                    # start is in UTF-16 units, as the page measures the text it already holds.
                     self._write_event("live", {
                         "job_id": job_id, "project_id": project_id, "gen": item["gen"],
-                        "start": start, "text": text[start:],
+                        "start": units, "text": piece,
                     })
-                    sent_lives[job_id] = (item["gen"], len(text))
+                    sent_lives[job_id] = (item["gen"], len(text), units + utf16_length(piece))
                 for job_id in [key for key in sent_lives if key not in live_ids]:
                     self._write_event("live_end", {"job_id": job_id})
                     del sent_lives[job_id]

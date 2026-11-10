@@ -66,17 +66,36 @@ test("an action flushes first, and patches arrive in the order they were made", 
   assert.equal(clock.count, 0, "a flush clears the waiting timer");
 });
 
-test("a failed patch does not stop the next one", async () => {
-  const sent: string[] = [];
+test("a patch the app did not take is kept, the action that asked is stopped, and the next flush sends it", async () => {
+  const sent: Record<string, unknown>[] = [];
+  let refuse = true;
   const queue = new PatchQueue(async (values) => {
-    if ("bad" in values) throw new Error("refused");
-    sent.push(Object.keys(values).join());
+    if (refuse) throw new Error("the app did not answer");
+    sent.push(values);
   }, fakeTimer().timer);
-  queue.set("bad", "x");
+  queue.set("density", "0.25");
+  queue.set("zone_id", "DH-1");
+  await assert.rejects(queue.flush(), /did not answer/);
+  assert.equal(queue.dirty, true, "the values wait for the next try");
+  // A field typed again since the failure keeps its newer value.
+  queue.set("density", "0.30");
+  refuse = false;
   await queue.flush();
-  queue.set("good", "y");
+  assert.deepEqual(sent, [{ density: "0.30", zone_id: "DH-1" }]);
+  assert.equal(queue.dirty, false);
+  // And once it has gone through, a flush with nothing new waiting resolves.
   await queue.flush();
-  assert.deepEqual(sent, ["good"]);
+});
+
+test("a failed timer flush is not an unhandled rejection", async () => {
+  const clock = fakeTimer();
+  const queue = new PatchQueue(async () => {
+    throw new Error("refused");
+  }, clock.timer);
+  queue.set("ahj", "City");
+  clock.fire();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(queue.dirty, true);
 });
 
 test("a form the app changed keeps the fields still being typed", () => {

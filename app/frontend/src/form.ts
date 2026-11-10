@@ -37,7 +37,8 @@ export class PatchQueue {
     if (this.handle !== null) this.timer.clear(this.handle);
     this.handle = this.timer.set(() => {
       this.handle = null;
-      void this.flush();
+      // A patch the app did not take stays waiting; the next action's flush says so.
+      this.flush().catch(() => undefined);
     }, this.delay);
   }
 
@@ -46,7 +47,11 @@ export class PatchQueue {
     return Object.keys(this.pending).length > 0;
   }
 
-  /** Send what is waiting now. Resolves once every patch sent so far has been answered. */
+  /**
+   * Send what is waiting now. Resolves once every patch sent so far has reached the app, and
+   * rejects when the last one did not: its values go back to waiting (unless the field was typed
+   * again since), so the action that asked does not run on inputs the app never got.
+   */
   flush(): Promise<void> {
     if (this.handle !== null) {
       this.timer.clear(this.handle);
@@ -55,8 +60,15 @@ export class PatchQueue {
     if (this.dirty) {
       const values = this.pending;
       this.pending = {};
-      const previous = this.inFlight;
-      this.inFlight = previous.then(() => this.send(values)).catch(() => undefined);
+      const previous = this.inFlight.catch(() => undefined);
+      this.inFlight = previous
+        .then(() => this.send(values))
+        .catch((error) => {
+          for (const [name, value] of Object.entries(values)) {
+            if (!(name in this.pending)) this.pending[name] = value;
+          }
+          throw error;
+        });
     }
     return this.inFlight;
   }

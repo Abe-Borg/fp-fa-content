@@ -111,7 +111,12 @@ export function App() {
   const act = useCallback(
     async (action: string, body: Record<string, unknown> = {}) => {
       try {
-        await queue.flush();
+        try {
+          await queue.flush();
+        } catch (error) {
+          const why = error instanceof Error ? error.message : String(error);
+          throw new Error(`The Zone details fields did not reach the app, so nothing was done. Your edits are kept; try again. (${why})`);
+        }
         unsent.current.clear();
         return await post(action, body);
       } catch (error) {

@@ -729,25 +729,34 @@ class Desk:
     # The key ------------------------------------------------------------------
 
     def _load_key(self) -> None:
+        before = self._key
         try:
             self._key = load_api_key() or ""
         except Exception:
             self._key = ""
+        if self._key != before:
+            # Settings shows whether a key is saved: read it again.
+            self._settings = None
         try:
             self._key_status = key_status(self._key)
         except Exception as exc:
             self._key_status = "The key store did not answer. " + safe_error(exc)
 
     def _api_key(self) -> str:
-        # A saved key is kept. With none kept, the store is read again, so a key saved
-        # since (by Settings or by hand) is found the next time one is needed.
+        """The key, for an action that needs one now (a question, a narrated run, a check).
+
+        A saved key is kept. With none kept, the store is read again, so a key saved
+        since (by Settings or by hand) is found the next time one is needed.
+        """
         if not self._key:
             self._load_key()
         return self._key or ""
 
     @property
     def _key_saved(self) -> bool:
-        return bool(self._api_key())
+        """Whether a key is kept. Never asks the store: the state is drawn often, under the lock,
+        and on a Windows source run each ask is a child Python that can wait seconds."""
+        return bool(self._key)
 
     def _sync_claude_default(self) -> None:
         self._load_key()
@@ -2037,7 +2046,7 @@ class Desk:
             self.status.set(self._with_job_label(job_id, note))
         else:
             note = "LFL tool plan only."
-            if self.ask_claude.get() and not self._api_key():
+            if self.ask_claude.get() and not self._key:
                 note = "LFL tool plan only. Save an API key in Settings to ask Claude."
             elif result.get("warnings"):
                 note = "LFL tool plan only. " + result["warnings"][0]
@@ -2167,7 +2176,7 @@ class Desk:
             self.status.set(self._with_job_label(job_id, note))
         else:
             note = "Tool plan only."
-            if self.ask_claude.get() and not self._api_key():
+            if self.ask_claude.get() and not self._key:
                 note = "Tool plan only. Save an API key in Settings to ask Claude."
             elif result.get("warnings"):
                 note = "Tool plan only. " + result["warnings"][0]
