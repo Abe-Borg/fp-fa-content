@@ -270,12 +270,11 @@ def elect_di_trim(system_type: str, prime_held_by: str = "unknown",
 
 
 def releasing_truth_table(manual_station: Any = True, insurer: str = "FM") -> dict[str, Any]:
-    """Solenoid = (detection leg OR manual station) AND p_second_leg AND NOT isolated.
+    """This solenoid truth table is electric/electric trim.
 
-    p_second_leg (P) is the second double-interlock leg: the pressure drop from
-    sprinkler operation. On electric/electric trim it is a separate pressure
-    contact (PSL-REL). On electric/pneumatic trim it is the listed pneumatic
-    actuator at the valve (PA-REL).
+    Solenoid = (detection leg OR manual station) AND p_second_leg AND NOT isolated.
+    p_second_leg (P) is the pressure drop from sprinkler operation, sensed by PSL-REL.
+    On electric/pneumatic trim the solenoid is D AND not isolated, and the valve actuator PA-REL gates the valve mechanically, which is outside this table.
 
     Low air is supervisory only (PSL-SUP). It is not a release input and it is
     not in the Boolean. The row key ``low_air`` and the ``boolean`` string are
@@ -322,9 +321,10 @@ def releasing_truth_table(manual_station: Any = True, insurer: str = "FM") -> di
     fires = [row for row in rows if row["solenoid"]]
     return {
         "boolean_p": "solenoid = (detection_leg OR manual_release) AND p_second_leg AND NOT isolated",
-        "second_leg": ("p_second_leg is P, the pressure drop from sprinkler operation: a separate PSL-REL "
-                       "pressure contact on electric/electric trim, or the listed pneumatic actuator "
-                       "(PA-REL) at the valve on electric/pneumatic trim"),
+        "second_leg": ("This solenoid truth table is electric/electric trim. "
+                       "p_second_leg is P, the pressure drop from sprinkler operation, sensed by PSL-REL. "
+                       "On electric/pneumatic trim the solenoid is D AND not isolated, and the valve actuator "
+                       "PA-REL gates the valve mechanically, which is outside this table."),
         "low_air_note": ("low_air is a deprecated alias of p_second_leg and carries the same value. "
                          "Low air is supervisory only (PSL-SUP) and is never a release input."),
         "boolean": "solenoid = (detection_leg OR manual_release) AND low_air AND NOT isolated",

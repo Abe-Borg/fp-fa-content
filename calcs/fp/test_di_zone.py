@@ -153,6 +153,78 @@ class SecondLegLabelTests(unittest.TestCase):
         self.assertIn("boolean_p", self.table["deprecated"]["boolean"])
 
 
+class ElectricElectricScopeTests(unittest.TestCase):
+    """The solenoid truth table states electric/electric trim only.
+
+    P in this table is the sprinkler-operation pressure drop sensed by PSL-REL.
+    On electric/pneumatic trim the solenoid is D AND not isolated, and PA-REL
+    gates the valve mechanically, outside this table.
+    """
+
+    def setUp(self):
+        self.table = di_zone.releasing_truth_table(manual_station=True, insurer="FM")
+        self.doc = di_zone.releasing_truth_table.__doc__
+
+    def _sentences(self, text: str) -> list[str]:
+        import re
+        return [part.strip() for part in re.split(r"(?<=[.])\s+", text.strip()) if part.strip()]
+
+    def test_scope_label_and_second_leg_name_electric_electric_and_psl_rel(self):
+        for text in (self.doc, self.table["second_leg"]):
+            low = text.lower()
+            self.assertIn("this solenoid truth table is electric/electric trim", low)
+            self.assertIn("pressure drop from sprinkler operation", low)
+            self.assertIn("sensed by psl-rel", low)
+            self.assertIn("on electric/pneumatic trim the solenoid is d and not isolated", low)
+            self.assertIn(
+                "the valve actuator pa-rel gates the valve mechanically, which is outside this table",
+                low,
+            )
+
+    def test_second_leg_does_not_present_pa_rel_as_p_second_leg(self):
+        sentences = self._sentences(self.table["second_leg"])
+        defining = [sentence for sentence in sentences if "p_second_leg" in sentence]
+        self.assertTrue(defining)
+        for sentence in defining:
+            self.assertNotIn("PA-REL", sentence)
+            self.assertIn("PSL-REL", sentence)
+        outside = [sentence for sentence in sentences if "PA-REL" in sentence]
+        self.assertTrue(outside)
+        for sentence in outside:
+            self.assertNotIn("p_second_leg", sentence)
+            self.assertIn("outside this table", sentence)
+            self.assertIn("mechanically", sentence)
+        self.assertNotIn("or the listed pneumatic actuator", self.table["second_leg"])
+        doc_low = self.doc.lower()
+        self.assertNotIn("it is the listed pneumatic actuator", doc_low)
+        for sentence in self._sentences(self.doc):
+            if "p_second_leg" in sentence:
+                self.assertNotIn("PA-REL", sentence)
+
+    def test_boolean_strings_row_structure_and_solenoid_count_unchanged(self):
+        self.assertEqual(
+            self.table["boolean_p"],
+            "solenoid = (detection_leg OR manual_release) AND p_second_leg AND NOT isolated",
+        )
+        self.assertEqual(
+            self.table["boolean"],
+            "solenoid = (detection_leg OR manual_release) AND low_air AND NOT isolated",
+        )
+        self.assertEqual(self.table["row_count"], 32)
+        self.assertEqual(self.table["solenoid_true_count"], 6)
+        keys = ("detection", "manual", "p_second_leg", "low_air", "isolated", "second_smoke", "solenoid")
+        fires = 0
+        for row in self.table["rows"]:
+            self.assertEqual(tuple(row), keys)
+            self.assertEqual(row["low_air"], row["p_second_leg"])
+            det_leg = row["detection"] or row["manual"]
+            expected = bool(det_leg and row["p_second_leg"] and not row["isolated"])
+            self.assertEqual(row["solenoid"], expected)
+            fires += int(expected)
+        self.assertEqual(fires, 6)
+        self.assertEqual(len(self.table["rows"]), 32)
+
+
 class NitrogenAndScreenTests(unittest.TestCase):
     def test_design_c_is_100(self):
         out = di_zone.nitrogen_gate(281.3, 40, 30)
