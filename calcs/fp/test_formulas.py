@@ -345,7 +345,7 @@ class DiTripTests(unittest.TestCase):
         with self.assertRaises(CalcError):
             di_trip_to_water(0, 800)
         with self.assertRaises(CalcError):
-            di_trip_to_water(200, 800, basis="XXX")
+            di_trip_to_water(200, 800, basis="UNKNOWN")
         with self.assertRaises(CalcError):
             di_trip_to_water(200, 800, t_release_s=-1)
 
@@ -1223,9 +1223,9 @@ class DryDeliveryEditionTests(unittest.TestCase):
         self.assertIn("NFPA 13-2025 s8.2.4.2.1", r25["nfpa_basis"])
         # doctrinal: numerics identical; only cite labels differ
         self.assertEqual(r19["volume_gal"], r25["volume_gal"])
-        self.assertIn("not auto-granted", r19["note_60s_option"])
-        self.assertIn("s8.2.3.2", r19["note_60s_option"])
-        self.assertIn("s8.2.4.2", r25["note_60s_option"])
+        self.assertIn("no-water-delivery-test threshold", r19["note_60s_option"])   # dry <=500 volume-aware
+        self.assertIn("§8.2.3.3", r19["note_60s_option"])      # dry <=500 -> s8.2.3.3 / s8.2.4.2.1 no-test wording
+        self.assertIn("§8.2.4.2.1", r25["note_60s_option"])
 
     def test_table_cites_and_di_qod_unchanged_by_edition(self):
         from formulas import di_trip_to_water, dry_delivery_screen
@@ -1820,12 +1820,20 @@ class RepairTests(unittest.TestCase):
             self.assertNotIn("s8.3.2.3.1.2", base["note_60s_option"])
             for st in ("di", "DI", "double-interlock", "double_interlock"):
                 o = t(100, 450, 0, 10, 0, edition=ed, system_type=st)
-                self.assertIn(f"NFPA 13-{ed} s8.3.2.3.1.2", o["note_60s_option"])
+                # 100 gal DI is <=500 -> s8.3.2.3.1.1 threshold (was .1.2); >500 is covered in the volume-aware tests below
+                self.assertIn(f"NFPA 13-{ed} §8.3.2.3.1.1", o["note_60s_option"])
                 self.assertNotIn(dry, o["note_60s_option"])
-                self.assertIn("screen does not auto-elect", o["note_60s_option"])
-                self.assertEqual({k: v for k, v in o.items() if k != "note_60s_option"},
-                                 {k: v for k, v in base.items() if k != "note_60s_option"})
-            self.assertEqual(t(100, 450, 0, 10, 0, edition=ed, system_type="dry")["note_60s_option"], base["note_60s_option"])
+                self.assertIn("no-water-delivery-test threshold", o["note_60s_option"])
+                # the default (system_type None) call now also carries the additive key
+                # system_type_default_warning; it is excluded here with note_60s_option (numbers/verdicts compared).
+                _skip = ("note_60s_option", "system_type_default_warning")
+                self.assertEqual({k: v for k, v in o.items() if k not in _skip},
+                                 {k: v for k, v in base.items() if k not in _skip})
+            # explicit "dry" at <=500 gal now carries the dry <=500 wording (None stays the legacy label)
+            self.assertIn("≤500 gal dry-pipe no-water-delivery-test threshold",
+                          t(100, 450, 0, 10, 0, edition=ed, system_type="dry")["note_60s_option"])
+            self.assertEqual(t(600, 450, 0, 10, 0, edition=ed, system_type="dry")["note_60s_option"],
+                             t(600, 450, 0, 10, 0, edition=ed)["note_60s_option"])
             self.assertEqual(t(100, 450, 0, 10, 0, edition=ed, system_type=None), base)
     def test_rl2_bad_system_type_refused(self):
         from formulas import di_trip_to_water as t
@@ -1833,14 +1841,14 @@ class RepairTests(unittest.TestCase):
     def test_rl2_dispatch_and_run_py_accept_system_type(self):
         import json, subprocess, tempfile, os
         from formulas import dispatch
-        self.assertIn("s8.3.2.3.1.2", dispatch("di_trip_to_water", {"v_gal": 100, "q_fill_gpm": 450, "system_type": "di", "edition": 2019})["note_60s_option"])
+        self.assertIn("8.3.2.3.1.1", dispatch("di_trip_to_water", {"v_gal": 100, "q_fill_gpm": 450, "system_type": "di", "edition": 2019})["note_60s_option"])
         job = {"job": "t", "steps": [{"id": "d", "op": "di_trip_to_water", "v_gal": 100, "q_fill_gpm": 450, "t_release_s": 10, "edition": 2019, "system_type": "di"}]}
         with tempfile.TemporaryDirectory() as td:
             pth = os.path.join(td, "j.json"); open(pth, "w").write(json.dumps(job))
             r = subprocess.run([sys.executable, str(_CALC / "run.py"), pth], capture_output=True, text=True,
                                env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"})
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertIn("system_type", r.stdout); self.assertIn("s8.3.2.3.1.2", r.stdout)
+        self.assertIn("system_type", r.stdout); self.assertIn("8.3.2.3.1.1", r.stdout)
     def test_rl2_dry_delivery_screen_di_unchanged(self):
         from formulas import dry_delivery_screen as d
         o = d(self.SEG_600, 450, system_type="di", edition=2019)
@@ -1867,6 +1875,253 @@ class RepairTests(unittest.TestCase):
                                env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"})
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertIn("nfpa_size_threshold_gal", r.stdout); self.assertIn("nfpa_size_cap_gal", r.stdout)
+
+class VolumeAwareCiteTests(unittest.TestCase):
+    """delivery-time cite chosen by VOLUME, not by path. DI <=500 gal -> s8.3.2.3.1.1 threshold
+    (held 13-FP006-2019/2025-8.3.2.3); DI >500 -> elected .1.2/.1.3/.1.4; dry <=500 (no QOD) / <=750 (QOD) ->
+    2019 s8.2.3.3/.4, 2025 s8.2.4.2.1/.2 (held 13-FP006-2019-8.2.3, 13-FP006-2025-8.2.4). Numerics unchanged."""
+    G_PER_FT = 3.141592653589793 / 4 * 2.469 ** 2 / 144 * 7.48
+
+    def seg(self, v):
+        return [{"d_in": 2.469, "length_ft": v / self.G_PER_FT}]
+
+    def di_note(self, v, ed, via="trip"):
+        if via == "trip":
+            return f.di_trip_to_water(v, 450, 0, 10, 0, edition=ed, system_type="di")["note_60s_option"]
+        return f.dry_delivery_screen(self.seg(v), 450, t_release_s=10, system_type="di", edition=ed)["note_60s_option"]
+
+    def check_le500(self, note, ed):
+        self.assertIn(f"≤500 gal DI no-water-delivery-test threshold (NFPA 13-{ed} §8.3.2.3.1.1) — FM 30 s governs", note)
+        self.assertIn("not a cap", note)
+        self.assertNotIn("60 s test-connection OPTION", note)
+
+    def check_gt500(self, note, ed):
+        calc, tab = (("s8.2.3.6", "Table 8.2.3.6.1") if ed == 2019 else ("s8.2.4.3", "Table 8.2.4.3.2"))
+        for t in (f"NFPA 13-{ed} s8.3.2.3.1.2", "s8.3.2.3.1.3", calc, "s8.3.2.3.1.4", tab, "elected", "s8.3.2.3.2"):
+            self.assertIn(t, note)
+        self.assertNotIn("no-water-delivery-test threshold", note)
+
+    def test_di_le500_trip_and_screen_both_editions(self):
+        for ed in (2019, 2025):
+            for v in (90.3675, 103.7279, 500.0):          # 500.0 inclusive boundary (<=)
+                self.check_le500(self.di_note(v, ed, "trip"), ed)
+                self.check_le500(self.di_note(v, ed, "screen"), ed)
+
+    def test_di_gt500_trip_and_screen_both_editions(self):
+        for ed in (2019, 2025):
+            for v in (500.1, 623.0):
+                self.check_gt500(self.di_note(v, ed, "trip"), ed)
+                self.check_gt500(self.di_note(v, ed, "screen"), ed)
+
+    def test_hand_check_numbers_unchanged(self):
+        # Hand check: 60*90.3675/450 = 12.049 s fill; +10 s release = 22.049 s (DI-nA)
+        r = f.di_trip_to_water(90.3675, 450, 0, 10, 0, edition=2019, system_type="di")
+        self.assertAlmostEqual(r["t_fill_s"], 12.049, places=6)
+        self.assertAlmostEqual(r["t_total_s"], 22.049, places=6)
+        self.assertTrue(r["passes_screen"]); self.assertEqual(r["limit_s"], 30.0)
+        s = f.dry_delivery_screen(self.seg(500.0), 450, t_release_s=10, system_type="di")
+        self.assertAlmostEqual(s["volume_gal"], 500.0, places=6)
+        self.assertTrue(s["nfpa_delivery_time_exempt"]); self.assertEqual(s["nfpa_size_threshold_gal"], 500.0)
+        s2 = f.dry_delivery_screen(self.seg(500.1), 450, t_release_s=10, system_type="di")
+        self.assertFalse(s2["nfpa_delivery_time_exempt"])
+
+    def test_default_and_dry_gt_threshold_labels_unchanged(self):
+        r = f.di_trip_to_water(90.3675, 450, 0, 10, 0)            # system_type None: unchanged dry label
+        self.assertEqual(r["note_60s_option"], "NFPA 13-2025 s8.2.4.2 (60 s test-connection OPTION — elected path, "
+                         "not auto-granted) — screen does not auto-elect this path")
+        for ed, sec in ((2019, "8.2.3.2"), (2025, "8.2.4.2")):
+            d = f.dry_delivery_screen(self.seg(500.1), 450, system_type="dry", edition=ed)
+            self.assertIn(f"NFPA 13-{ed} s{sec} (60 s test-connection OPTION", d["note_60s_option"])
+            self.assertNotIn("no-water-delivery-test threshold", d["note_60s_option"])
+
+    def test_dry_le500_and_qod_750_wording_both_editions(self):
+        for ed, s500, s750 in ((2019, "§8.2.3.3", "§8.2.3.4"), (2025, "§8.2.4.2.1", "§8.2.4.2.2")):
+            n = f.dry_delivery_screen(self.seg(400.0), 450, system_type="dry", edition=ed)["note_60s_option"]
+            self.assertIn(f"≤500 gal dry-pipe no-water-delivery-test threshold (NFPA 13-{ed} {s500}", n)
+            self.assertIn("FM 30 s governs", n); self.assertNotIn("8.3.2.3", n)
+            n2 = f.dry_delivery_screen(self.seg(600.0), 450, qod=True, system_type="dry", edition=ed)["note_60s_option"]
+            self.assertIn(f"≤750 gal dry-pipe with QOD no-water-delivery-test threshold (NFPA 13-{ed} {s750}", n2)
+            self.assertIn("not DI", n2)
+            n3 = f.dry_delivery_screen(self.seg(600.0), 450, qod=False, system_type="dry", edition=ed)["note_60s_option"]
+            self.assertNotIn("no-water-delivery-test threshold", n3)
+            n4 = f.di_trip_to_water(400.0, 450, 0, 10, 0, edition=ed, system_type="dry")["note_60s_option"]
+            self.assertIn(f"≤500 gal dry-pipe no-water-delivery-test threshold (NFPA 13-{ed} {s500}", n4)
+
+
+class ObscurationScBoundaryTests(unittest.TestCase):
+    """obscuration_sc N_max = floor(Sh/Sc_min) must be exact at exact decimal multiples.
+    Old kernel used float `sh // scmin` (0.3 // 0.01 == 29.0 although 0.3/0.01 is 30 to 1e-15)."""
+
+    def test_choomba_exact_case_n_max_30_and_consistent(self):
+        # Boundary example: sc == sc_min, N == Sh/sc_min exactly.
+        from formulas import obscuration_sc
+        r = obscuration_sc(0.3, 30, "pct_obs_per_ft", sc=0.01, sc_min=0.01)
+        self.assertTrue(r["passes_sc"])
+        self.assertEqual(r["n_max_at_sc_min"], 30)
+        self.assertTrue(r["passes_n"])
+        self.assertEqual(r["passes_n"], r["passes_sc"])  # same boundary, same verdict
+        # one port more is over the listing floor
+        r31 = obscuration_sc(0.3, 31, "pct_obs_per_ft", sc=0.01, sc_min=0.01)
+        self.assertEqual(r31["n_max_at_sc_min"], 30)
+        self.assertFalse(r31["passes_n"])
+        self.assertFalse(r31["passes_sc"])
+
+    def test_exact_multiples_plan_boundaries(self):
+        from formulas import obscuration_sc
+        for sh, scmin, want in [(0.3, 0.1, 3), (0.7, 0.1, 7), (0.6, 0.2, 2 + 1), (1.0, 0.05, 20)]:
+            r = obscuration_sc(sh, want, "pct_obs_per_ft", sc_min=scmin)
+            self.assertEqual(r["n_max_at_sc_min"], want, (sh, scmin))
+            self.assertTrue(r["passes_n"], (sh, scmin))
+            self.assertFalse(obscuration_sc(sh, want + 1, "pct_obs_per_ft", sc_min=scmin)["passes_n"])
+
+    def test_non_boundary_values_unchanged_and_hand_check_exact_rational(self):
+        from fractions import Fraction
+        from formulas import obscuration_sc
+        # existing value stays 22 (0.2/0.009 = 22.22...)
+        self.assertEqual(obscuration_sc(0.2, 25, "pct_obs_per_ft", sc_min=0.009)["n_max_at_sc_min"], 22)
+        # just below / just above an exact multiple (well outside the 1e-9 tolerance)
+        self.assertEqual(obscuration_sc(0.2999, 1, "pct_obs_per_ft", sc_min=0.1)["n_max_at_sc_min"], 2)
+        self.assertEqual(obscuration_sc(0.3001, 1, "pct_obs_per_ft", sc_min=0.1)["n_max_at_sc_min"], 3)
+        # exact-rational hand check: 0.3 / 0.01 = 3/10 / (1/100) = 30 exactly
+        self.assertEqual(Fraction("0.3") / Fraction("0.01"), 30)
+        self.assertEqual(obscuration_sc(0.3, 1, "pct_obs_per_ft", sc_min=0.01)["n_max_at_sc_min"], 30)
+
+    def test_sweep_matches_exact_decimal_floor(self):
+        # 3-decimal grid: kernel N_max must equal the exact-rational floor for every (Sh, Sc_min).
+        from fractions import Fraction
+        from math import floor
+        from formulas import obscuration_sc
+        bad = []
+        for a in range(1, 400, 7):
+            for b in range(1, 120, 3):
+                sh, scmin = a / 1000.0, b / 1000.0
+                want = floor(Fraction(a, 1000) / Fraction(b, 1000))
+                got = obscuration_sc(sh, 1, "pct_obs_per_ft", sc_min=scmin)["n_max_at_sc_min"]
+                if got != want:
+                    bad.append((sh, scmin, got, want))
+        self.assertEqual(bad, [])
+
+class HeadsFitDefaultGuardTests(unittest.TestCase):
+    """Additive warning key; wall_offset_ft NOT required. Tests first.
+    When wall_offset_ft is omitted, remote_area_rectangle falls back to the SPACING count floor(Rp/S) for
+    heads_fit_parallel. It now ALSO emits heads_fit_parallel_warning (default used; a wall-offset head count may
+    differ). Every existing key/value is unchanged. Hand check: Rp 75, S 11.00, w 4.5 -> spacing count 6,
+    head count floor((75-9)/11)+1 = 7 (end-head span 66.0 ft; 7*11 = 77.0 ft)."""
+    KEY = "heads_fit_parallel_warning"
+    LEGACY_KEYS = {"sqrt_a_ft", "required_length_parallel_ft", "heads_per_branch_raw", "heads_per_branch_v",
+                   "length_provided_parallel_ft_v", "area_per_head_ft2", "n_heads_raw", "n_heads_v", "n_branches_v",
+                   "heads_on_last_branch_v", "width_perp_ft_v", "heads_area_ft2_v", "rectangle_area_ft2_v",
+                   "both_sides_of_cross_main", "room_length_parallel_ft", "room_width_perp_ft", "spacings_fit_parallel",
+                   "heads_fit_parallel", "heads_fit_parallel_basis", "shortfall_parallel_ft", "room_short_parallel",
+                   "room_narrow_perp", "fits_room", "warnings", "elects_remote_area", "basis"}
+    def test_a_warning_present_when_wall_offset_omitted(self):
+        from formulas import remote_area_rectangle as r
+        o = r(3600, 11.0, 10, room_length_parallel_ft=75)
+        self.assertIn(self.KEY, o)
+        w = o[self.KEY]
+        self.assertIsInstance(w, str)
+        self.assertIn("wall_offset_ft", w)
+        self.assertIn("default", w.lower())
+        self.assertIn("spacing count", w)
+        self.assertIn("may differ", w)
+        self.assertIn("floor(75/11)", w)                                # states the Rp and S used
+        self.assertIn("= 6", w)                                         # the default value returned
+        self.assertIn("7", w)                                           # Example: wall_offset_ft 4.5 gives 7
+    def test_b_warning_absent_when_wall_offset_given_or_no_room(self):
+        from formulas import remote_area_rectangle as r
+        self.assertNotIn(self.KEY, r(3600, 11.0, 10, room_length_parallel_ft=75, wall_offset_ft=4.5))
+        self.assertNotIn(self.KEY, r(3600, 11.0, 10, room_length_parallel_ft=75, wall_offset_ft=0))
+        self.assertNotIn(self.KEY, r(3600, 11.0, 10, room_length_parallel_ft=75, wall_offset_ft=0.0, room_width_perp_ft=100))
+        self.assertNotIn(self.KEY, r(3600, 11.0, 10))                       # no room length: no heads_fit at all
+        self.assertNotIn("heads_fit_parallel", r(3600, 11.0, 10))
+    def test_c_hand_check_75_s11_default_6_vs_wall_offset_7(self):
+        from formulas import remote_area_rectangle as r
+        d = r(3600, 11.0, 10, room_length_parallel_ft=75)
+        self.assertEqual(d["heads_fit_parallel"], 6)                      # legacy default value unchanged
+        self.assertEqual(d["spacings_fit_parallel"], 6)
+        self.assertIn(self.KEY, d)
+        o = r(3600, 11.0, 10, room_length_parallel_ft=75, wall_offset_ft=4.5)
+        self.assertEqual(o["heads_fit_parallel"], 7)
+        self.assertAlmostEqual(o["length_between_end_heads_ft"], 66.0)
+        self.assertEqual(o["heads_per_branch_v"] * 11.0, 77.0)
+        self.assertNotIn(self.KEY, o)
+    def test_d_legacy_keys_and_values_identical(self):
+        from formulas import remote_area_rectangle as r
+        d = r(3500, 11.25, 10, room_length_parallel_ft=60, room_width_perp_ft=100)
+        self.assertEqual(set(d) - {self.KEY}, self.LEGACY_KEYS)
+        self.assertEqual(d["heads_fit_parallel"], 5)
+        self.assertEqual(d["spacings_fit_parallel"], 5)
+        self.assertEqual(len(d["warnings"]), 1)                            # only the legacy room-short warning
+        self.assertNotIn("DEFAULT USED", d["warnings"][0])                 # new key does NOT leak into warnings[]
+        self.assertIn("spacing count floor(Rp/S), NOT a head count", d["heads_fit_parallel_basis"])
+        o = r(3500, 11.25, 10, room_length_parallel_ft=60, room_width_perp_ft=100, wall_offset_ft=4.5)
+        self.assertEqual(set(o), self.LEGACY_KEYS | {"wall_offset_ft", "length_between_end_heads_ft"})
+        # numerics identical default vs wall-offset call on every key that does not depend on the offset
+        for k in ("sqrt_a_ft", "heads_per_branch_v", "n_heads_v", "n_branches_v", "rectangle_area_ft2_v",
+                  "shortfall_parallel_ft", "fits_room", "room_short_parallel"):
+            self.assertEqual(d[k], o[k], k)
+    def test_e_wall_offset_not_required_and_errors_unchanged(self):
+        from formulas import remote_area_rectangle as r
+        r(3600, 11.0, 10, room_length_parallel_ft=75)                      # must not raise (NOT required)
+        with self.assertRaises(CalcError):
+            r(3600, 11.0, 10, room_length_parallel_ft=75, wall_offset_ft=-1)
+    def test_f_run_py_prints_warning_key(self):
+        import run
+        order = run.OUTPUT_ORDER["remote_area_rectangle"]
+        self.assertIn(self.KEY, order)
+        self.assertEqual(order.index(self.KEY), order.index("heads_fit_parallel_basis") + 1)
+
+
+class L45RL5DefaultSystemTypeWarningTests(unittest.TestCase):
+    """Tests first. di_trip_to_water with system_type omitted keeps the
+    legacy DRY-pipe note_60s_option byte-identical and ALSO emits the additive key system_type_default_warning
+    ('DEFAULT USED'). The key is absent whenever system_type is given. No numeric, verdict or legacy-label change."""
+    KEY = "system_type_default_warning"
+    TEXT = "DEFAULT USED: no system_type \u2192 dry-pipe cite; pass system_type='di' for DI"
+    LEGACY_KEYS = {"formula", "t_fill_s", "t_total_s", "limit_s", "limit_basis", "margin_s", "passes_screen",
+                   "v_max_gal_at_limit", "edition", "nfpa_table_cite", "note_60s_option"}
+    def test_a_warning_present_when_system_type_omitted(self):
+        from formulas import di_trip_to_water as d
+        for ed in (2019, 2025):
+            o = d(100.0, 40.0, edition=ed)
+            self.assertIn(self.KEY, o, ed)
+            self.assertEqual(o[self.KEY], self.TEXT)
+            self.assertIn("DEFAULT USED", o[self.KEY])
+            self.assertIn("system_type='di'", o[self.KEY])
+        self.assertIn(self.KEY, d(600.0, 40.0, system_type=None))     # explicit None == omitted
+    def test_b_warning_absent_when_system_type_given(self):
+        from formulas import di_trip_to_water as d
+        for st in ("dry", "di", "DI", "double-interlock", "double_interlock", "di_preaction", "dry_pipe"):
+            for v in (100.0, 600.0):
+                self.assertNotIn(self.KEY, d(v, 40.0, system_type=st), (st, v))
+    def test_c_legacy_note_and_keys_byte_identical_for_default(self):
+        from formulas import di_trip_to_water as d, _nfpa13_dry_cites, _parse_nfpa13_dry_edition
+        for ed in (2019, 2025):
+            for v in (100.0, 600.0):
+                o = d(v, 40.0, edition=ed)
+                cites = _nfpa13_dry_cites(_parse_nfpa13_dry_edition(ed))
+                self.assertEqual(o["note_60s_option"], cites["dry_60s_cite"] + " \u2014 screen does not auto-elect this path")
+                self.assertEqual(set(o) - {self.KEY}, self.LEGACY_KEYS)
+    def test_d_numerics_identical_to_explicit_dry_and_no_warning_leak(self):
+        from formulas import di_trip_to_water as d
+        a = d(412.5, 37.0, 2.0, 3.0, 4.0); b = d(412.5, 37.0, 2.0, 3.0, 4.0, system_type="dry")
+        for k in ("t_fill_s", "t_total_s", "limit_s", "limit_basis", "margin_s", "passes_screen", "v_max_gal_at_limit",
+                  "edition", "nfpa_table_cite"):
+            self.assertEqual(a[k], b[k], k)
+        self.assertNotIn("DEFAULT USED", a["note_60s_option"])           # warning is its own key, not in the legacy note
+        self.assertNotIn("DEFAULT USED", a["nfpa_table_cite"])
+    def test_e_dry_delivery_screen_unchanged(self):
+        from formulas import dry_delivery_screen as s
+        o = s([{"d_in": 4.0, "length_ft": 100.0}], 40.0, system_type="di")
+        self.assertNotIn(self.KEY, o)
+        o2 = s([{"d_in": 4.0, "length_ft": 100.0}], 40.0)
+        self.assertNotIn(self.KEY, o2)                                    # screen always passes system_type through
+    def test_f_run_py_prints_warning_key(self):
+        import run
+        order = run.OUTPUT_ORDER["di_trip_to_water"]
+        self.assertIn(self.KEY, order)
+        self.assertEqual(order.index(self.KEY), order.index("note_60s_option") + 1)
+
 
 if __name__ == "__main__":
     unittest.main()
