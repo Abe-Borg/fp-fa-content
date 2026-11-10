@@ -20,7 +20,7 @@ Quick-opening-device trip time is still not water-delivery time. Hand the proof 
 
 ## Sequence
 
-The water path on double-interlock is detection (or the owner's pre-alarm level that the engineer of record has accepted) and low air. Both are required. Write that as the cause-and-effect matrix the panel is programmed from (`preaction-releasing-c-and-e-soo` and `fa/di-releasing.md`).
+The water path on double-interlock is detection (or the owner's pre-alarm level that the engineer of record has accepted) and P, the pressure drop from sprinkler operation. Both are required. P is a separate pressure contact (tag PSL-REL) on electric/electric trim and the listed pneumatic actuator at the valve (tag PA-REL) on electric/pneumatic trim. Low air is supervisory only (tag PSL-SUP) and is never a release input. A slow nitrogen leak or a compressor fault gives a supervisory signal, never a release. Write that as the cause-and-effect matrix the panel is programmed from (`preaction-releasing-c-and-e-soo` and `fa/di-releasing.md`).
 
 Wet pipe, when it is the elected system, is thermal operation of the sprinkler. Do not attach a double-interlock releasing program to a wet valve.
 

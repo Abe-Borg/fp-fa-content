@@ -9,12 +9,12 @@ Deterministic fire-protection and fire-alarm math. The desktop app loads `calcs/
 | `formulas.py` | Kernel: pipe volume, delivery screen, density/area, hose duration, nitrogen fill, and the other ops behind `dispatch` |
 | `run.py` | Small CLI over `dispatch` |
 | `pipe_ids.py` | Shop inside diameters and the blank-schedule rule |
-| `di_zone.py` | Zone gallons (fittings and trim), trim-family screen, releasing truth table, nitrogen C = 100 |
+| `di_zone.py` | Zone gallons (fittings and trim), trim-family screen, releasing truth table (second leg is `p_second_leg`, the pressure drop from sprinkler operation; `low_air` is a deprecated alias and low air is supervisory only), nitrogen C = 100 |
 | `test_formulas.py` | Kernel tests. Run from this folder: `python -m unittest test_formulas` |
-| `test_di_zone.py` | Zone-screen tests |
+| `test_di_zone.py` | Zone-screen tests, including the second-leg label tests (`p_second_leg`, deprecated `low_air` alias) |
 | `test_pack_local.py` | Finite-number guard and fill-basis label tests |
 
-The kernel file in this tree has 202 tests. `test_pack_local.py` adds 3 more for the finite-number guard and the two-basis fill labels, which this pack keeps on top of the kernel.
+The kernel file in this tree has 211 tests. `test_pack_local.py` adds 3 more for the finite-number guard and the two-basis fill labels, which this pack keeps on top of the kernel.
 
 `di_zone.py` loads `formulas.py` and `pipe_ids.py` from its own directory, so a content pack can replace `calcs/fp` without installing a package.
 

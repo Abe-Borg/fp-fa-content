@@ -270,7 +270,20 @@ def elect_di_trim(system_type: str, prime_held_by: str = "unknown",
 
 
 def releasing_truth_table(manual_station: Any = True, insurer: str = "FM") -> dict[str, Any]:
-    """Solenoid = (detection leg OR manual station) AND low air AND NOT isolated.
+    """This solenoid truth table is electric/electric trim.
+
+    Solenoid = (detection leg OR manual station) AND p_second_leg AND NOT isolated.
+    p_second_leg (P) is the pressure drop from sprinkler operation, sensed by PSL-REL.
+    On electric/pneumatic trim the solenoid is D AND not isolated, and the valve actuator PA-REL gates the valve mechanically, which is outside this table.
+
+    Low air is supervisory only (PSL-SUP). It is not a release input and it is
+    not in the Boolean. The row key ``low_air`` and the ``boolean`` string are
+    kept only as deprecated aliases for existing consumers: ``low_air`` carries
+    the same value as ``p_second_leg``. New callers read ``p_second_leg`` and
+    ``boolean_p``.
+
+    manual_release is a station inside D (still needs P). A panel zone typed Manual Release
+    that bypasses the AND is not modeled and is never a default (C&E skill footnote ⁹ election).
 
     A second smoke zone does not trip the valve and is not required. No abort
     and no pre-discharge delay on the water path.
@@ -279,35 +292,48 @@ def releasing_truth_table(manual_station: Any = True, insurer: str = "FM") -> di
     rows = []
     for detection in (False, True):
         for manual in (False, True):
-            for low_air in (False, True):
+            for p_second_leg in (False, True):
                 for isolated in (False, True):
                     for second_smoke in (False, True):
                         det_leg = detection or (manual and manual_ok)
-                        solenoid = bool(det_leg and low_air and not isolated)
+                        solenoid = bool(det_leg and p_second_leg and not isolated)
                         rows.append({
                             "detection": detection,
                             "manual": manual,
-                            "low_air": low_air,
+                            "p_second_leg": p_second_leg,
+                            "low_air": p_second_leg,
                             "isolated": isolated,
                             "second_smoke": second_smoke,
                             "solenoid": solenoid,
                         })
     by_key = {}
     for row in rows:
-        key = (row["detection"], row["manual"], row["low_air"], row["isolated"], row["second_smoke"])
+        key = (row["detection"], row["manual"], row["p_second_leg"], row["isolated"], row["second_smoke"])
         by_key[key] = row["solenoid"]
     for detection in (False, True):
         for manual in (False, True):
-            for low_air in (False, True):
+            for p_second_leg in (False, True):
                 for isolated in (False, True):
-                    a = by_key[(detection, manual, low_air, isolated, False)]
-                    b = by_key[(detection, manual, low_air, isolated, True)]
+                    a = by_key[(detection, manual, p_second_leg, isolated, False)]
+                    b = by_key[(detection, manual, p_second_leg, isolated, True)]
                     if a != b:
                         raise RuntimeError("second smoke zone changed the solenoid; truth table is wrong")
     fires = [row for row in rows if row["solenoid"]]
     return {
+        "boolean_p": "solenoid = (detection_leg OR manual_release) AND p_second_leg AND NOT isolated",
+        "second_leg": ("This solenoid truth table is electric/electric trim. "
+                       "p_second_leg is P, the pressure drop from sprinkler operation, sensed by PSL-REL. "
+                       "On electric/pneumatic trim the solenoid is D AND not isolated, and the valve actuator "
+                       "PA-REL gates the valve mechanically, which is outside this table."),
+        "low_air_note": ("low_air is a deprecated alias of p_second_leg and carries the same value. "
+                         "Low air is supervisory only (PSL-SUP) and is never a release input."),
         "boolean": "solenoid = (detection_leg OR manual_release) AND low_air AND NOT isolated",
-        "detection_leg": "one detection zone, or a manual station in place of that zone",
+        "deprecated": {
+            "low_air": "deprecated alias of p_second_leg; low air is supervisory only and not a release input",
+            "boolean": "deprecated string kept for existing consumers; read boolean_p",
+        },
+        "detection_leg": ("one detection zone, or a manual station in place of that zone. "
+                          "manual_release is a station inside D (still needs P). A panel zone typed Manual Release that bypasses the AND is not modeled and is never a default (C&E skill footnote ⁹ election)."),
         "second_smoke": "does not trip the valve and is not required",
         "abort": "no abort and no pre-discharge delay on the water path",
         "manual_station": manual_ok,

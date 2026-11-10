@@ -46,4 +46,4 @@ Provide low-point drains. Do not heat-trace drained double-interlock pipe. A val
 
 Hydrostatic test per the adopted NFPA 13: 200 psi for 2 hours, or 50 psi above system working pressure where that pressure is over 150 psi (NFPA 13-2025 and 2022 §29.2.1.1 and §29.2.1.3). The code water-delivery test opens detection and the inspector's test together, not detection first.
 
-Water opens only when the detection leg and the low-air leg are both true. Do not add a foam column or a clean-agent column. Record drawings match the program that was loaded.
+Water opens only when the detection leg (Fire 1 or the manual release station) and P are both true, and the zone is not isolated. P is the pressure drop from sprinkler operation: a separate pressure contact (tag PSL-REL) on electric/electric trim, or the listed pneumatic actuator (tag PA-REL) at the valve on electric/pneumatic trim. Low air is supervisory only (tag PSL-SUP) and is never a release input. The manual release station replaces the detection leg only. It does not bypass P. Do not add a foam column or a clean-agent column. Record drawings match the program that was loaded.

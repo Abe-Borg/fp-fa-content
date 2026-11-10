@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import unittest
 
 import di_zone
@@ -70,6 +71,158 @@ class TrimAndReleaseTests(unittest.TestCase):
         self.assertEqual(table["solenoid_true_count"], 6)
         self.assertTrue(table["fm_no_cross_zone"])
         self.assertIn("low_air", table["boolean"])
+
+
+class SecondLegLabelTests(unittest.TestCase):
+    """The second DI leg is P, the pressure drop from sprinkler operation.
+
+    Low air is supervisory only and is never a release input. ``low_air`` stays
+    on each row only as a deprecated alias of ``p_second_leg``.
+    """
+
+    def setUp(self):
+        self.table = di_zone.releasing_truth_table(manual_station=True, insurer="FM")
+
+    def test_p_second_leg_key_matches_deprecated_alias_on_every_row(self):
+        self.assertEqual(self.table["row_count"], 32)
+        for row in self.table["rows"]:
+            self.assertIn("p_second_leg", row)
+            self.assertIn("low_air", row)
+            self.assertEqual(row["p_second_leg"], row["low_air"])
+
+    def test_boolean_structure_and_counts_unchanged(self):
+        self.assertEqual(self.table["solenoid_true_count"], 6)
+        for row in self.table["rows"]:
+            det_leg = row["detection"] or row["manual"]
+            self.assertEqual(row["solenoid"], bool(det_leg and row["p_second_leg"] and not row["isolated"]))
+        before = [(r["detection"], r["manual"], r["isolated"], r["second_smoke"], r["solenoid"])
+                  for r in self.table["rows"] if r["p_second_leg"]]
+        self.assertEqual(len(before), 16)
+        no_manual = di_zone.releasing_truth_table(manual_station=False)
+        self.assertEqual(no_manual["solenoid_true_count"], 4)
+
+    def test_p_boolean_label_names_p_not_low_air(self):
+        label = self.table["boolean_p"]
+        self.assertEqual(label, "solenoid = (detection_leg OR manual_release) AND p_second_leg AND NOT isolated")
+        self.assertNotIn("low", label.lower())
+
+    def test_p_is_defined_as_sprinkler_operation_pressure_drop(self):
+        text = self.table["second_leg"].lower()
+        self.assertIn("pressure drop", text)
+        self.assertIn("sprinkler operation", text)
+        self.assertIn("psl-rel", text)
+        self.assertIn("pa-rel", text)
+
+    def test_low_air_text_says_supervisory_and_not_a_release_input(self):
+        note = self.table["low_air_note"].lower()
+        self.assertIn("deprecated alias", note)
+        self.assertIn("p_second_leg", note)
+        self.assertIn("supervisory", note)
+        self.assertIn("never a release input", note)
+        self.assertIn("psl-sup", note)
+
+    def test_no_new_text_names_low_air_as_a_release_input(self):
+        import re
+        fields = [self.table["boolean_p"], self.table["second_leg"], self.table["low_air_note"],
+                  self.table["detection_leg"], self.table["second_smoke"], self.table["abort"]]
+        for text in fields:
+            for sentence in re.split(r"(?<=[.;])\s+", text):
+                low = sentence.lower()
+                if "low air" in low or "low_air" in low:
+                    self.assertTrue("supervisory" in low or "deprecated alias" in low, sentence)
+                    self.assertNotRegex(low, r"and low[ _]air|low[ _]air (releases|opens|leg)", sentence)
+        src = inspect.getsource(di_zone.releasing_truth_table).lower()
+        self.assertNotIn("and low air", src)
+        doc = di_zone.releasing_truth_table.__doc__.lower()
+        self.assertIn("p_second_leg", doc)
+        self.assertIn("supervisory", doc)
+        self.assertIn("not a release input", doc)
+
+    def test_detection_leg_label_says_manual_is_inside_d_and_needs_p(self):
+        label = self.table["detection_leg"]
+        self.assertIn("manual_release is a station inside D (still needs P).", label)
+        self.assertIn("A panel zone typed Manual Release that bypasses the AND is not modeled "
+                      "and is never a default (C&E skill footnote \u2079 election).", label)
+        self.assertTrue(label.startswith("one detection zone, or a manual station in place of that zone"))
+
+    def test_legacy_boolean_string_kept_for_existing_consumers(self):
+        self.assertEqual(self.table["boolean"],
+                         "solenoid = (detection_leg OR manual_release) AND low_air AND NOT isolated")
+        self.assertIn("boolean", self.table["deprecated"])
+        self.assertIn("low_air", self.table["deprecated"])
+        self.assertIn("boolean_p", self.table["deprecated"]["boolean"])
+
+
+class ElectricElectricScopeTests(unittest.TestCase):
+    """The solenoid truth table states electric/electric trim only.
+
+    P in this table is the sprinkler-operation pressure drop sensed by PSL-REL.
+    On electric/pneumatic trim the solenoid is D AND not isolated, and PA-REL
+    gates the valve mechanically, outside this table.
+    """
+
+    def setUp(self):
+        self.table = di_zone.releasing_truth_table(manual_station=True, insurer="FM")
+        self.doc = di_zone.releasing_truth_table.__doc__
+
+    def _sentences(self, text: str) -> list[str]:
+        import re
+        return [part.strip() for part in re.split(r"(?<=[.])\s+", text.strip()) if part.strip()]
+
+    def test_scope_label_and_second_leg_name_electric_electric_and_psl_rel(self):
+        for text in (self.doc, self.table["second_leg"]):
+            low = text.lower()
+            self.assertIn("this solenoid truth table is electric/electric trim", low)
+            self.assertIn("pressure drop from sprinkler operation", low)
+            self.assertIn("sensed by psl-rel", low)
+            self.assertIn("on electric/pneumatic trim the solenoid is d and not isolated", low)
+            self.assertIn(
+                "the valve actuator pa-rel gates the valve mechanically, which is outside this table",
+                low,
+            )
+
+    def test_second_leg_does_not_present_pa_rel_as_p_second_leg(self):
+        sentences = self._sentences(self.table["second_leg"])
+        defining = [sentence for sentence in sentences if "p_second_leg" in sentence]
+        self.assertTrue(defining)
+        for sentence in defining:
+            self.assertNotIn("PA-REL", sentence)
+            self.assertIn("PSL-REL", sentence)
+        outside = [sentence for sentence in sentences if "PA-REL" in sentence]
+        self.assertTrue(outside)
+        for sentence in outside:
+            self.assertNotIn("p_second_leg", sentence)
+            self.assertIn("outside this table", sentence)
+            self.assertIn("mechanically", sentence)
+        self.assertNotIn("or the listed pneumatic actuator", self.table["second_leg"])
+        doc_low = self.doc.lower()
+        self.assertNotIn("it is the listed pneumatic actuator", doc_low)
+        for sentence in self._sentences(self.doc):
+            if "p_second_leg" in sentence:
+                self.assertNotIn("PA-REL", sentence)
+
+    def test_boolean_strings_row_structure_and_solenoid_count_unchanged(self):
+        self.assertEqual(
+            self.table["boolean_p"],
+            "solenoid = (detection_leg OR manual_release) AND p_second_leg AND NOT isolated",
+        )
+        self.assertEqual(
+            self.table["boolean"],
+            "solenoid = (detection_leg OR manual_release) AND low_air AND NOT isolated",
+        )
+        self.assertEqual(self.table["row_count"], 32)
+        self.assertEqual(self.table["solenoid_true_count"], 6)
+        keys = ("detection", "manual", "p_second_leg", "low_air", "isolated", "second_smoke", "solenoid")
+        fires = 0
+        for row in self.table["rows"]:
+            self.assertEqual(tuple(row), keys)
+            self.assertEqual(row["low_air"], row["p_second_leg"])
+            det_leg = row["detection"] or row["manual"]
+            expected = bool(det_leg and row["p_second_leg"] and not row["isolated"])
+            self.assertEqual(row["solenoid"], expected)
+            fires += int(expected)
+        self.assertEqual(fires, 6)
+        self.assertEqual(len(self.table["rows"]), 32)
 
 
 class NitrogenAndScreenTests(unittest.TestCase):
