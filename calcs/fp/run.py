@@ -297,7 +297,7 @@ OUTPUT_ORDER = {
     "brace_load": ["segments_detail", "w_pipe_lb", "wp_lb", "fpw_lb", "pipe_fpw_max_lb", "pipe_ok", "capacity_is_horizontal", "angle_divisor", "brace_cap_lb", "brace_ok"],
     "cp_from_sds": ["cp_base", "height_factor", "cp"],
     "hose_duration": ["hose_total_gpm", "duration_min", "duration_range_min", "supervised"],
-    "dry_delivery_screen": ["volume_gal", "system_type", "qod", "nfpa_size_cap_gal", "nfpa_size_threshold_gal", "nfpa_delivery_time_exempt", "nfpa_basis", "edition", "note_60s_option", "nfpa_table_cite", "t_fill_s", "t_total_s", "limit_s", "limit_basis", "margin_s", "passes_screen", "v_max_gal_at_limit", "declared_interlock", "qod_750_cap_basis", "warning"],
+    "dry_delivery_screen": ["volume_gal", "system_type", "qod", "nfpa_size_cap_gal", "nfpa_size_threshold_gal", "nfpa_delivery_time_exempt", "nfpa_basis", "edition", "note_60s_option", "nfpa_table_cite", "t_fill_s", "t_total_s", "limit_s", "limit_basis", "margin_s", "passes_screen", "v_max_gal_at_limit", "declared_interlock", "qod_750_cap_basis", "warning", "system_type_default_warning"],
     "relief_check": ["relief_check_psi", "component_rating_psi", "relief_valve_required", "margin_psi"],
     "junction_balance": ["k_equiv", "q_low_adjusted_gpm", "q_total_gpm", "p_carried_psi", "delta_p_psi", "within_tolerance"],
     "loop_two_path": ["mode","q1_gpm","q2_gpm","p1_psi","p2_psi","p_governing_psi","equal_split_p1_psi","equal_split_p2_psi","equal_split_governing_psi","basis"],

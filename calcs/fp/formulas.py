@@ -8,6 +8,7 @@ SprinkFDT / water-delivery-time, no shop-curve invention.
 from __future__ import annotations
 
 from typing import Any, Optional, Sequence, Union
+from decimal import Decimal, ROUND_FLOOR
 
 # US fire-protection Hazen-Williams (NFPA 13 / handbook form).
 HW_COEFF = 4.52
@@ -579,27 +580,47 @@ def _nfpa13_dry_cites(edition: int) -> dict[str, str]:
     }
 
 
-def _delivery_cite_note(st: str, v: float, cites: dict, ed: int, qod: bool = False) -> tuple[Any, bool]:
-    """volume-aware delivery-time cite. Returns (note_body, is_threshold); (None, False) = keep legacy label.
+def _delivery_cite_note(st: str, v: float, cites: dict, ed: int, qod: bool = False,
+                        basis: str = "FM") -> tuple[Any, bool]:
+    """Volume-aware, basis-aware delivery-time cite.
+    Returns (note_body, is_threshold); (None, False) = keep legacy label.
 
-    DI: V <= 500 gal -> NFPA 13 s8.3.2.3.1.1 (no water-delivery test; a threshold, not a cap; FM 30 s governs);
+    DI: V <= 500 gal -> NFPA 13 s8.3.2.3.1.1 (no water-delivery test; a threshold, not a cap);
     V > 500 -> one of s8.3.2.3.1.2 / .1.3 / .1.4 must be elected (s8.3.2.3.1 = four alternatives, not tiers).
     Dry (held 2019 s8.2.3.3/.4, 2025 s8.2.4.2.1/.2): V <= 500 no test; <= 750 with QOD no test; else legacy label.
-    Label only: no numeric output depends on this."""
+    Claim "FM 30 s governs" only when basis is FM (the backward-compatible default). NFPA-* and
+    explicit limit_s (limit_basis "explicit") cite the held NFPA 13 path only — they do not claim FM 30 s.
+    The <=500 / <=750 test uses the caller-supplied V, which in di_trip_to_water and dry_delivery_screen
+    is pipe-only trapped volume, not V_allow (= pipe x 1.05 + 5 gal, ASSUMED; verify with engineer of record).
+    Label only: no numeric output depends on this. FM-basis threshold notes stay byte-identical."""
     thr = 500.0 + 1e-9
+    key = str(basis).upper()
+    key = "NFPA-OH" if key == "NFPA" else key
+    claim_fm = key == "FM"
+    v_clause = ("V tested is pipe-only trapped volume, not V_allow "
+                "(= pipe × 1.05 + 5 gal, ASSUMED; verify with engineer of record)")
     if st == "di":
         if v <= thr:
-            return (f"≤500 gal DI no-water-delivery-test threshold (NFPA 13-{ed} §8.3.2.3.1.1) — FM 30 s governs "
-                    "(a threshold, not a cap; §8.3.2.3.1.2–.1.4 apply only if elected)"), True
+            if claim_fm:
+                return (f"≤500 gal DI no-water-delivery-test threshold (NFPA 13-{ed} §8.3.2.3.1.1) — FM 30 s governs "
+                        "(a threshold, not a cap; §8.3.2.3.1.2–.1.4 apply only if elected)"), True
+            return (f"≤500 gal DI no-water-delivery-test threshold (NFPA 13-{ed} §8.3.2.3.1.1) — "
+                    f"a threshold, not a cap; §8.3.2.3.1.2–.1.4 apply only if elected; {v_clause}"), True
         return (f"NFPA 13-{ed} s8.3.2.3.1.2 (60 s) / s8.3.2.3.1.3 (calc, {cites['di_calc_sec']}) / s8.3.2.3.1.4 "
                 f"({cites['di_table_sec']}) — one path must be elected (s8.3.2.3.1 = four alternatives, not tiers); "
                 "QOD s8.3.2.3.2 may help"), False
     if v <= thr:
+        if claim_fm:
+            return (f"≤500 gal dry-pipe no-water-delivery-test threshold (NFPA 13-{ed} {cites['dry_le500_sec']}, no QOD) — "
+                    "FM 30 s governs (a threshold, not a cap)"), True
         return (f"≤500 gal dry-pipe no-water-delivery-test threshold (NFPA 13-{ed} {cites['dry_le500_sec']}, no QOD) — "
-                "FM 30 s governs (a threshold, not a cap)"), True
+                f"a threshold, not a cap; {v_clause}"), True
     if qod and v <= 750.0 + 1e-9:
+        if claim_fm:
+            return (f"≤750 gal dry-pipe with QOD no-water-delivery-test threshold (NFPA 13-{ed} {cites['dry_le750_sec']}) — "
+                    "FM 30 s governs (a threshold, not a cap; confirm dry-pipe, not DI)"), True
         return (f"≤750 gal dry-pipe with QOD no-water-delivery-test threshold (NFPA 13-{ed} {cites['dry_le750_sec']}) — "
-                "FM 30 s governs (a threshold, not a cap; confirm dry-pipe, not DI)"), True
+                f"a threshold, not a cap; confirm dry-pipe, not DI; {v_clause}"), True
     return None, False
 
 
@@ -617,6 +638,9 @@ def di_trip_to_water(v_gal: Number, q_fill_gpm: Number, t_detect_s: Number = 0.0
     labeled FM); basis "NFPA-xx" = held dry-pipe water-delivery table times (LH 60 / OH 50 / EH 45 /
     HP 40 / DU 15); "NFPA" = NFPA-OH. Table numerics identical 2019 Table 8.2.3.6.1 ↔ 2025
     Table 8.2.4.3.2 (B-DRYED); edition only changes the cite label (and DU row location note).
+    note_60s_option claims "FM 30 s governs" only when limit_basis is FM; NFPA-* /
+    explicit limit_s cite the held NFPA 13 path only. The <=500 test uses pipe-only trapped V,
+    not V_allow (= pipe x 1.05 + 5 gal, ASSUMED; verify with engineer of record). Label only; FM-default notes byte-identical.
     Do NOT treat the 60 s single-orifice test-connection OPTION (2019 s8.2.3.2 / 2025 s8.2.4.2)
     as automatically granted — it is one of several conditional sizing paths. limit_s overrides
     basis. edition default 2025 (backward compatible); 2019|2025 only.
@@ -660,7 +684,7 @@ def di_trip_to_water(v_gal: Number, q_fill_gpm: Number, t_detect_s: Number = 0.0
         table_cite = cites["dry_du_cite"] if src == "NFPA-DU" else cites["dry_table_cite"]
     else:
         table_cite = "FM DS 5-32 provisional 30 s (design practice)" if src == "FM" else "explicit limit_s"
-    _nb, _thr = _delivery_cite_note(_st_cite, v, cites, ed) if _st_cite else (None, False)
+    _nb, _thr = _delivery_cite_note(_st_cite, v, cites, ed, basis=src) if _st_cite else (None, False)
     if _nb is not None:
         _note = _nb if _thr else _nb + " — screen does not auto-elect this path"
     else:
@@ -977,7 +1001,7 @@ def junction_balance(q_low_gpm: Number, p_low_psi: Number, p_high_psi: Number,
 def dry_delivery_screen(segments: Any, q_fill_gpm: Number, qod: Any = False,
                         t_detect_s: Number = 0.0, t_release_s: Number = 0.0,
                         t_exhaust_s: Number = 0.0, limit_s: Any = None,
-                        basis: str = "FM", system_type: str = "dry",
+                        basis: str = "FM", system_type: Any = None,
                         edition: Any = 2025, declared_interlock: Any = None) -> dict[str, Any]:
     """Chained op:
     pipe_volume(segments) -> NFPA 13 dry/DI size-exemption check -> di_trip_to_water screen.
@@ -994,6 +1018,10 @@ def dry_delivery_screen(segments: Any, q_fill_gpm: Number, qod: Any = False,
     does not extend DI size (s8.3.2.3.2). The 60 s test-connection OPTION is NOT auto-granted
     when volume exceeds the size exemption (caller must elect that path separately).
     FM DS 5-32 provisional 30 s default still applies when basis=FM (design practice).
+    "FM 30 s governs" is claimed only when basis/limit_basis is FM; NFPA-* / explicit
+    limit_s cite the held NFPA 13 path only (DI s8.3.2.3.1.1 / dry 2019 s8.2.3.3/.4 = 2025 s8.2.4.2.1/.2).
+    The <=500 / <=750 test uses pipe-only trapped V from pipe_volume, not V_allow
+    (= pipe x 1.05 + 5 gal, ASSUMED; verify with engineer of record). Label only; FM-default notes byte-identical.
     note_60s_option is VOLUME-aware (DI <=500 gal s8.3.2.3.1.1 threshold; DI >500 elected
     .1.2/.1.3/.1.4; dry <=500 / <=750 with QOD -> 2019 s8.2.3.3/.4, 2025 s8.2.4.2.1/.2; dry above that keeps the
     path-specific s8.2.3.2 / s8.2.4.2 label). Label only; all numerics and verdicts unchanged.
@@ -1003,16 +1031,26 @@ def dry_delivery_screen(segments: Any, q_fill_gpm: Number, qod: Any = False,
     750 gal QOD cap; NFPA 13-2019 s8.3.2.3.1.1 / s8.3.2.3.2, held 13-FP006-2019-8.3.2.3). When
     system_type="dry", QOD on and 500 < V <= 750 gal, outputs add qod_750_cap_basis + warning
     "confirm dry-pipe, not DI". Granted caps, verdicts and di_trip_to_water arithmetic unchanged.
+    system_type default is None (omitted). Output system_type stays "dry" and every
+    existing key/value stays byte-identical; an additive key system_type_default_warning reports
+    "DEFAULT USED: no system_type -> dry-pipe path; pass system_type='di' for DI". The key is
+    absent when system_type is given (including explicit "dry"). Same pattern as the key
+    on di_trip_to_water. nfpa_size_cap_gal is a legacy alias of nfpa_size_threshold_gal (a threshold,
+    not a cap); both keys stay equal and both remain readable. Alias-safe; no numeric change.
     """
     ed = _parse_nfpa13_dry_edition(edition)
     cites = _nfpa13_dry_cites(ed)
     pv = pipe_volume(segments)
     v = float(pv["volume_gal"])
     q = bool(qod) and str(qod).lower() not in ("false", "0", "no")
-    st = str(system_type).strip().lower().replace("-", "_").replace(" ", "_")
-    st = {"double_interlock": "di", "di_preaction": "di", "dry_pipe": "dry"}.get(st, st)
-    if st not in ("dry", "di"):
-        raise CalcError("system_type must be 'dry' or 'di' (wet/dry/DI locks; single-interlock not supported)")
+    _system_type_defaulted = system_type is None
+    if _system_type_defaulted:
+        st = "dry"
+    else:
+        st = str(system_type).strip().lower().replace("-", "_").replace(" ", "_")
+        st = {"double_interlock": "di", "di_preaction": "di", "dry_pipe": "dry"}.get(st, st)
+        if st not in ("dry", "di"):
+            raise CalcError("system_type must be 'dry' or 'di' (wet/dry/DI locks; single-interlock not supported)")
     di_decl = None if declared_interlock is None else str(declared_interlock).strip().lower().replace("-", "_")
     di_decl = {"double_interlock": "double"}.get(di_decl, di_decl)
     if di_decl not in (None, "none", "double"):
@@ -1028,7 +1066,7 @@ def dry_delivery_screen(segments: Any, q_fill_gpm: Number, qod: Any = False,
     trip = di_trip_to_water(v, q_fill_gpm, t_detect_s, t_release_s, t_exhaust_s, limit_s, basis, edition=ed,
                             system_type=st)
     nb = cites["di_size_cite"] if st == "di" else cites["dry_size_cite"]
-    _vb, _vthr = _delivery_cite_note(st, v, cites, ed, q)      # volume-aware cite
+    _vb, _vthr = _delivery_cite_note(st, v, cites, ed, q, basis=trip["limit_basis"])  # basis-aware
     if _vb is not None:
         _n60 = _vb if _vthr else _vb + " — not auto-granted by size-exemption screen"
     else:
@@ -1047,6 +1085,9 @@ def dry_delivery_screen(segments: Any, q_fill_gpm: Number, qod: Any = False,
                                     + cites["di_size_cite"] + ")")
         out["warning"] = ("dry+QOD 500-750 gal: 750 gal cap granted — confirm dry-pipe, not DI "
                           "(a DI zone must use system_type='di' / declared_interlock='double')")
+    if _system_type_defaulted:
+        # additive key only; system_type stays "dry"; every existing key/value byte-identical.
+        out["system_type_default_warning"] = "DEFAULT USED: no system_type → dry-pipe path; pass system_type='di' for DI"
     return out
 def cross_main_walk(c: Number, branches: Any, segments: Any, tol_psi: Number = 0.5) -> dict[str, Any]:
     """Cross-main walk with a junction balance at every branch tee.
@@ -1754,6 +1795,14 @@ def fus_rff(
 
 
 
+def _decimal_floor_quotient(numer: Number, denom: Number) -> int:
+    """Floor of numer/denom using the shortest-round-trip decimal of each float
+. Avoids the binary residue of Sh/Sc_min and the float-eps residual.
+    """
+    q = Decimal(str(float(numer))) / Decimal(str(float(denom)))
+    return int(q.to_integral_value(rounding=ROUND_FLOOR))
+
+
 def obscuration_sc(
     sh: Number,
     n_ports: Number,
@@ -1830,12 +1879,13 @@ def obscuration_sc(
     if sc_min is not None:
         scmin = _require_positive("sc_min", sc_min)
         # float `sh_v // scmin` is NOT the exact floor at decimal multiples
-        # (0.3 // 0.01 == 29.0 though 0.3/0.01 == 30.000000000000004-ish to 1e-15; 0.3/0.1 -> 2.9999999999999996).
-        # Tolerant floor: floor(Sh/Sc_min + 1e-9). The quotient is rounded to the integer it sits within
-        # 1e-9 of (same eps family as the other floor/ceil sites below, eps=1e-9), exact elsewhere. This keeps
-        # passes_n consistent with passes_sc (which already carries +1e-15) at the Sc == Sc_min boundary.
-        import math
-        n_max = int(math.floor(sh_v / scmin + 1e-9))
+        # (0.3 // 0.01 == 29.0 though 0.3/0.01 is 30 to ~1e-15; 0.3/0.1 -> 2.9999999999999996).
+        # Replace the floor(Sh/Sc_min + 1e-9) residual with an exact Decimal
+        # quotient (shortest-round-trip decimal of each float, then floor). Exact decimal
+        # multiples (0.3/0.01, 0.3/0.1, 0.7/0.1, 0.6/0.2, 1.0/0.05, earlier cases) are exact;
+        # non-boundary values unchanged. The open trip-tier hold is untouched. passes_n stays consistent
+        # with passes_sc at the Sc == Sc_min exact-decimal boundary.
+        n_max = _decimal_floor_quotient(sh_v, scmin)
         out.update({
             "sc_min": scmin,
             "n_max_at_sc_min": n_max,

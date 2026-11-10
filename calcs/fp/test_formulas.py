@@ -1952,7 +1952,7 @@ class ObscurationScBoundaryTests(unittest.TestCase):
     """obscuration_sc N_max = floor(Sh/Sc_min) must be exact at exact decimal multiples.
     Old kernel used float `sh // scmin` (0.3 // 0.01 == 29.0 although 0.3/0.01 is 30 to 1e-15)."""
 
-    def test_choomba_exact_case_n_max_30_and_consistent(self):
+    def test_exact_boundary_case_n_max_30_and_consistent(self):
         # Boundary example: sc == sc_min, N == Sh/sc_min exactly.
         from formulas import obscuration_sc
         r = obscuration_sc(0.3, 30, "pct_obs_per_ft", sc=0.01, sc_min=0.01)
@@ -2110,17 +2110,249 @@ class L45RL5DefaultSystemTypeWarningTests(unittest.TestCase):
             self.assertEqual(a[k], b[k], k)
         self.assertNotIn("DEFAULT USED", a["note_60s_option"])           # warning is its own key, not in the legacy note
         self.assertNotIn("DEFAULT USED", a["nfpa_table_cite"])
-    def test_e_dry_delivery_screen_unchanged(self):
+    def test_e_dry_delivery_screen_explicit_has_no_warning(self):
+        # The dry_delivery_screen analogue when system_type is omitted
+        # is covered in KernelResidualsTests. Explicit system_type still has no warning.
         from formulas import dry_delivery_screen as s
         o = s([{"d_in": 4.0, "length_ft": 100.0}], 40.0, system_type="di")
         self.assertNotIn(self.KEY, o)
-        o2 = s([{"d_in": 4.0, "length_ft": 100.0}], 40.0)
-        self.assertNotIn(self.KEY, o2)                                    # screen always passes system_type through
+        o_dry = s([{"d_in": 4.0, "length_ft": 100.0}], 40.0, system_type="dry")
+        self.assertNotIn(self.KEY, o_dry)
     def test_f_run_py_prints_warning_key(self):
         import run
         order = run.OUTPUT_ORDER["di_trip_to_water"]
         self.assertIn(self.KEY, order)
         self.assertEqual(order.index(self.KEY), order.index("note_60s_option") + 1)
+
+
+
+class DeliveryCiteBasisAwareTests(unittest.TestCase):
+    """`_delivery_cite_note` claims 'FM 30 s governs' only when basis is FM.
+    NFPA-* / explicit limit_s cite the held NFPA 13 path (section AND edition) only.
+    Default FM callers stay byte-identical on every existing key. Label only."""
+    # Hand check (unchanged): 60*90.3675/450 = 12.049 s fill; +10 s release = 22.049 s
+    V_HAND = 90.3675
+    Q_HAND = 450.0
+    T_REL = 10.0
+    G_PER_FT = 3.141592653589793 / 4 * 2.469 ** 2 / 144 * 7.48
+    FM_DI = ("≤500 gal DI no-water-delivery-test threshold (NFPA 13-{ed} §8.3.2.3.1.1) — "
+             "FM 30 s governs (a threshold, not a cap; §8.3.2.3.1.2–.1.4 apply only if elected)")
+    FM_DRY_500 = ("≤500 gal dry-pipe no-water-delivery-test threshold (NFPA 13-{ed} {sec}, no QOD) — "
+                  "FM 30 s governs (a threshold, not a cap)")
+    FM_DRY_750 = ("≤750 gal dry-pipe with QOD no-water-delivery-test threshold (NFPA 13-{ed} {sec}) — "
+                  "FM 30 s governs (a threshold, not a cap; confirm dry-pipe, not DI)")
+    LEGACY_TRIP_KEYS = {
+        "formula", "t_fill_s", "t_total_s", "limit_s", "limit_basis", "margin_s",
+        "passes_screen", "v_max_gal_at_limit", "edition", "nfpa_table_cite", "note_60s_option",
+    }
+
+    def seg(self, v):
+        return [{"d_in": 2.469, "length_ft": v / self.G_PER_FT}]
+
+    def test_a_fm_basis_di_le500_still_claims_fm_30s(self):
+        for kwargs in ({}, {"basis": "FM"}, {"basis": "fm"}):
+            for ed in (2019, 2025):
+                r = f.di_trip_to_water(self.V_HAND, self.Q_HAND, 0, self.T_REL, 0,
+                                       edition=ed, system_type="di", **kwargs)
+                self.assertEqual(r["note_60s_option"], self.FM_DI.format(ed=ed))
+                self.assertEqual(r["limit_basis"], "FM")
+                self.assertEqual(r["limit_s"], 30.0)
+                self.assertIn("FM 30 s governs", r["note_60s_option"])
+
+    def test_b_nfpa_oh_does_not_claim_fm_30s_cites_held_path(self):
+        # Fails on the previous kernel, which hard-codes "FM 30 s governs" on every threshold branch.
+        for ed in (2019, 2025):
+            r = f.di_trip_to_water(self.V_HAND, self.Q_HAND, 0, self.T_REL, 0,
+                                   basis="NFPA-OH", edition=ed, system_type="di")
+            self.assertNotIn("FM 30 s", r["note_60s_option"])
+            self.assertIn(f"≤500 gal DI no-water-delivery-test threshold (NFPA 13-{ed} §8.3.2.3.1.1)",
+                          r["note_60s_option"])
+            self.assertIn("not a cap", r["note_60s_option"])
+            self.assertIn("§8.3.2.3.1.2–.1.4", r["note_60s_option"])
+            self.assertIn("pipe-only", r["note_60s_option"])
+            self.assertIn("V_allow", r["note_60s_option"])
+            self.assertEqual(r["limit_basis"], "NFPA-OH")
+            s = f.dry_delivery_screen(self.seg(400.0), self.Q_HAND, t_release_s=self.T_REL,
+                                      basis="NFPA-OH", system_type="di", edition=ed)
+            self.assertNotIn("FM 30 s", s["note_60s_option"])
+            self.assertIn(f"NFPA 13-{ed} §8.3.2.3.1.1", s["note_60s_option"])
+
+    def test_c_nfpa_star_and_explicit_limit_s_do_not_claim_fm_30s(self):
+        r = f.di_trip_to_water(self.V_HAND, self.Q_HAND, 0, self.T_REL, 0,
+                               basis="NFPA", system_type="di")
+        self.assertNotIn("FM 30 s", r["note_60s_option"])
+        self.assertEqual(r["limit_basis"], "NFPA-OH")
+        r2 = f.di_trip_to_water(self.V_HAND, self.Q_HAND, 0, self.T_REL, 0,
+                                basis="NFPA-LH", system_type="di", edition=2019)
+        self.assertNotIn("FM 30 s", r2["note_60s_option"])
+        self.assertIn("NFPA 13-2019 §8.3.2.3.1.1", r2["note_60s_option"])
+        self.assertEqual(r2["limit_basis"], "NFPA-LH")
+        r3 = f.di_trip_to_water(self.V_HAND, self.Q_HAND, 0, self.T_REL, 0,
+                                limit_s=60, system_type="di")
+        self.assertNotIn("FM 30 s", r3["note_60s_option"])
+        self.assertEqual(r3["limit_basis"], "explicit")
+        n = f.dry_delivery_screen(self.seg(400.0), self.Q_HAND, basis="NFPA-EH",
+                                  system_type="dry", edition=2025)["note_60s_option"]
+        self.assertNotIn("FM 30 s", n)
+        self.assertIn("≤500 gal dry-pipe no-water-delivery-test threshold (NFPA 13-2025 §8.2.4.2.1", n)
+        n2 = f.dry_delivery_screen(self.seg(600.0), self.Q_HAND, qod=True, basis="NFPA-OH",
+                                   system_type="dry", edition=2019)["note_60s_option"]
+        self.assertNotIn("FM 30 s", n2)
+        self.assertIn("≤750 gal dry-pipe with QOD no-water-delivery-test threshold (NFPA 13-2019 §8.2.3.4)", n2)
+
+    def test_d_legacy_fm_default_existing_keys_byte_identical(self):
+        # Exact previous FM threshold strings; no new/missing existing keys.
+        for ed, sec500, sec750 in ((2019, "§8.2.3.3", "§8.2.3.4"), (2025, "§8.2.4.2.1", "§8.2.4.2.2")):
+            r = f.di_trip_to_water(self.V_HAND, self.Q_HAND, 0, self.T_REL, 0,
+                                   edition=ed, system_type="di")
+            self.assertEqual(r["note_60s_option"], self.FM_DI.format(ed=ed))
+            self.assertTrue(self.LEGACY_TRIP_KEYS <= set(r))
+            d = f.dry_delivery_screen(self.seg(400.0), self.Q_HAND, system_type="dry", edition=ed)
+            self.assertEqual(d["note_60s_option"], self.FM_DRY_500.format(ed=ed, sec=sec500))
+            d2 = f.dry_delivery_screen(self.seg(600.0), self.Q_HAND, qod=True, system_type="dry", edition=ed)
+            self.assertEqual(d2["note_60s_option"], self.FM_DRY_750.format(ed=ed, sec=sec750))
+        # system_type None keeps the legacy dry 60 s label (not a threshold note)
+        r0 = f.di_trip_to_water(self.V_HAND, self.Q_HAND, 0, self.T_REL, 0)
+        self.assertEqual(r0["note_60s_option"],
+                         "NFPA 13-2025 s8.2.4.2 (60 s test-connection OPTION — elected path, "
+                         "not auto-granted) — screen does not auto-elect this path")
+        # DI >500 note is already NFPA-path-only and must stay byte-identical under FM and NFPA-OH
+        want_gt = ("NFPA 13-2025 s8.3.2.3.1.2 (60 s) / s8.3.2.3.1.3 (calc, s8.2.4.3) / s8.3.2.3.1.4 "
+                   "(Table 8.2.4.3.2) — one path must be elected (s8.3.2.3.1 = four alternatives, not tiers); "
+                   "QOD s8.3.2.3.2 may help — screen does not auto-elect this path")
+        a = f.di_trip_to_water(600.0, self.Q_HAND, 0, self.T_REL, 0, system_type="di")
+        b = f.di_trip_to_water(600.0, self.Q_HAND, 0, self.T_REL, 0, basis="NFPA-OH", system_type="di")
+        self.assertEqual(a["note_60s_option"], want_gt)
+        self.assertEqual(b["note_60s_option"], want_gt)
+
+    def test_e_hand_check_numerics_unchanged(self):
+        # 60 * 90.3675 / 450 = 12.049; + 10 = 22.049. FM limit 30 s. Unchanged by the cite fix.
+        r = f.di_trip_to_water(self.V_HAND, self.Q_HAND, 0, self.T_REL, 0, system_type="di")
+        self.assertAlmostEqual(r["t_fill_s"], 12.049, places=6)
+        self.assertAlmostEqual(r["t_total_s"], 22.049, places=6)
+        self.assertEqual(r["limit_s"], 30.0)
+        self.assertTrue(r["passes_screen"])
+        self.assertAlmostEqual(r["margin_s"], 30.0 - 22.049, places=6)
+        self.assertEqual(r["note_60s_option"], self.FM_DI.format(ed=2025))
+        # Same times under NFPA-OH (existing 50 s table limit, not changed); cite must not claim FM.
+        n = f.di_trip_to_water(self.V_HAND, self.Q_HAND, 0, self.T_REL, 0,
+                               basis="NFPA-OH", system_type="di")
+        self.assertAlmostEqual(n["t_fill_s"], 12.049, places=6)
+        self.assertAlmostEqual(n["t_total_s"], 22.049, places=6)
+        self.assertEqual(n["limit_s"], 50.0)
+        self.assertTrue(n["passes_screen"])
+        self.assertEqual(n["limit_basis"], "NFPA-OH")
+        self.assertNotIn("FM 30 s", n["note_60s_option"])
+        self.assertIn("NFPA 13-2025 §8.3.2.3.1.1", n["note_60s_option"])
+
+
+class KernelResidualsTests(unittest.TestCase):
+    """Three additive residual cleanups, tests first.
+
+    (1) obscuration_sc N_max uses an exact Decimal quotient (shortest-round-trip
+        decimal of each float, then floor) instead of floor(Sh/Sc_min + 1e-9).
+        Includes the boundary regression obscuration_sc(0.3, 30, 'pct_obs_per_ft',
+        sc=0.01, sc_min=0.01) -> n_max 30. The open trip-tier hold is untouched.
+    (2) dry_delivery_screen: system_type default is None; output system_type stays
+        "dry"; additive system_type_default_warning ("DEFAULT USED") is present only
+        when system_type is omitted. Existing keys/values stay byte-identical.
+    (3) nfpa_size_cap_gal remains a readable legacy alias of nfpa_size_threshold_gal
+        (a threshold, not a cap); both keys stay equal; no consumer break.
+    """
+    KEY = "system_type_default_warning"
+    TEXT = "DEFAULT USED: no system_type \u2192 dry-pipe path; pass system_type='di' for DI"
+    SEG = [{"d_in": 4.0, "length_ft": 100.0}]
+    HOLD = "GAP-B33R8-1 HOLD untouched — op does not elect trip tier / Sh setpoint"
+
+    def test_1_obscuration_boundary_regression_n_max_30(self):
+        # Required boundary case: sc == sc_min, N == Sh/sc_min exactly.
+        from decimal import Decimal, ROUND_FLOOR
+        from formulas import obscuration_sc
+        r = obscuration_sc(0.3, 30, "pct_obs_per_ft", sc=0.01, sc_min=0.01)
+        self.assertEqual(r["n_max_at_sc_min"], 30)
+        self.assertTrue(r["passes_sc"])
+        self.assertTrue(r["passes_n"])
+        self.assertEqual(r["passes_n"], r["passes_sc"])
+        # hand-checked Decimal quotient: 0.3/0.01 = Decimal('0.3')/Decimal('0.01') = 30 exactly
+        self.assertEqual(Decimal("0.3") / Decimal("0.01"), Decimal("30"))
+        self.assertEqual(int((Decimal("0.3") / Decimal("0.01")).to_integral_value(rounding=ROUND_FLOOR)), 30)
+        r31 = obscuration_sc(0.3, 31, "pct_obs_per_ft", sc=0.01, sc_min=0.01)
+        self.assertEqual(r31["n_max_at_sc_min"], 30)
+        self.assertFalse(r31["passes_n"])
+        self.assertFalse(r31["passes_sc"])
+
+    def test_2_decimal_quotient_not_1e9_residual_hand_check(self):
+        """The 1e-9 residual promotes any quotient within 1e-9 of the next integer.
+        A Decimal (str-based) floor must not. Also locks the plan decimal multiples
+        and non-boundary values, and requires the implementation to use Decimal."""
+        import inspect
+        import math
+        from decimal import Decimal, ROUND_FLOOR
+        import formulas
+        from formulas import obscuration_sc
+
+        # Hand check: a value just below 3.0 by ~5e-10 — inside the 1e-9 residual,
+        # not an exact decimal multiple. float hack floors to 3; Decimal floor is 2.
+        sh, scmin = 0.29999999995, 0.1
+        float_hack = int(math.floor(sh / scmin + 1e-9))
+        want = int((Decimal(str(sh)) / Decimal(str(scmin))).to_integral_value(rounding=ROUND_FLOOR))
+        self.assertEqual(float_hack, 3)
+        self.assertEqual(want, 2)
+        self.assertEqual(obscuration_sc(sh, 1, "pct_obs_per_ft", sc_min=scmin)["n_max_at_sc_min"], 2)
+
+        # Plan exact decimal multiples (and B38 0.2/0.009 leftover)
+        for sh2, sc2, want2 in [(0.3, 0.01, 30), (0.3, 0.1, 3), (0.7, 0.1, 7),
+                                (0.6, 0.2, 3), (1.0, 0.05, 20), (0.2, 0.009, 22)]:
+            self.assertEqual(obscuration_sc(sh2, 1, "pct_obs_per_ft", sc_min=sc2)["n_max_at_sc_min"], want2, (sh2, sc2))
+        # just below / just above, well outside 1e-9
+        self.assertEqual(obscuration_sc(0.2999, 1, "pct_obs_per_ft", sc_min=0.1)["n_max_at_sc_min"], 2)
+        self.assertEqual(obscuration_sc(0.3001, 1, "pct_obs_per_ft", sc_min=0.1)["n_max_at_sc_min"], 3)
+
+        src = inspect.getsource(formulas.obscuration_sc)
+        self.assertIn("Decimal", src)
+        self.assertNotIn("sh_v / scmin + 1e-9", src)
+        self.assertNotIn("1e-9", inspect.getsource(formulas._decimal_floor_quotient))
+
+        r = obscuration_sc(0.3, 30, "pct_obs_per_ft", sc=0.01, sc_min=0.01)
+        self.assertEqual(r["gap_b33r8_1"], self.HOLD)
+
+    def test_3_dry_delivery_screen_default_used_key(self):
+        from formulas import dry_delivery_screen as s
+        import run
+        # omitted / explicit None -> warning; output system_type stays "dry"
+        for kwargs in ({}, {"system_type": None}):
+            o = s(self.SEG, 40.0, **kwargs)
+            self.assertEqual(o["system_type"], "dry")
+            self.assertIn(self.KEY, o)
+            self.assertEqual(o[self.KEY], self.TEXT)
+            self.assertIn("DEFAULT USED", o[self.KEY])
+        # explicit system_type -> no warning
+        for st in ("dry", "di", "DI", "double-interlock", "double_interlock", "di_preaction", "dry_pipe"):
+            self.assertNotIn(self.KEY, s(self.SEG, 40.0, system_type=st), st)
+        # legacy keys/values byte-identical vs explicit dry (warning is the only addition)
+        a = s(self.SEG, 40.0)
+        b = s(self.SEG, 40.0, system_type="dry")
+        self.assertEqual(set(a) - {self.KEY}, set(b))
+        for k in set(b):
+            self.assertEqual(a[k], b[k], k)
+        self.assertNotIn("DEFAULT USED", a.get("note_60s_option", ""))
+        self.assertNotIn("DEFAULT USED", a.get("warning", "") or "")
+        # run.py prints the key
+        order = run.OUTPUT_ORDER["dry_delivery_screen"]
+        self.assertIn(self.KEY, order)
+
+    def test_4_nfpa_size_cap_gal_legacy_alias_contract(self):
+        from formulas import dry_delivery_screen as d
+        # alias-safe: both keys present, always equal, old key stays readable
+        for st, qod, want in (("di", True, 500.0), ("dry", True, 750.0), ("dry", False, 500.0)):
+            o = d(self.SEG, 1000, qod=qod, system_type=st)
+            self.assertIn("nfpa_size_cap_gal", o)
+            self.assertIn("nfpa_size_threshold_gal", o)
+            self.assertEqual(o["nfpa_size_cap_gal"], want)
+            self.assertEqual(o["nfpa_size_threshold_gal"], want)
+            self.assertEqual(o["nfpa_size_cap_gal"], o["nfpa_size_threshold_gal"])
+        self.assertIn("legacy alias of nfpa_size_threshold_gal", d.__doc__)
+        self.assertIn("not a cap", d.__doc__)
 
 
 if __name__ == "__main__":
