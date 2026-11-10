@@ -560,6 +560,9 @@ def _nfpa13_dry_cites(edition: int) -> dict[str, str]:
             "di_size_cite": "NFPA 13-2019 s8.3.2.3.1.1 (DI <=500 gal: no delivery-time requirement; >500 gal via s8.3.2.3.1.2-.4; QOD may help, s8.3.2.3.2)",
             "di_60s_cite": "NFPA 13-2019 s8.3.2.3.1.2 (DI 60 s test-connection OPTION — elected path, not auto-granted)",
             "di_calc_ptr": "NFPA 13-2019 s8.3.2.3.1.3 → s8.2.3.6 / Table 8.2.3.6.1",
+            # Volume-aware cite sections (held)
+            "di_calc_sec": "s8.2.3.6", "di_table_sec": "Table 8.2.3.6.1",
+            "dry_le500_sec": "§8.2.3.3", "dry_le750_sec": "§8.2.3.4",
         }
     return {
         "dry_size_cite": "NFPA 13-2025 s8.2.4.2.1 (500 gal) / s8.2.4.2.2 (750 gal w/ QOD)",
@@ -569,7 +572,35 @@ def _nfpa13_dry_cites(edition: int) -> dict[str, str]:
         "di_size_cite": "NFPA 13-2025 s8.3.2.3.1.1 (DI <=500 gal: no delivery-time requirement; >500 gal via s8.3.2.3.1.2-.4; QOD may help, s8.3.2.3.2)",
         "di_60s_cite": "NFPA 13-2025 s8.3.2.3.1.2 (DI 60 s test-connection OPTION — elected path, not auto-granted)",
         "di_calc_ptr": "NFPA 13-2025 s8.3.2.3.1.3 → s8.2.4.3 / Table 8.2.4.3.2",
+        # DI numbering in 2025 is s8.3.2.3.1.x (held); s8.2.4.3 / Table 8.2.4.3.2 are
+        # the calc/table homes that .1.3/.1.4 point to; dry <=500/<=750 = s8.2.4.2.1/.2 (held)
+        "di_calc_sec": "s8.2.4.3", "di_table_sec": "Table 8.2.4.3.2",
+        "dry_le500_sec": "§8.2.4.2.1", "dry_le750_sec": "§8.2.4.2.2",
     }
+
+
+def _delivery_cite_note(st: str, v: float, cites: dict, ed: int, qod: bool = False) -> tuple[Any, bool]:
+    """volume-aware delivery-time cite. Returns (note_body, is_threshold); (None, False) = keep legacy label.
+
+    DI: V <= 500 gal -> NFPA 13 s8.3.2.3.1.1 (no water-delivery test; a threshold, not a cap; FM 30 s governs);
+    V > 500 -> one of s8.3.2.3.1.2 / .1.3 / .1.4 must be elected (s8.3.2.3.1 = four alternatives, not tiers).
+    Dry (held 2019 s8.2.3.3/.4, 2025 s8.2.4.2.1/.2): V <= 500 no test; <= 750 with QOD no test; else legacy label.
+    Label only: no numeric output depends on this."""
+    thr = 500.0 + 1e-9
+    if st == "di":
+        if v <= thr:
+            return (f"≤500 gal DI no-water-delivery-test threshold (NFPA 13-{ed} §8.3.2.3.1.1) — FM 30 s governs "
+                    "(a threshold, not a cap; §8.3.2.3.1.2–.1.4 apply only if elected)"), True
+        return (f"NFPA 13-{ed} s8.3.2.3.1.2 (60 s) / s8.3.2.3.1.3 (calc, {cites['di_calc_sec']}) / s8.3.2.3.1.4 "
+                f"({cites['di_table_sec']}) — one path must be elected (s8.3.2.3.1 = four alternatives, not tiers); "
+                "QOD s8.3.2.3.2 may help"), False
+    if v <= thr:
+        return (f"≤500 gal dry-pipe no-water-delivery-test threshold (NFPA 13-{ed} {cites['dry_le500_sec']}, no QOD) — "
+                "FM 30 s governs (a threshold, not a cap)"), True
+    if qod and v <= 750.0 + 1e-9:
+        return (f"≤750 gal dry-pipe with QOD no-water-delivery-test threshold (NFPA 13-{ed} {cites['dry_le750_sec']}) — "
+                "FM 30 s governs (a threshold, not a cap; confirm dry-pipe, not DI)"), True
+    return None, False
 
 
 def di_trip_to_water(v_gal: Number, q_fill_gpm: Number, t_detect_s: Number = 0.0,
@@ -593,9 +624,16 @@ def di_trip_to_water(v_gal: Number, q_fill_gpm: Number, t_detect_s: Number = 0.0
     2019 s8.2.3.2 / 2025 s8.2.4.2) | "dry" (same) | "di" (aliases double-interlock / double_interlock /
     di_preaction): note_60s_option cites the DI 60 s option, NFPA 13 s8.3.2.3.1.2. Label only: no numeric
     output depends on system_type. Any other value raises CalcError.
+    with system_type "di" the note is VOLUME-aware (V <= 500 gal: s8.3.2.3.1.1 no-delivery-test
+    threshold, not a cap; V > 500: s8.3.2.3.1.2/.1.3/.1.4, one path elected); explicit "dry" with V <= 500 gal gets
+    the dry <=500 wording (2019 s8.2.3.3 / 2025 s8.2.4.2.1). system_type None stays byte-identical (legacy dry label).
+    with system_type None the output ALSO carries the additive key system_type_default_warning
+    ("DEFAULT USED: no system_type -> dry-pipe cite; pass system_type='di' for DI"); absent when system_type is given;
+    note_60s_option, the dry default label and every number/verdict unchanged.
     """
     ed = _parse_nfpa13_dry_edition(edition)
     cites = _nfpa13_dry_cites(ed)
+    _st_cite = None
     if system_type is None:
         di_note = False
     else:
@@ -604,6 +642,7 @@ def di_trip_to_water(v_gal: Number, q_fill_gpm: Number, t_detect_s: Number = 0.0
         if _st not in ("dry", "di"):
             raise CalcError("system_type must be None, 'dry' or 'di' (wet/dry/DI locks)")
         di_note = _st == "di"
+        _st_cite = _st
     v = _require_positive("v_gal", v_gal); qf = _require_positive("q_fill_gpm", q_fill_gpm)
     td = _require_non_negative("t_detect_s", t_detect_s); tr = _require_non_negative("t_release_s", t_release_s)
     te = _require_non_negative("t_exhaust_s", t_exhaust_s)
@@ -621,12 +660,20 @@ def di_trip_to_water(v_gal: Number, q_fill_gpm: Number, t_detect_s: Number = 0.0
         table_cite = cites["dry_du_cite"] if src == "NFPA-DU" else cites["dry_table_cite"]
     else:
         table_cite = "FM DS 5-32 provisional 30 s (design practice)" if src == "FM" else "explicit limit_s"
-    return {"formula": "t = t_det + t_rel + t_exh + 60*V/Q_fill (screen, optimistic)", "t_fill_s": tf,
-            "t_total_s": t, "limit_s": lim, "limit_basis": src, "margin_s": lim - t,
-            "passes_screen": t <= lim + 1e-9, "v_max_gal_at_limit": max(v_max, 0.0),
-            "edition": ed, "nfpa_table_cite": table_cite,
-            "note_60s_option": cites["di_60s_cite" if di_note else "dry_60s_cite"]
-                               + " — screen does not auto-elect this path"}
+    _nb, _thr = _delivery_cite_note(_st_cite, v, cites, ed) if _st_cite else (None, False)
+    if _nb is not None:
+        _note = _nb if _thr else _nb + " — screen does not auto-elect this path"
+    else:
+        _note = cites["di_60s_cite" if di_note else "dry_60s_cite"] + " — screen does not auto-elect this path"
+    out = {"formula": "t = t_det + t_rel + t_exh + 60*V/Q_fill (screen, optimistic)", "t_fill_s": tf,
+           "t_total_s": t, "limit_s": lim, "limit_basis": src, "margin_s": lim - t,
+           "passes_screen": t <= lim + 1e-9, "v_max_gal_at_limit": max(v_max, 0.0),
+           "edition": ed, "nfpa_table_cite": table_cite,
+           "note_60s_option": _note}
+    if system_type is None:
+        # additive key only; legacy note_60s_option / dry-pipe default label stay byte-identical.
+        out["system_type_default_warning"] = "DEFAULT USED: no system_type \u2192 dry-pipe cite; pass system_type='di' for DI"
+    return out
 
 
 def seismic_fp(sds: Number, ip: Number, wp: Number, z_over_h: Number = 1.0,
@@ -947,6 +994,9 @@ def dry_delivery_screen(segments: Any, q_fill_gpm: Number, qod: Any = False,
     does not extend DI size (s8.3.2.3.2). The 60 s test-connection OPTION is NOT auto-granted
     when volume exceeds the size exemption (caller must elect that path separately).
     FM DS 5-32 provisional 30 s default still applies when basis=FM (design practice).
+    note_60s_option is VOLUME-aware (DI <=500 gal s8.3.2.3.1.1 threshold; DI >500 elected
+    .1.2/.1.3/.1.4; dry <=500 / <=750 with QOD -> 2019 s8.2.3.3/.4, 2025 s8.2.4.2.1/.2; dry above that keeps the
+    path-specific s8.2.3.2 / s8.2.4.2 label). Label only; all numerics and verdicts unchanged.
     edition default 2025 (backward compatible); 2019|2025 only.
     declared_interlock: None (default, unchanged) | "none" |
     "double". "double" with system_type="dry" -> CalcError (a DI zone typed 'dry' would get the dry-pipe
@@ -978,10 +1028,14 @@ def dry_delivery_screen(segments: Any, q_fill_gpm: Number, qod: Any = False,
     trip = di_trip_to_water(v, q_fill_gpm, t_detect_s, t_release_s, t_exhaust_s, limit_s, basis, edition=ed,
                             system_type=st)
     nb = cites["di_size_cite"] if st == "di" else cites["dry_size_cite"]
+    _vb, _vthr = _delivery_cite_note(st, v, cites, ed, q)      # volume-aware cite
+    if _vb is not None:
+        _n60 = _vb if _vthr else _vb + " — not auto-granted by size-exemption screen"
+    else:
+        _n60 = cites["di_60s_cite" if st == "di" else "dry_60s_cite"] + " — not auto-granted by size-exemption screen"
     out = {"volume_gal": v, "system_type": st, "qod": q, "nfpa_size_cap_gal": cap,
            "nfpa_size_threshold_gal": cap, "nfpa_delivery_time_exempt": exempt, "nfpa_basis": nb, "edition": ed,
-           "note_60s_option": cites["di_60s_cite" if st == "di" else "dry_60s_cite"]
-                              + " — not auto-granted by size-exemption screen"}
+           "note_60s_option": _n60}
     out.update({k: trip[k] for k in ("t_fill_s", "t_total_s", "limit_s", "limit_basis",
                                       "margin_s", "passes_screen", "v_max_gal_at_limit",
                                       "nfpa_table_cite")})
@@ -1775,7 +1829,13 @@ def obscuration_sc(
         out.update({"sc": sc_v, "sh_eff": sh_eff, "passes_sc": passes})
     if sc_min is not None:
         scmin = _require_positive("sc_min", sc_min)
-        n_max = int(sh_v // scmin)  # floor
+        # float `sh_v // scmin` is NOT the exact floor at decimal multiples
+        # (0.3 // 0.01 == 29.0 though 0.3/0.01 == 30.000000000000004-ish to 1e-15; 0.3/0.1 -> 2.9999999999999996).
+        # Tolerant floor: floor(Sh/Sc_min + 1e-9). The quotient is rounded to the integer it sits within
+        # 1e-9 of (same eps family as the other floor/ceil sites below, eps=1e-9), exact elsewhere. This keeps
+        # passes_n consistent with passes_sc (which already carries +1e-15) at the Sc == Sc_min boundary.
+        import math
+        n_max = int(math.floor(sh_v / scmin + 1e-9))
         out.update({
             "sc_min": scmin,
             "n_max_at_sc_min": n_max,
@@ -2021,6 +2081,12 @@ def remote_area_rectangle(
             out["heads_fit_parallel"] = spacings
             out["heads_fit_parallel_basis"] = ("spacing count floor(Rp/S), NOT a head count; pass wall_offset_ft "
                                                "for heads = floor((Rp-2w)/S)+1")
+            # explicit guard; wall_offset_ft stays OPTIONAL.
+            out["heads_fit_parallel_warning"] = (
+                f"DEFAULT USED: wall_offset_ft omitted -> heads_fit_parallel = spacing count floor(Rp/S) = "
+                f"floor({Rp:g}/{S:g}) = {spacings}, NOT a head count; a wall-offset head count "
+                "floor((Rp-2w)/S)+1 may differ (example: Rp 75 ft, S 11.00 ft, wall_offset_ft 4.5 gives 7, "
+                "spacing count 6) - pass wall_offset_ft (caller input, not a code value)")
         else:
             w = _require_non_negative("wall_offset_ft", wall_offset_ft)
             avail = Rp - 2.0 * w

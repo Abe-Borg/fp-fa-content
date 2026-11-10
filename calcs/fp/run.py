@@ -290,7 +290,7 @@ OUTPUT_ORDER = {
     "pipe_volume": ["segments_detail", "volume_gal", "volume_ft3"],
     "k_factor": ["q_gpm", "p_psi", "q_req_gpm", "k_si", "min_p_psi", "floor_governs"],
     "tapered_branch": ["nodes_detail", "q_inlet_gpm", "p_inlet_psi", "k_equiv_inlet", "end_head_ok"],
-    "di_trip_to_water": ["t_fill_s", "t_total_s", "limit_s", "limit_basis", "margin_s", "passes_screen", "v_max_gal_at_limit", "edition", "nfpa_table_cite", "note_60s_option"],
+    "di_trip_to_water": ["t_fill_s", "t_total_s", "limit_s", "limit_basis", "margin_s", "passes_screen", "v_max_gal_at_limit", "edition", "nfpa_table_cite", "note_60s_option", "system_type_default_warning"],
     "seismic_fp": ["hf", "r_mu_used", "fp_raw", "fp_min", "fp_max", "fp", "fp_over_wp"],
     "electric_overpressure": ["elevation_adj_psi", "churn_max_psi", "component_rating_psi", "churn_ok_4771", "churn_margin_psi", "vs_max_psi", "vs_ok_47732", "vs_margin_psi", "relief_credited", "compliant", "compliance_path", "basis"],
     "diesel_derate": ["alt_deduction_pct", "temp_deduction_pct", "total_deduction_pct", "derate_factor", "required_engine_hp", "nameplate_hp", "derated_hp", "engine_ok", "deficit_hp", "basis"],
@@ -314,7 +314,7 @@ OUTPUT_ORDER = {
     "obscuration_sc": ["sh", "n_ports", "unit", "sc_max", "sc_req_max", "sc", "sh_eff", "passes_sc", "sc_min", "n_max_at_sc_min", "passes_n", "gap_b33r8_1", "port_layout", "basis"],
     "sprinkler_grid_coverage": ["n_heads", "area_per_head_ft2", "edge_area_per_head_ft2_v", "edge_area_ok", "edge_area_rule", "wall_compare", "max_directional_spacing_ft", "x_last_branch_ft", "y_last_head_ft", "wall_x0_ft", "wall_x1_ft", "wall_y0_ft", "wall_y1_ft", "max_wall_dist_actual_ft", "covered_x_ft", "covered_y_ft", "uncovered_x_ft", "uncovered_y_ft", "coverage_x_pct", "coverage_y_pct", "spacing_ok", "area_ok", "coverage_ok", "wall_ok", "min_spacing_ok", "passes", "fail_reasons", "basis"],
     "pipe_velocity": ["v_fps", "q_gpm", "id_in", "nominal", "schedule", "id_source", "k_const", "k_const_derived", "flow_area_in2", "limit_fps", "limit_source", "v_minus_limit_fps", "v_over_limit", "nfpa13_cite", "friction_method_note", "basis"],
-    "remote_area_rectangle": ["sqrt_a_ft", "required_length_parallel_ft", "heads_per_branch_raw", "heads_per_branch_v", "length_provided_parallel_ft_v", "area_per_head_ft2", "n_heads_raw", "n_heads_v", "n_branches_v", "heads_on_last_branch_v", "width_perp_ft_v", "heads_area_ft2_v", "rectangle_area_ft2_v", "room_length_parallel_ft", "heads_fit_parallel", "spacings_fit_parallel", "heads_fit_parallel_basis", "wall_offset_ft", "length_between_end_heads_ft", "shortfall_parallel_ft", "room_short_parallel", "room_width_perp_ft", "room_narrow_perp", "fits_room", "both_sides_of_cross_main", "warnings", "elects_remote_area", "basis"],
+    "remote_area_rectangle": ["sqrt_a_ft", "required_length_parallel_ft", "heads_per_branch_raw", "heads_per_branch_v", "length_provided_parallel_ft_v", "area_per_head_ft2", "n_heads_raw", "n_heads_v", "n_branches_v", "heads_on_last_branch_v", "width_perp_ft_v", "heads_area_ft2_v", "rectangle_area_ft2_v", "room_length_parallel_ft", "heads_fit_parallel", "spacings_fit_parallel", "heads_fit_parallel_basis", "heads_fit_parallel_warning", "wall_offset_ft", "length_between_end_heads_ft", "shortfall_parallel_ft", "room_short_parallel", "room_width_perp_ft", "room_narrow_perp", "fits_room", "both_sides_of_cross_main", "warnings", "elects_remote_area", "basis"],
 }
 
 UNITS = {
