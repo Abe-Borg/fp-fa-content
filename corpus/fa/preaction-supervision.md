@@ -8,9 +8,9 @@ Provide an extra detector for test on each circuit at an accessible location (NF
 
 NFPA 13 requires a hydraulic, pneumatic, or mechanical manual means that operates the preaction valve independent of the detectors and independent of the sprinklers (NFPA 13-2025 §8.3.1.4; NFPA 13-2022 §8.3.1.2). That is the emergency release on the valve trim. It is not the same device as a manual-release input on the releasing panel.
 
-The emergency handle, or the equivalent hydraulic or mechanical release at the valve, vents the priming chamber and opens the valve without waiting for the panel low-air interlock. Water then enters the sprinkler piping and stays there until a sprinkler opens. A test that pulls that handle will open the valve while supervisory pressure is still up. Do not expect the air in the pipe to hold the valve shut.
+The emergency handle, or the equivalent hydraulic or mechanical release at the valve, vents the priming chamber and opens the valve without waiting for the panel's release logic (detection and P, the pressure drop from sprinkler operation). Water then enters the sprinkler piping and stays there until a sprinkler opens. A test that pulls that handle will open the valve while supervisory pressure is still up. Do not expect the air in the pipe to hold the valve shut.
 
-A manual-release input on the releasing panel is a substitute for the detection leg. On double-interlock that input still needs loss of supervisory pressure before the solenoid releases water. It does not replace the emergency handle, and the emergency handle does not follow the panel's two-leg program.
+A manual-release input on the releasing panel is a substitute for the detection leg. On double-interlock that input still needs P. On electric/electric trim the panel ANDs P with the detection leg before the solenoid releases water. On electric/pneumatic trim the solenoid follows the detection leg at the panel and the valve actuator gates P. Low air is supervisory only and never stands in for P. It does not replace the emergency handle, and the emergency handle does not follow the panel's two-leg program.
 
 Read the opened trim sheet for which device is which. Do not treat them as one switch.
 

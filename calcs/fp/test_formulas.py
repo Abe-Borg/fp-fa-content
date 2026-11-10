@@ -2252,7 +2252,7 @@ class KernelResidualsTests(unittest.TestCase):
     (1) obscuration_sc N_max uses an exact Decimal quotient (shortest-round-trip
         decimal of each float, then floor) instead of floor(Sh/Sc_min + 1e-9).
         Includes the boundary regression obscuration_sc(0.3, 30, 'pct_obs_per_ft',
-        sc=0.01, sc_min=0.01) -> n_max 30. The open trip-tier hold is untouched.
+        sc=0.01, sc_min=0.01) -> n_max 30. GAP-B33R8-1 HOLD untouched.
     (2) dry_delivery_screen: system_type default is None; output system_type stays
         "dry"; additive system_type_default_warning ("DEFAULT USED") is present only
         when system_type is omitted. Existing keys/values stay byte-identical.
@@ -2353,6 +2353,112 @@ class KernelResidualsTests(unittest.TestCase):
             self.assertEqual(o["nfpa_size_cap_gal"], o["nfpa_size_threshold_gal"])
         self.assertIn("legacy alias of nfpa_size_threshold_gal", d.__doc__)
         self.assertIn("not a cap", d.__doc__)
+
+
+
+class VBasisDecimalTests(unittest.TestCase):
+    """Additive v_basis on di_trip_to_water; Decimal typed vs computed residue."""
+
+    def test_1_v_basis_hand_checked_pipe_only(self):
+        from formulas import di_trip_to_water
+        import run
+        # Hand check: V=200 gal, Q=800 gpm, all sub-times 0.
+        # t_fill = 60*200/800 = 15 s; t_total = 15 s.
+        # NFPA-OH limit = 50 s (held table); margin = 35 s; pass.
+        r = di_trip_to_water(200, 800, 0, 0, 0, basis="NFPA-OH", edition=2025,
+                             system_type="di", v_basis="pipe-only")
+        self.assertEqual(r["t_fill_s"], 15.0)
+        self.assertEqual(r["t_total_s"], 15.0)
+        self.assertEqual(r["limit_s"], 50.0)
+        self.assertEqual(r["limit_basis"], "NFPA-OH")
+        self.assertEqual(r["margin_s"], 35.0)
+        self.assertTrue(r["passes_screen"])
+        self.assertEqual(r["v_basis"], "pipe-only")
+        self.assertIn("V tested is pipe-only trapped volume, not V_allow", r["note_60s_option"])
+        self.assertIn("§8.3.2.3.1.1", r["note_60s_option"])
+        # existing keys on an omitted call stay equal (label only)
+        base = di_trip_to_water(200, 800, 0, 0, 0, basis="NFPA-OH", edition=2025, system_type="di")
+        self.assertNotIn("v_basis", base)
+        for k, v in base.items():
+            self.assertEqual(r[k], v, k)
+        self.assertEqual(set(r) - set(base), {"v_basis"})
+        self.assertIn("v_basis", run.OUTPUT_ORDER["di_trip_to_water"])
+
+    def test_2_v_basis_caller_and_v_allow_do_not_claim_pipe_only(self):
+        from formulas import di_trip_to_water, CalcError
+        base = di_trip_to_water(200, 800, 0, 0, 0, basis="NFPA-OH", edition=2025, system_type="di")
+        caller = di_trip_to_water(200, 800, 0, 0, 0, basis="NFPA-OH", edition=2025,
+                                  system_type="di", v_basis="caller")
+        allow = di_trip_to_water(200, 800, 0, 0, 0, basis="NFPA-OH", edition=2025,
+                                 system_type="di", v_basis="v_allow")
+        self.assertEqual(caller["v_basis"], "caller")
+        self.assertEqual(allow["v_basis"], "v_allow")
+        self.assertNotIn("V tested is pipe-only", caller["note_60s_option"])
+        self.assertNotIn("V tested is pipe-only", allow["note_60s_option"])
+        self.assertIn("caller-supplied", caller["note_60s_option"])
+        self.assertIn("not labelled pipe-only", caller["note_60s_option"])
+        self.assertIn("V tested is V_allow", allow["note_60s_option"])
+        self.assertIn("not pipe-only trapped volume", allow["note_60s_option"])
+        # numbers/verdicts unchanged vs omitted (cite string + new key only)
+        for other in (caller, allow):
+            self.assertEqual(set(other) - {"v_basis"}, set(base))
+            for k in set(base) - {"note_60s_option"}:
+                self.assertEqual(other[k], base[k], k)
+        # aliases + reject
+        self.assertEqual(
+            di_trip_to_water(200, 800, system_type="di", v_basis="pipe_only")["v_basis"],
+            "pipe-only",
+        )
+        with self.assertRaises(CalcError):
+            di_trip_to_water(200, 800, system_type="di", v_basis="zone_gal")
+        # FM notes do not claim pipe-only today; explicit caller appends the clause
+        fm_caller = di_trip_to_water(200, 800, system_type="di", basis="FM", v_basis="caller")
+        self.assertNotIn("V tested is pipe-only", fm_caller["note_60s_option"])
+        self.assertIn("caller-supplied", fm_caller["note_60s_option"])
+        self.assertEqual(fm_caller["limit_s"], 30.0)
+        self.assertEqual(fm_caller["v_basis"], "caller")
+
+    def test_3_v_basis_omitted_keeps_existing_keys_byte_identical(self):
+        from formulas import di_trip_to_water
+        # Frozen contract: omitted v_basis adds no key
+        # and keeps the pipe-only V wording on the non-FM threshold note.
+        r = di_trip_to_water(200, 800, 0, 0, 0, basis="NFPA-OH", edition=2025, system_type="di")
+        self.assertNotIn("v_basis", r)
+        self.assertIn("V tested is pipe-only trapped volume, not V_allow", r["note_60s_option"])
+        self.assertEqual(r["t_total_s"], 15.0)
+        self.assertEqual(r["limit_s"], 50.0)
+        self.assertTrue(r["passes_screen"])
+        # FM notes stay byte-identical (no V clause)
+        fm = di_trip_to_water(200, 800, 0, 0, 0, basis="FM", edition=2025, system_type="di")
+        self.assertNotIn("v_basis", fm)
+        self.assertNotIn("pipe-only", fm["note_60s_option"])
+        self.assertIn("FM 30 s governs", fm["note_60s_option"])
+
+    def test_4_decimal_floor_typed_vs_computed_residue(self):
+        """Pins current exact-Decimal behaviour. Expected to PASS on the kernel before v_basis
+        (documentation + characterization; no tolerance is added)."""
+        import math
+        from decimal import Decimal, ROUND_FLOOR
+        from formulas import _decimal_floor_quotient
+        # Typed inputs (hand-checked): shortest-round-trip Decimal is exact.
+        for numer, denom, want in [(0.3, 0.01, 30), (0.7, 0.1, 7), (0.3, 0.1, 3),
+                                   (0.6, 0.2, 3), (1.0, 0.05, 20), (0.2, 0.009, 22)]:
+            self.assertEqual(_decimal_floor_quotient(numer, denom), want, (numer, denom))
+            self.assertEqual(
+                int((Decimal(str(numer)) / Decimal(str(denom))).to_integral_value(rounding=ROUND_FLOOR)),
+                want,
+            )
+        # Computed residue: 0.7-0.4 is 0.29999999999999993, not 0.3.
+        residue = 0.7 - 0.4
+        self.assertEqual(residue, 0.29999999999999993)
+        self.assertEqual(str(float(residue)), "0.29999999999999993")
+        self.assertNotEqual(residue, 0.3)
+        got = _decimal_floor_quotient(residue, 0.1)
+        self.assertEqual(got, 2)  # current exact-Decimal behaviour
+        old_eps = int(math.floor(residue / 0.1 + 1e-9))
+        self.assertEqual(old_eps, 3)  # retired residual; we do not restore it
+        # typed 0.3 / 0.1 still 3 — contrast with the computed residue
+        self.assertEqual(_decimal_floor_quotient(0.3, 0.1), 3)
 
 
 if __name__ == "__main__":

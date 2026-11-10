@@ -580,8 +580,44 @@ def _nfpa13_dry_cites(edition: int) -> dict[str, str]:
     }
 
 
+
+_V_BASIS_ALIASES = {
+    "pipe_only": "pipe-only",
+    "pipeonly": "pipe-only",
+    "v_allow": "v_allow",
+    "vallow": "v_allow",
+    "caller": "caller",
+    "caller_supplied": "caller",
+    "callersupplied": "caller",
+}
+
+
+def _normalize_v_basis(v_basis: Any) -> Any:
+    """None stays omitted. Else 'pipe-only' / 'v_allow' / 'caller' (aliases accepted)."""
+    if v_basis is None:
+        return None
+    raw = str(v_basis).strip().lower().replace("-", "_").replace(" ", "_")
+    if raw not in _V_BASIS_ALIASES:
+        raise CalcError("v_basis must be None, 'pipe-only', 'v_allow' or 'caller'")
+    return _V_BASIS_ALIASES[raw]
+
+
+def _v_basis_clause(v_basis: Any) -> str:
+    """Which V the <=500 / <=750 test used. None and pipe-only keep the pipe-only clause."""
+    if v_basis in (None, "pipe-only"):
+        return ("V tested is pipe-only trapped volume, not V_allow "
+                "(= pipe × 1.05 + 5 gal, ASSUMED; verify with engineer of record)")
+    if v_basis == "v_allow":
+        return ("V tested is V_allow (= pipe × 1.05 + 5 gal, ASSUMED; verify with engineer of record), "
+                "not pipe-only trapped volume")
+    if v_basis == "caller":
+        return ("V tested is caller-supplied v_gal (v_basis=caller), "
+                "not labelled pipe-only")
+    raise CalcError("v_basis must be None, 'pipe-only', 'v_allow' or 'caller'")
+
+
 def _delivery_cite_note(st: str, v: float, cites: dict, ed: int, qod: bool = False,
-                        basis: str = "FM") -> tuple[Any, bool]:
+                        basis: str = "FM", v_basis: Any = None) -> tuple[Any, bool]:
     """Volume-aware, basis-aware delivery-time cite.
     Returns (note_body, is_threshold); (None, False) = keep legacy label.
 
@@ -592,18 +628,27 @@ def _delivery_cite_note(st: str, v: float, cites: dict, ed: int, qod: bool = Fal
     explicit limit_s (limit_basis "explicit") cite the held NFPA 13 path only — they do not claim FM 30 s.
     The <=500 / <=750 test uses the caller-supplied V, which in di_trip_to_water and dry_delivery_screen
     is pipe-only trapped volume, not V_allow (= pipe x 1.05 + 5 gal, ASSUMED; verify with engineer of record).
-    Label only: no numeric output depends on this. FM-basis threshold notes stay byte-identical."""
+    Label only: no numeric output depends on this. FM-basis threshold notes stay byte-identical.
+    Optional v_basis (None / pipe-only / v_allow / caller) selects the V-tested clause.
+    None and pipe-only keep the wording. v_allow and caller must not claim pipe-only.
+    FM-basis threshold notes stay byte-identical when v_basis is omitted or pipe-only (no V
+    clause); an explicit v_allow / caller appends the clause so the note does not imply pipe-only."""
     thr = 500.0 + 1e-9
     key = str(basis).upper()
     key = "NFPA-OH" if key == "NFPA" else key
     claim_fm = key == "FM"
-    v_clause = ("V tested is pipe-only trapped volume, not V_allow "
-                "(= pipe × 1.05 + 5 gal, ASSUMED; verify with engineer of record)")
+    vb = _normalize_v_basis(v_basis) if v_basis is not None else None
+    v_clause = _v_basis_clause(vb)
+    # Append the non-pipe-only clause onto FM notes (which otherwise never mention V)
+    # so an explicit v_allow / caller cannot be read as pipe-only. Omitted / pipe-only
+    # FM notes stay byte-identical (no V clause).
+    attach_fm = vb in ("v_allow", "caller")
     if st == "di":
         if v <= thr:
             if claim_fm:
-                return (f"≤500 gal DI no-water-delivery-test threshold (NFPA 13-{ed} §8.3.2.3.1.1) — FM 30 s governs "
-                        "(a threshold, not a cap; §8.3.2.3.1.2–.1.4 apply only if elected)"), True
+                _fm = (f"≤500 gal DI no-water-delivery-test threshold (NFPA 13-{ed} §8.3.2.3.1.1) — FM 30 s governs "
+                       "(a threshold, not a cap; §8.3.2.3.1.2–.1.4 apply only if elected)")
+                return ((_fm + f"; {v_clause}") if attach_fm else _fm), True
             return (f"≤500 gal DI no-water-delivery-test threshold (NFPA 13-{ed} §8.3.2.3.1.1) — "
                     f"a threshold, not a cap; §8.3.2.3.1.2–.1.4 apply only if elected; {v_clause}"), True
         return (f"NFPA 13-{ed} s8.3.2.3.1.2 (60 s) / s8.3.2.3.1.3 (calc, {cites['di_calc_sec']}) / s8.3.2.3.1.4 "
@@ -611,14 +656,16 @@ def _delivery_cite_note(st: str, v: float, cites: dict, ed: int, qod: bool = Fal
                 "QOD s8.3.2.3.2 may help"), False
     if v <= thr:
         if claim_fm:
-            return (f"≤500 gal dry-pipe no-water-delivery-test threshold (NFPA 13-{ed} {cites['dry_le500_sec']}, no QOD) — "
-                    "FM 30 s governs (a threshold, not a cap)"), True
+            _fm = (f"≤500 gal dry-pipe no-water-delivery-test threshold (NFPA 13-{ed} {cites['dry_le500_sec']}, no QOD) — "
+                   "FM 30 s governs (a threshold, not a cap)")
+            return ((_fm + f"; {v_clause}") if attach_fm else _fm), True
         return (f"≤500 gal dry-pipe no-water-delivery-test threshold (NFPA 13-{ed} {cites['dry_le500_sec']}, no QOD) — "
                 f"a threshold, not a cap; {v_clause}"), True
     if qod and v <= 750.0 + 1e-9:
         if claim_fm:
-            return (f"≤750 gal dry-pipe with QOD no-water-delivery-test threshold (NFPA 13-{ed} {cites['dry_le750_sec']}) — "
-                    "FM 30 s governs (a threshold, not a cap; confirm dry-pipe, not DI)"), True
+            _fm = (f"≤750 gal dry-pipe with QOD no-water-delivery-test threshold (NFPA 13-{ed} {cites['dry_le750_sec']}) — "
+                   "FM 30 s governs (a threshold, not a cap; confirm dry-pipe, not DI)")
+            return ((_fm + f"; {v_clause}") if attach_fm else _fm), True
         return (f"≤750 gal dry-pipe with QOD no-water-delivery-test threshold (NFPA 13-{ed} {cites['dry_le750_sec']}) — "
                 f"a threshold, not a cap; confirm dry-pipe, not DI; {v_clause}"), True
     return None, False
@@ -627,7 +674,8 @@ def _delivery_cite_note(st: str, v: float, cites: dict, ed: int, qod: bool = Fal
 def di_trip_to_water(v_gal: Number, q_fill_gpm: Number, t_detect_s: Number = 0.0,
                      t_release_s: Number = 0.0, t_exhaust_s: Number = 0.0,
                      limit_s: Any = None, basis: str = "FM",
-                     edition: Any = 2025, system_type: Any = None) -> dict[str, Any]:
+                     edition: Any = 2025, system_type: Any = None,
+                     v_basis: Any = None) -> dict[str, Any]:
     """SCREEN ONLY - not a listed water-delivery calc.
 
     t_total = t_detect + t_release + t_exhaust + 60 * V / Q_fill.
@@ -654,6 +702,12 @@ def di_trip_to_water(v_gal: Number, q_fill_gpm: Number, t_detect_s: Number = 0.0
     with system_type None the output ALSO carries the additive key system_type_default_warning
     ("DEFAULT USED: no system_type -> dry-pipe cite; pass system_type='di' for DI"); absent when system_type is given;
     note_60s_option, the dry default label and every number/verdict unchanged.
+        Optional v_basis (None / 'pipe-only' / 'v_allow' / 'caller'; aliases accepted).
+    When omitted, every existing key/value stays byte-identical and the v_basis output key is
+    absent (the non-FM threshold note still says the <=500 test used pipe-only V). When
+    given, the additive output key reports the label and is threaded through _delivery_cite_note.
+    The cite note must not claim "pipe-only" for v_allow or caller. Label only: no numeric or
+    verdict output depends on v_basis.
     """
     ed = _parse_nfpa13_dry_edition(edition)
     cites = _nfpa13_dry_cites(ed)
@@ -684,7 +738,8 @@ def di_trip_to_water(v_gal: Number, q_fill_gpm: Number, t_detect_s: Number = 0.0
         table_cite = cites["dry_du_cite"] if src == "NFPA-DU" else cites["dry_table_cite"]
     else:
         table_cite = "FM DS 5-32 provisional 30 s (design practice)" if src == "FM" else "explicit limit_s"
-    _nb, _thr = _delivery_cite_note(_st_cite, v, cites, ed, basis=src) if _st_cite else (None, False)
+    _vb = _normalize_v_basis(v_basis)
+    _nb, _thr = _delivery_cite_note(_st_cite, v, cites, ed, basis=src, v_basis=_vb) if _st_cite else (None, False)
     if _nb is not None:
         _note = _nb if _thr else _nb + " — screen does not auto-elect this path"
     else:
@@ -697,6 +752,9 @@ def di_trip_to_water(v_gal: Number, q_fill_gpm: Number, t_detect_s: Number = 0.0
     if system_type is None:
         # additive key only; legacy note_60s_option / dry-pipe default label stay byte-identical.
         out["system_type_default_warning"] = "DEFAULT USED: no system_type \u2192 dry-pipe cite; pass system_type='di' for DI"
+    if _vb is not None:
+        # Additive key only; omitted callers keep every existing key/value byte-identical.
+        out["v_basis"] = _vb
     return out
 
 
@@ -1797,7 +1855,21 @@ def fus_rff(
 
 def _decimal_floor_quotient(numer: Number, denom: Number) -> int:
     """Floor of numer/denom using the shortest-round-trip decimal of each float
-. Avoids the binary residue of Sh/Sc_min and the float-eps residual.
+    (documents the typed-input vs computed-residue edge).
+
+    Each side is Decimal(str(float(x))), then ROUND_FLOOR. Typed decimal inputs
+    that survive str(float(...)) as their exact short decimal (0.3/0.01 → 30,
+    0.7/0.1 → 7, 0.3/0.1 → 3, 0.6/0.2 → 3, 1.0/0.05 → 20, and the 0.2/0.009
+    leftover → 22) are exact.
+
+    Computed residue is different. A binary intermediate such as 0.7 - 0.4
+    equals 0.29999999999999993, not 0.3; str(float(0.7-0.4)) is
+    '0.29999999999999993', so (0.7-0.4)/0.1 floors to 2. The retired
+    float-eps residual would have returned 3. This helper does not add
+    a tolerance to restore that promotion. Callers that need an exact decimal
+    should pass a typed decimal (or a value that round-trips through str(float)),
+    not a binary difference. obscuration_sc corpus inputs are typed, so this
+    edge does not change stored jobs.
     """
     q = Decimal(str(float(numer))) / Decimal(str(float(denom)))
     return int(q.to_integral_value(rounding=ROUND_FLOOR))
@@ -1883,7 +1955,7 @@ def obscuration_sc(
         # Replace the floor(Sh/Sc_min + 1e-9) residual with an exact Decimal
         # quotient (shortest-round-trip decimal of each float, then floor). Exact decimal
         # multiples (0.3/0.01, 0.3/0.1, 0.7/0.1, 0.6/0.2, 1.0/0.05, earlier cases) are exact;
-        # non-boundary values unchanged. The open trip-tier hold is untouched. passes_n stays consistent
+        # non-boundary values unchanged. GAP-B33R8-1 HOLD untouched. passes_n stays consistent
         # with passes_sc at the Sc == Sc_min exact-decimal boundary.
         n_max = _decimal_floor_quotient(sh_v, scmin)
         out.update({

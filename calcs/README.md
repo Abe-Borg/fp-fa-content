@@ -13,12 +13,13 @@ Deterministic fire-protection and fire-alarm math. The desktop app loads `calcs/
 | `test_formulas.py` | Kernel tests. Run from this folder: `python -m unittest test_formulas` |
 | `test_di_zone.py` | Zone-screen tests, including the second-leg label tests (`p_second_leg`, deprecated `low_air` alias) |
 | `test_pack_local.py` | Finite-number guard and fill-basis label tests |
+| `test_pack_content_lowair.py` | Scans `corpus/` and `specs/` for wording that makes low air a release input; release is detection and P |
 
-The kernel file in this tree has 211 tests. `test_pack_local.py` adds 3 more for the finite-number guard and the two-basis fill labels, which this pack keeps on top of the kernel.
+The kernel file in this tree has 215 tests. `test_pack_local.py` adds 3 more for the finite-number guard and the two-basis fill labels, which this pack keeps on top of the kernel.
 
 `di_zone.py` loads `formulas.py` and `pipe_ids.py` from its own directory, so a content pack can replace `calcs/fp` without installing a package.
 
-The delivery-time functions are an optimistic screen (trip time plus volume over fill flow). They are not a listed water-delivery-time calculation. On double-interlock the 500 gallon size threshold is not raised by a quick-opening device. Above it, a 60 second test-connection option or a listed calculation is the path; the screen does not pick one. The cite note follows the volume: at or under 500 gallons it is a no-delivery-test threshold; above 500 gallons one of the alternative paths has to be elected.
+The delivery-time functions are an optimistic screen (trip time plus volume over fill flow). They are not a listed water-delivery-time calculation. On double-interlock the 500 gallon size threshold is not raised by a quick-opening device. Above it, a 60 second test-connection option or a listed calculation is the path; the screen does not pick one. `di_trip_to_water` takes an optional `v_basis` (pipe-only, v_allow, or caller) that labels which volume the threshold test used; omitting it changes no existing key or value. The cite note follows the volume: at or under 500 gallons it is a no-delivery-test threshold; above 500 gallons one of the alternative paths has to be elected.
 
 ## `calcs/fa`
 
