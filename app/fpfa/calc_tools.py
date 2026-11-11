@@ -8,10 +8,13 @@ import json
 import sys
 from pathlib import Path
 
+from fpfa import coherence
 from fpfa.corpus_search import search_corpus
 from fpfa.fa_calc import run_fa_calc
 from fpfa.modes_loader import list_modes, read_mode
+from fpfa.inputs import BASIS_FIELDS, BASIS_KIND, GIVEN, INPUT_KIND
 from fpfa.record import CALC_TOOLS, LABELS, Record, RecordError
+from fpfa.releasing import reader_view
 from fpfa.roles_loader import list_roles, read_role
 from fpfa.skills_loader import list_skills, read_skill
 
@@ -35,6 +38,11 @@ def _load(path: Path):
 
 def _obj(properties: dict, required: list[str]) -> dict:
     return {"type": "object", "properties": properties, "required": required}
+
+
+# GIVEN says where a value came from. A finding or a decision is the team's own statement, so it never carries it.
+FINDING_LABELS = tuple(label for label in LABELS if label != GIVEN)
+LEAD = "lead"
 
 
 SCHEMAS = [
@@ -185,7 +193,12 @@ SCHEMAS = [
     },
     {
         "name": "releasing_truth_table",
-        "description": "Build the double-interlock solenoid truth table in code. solenoid = (detection OR manual) AND low air AND NOT isolated. A second smoke zone must not change the result.",
+        "description": (
+            "Build the double-interlock solenoid truth table in code (electric/electric trim). "
+            "solenoid = (detection OR manual) AND P AND NOT isolated. P is the second leg, the pressure "
+            "drop from sprinkler operation (p_second_leg). Low air is supervisory only and is not a "
+            "release input. Quote boolean_p. A second smoke zone must not change the result."
+        ),
         "input_schema": _obj(
             {"manual_station": {"type": "boolean"}, "insurer": {"type": "string"}},
             [],
@@ -254,9 +267,13 @@ SCHEMAS = [
     {
         "name": "record_fact",
         "description": (
-            "Write one basis-of-design fact to this job's project record: AHJ, adopted code and edition, "
-            "insurer, owner standard, or an assumption. label is calculated, ASSUMED, use best judgment, "
-            "or a cite class (CODE, OWNER, PRACTICE, PARA, HB). The record is the source for the export."
+            "Write one basis-of-design fact to this job's project record: an owner standard, a confirmed "
+            "authority or edition, or an assumption. label is calculated, ASSUMED, use best judgment, "
+            "or a cite class (CODE, OWNER, PRACTICE, PARA, HB). GIVEN is for a value the designer stated, and "
+            "only the lead writes it. A new value for a key you wrote before replaces your earlier one. "
+            "A value that differs from another contributor's for the same key is kept beside it and shown as a "
+            "conflict for the lead to settle. The zone inputs and the five basis fields are not written here: "
+            "the lead changes those with set_input. The record is the source for the export."
         ),
         "input_schema": _obj(
             {
@@ -291,34 +308,76 @@ SCHEMAS = [
     {
         "name": "record_finding",
         "description": (
-            "Write one finding to the project record with its label and the ids of the calc records or "
-            "evidence rows that support it. A figure with no calc record id is not calculated."
+            "Write one finding to the project record with its label and the ids of the calc records, "
+            "evidence rows, or facts that support it. A figure with no calc record id is not calculated. "
+            "One statement per finding, so each can be checked and reviewed on its own. To revise a finding "
+            "you wrote earlier, pass its id in replaces: the old one is kept as history and leaves the current set."
         ),
         "input_schema": _obj(
             {
                 "text": {"type": "string"},
-                "label": {"type": "string", "description": "One of: " + ", ".join(LABELS)},
+                "label": {"type": "string", "description": "One of: " + ", ".join(FINDING_LABELS)},
                 "supports": {"type": "array", "description": "Record ids this finding rests on.", "items": {"type": "string"}},
+                "replaces": {"type": "string", "description": "Id of your earlier finding this one takes the place of. Optional."},
             },
             ["text", "label"],
         ),
     },
     {
+        "name": "withdraw_finding",
+        "description": (
+            "Withdraw a finding or a decision you wrote that no longer holds and that you have nothing to put in "
+            "the place of: its basis changed, or an objection to it was right. It stays on the record as history."
+        ),
+        "input_schema": _obj(
+            {"id": {"type": "string", "description": "The finding's id, or the decision's."},
+             "reason": {"type": "string", "description": "Why it no longer holds."}},
+            ["id", "reason"],
+        ),
+    },
+    {
+        "name": "review_finding",
+        "description": (
+            "Record your position on another contributor's finding that touches your work: agree, or object. "
+            "An objection needs a note that says what is wrong and what would settle it. It stays open until "
+            "the author revises or withdraws the finding, or the lead settles it. You do not review your own finding."
+        ),
+        "input_schema": _obj(
+            {
+                "id": {"type": "string", "description": "The finding's id."},
+                "position": {"type": "string", "description": "agree or object"},
+                "note": {"type": "string", "description": "Required for object. Optional for agree."},
+            },
+            ["id", "position"],
+        ),
+    },
+    {
         "name": "open_question",
-        "description": "Write an open question or RFI for the engineer of record to the project record.",
-        "input_schema": _obj({"text": {"type": "string"}}, ["text"]),
+        "description": (
+            "Write a question to the project record. to is engineer (the default) for an RFI the engineer of "
+            "record, the owner, or the authority must settle; it is listed in the design basis. to is designer "
+            "when the team needs the answer from the person using the app before the work can go on: a missing "
+            "input, or a choice only they can make. One question per call."
+        ),
+        "input_schema": _obj(
+            {"text": {"type": "string"}, "to": {"type": "string", "description": "engineer or designer. Default engineer."}},
+            ["text"],
+        ),
     },
     {
         "name": "record_decision",
         "description": (
             "Write an election or a judgment to the project record, with its basis and label. "
-            "A decision the tools did not return is use best judgment."
+            "A decision the tools did not return is use best judgment. To revise a decision you made earlier, "
+            "pass its id in replaces."
         ),
         "input_schema": _obj(
             {
                 "text": {"type": "string"},
-                "label": {"type": "string", "description": "One of: " + ", ".join(LABELS)},
-                "basis": {"type": "string", "description": "Cites or calc record ids behind the decision. Optional."},
+                "label": {"type": "string", "description": "One of: " + ", ".join(FINDING_LABELS)},
+                "basis": {"type": "string", "description": "The reasoning behind the decision, in a sentence. Optional."},
+                "supports": {"type": "array", "description": "Record ids the decision rests on. Optional.", "items": {"type": "string"}},
+                "replaces": {"type": "string", "description": "Id of your earlier decision this one takes the place of. Optional."},
             },
             ["text", "label"],
         ),
@@ -328,8 +387,8 @@ SCHEMAS = [
         "description": (
             "Show this job's project record with row ids: facts, calc records with inputs and outputs, "
             "evidence, findings, decisions, open questions, and pending handoffs. Pass kind for the full "
-            "rows of one table (calcs, evidence, facts, findings, questions, decisions, handoffs, tasks, agents, jobs), "
-            "and id for one row."
+            "rows of one table (calcs, evidence, facts, findings, questions, decisions, handoffs, reviews, tasks, "
+            "agents, jobs), and id for one row."
         ),
         "input_schema": _obj(
             {
@@ -362,6 +421,8 @@ RECORD_TOOLS = frozenset({
     "record_fact",
     "record_evidence",
     "record_finding",
+    "withdraw_finding",
+    "review_finding",
     "open_question",
     "record_decision",
     "read_record",
@@ -418,30 +479,83 @@ class ToolSession:
             found = self.record.find_calc(self.project_id, name, args, self.calc_identity)
             if found is not None:
                 # Same tool, inputs, calc code, and project: count the replay and return the recorded output.
+                # A replay is the same call checked against the inputs as they are now, so its basis is rewritten.
+                depends, varies, departs = self._basis(name, args)
                 row = self.record.record_calc(
                     self.project_id, tool=name, inputs=args, outputs=found["outputs"],
-                    agent=self.agent, calc_identity=self.calc_identity,
+                    agent=self.agent, calc_identity=self.calc_identity, depends=depends, varies=varies,
                 )
-                return self._with_record_id(found["outputs"], row["id"])
+                return self._with_record_id(name, found["outputs"], row["id"], departs)
             output = self._run(name, args)
+            depends, varies, departs = self._basis(name, args)
             row = self.record.record_calc(
                 self.project_id, tool=name, inputs=args, outputs=output,
                 agent=self.agent, pack_version=self.pack_version, calc_identity=self.calc_identity,
+                depends=depends, varies=varies,
             )
-            return self._with_record_id(output, row["id"])
-        return self._run(name, args)
+            return self._with_record_id(name, output, row["id"], departs)
+        output = self._run(name, args)
+        # A model never reads the kernel's deprecated names, with a record or without one.
+        return reader_view(name, output) if self.model_facing else output
 
-    def _with_record_id(self, output: dict, record_id: str) -> dict:
+    @property
+    def model_facing(self) -> bool:
+        """True when a model reads this session's results. The fixed tool plan and a bare session do not."""
+        return self.agent not in ("", "tool-plan")
+
+    def _with_record_id(self, name: str, output: dict, record_id: str, departs: str = "") -> dict:
         """A model-facing result carries the calc record id so a finding can cite it.
 
-        The fixed tool plan (agent tool-plan) gets the bare output, so its
-        tables and export stay byte-identical to a run with no record.
+        It also says, in one sentence, where the call departed from the project
+        inputs, so a specialist sees at once that it ran an alternative and not
+        the design case. departs is that sentence's middle (_basis): the call's
+        own arguments, and a figure it took from a calc that was itself an
+        alternative. The fixed tool plan (agent tool-plan) gets the bare
+        output, so its tables and export stay byte-identical to a run with no record.
         """
-        if self.agent in ("", "tool-plan") or not isinstance(output, dict):
+        if not self.model_facing or not isinstance(output, dict):
             return output
-        shown = dict(output)
+        shown = dict(reader_view(name, output))
         shown["record_id"] = record_id
+        if departs:
+            shown["differs_from_project_inputs"] = (
+                f"This call used {departs}. It is recorded as an alternative, not the design case. "
+                "If the project input is wrong, the lead changes it; do not present this result as the design case."
+            )
         return shown
+
+    def _resolve_id(self, nps, schedule, role) -> dict:
+        return self.di.pipe_ids.resolve(nps, schedule, role)
+
+    def _basis(self, name: str, args: dict) -> tuple[list[str], dict, str]:
+        """What this call follows on the record: the inputs it used and the calcs it took a figure from.
+
+        The third value says where the call departs from the project inputs,
+        the way the record's own analysis will once the row is written: by its
+        own arguments, or by taking a figure from a calc that ran on another
+        case. It is empty for the design case.
+        """
+        if name not in coherence.TRACKED_TOOLS:
+            return [], {}, ""
+        try:
+            givens = self.record.givens(self.project_id)
+            if not givens:
+                return [], {}, ""
+            calcs = self.record.calcs(self.project_id) if name in coherence.DERIVED else []
+            standing: dict[str, dict] = {}
+            if calcs:
+                standing = coherence.analyze({
+                    "fact_history": self.record.facts(self.project_id, include_superseded=True), "calcs": calcs,
+                })["calcs"]
+            stale = {ident for ident, item in standing.items() if item["state"] == coherence.STALE}
+            alternative = {ident for ident, item in standing.items() if item["state"] == coherence.ALTERNATIVE}
+            depends, varies = coherence.call_basis(name, args, givens, calcs, resolve_id=self._resolve_id,
+                                                   stale=stale, alternative=alternative)
+            departs = coherence.departure_text(depends, varies, {row["id"]: row for row in calcs}, standing)
+            return depends, varies, departs
+        except Exception:
+            # The basis is bookkeeping. A failure here never fails the calculation.
+            return [], {}, ""
 
     def _record_tool(self, name: str, args: dict) -> dict:
         if not self.recording:
@@ -452,6 +566,9 @@ class ToolSession:
             kind = str(args.get("kind") or "").strip()
             if kind:
                 rows = record.detail(project_id, kind, str(args.get("id") or "").strip() or None)
+                if kind == "calcs":
+                    # A model reads a recorded output the same way it reads a fresh one.
+                    rows = [dict(row, outputs=reader_view(row.get("tool") or "", row.get("outputs"))) for row in rows]
                 return {"kind": kind, "rows": rows}
             snap = record.snapshot(project_id)
             return {
@@ -459,34 +576,66 @@ class ToolSession:
                 "counts": {key: len(value) for key, value in snap.items() if isinstance(value, list)},
             }
         if name == "record_fact":
-            row = record.record_fact(
-                project_id, kind=args.get("kind"), key=args.get("key"), value=args.get("value"),
-                label=args.get("label"), source=args.get("source") or "", agent=self.agent,
-            )
-            return {"id": row["id"], "kind": row["kind"], "key": row["key"], "label": row["label"]}
+            return self._record_fact(args)
         if name == "record_evidence":
+            document = args.get("document")
             row = record.record_evidence(
-                project_id, document=args.get("document"), edition=args.get("edition") or "",
+                project_id, document=document, edition=args.get("edition") or "",
                 section=args.get("section") or "", note=args.get("note") or "",
                 applicability=args.get("applicability") or "", status=args.get("status") or "held",
                 agent=self.agent,
+                # A cite follows the edition the job names for its document.
+                depends=coherence.evidence_basis(str(document or ""), record.givens(project_id)),
             )
             return {"id": row["id"], "document": row["document"], "section": row["section"], "status": row["status"]}
         if name == "record_finding":
+            self._no_given(args.get("label"), "A finding")
             row = record.record_finding(
-                project_id, agent=self.agent or "lead", text=args.get("text"), label=args.get("label"),
-                supports=args.get("supports"),
+                project_id, agent=self.agent or LEAD, text=args.get("text"), label=args.get("label"),
+                supports=args.get("supports"), replaces=args.get("replaces"),
+                may_replace_any=(self.agent or LEAD) == LEAD,
             )
-            return {"id": row["id"], "label": row["label"]}
+            out = {"id": row["id"], "label": row["label"]}
+            if row.get("replaces"):
+                out["replaces"] = row["replaces"]
+            return out
+        if name == "withdraw_finding":
+            ident = str(args.get("id") or "").strip()
+            is_lead = (self.agent or LEAD) == LEAD
+            if record.has_decision(project_id, ident):
+                row = record.retire_decision(project_id, ident, by=self.agent or LEAD, reason=args.get("reason"),
+                                             may_retire_any=is_lead)
+                return {"id": row["id"], "withdrawn": True, "kind": "decision"}
+            row = record.retire_finding(project_id, ident, by=self.agent or LEAD, reason=args.get("reason"),
+                                        may_retire_any=is_lead)
+            return {"id": row["id"], "withdrawn": True, "kind": "finding"}
+        if name == "review_finding":
+            row = record.put_review(
+                project_id, finding_id=str(args.get("id") or ""), agent=self.agent or LEAD,
+                position=str(args.get("position") or "").strip().lower(), note=args.get("note") or "",
+            )
+            return {"id": row["id"], "finding": row["finding_id"], "position": row["position"], "status": row["status"]}
         if name == "open_question":
-            row = record.open_question(project_id, raised_by=self.agent or "lead", text=args.get("text"))
-            return {"id": row["id"], "status": row["status"]}
-        if name == "record_decision":
-            row = record.record_decision(
-                project_id, text=args.get("text"), decided_by=self.agent or "lead",
-                label=args.get("label"), basis=args.get("basis") or "",
+            audience = str(args.get("to") or "engineer").strip().lower()
+            if audience in ("engineer of record", "eor", "owner", "ahj", "rfi"):
+                audience = "engineer"
+            if audience in ("user", "the designer"):
+                audience = "designer"
+            row = record.open_question(
+                project_id, raised_by=self.agent or LEAD, text=args.get("text"), audience=audience,
             )
-            return {"id": row["id"], "label": row["label"]}
+            return {"id": row["id"], "status": row["status"], "to": row["audience"]}
+        if name == "record_decision":
+            self._no_given(args.get("label"), "A decision")
+            row = record.record_decision(
+                project_id, text=args.get("text"), decided_by=self.agent or LEAD,
+                label=args.get("label"), basis=args.get("basis") or "", supports=args.get("supports"),
+                replaces=args.get("replaces"), may_replace_any=(self.agent or LEAD) == LEAD,
+            )
+            out = {"id": row["id"], "label": row["label"]}
+            if row.get("replaces"):
+                out["replaces"] = row["replaces"]
+            return out
         if name == "handoff":
             payload = args.get("payload")
             if payload is not None and not isinstance(payload, dict):
@@ -497,6 +646,61 @@ class ToolSession:
             )
             return {"id": row["id"], "to": row["to_agent"], "status": row["status"]}
         raise KeyError(f"unknown tool {name}")
+
+    def _no_given(self, label, what: str) -> None:
+        if str(label or "").strip().upper() == GIVEN:
+            raise RecordError(
+                f"{what} is the team's own statement and cannot be labeled GIVEN. "
+                "GIVEN marks a value the designer supplied."
+            )
+
+    def _record_fact(self, args: dict) -> dict:
+        """One fact, with the rules on who may write what.
+
+        The zone inputs and the basis fields are changed by the lead's set_input,
+        so every agent keeps working from one set of inputs. GIVEN is the
+        designer's own value and only the lead, who talks to the designer,
+        writes it. Two contributors that disagree on a key both stay on the record.
+        """
+        record = self.record
+        project_id = self.project_id
+        agent = self.agent or LEAD
+        kind = str(args.get("kind") or "").strip()
+        key = str(args.get("key") or "").strip()
+        label = str(args.get("label") or "").strip()
+        if kind == INPUT_KIND or (kind == BASIS_KIND and key in BASIS_FIELDS):
+            raise RecordError(
+                f"{kind}/{key} is a project input. The lead changes it with set_input, so the whole team "
+                "works from one value. If you think it is wrong, record an objection or a question."
+            )
+        if label.upper() == GIVEN and agent != LEAD:
+            raise RecordError(
+                "GIVEN marks a value the designer stated, and only the lead records it. "
+                "Record your own reading with another label, or hand the point to the lead."
+            )
+        value = "" if args.get("value") is None else str(args.get("value")).strip()
+        existing = [row for row in record.facts(project_id, kind) if row["key"] == key] if kind and key else []
+        agreed = next((row for row in existing if row["agent"] != agent and str(row["value"]).strip() == value), None)
+        if agreed is not None and agent != LEAD:
+            return {
+                "id": agreed["id"], "kind": kind, "key": key, "label": agreed["label"],
+                "note": f"Already on the record with this value, written by {agreed['agent'] or 'the app'}. Nothing new was written.",
+            }
+        row = record.record_fact(
+            project_id, kind=kind, key=key, value=args.get("value"), label=args.get("label"),
+            source=args.get("source") or "", agent=agent, supersede=True if agent == LEAD else "own",
+        )
+        out = {"id": row["id"], "kind": row["kind"], "key": row["key"], "label": row["label"]}
+        others = [item for item in existing if item["agent"] != agent and str(item["value"]).strip() != value]
+        if others and agent != LEAD:
+            out["conflicts_with"] = [
+                {"id": item["id"], "by": item["agent"], "value": item["value"]} for item in others
+            ]
+            out["note"] = (
+                "Another contributor recorded a different value for this key. Both stay on the record "
+                "until the lead settles it. Say so in your summary."
+            )
+        return out
 
     def _run(self, name: str, args: dict) -> dict:
         if name == "list_skills":

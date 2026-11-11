@@ -26,13 +26,13 @@ description: >-
 - Gas exhaust: never shut down by FA or HVAC sequences (see `fa-bess-gas-relay-map-and-cause-effect`).
 
 ## Company pins
-- FA-DI-CE = (Fire 1 OR the FACU manual station) AND same-zone low air. No cross-zone. Never cite §23.8.5.4.3 for that AND.
+- FA-DI-CE = (Fire 1 OR the FACU manual station) AND same-zone P. P is the pressure drop from sprinkler operation (PSL-REL contact on electric/electric trim; the PA-REL actuator at the valve on electric/pneumatic trim). No cross-zone. Never cite §23.8.5.4.3 for that AND.
 - Dry and double-interlock low air: supervisory only [CODE NFPA 72 §17.19.2.2.2(A)]. Low air alone never unlocks a door and never releases a hold.
 - A duct detector is supervisory [CODE NFPA 72-2019, 2022, and 2025 §21.7.4]. It stops its own fan only [PRACTICE]. It is not a releasing input for wet, dry, or double-interlock. It never unlocks a door and never releases a hold.
 - Pump house (EX-153): the duct detector is supervisory and stops its own non-engine fan only. It does not release a hold and it does not unlock. Do not stop diesel combustion air or engine cooling air on a fire-alarm signal. That stop is not resolved. It stays pending engineer-of-record confirmation. Non-engine HVAC fan stop on alarm stays [OWNER]/[PRACTICE] until that confirmation. IBC 716 hold-open release stays [PRACTICE].
 - Doors unlock and holds release on wet waterflow, double-interlock Fire 1, or the FACU manual station. Not on low air, valve tamper, or a duct detector.
 - Hold-open release and egress unlock are two outputs. They may share a trigger. They do not share a code basis.
-- Do not delay door unlock or hold release to the double-interlock solenoid. Doors follow the first alarm (Fire 1). Release still needs low air, and that may never come.
+- Do not delay door unlock or hold release to the double-interlock solenoid. Doors follow the first alarm (Fire 1). Release still needs P, the pressure drop from sprinkler operation, and that may never come.
 - Secondary power: building FACU 24 h + 5 min [CODE]; EVACS 24 h + 15 min [CODE]; releasing FACU 90 h + 10 min [OWNER FM DS 5-40]. Never put 90 h on EVACS or the building FACU.
 - Wet, dry, and double-interlock only. No foam. No clean agent. See the country gate in this skill.
 

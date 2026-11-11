@@ -202,14 +202,21 @@ class RecoverTests(unittest.TestCase):
         create = Recorder()
         run_everyday(REPO, create, "What is left on DH-1?", record=record, project_id="p1")
         user = create.calls[0]["messages"][0]["content"]
-        self.assertTrue(user.startswith("Handoffs waiting on the record"))
+        # The status block the application reads from the record leads the message; the
+        # designer's words close it. The waiting handoffs and who was cut off are in the block.
+        self.assertTrue(user.startswith("Status of this job, read from the project record by the application:"))
         self.assertTrue(user.endswith("What is left on DH-1?"))
+        block = user[: -len("What is left on DH-1?")]
+        self.assertIn(note, block)
+        self.assertIn("Interrupted before it finished: Lead, Sprinkler specialist.", block)
         self.assertEqual(pending_handoff_note(_record(), "none"), "")
         clean = Recorder()
         record.set_handoff("p1", delivered["id"], status="returned", by="fp-sprinkler")
         record.set_handoff("p1", pending["id"], status="returned", by="fa-releasing")
         run_everyday(REPO, clean, "Anything else?", record=record, project_id="p1")
-        self.assertEqual(clean.calls[0]["messages"][0]["content"], "Anything else?")
+        after = clean.calls[0]["messages"][0]["content"]
+        self.assertTrue(after.endswith("Anything else?"))
+        self.assertNotIn("Handoffs waiting on the record", after)
 
     def test_recovery_text_names_what_was_in_flight(self):
         from fpfa.team_panel import blocker_lines, recovery_text

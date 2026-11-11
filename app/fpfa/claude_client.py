@@ -35,17 +35,39 @@ cache markers, the retries, and the returned message are the same as
 create()'s, so the tool loop does not know which one it was given. Tool
 definitions are not marked for eager input streaming: every tool here takes
 a few scalars, and the API keeps validating them.
+
+Retries. A rate limit, an overload, a timeout, or a dropped connection is
+sent again, up to RETRY_ATTEMPTS attempts in all. The wait is the API's
+retry-after when it names one, capped at RETRY_AFTER_CAP so a cancel is
+never far away, and otherwise RETRY_WAITS. on_retry, when set, hears each
+wait so the window can say why nothing is moving. A long team turn makes
+dozens of requests, and one refused request must not lose the turn.
+
+Effort. FPFA_EFFORT, or the effort argument, adds output_config.effort to
+every request this client sends, on both paths alike. It is unset by
+default, which leaves the model on its own default (medium on Opus 5.5).
+It is there so cost and time can be compared against quality on a live
+run; nothing in the app sets it.
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 import time
 from typing import Any, Callable
 
 MODEL_ID = "claude-opus-5-5"
+# Attempts for one request, the first included.
+RETRY_ATTEMPTS = 5
+# Seconds before the second, third, fourth, and fifth attempt when the API names no wait.
+RETRY_WAITS = (2.0, 4.0, 8.0, 16.0)
+# The longest the API's own retry-after is obeyed. A cancel is honoured between attempts.
+RETRY_AFTER_CAP = 30.0
+EFFORTS = ("low", "medium", "high", "xhigh", "max")
+EFFORT_ENV = "FPFA_EFFORT"
 # One breakpoint on the system block caches tools plus system. The same
 # value as a top-level request field asks the API to cache the last block of
 # the message list automatically, so each tool round reads the rounds before it.
@@ -174,6 +196,33 @@ def incomplete_notice(stop_reason: str | None) -> str:
     if not reason:
         return ""
     return f"Incomplete reply. {reason}. The text is partial and is not a complete answer."
+
+
+def retry_wait(exc: BaseException, attempt: int) -> float:
+    """Seconds before the next attempt. attempt counts the failures so far, starting at 0.
+
+    The API's retry-after header wins when it gives a number of seconds, up
+    to RETRY_AFTER_CAP. Without one the wait doubles from RETRY_WAITS.
+    """
+    headers = getattr(getattr(exc, "response", None), "headers", None)
+    named = None
+    if headers is not None:
+        try:
+            named = headers.get("retry-after")
+        except Exception:
+            named = None
+    if named not in (None, ""):
+        try:
+            return max(0.0, min(float(named), RETRY_AFTER_CAP))
+        except (TypeError, ValueError):
+            pass
+    return RETRY_WAITS[min(max(attempt, 0), len(RETRY_WAITS) - 1)]
+
+
+def configured_effort(value: str | None = None) -> str:
+    """The effort to send, or "" to send none. An unknown word is treated as none."""
+    text = (value if value is not None else os.environ.get(EFFORT_ENV, "")).strip().lower()
+    return text if text in EFFORTS else ""
 
 
 def _transient_api_error(exc: BaseException) -> bool:
@@ -338,10 +387,14 @@ def run_tool_loop(
 class AnthropicMessages:
     """Thin wrapper so the loop and the UI share one client."""
 
-    def __init__(self, api_key: str, model: str = MODEL_ID):
+    def __init__(self, api_key: str, model: str = MODEL_ID, *, effort: str | None = None,
+                 on_retry: Callable[[dict], Any] | None = None):
         import anthropic
 
         self.model = model
+        self.effort = configured_effort(effort)
+        # Hears {"type": "retry", "attempt", "of", "wait_s", "status"} before each wait.
+        self.on_retry = on_retry
         # Retries live in create() so a 429 or 529 is visible and bounded.
         self._client = anthropic.Anthropic(api_key=api_key, timeout=300.0, max_retries=0)
 
@@ -368,12 +421,16 @@ class AnthropicMessages:
         # that entry, so it is left off there.
         if kwargs.get("tools"):
             kwargs.setdefault("cache_control", dict(CACHE_CONTROL))
+        # Off unless the owner set it. The same field on the streamed path and the plain one.
+        if self.effort:
+            config = dict(kwargs.get("output_config") or {})
+            config.setdefault("effort", self.effort)
+            kwargs["output_config"] = config
         return kwargs
 
     def _send(self, kwargs: dict, on_event: Callable[[dict], Any] | None = None):
         """Send one request, with the bounded retry. on_event turns the call into a stream."""
-        delay = 1.0
-        for attempt in range(3):
+        for attempt in range(RETRY_ATTEMPTS):
             try:
                 if on_event is None:
                     return self._client.messages.create(**kwargs)
@@ -389,12 +446,18 @@ class AnthropicMessages:
                         "the question or start a new job so fewer earlier turns are included. "
                         "API response: " + safe_error(exc)
                     ) from exc
-                if attempt == 2 or not _transient_api_error(exc):
+                if attempt == RETRY_ATTEMPTS - 1 or not _transient_api_error(exc):
                     raise
                 # The words of the failed attempt are not the reply. The listener drops them.
                 _tell(on_event, {"type": "reset"})
-                time.sleep(delay)
-                delay *= 2
+                wait = retry_wait(exc, attempt)
+                _tell(self.on_retry, {
+                    "type": "retry", "attempt": attempt + 2, "of": RETRY_ATTEMPTS, "wait_s": wait,
+                    "status": getattr(exc, "status_code", None),
+                })
+                _log.warning("request failed (%s); attempt %d of %d in %.0f s",
+                             type(exc).__name__, attempt + 2, RETRY_ATTEMPTS, wait)
+                time.sleep(wait)
         raise RuntimeError("Claude request was not sent")
 
     def _stream(self, kwargs: dict, on_event: Callable[[dict], Any]):

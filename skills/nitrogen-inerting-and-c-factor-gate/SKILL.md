@@ -94,7 +94,7 @@ Emit a status token on **(a)** the Hard-scope gate, **(b)** each of Parameters A
 | `provisional` | Directionally pinned; PDF-held training role sheet or edition hole flagged `[V]` — **never silent `grounded`** |
 | `unresolved` | STS / matrix N₂·C row / carrier / AHJ edition / pipe material / purity-verification status not given — carried as `ASSUMED` (value + why) and flagged; not a Stop (the packet itself is optional) |
 | `comparison-only` | SI/NI, AXA SI preference, FM ranking — never controlling N₂/C BOD |
-| `handoff` | Peer owns next action (ITM 3→10 schedule; QOD×N₂ listing / 30 s proof; El/El medium compat; C&E low-air Boolean; density-area consumes C) |
+| `handoff` | Peer owns next action (ITM 3→10 schedule; QOD×N₂ listing / 30 s proof; El/El medium compat; C&E release Boolean (detection AND P); density-area consumes C) |
 | `RFI-variance` | SI/NI/foam/mist (or wet-as-N₂-BOD with no dry/DI) presented as BOD |
 
 **Emitted C = 100 on every run** (`grounded` on the 100 emit when inputs are pinned). **C=120 is never emitted and never `grounded`** — it appears only as a `comparison-only` line with the 29 % show-and-verify, even when remote-branch purity is measured ≥98 %. Purge-valve, generator SP, AutoPurge/Quick-Check, INS-PV on-valve, TAV-D/TSV-D riser, cabinet PSV-D readings are **not** evidence the pipe is inerted (corrosion acceptance). SI evidence → `comparison-only`. FM 1035: approvals under **FM 1035 (September 2024)** are certificate-held (UFS PR470042 / PR470065); the **standard text is unheld** → claims about what 1035 tests stay ≤ `provisional` + `[V]`.
@@ -134,7 +134,7 @@ Hand-off line (2026-10-22c): largest-system volume (gal) and connected Σ gallon
 | `dc-fp-assignment-packet` | Packet context — **optional** (consume when present) | Rebuild the packet; retrieve `CASE_INDEX` |
 | `suppression-technology-selection` | Elected dry/DI; comparison-only / prohibited / `PRACTICE REFUSED` status | Elect a system family; silent-substitute SI→DI |
 | `most-stringent-basis-matrix` | Nitrogen / C / inert-medium rows; company dry/DI fence; provisional/`[V]` | Rebuild dual-carrier BOD; silent FM↔AXA C swap |
-| `preaction-releasing-c-and-e-soo` | Low-air Boolean context; SI line is **comparison-only** | Rewrite C&E; invent SI supervisory defaults |
+| `preaction-releasing-c-and-e-soo` | Release Boolean context (detection AND P; low air supervisory only); SI line is **comparison-only** | Rewrite C&E; invent SI supervisory defaults |
 | `dry-preaction-water-delivery-screen` | Delivery-clock companion when present | Own ≤30/60 s proof or QOD×N₂ listing here |
 | `preaction-el-el-trim-election` | Medium-compat / AMD pressure band when present | Write trim SKU catalog here |
 | `itm-design-for-testability` | Receives eligibility hand-off | Emit interval table here |
@@ -148,7 +148,7 @@ If SI/NI/foam/mist is presented as BOD → **Stop** (company scope lock — stay
 | `itm-design-for-testability` | **Interval** schedule (3→10 full-flow; obstruction exemption) when FM grants | **Eligibility** only: `originally installed with nitrogen` y/n on each company dry/DI hall |
 | `dry-preaction-water-delivery-screen` | ≤30 s / ≤60 s **delivery** proof; QOD×air/N₂ **listing** compatibility | **30-minute FILL** (compressor half); medium air vs N₂; C emit — **fill ≠ delivery** |
 | `preaction-el-el-trim-election` | Valve-room trim family / supervisory pressure band | Medium / AMD / generator-vs-cylinders **compatibility** only |
-| `preaction-releasing-c-and-e-soo` | Controlling `preaction_trip` / low-air Boolean; SI line **comparison-only** | Day-one N₂ / medium context; do not rewrite matrix |
+| `preaction-releasing-c-and-e-soo` | Controlling `preaction_trip` Boolean (detection AND P); SI line **comparison-only** | Day-one N₂ / medium context; do not rewrite matrix |
 | `suppression-technology-selection` | Company wet \| dry \| DI election | Consumes dry/DI; does not re-elect |
 | `most-stringent-basis-matrix` | Dual-carrier nitrogen / C / inert rows | Consumes; never silent-swap |
 | `dc-fp-assignment-packet` | Packet intake (optional) | Consume when present |
@@ -159,7 +159,7 @@ Emit rows as needed:
 - `HAND OFF — itm-design-for-testability: nitrogen originally installed = y/n on each dry/DI hall. Hardware + C-factor gate is closed here. Interval-lever schedule is THAT Skill’s.`
 - `HAND OFF — dry-preaction-water-delivery-screen: 30/60 delivery proof + QOD×N₂ listing. This Skill owns 30-minute FILL only (compressor half). Fill ≠ delivery.`
 - `HAND OFF — preaction-el-el-trim-election: medium / AMD / pressure-band compatibility. Do not write a trim schedule here.`
-- `HAND OFF — preaction-releasing-c-and-e-soo: low-air Boolean; SI alarm-only line is comparison-only; DI air is a trip input. Do not rewrite the matrix.`
+- `HAND OFF — preaction-releasing-c-and-e-soo: release Boolean (detection AND P); SI alarm-only line is comparison-only; on DI the trip input is P, the pressure drop from sprinkler operation, and low air is supervisory only. Do not rewrite the matrix.`
 - Extra: density-area / pump-envelope / hydrant-supply-curve / hydraulic-tree **consume** the C this Skill emits (underground C ≠ sprinkler C).
 
 ---
@@ -198,7 +198,7 @@ Consume the assignment packet if present (optional). Do not rebuild it. Do not r
 
 ### 3.2 Confirm prerequisites — consume, don’t redo
 
-STS already pinned company `dry` | `double-interlock` (wet → N/A; SI/NI-as-BOD → Stop `RFI-variance`). If type is missing → `ASSUMED` `dry` or `double-interlock` (with why), flagged — not a Stop. `preaction-releasing-c-and-e-soo` owns low-air / LOW AIR ALARM — consume, **do not rewrite**; SI line remains **comparison-only**. `itm-design-for-testability` owns the interval lever — this Skill records **eligibility** (`originally installed with nitrogen` y/n) and hands it over. El/El trim is **preaction-el-el-trim-election** — emit a hand-off row, do not elect family here. Water-delivery owns QOD×N₂ listing and 30/60 proof — this Skill owns **fill**, not delivery.
+STS already pinned company `dry` | `double-interlock` (wet → N/A; SI/NI-as-BOD → Stop `RFI-variance`). If type is missing → `ASSUMED` `dry` or `double-interlock` (with why), flagged — not a Stop. `preaction-releasing-c-and-e-soo` owns the release Boolean (detection AND P) and the low-air supervisory row — consume, **do not rewrite**; SI line remains **comparison-only**. `itm-design-for-testability` owns the interval lever — this Skill records **eligibility** (`originally installed with nitrogen` y/n) and hands it over. El/El trim is **preaction-el-el-trim-election** — emit a hand-off row, do not elect family here. Water-delivery owns QOD×N₂ listing and 30/60 proof — this Skill owns **fill**, not delivery.
 
 ### 3.3 Three-layer union — five parameters, separately
 
@@ -276,7 +276,7 @@ Mark each `DRAW` / `SPEC` / `C&E` / `N/A` / `[V]`.
 7. **FM air-tightness** (DS 2-81 §3.1.6.1): **40 psi**, should not lose more than **1½ psi over 24 hours**. **Do not raise air pressure to mask a leak.**
 8. Low-point drains, back-pitch, trapped volume are corrosion controls. Hand drain sizing / heated valve room to air-supply / ITM Skills.
 9. **El/El trim — hand-off.** `HAND OFF — preaction-el-el-trim-election`. Do not write a trim schedule here.
-10. **C&E hand-off row.** On **SI** (`comparison-only`): low air is a leak/break alarm; **the valve stays closed**. On **DI** (controlling): air is one of two trip conditions — **do not silently import the SI line onto DI**. **preaction-releasing-c-and-e-soo writes the matrix.**
+10. **C&E hand-off row.** On **SI** (`comparison-only`): low air is a leak/break alarm; **the valve stays closed**. On **DI** (controlling): P, the pressure drop from sprinkler operation, is one of two trip conditions, and low air stays a supervisory signal that is never a release input — **do not silently import the SI line onto DI**. **preaction-releasing-c-and-e-soo writes the matrix.**
 
 ### 3.7 Parameter C — remote-branch purity sampling (+ thin OEM pointer)
 
@@ -434,7 +434,7 @@ Nitrogen = `n` on a dry/DI hall is **not** a Stop — it is a lever **not taken*
 |---|---|
 | Wet / dry / double-interlock election | suppression-technology-selection |
 | Nitrogen as **3 yr → 10 yr** interval lever | **itm-design-for-testability** |
-| Low-air / LOW AIR ALARM / SI vs DI trip Boolean | **preaction-releasing-c-and-e-soo** (SI line comparison-only) |
+| Release Boolean (detection AND P) / low-air supervisory row / SI vs DI | **preaction-releasing-c-and-e-soo** (SI line comparison-only) |
 | Density × area `_calc` | density-area-dry-increase (consumes C; AXA DI+N₂ area penalty) |
 | Pump envelope / hydrant curve | pump-envelope / hydrant-supply-curve (underground C is **not** sprinkler C) |
 | Node-by-node tree | hydraulic-tree Skill (consumes the C this Skill emits) |

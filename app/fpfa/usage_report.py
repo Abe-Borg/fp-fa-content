@@ -2,9 +2,15 @@
 
 Every model context already sums its own usage. The lead turn writes a `turn`
 event with the task total (lead rounds plus every delegation and check it ran),
-a narrated zone run or starter writes a `narration` event, a blind check writes
-its usage on the `record_check` event, and each delegation writes a `delegation`
+a narrated zone run or starter writes a `narration` event, a trace check writes
+its usage on the `record_check` event, each delegation writes a `delegation`
+event, and each question one specialist put to another writes a `consult`
 event. This module reads those events back and prices them.
+
+Time. A turn, a delegation, a consult, and a trace check each record how
+long they took on the wall clock (seconds). The report prints it beside
+the tokens and sums the counted kinds, so a run can be judged on time as
+well as cost. A delegation's time is inside its turn's, like its tokens.
 
 Prices are a dated snapshot, not a feed. RATES_PER_MILLION holds the Claude
 Opus 5.5 list prices in dollars per million tokens as published on RATES_DATE.
@@ -26,8 +32,9 @@ RATES_DATE = "2026-10-06"
 # Dollars per million tokens. Cache write is the 5-minute write price, 1.25 times input.
 RATES_PER_MILLION = {"input": 4.00, "output": 20.00, "cache_write": 5.00, "cache_read": 0.20}
 # Event kinds that carry usage, and whether the kind counts toward a job's total.
-# A delegation's usage is already inside its turn's total, so it is shown but not added.
-USAGE_KINDS = ("turn", "narration", "record_check", "delegation")
+# A delegation's usage is already inside its turn's total, and a consult's is inside its
+# delegation's, so both are shown but not added.
+USAGE_KINDS = ("turn", "narration", "record_check", "delegation", "consult")
 COUNTED_KINDS = ("turn", "narration", "record_check")
 
 
@@ -87,7 +94,7 @@ def usage_events(record: Any, project_id: str) -> list[dict]:
             "usage": normalize(usage),
             "counted": event["kind"] in COUNTED_KINDS,
         }
-        for key in ("specialist", "delegations", "checks", "cancelled", "source", "stop_reason"):
+        for key in ("specialist", "delegations", "checks", "cancelled", "source", "stop_reason", "seconds", "from", "to"):
             if key in payload:
                 row[key] = payload[key]
         rows.append(row)
@@ -100,6 +107,31 @@ def job_totals(rows: list[dict]) -> dict:
         if row.get("counted"):
             add(total, row["usage"])
     return normalize(total)
+
+
+def job_seconds(rows: list[dict]) -> float:
+    """Wall-clock seconds over the counted contexts that recorded a time. Older rows recorded none."""
+    total = 0.0
+    for row in rows:
+        if row.get("counted"):
+            try:
+                total += float(row.get("seconds") or 0)
+            except (TypeError, ValueError):
+                continue
+    return round(total, 1)
+
+
+def clock(seconds: Any) -> str:
+    """Seconds as a person reads them: 42 s, 3 min 05 s."""
+    try:
+        value = float(seconds or 0)
+    except (TypeError, ValueError):
+        return ""
+    if value <= 0:
+        return ""
+    if value < 60:
+        return f"{value:.0f} s"
+    return f"{int(value // 60)} min {int(value % 60):02d} s"
 
 
 def _label(row: dict) -> str:
@@ -119,8 +151,11 @@ def _label(row: dict) -> str:
     if kind == "narration":
         note = "cancelled" if row.get("cancelled") else (row.get("source") or "")
         return f"narration ({row.get('agent') or 'narrator'}{', ' + note if note else ''})"
+    if kind == "consult":
+        note = ", cancelled" if row.get("cancelled") else ""
+        return f"    within that: {row.get('from') or 'a specialist'} asked {row.get('to') or 'another'}{note}"
     if kind == "record_check":
-        return "blind check"
+        return "trace check"
     return kind
 
 
@@ -146,12 +181,17 @@ def report_text(record: Any, project_id: str, rates: dict | None = None, *, name
     for row in rows:
         money = cost(row["usage"], rate)["total"]
         mark = "" if row["counted"] else "   (inside the turn above, not added)"
-        lines.append(f"{row['ts'][:19]}  {_label(row):<42} {_tokens(row['usage'])}  ${money:7.4f}{mark}")
+        took = clock(row.get("seconds"))
+        lines.append(f"{row['ts'][:19]}  {_label(row):<42} {_tokens(row['usage'])}  ${money:7.4f}"
+                     f"{'  ' + took if took else ''}{mark}")
     total = job_totals(rows)
     money = cost(total, rate)
     counted = [row for row in rows if row["counted"]]
     lines.append("")
     lines.append(f"Job total over {len(counted)} model context{'s' if len(counted) != 1 else ''}: {_tokens(total)}")
+    spent = clock(job_seconds(rows))
+    if spent:
+        lines.append(f"Time on the model: {spent}, summed over the turns and checks that recorded one.")
     lines.append(
         f"Estimated cost ${money['total']:.4f}: input ${money['input']:.4f}, cache write ${money['cache_write']:.4f}, "
         f"cache read ${money['cache_read']:.4f}, output ${money['output']:.4f}."
@@ -197,7 +237,8 @@ def main(argv: list[str] | None = None) -> int:
         out = {}
         for project_id in projects:
             rows = usage_events(record, project_id)
-            out[project_id] = {"rows": rows, "total": job_totals(rows), "cost": cost(job_totals(rows), rates),
+            out[project_id] = {"rows": rows, "total": job_totals(rows), "seconds": job_seconds(rows),
+                               "cost": cost(job_totals(rows), rates),
                                "rates": {**RATES_PER_MILLION, **rates}, "rates_date": RATES_DATE}
         sys.stdout.write(json.dumps(out, indent=2, default=str) + "\n")
         return 0

@@ -267,7 +267,27 @@ class ObserveTests(unittest.TestCase):
             "handing off to fa-releasing",
         )
         self.assertEqual(describe_activity({"type": "tool_start", "name": "request_check", "input": {}}),
-                         "running the blind check")
+                         "running the trace check")
+        # The team's own moves are named. What a move carried is not shown.
+        asked = describe_activity({"type": "tool_start", "name": "consult", "agent": "fp-sprinkler",
+                                   "input": {"specialist": "fa-releasing", "question": "What is t_release for DH-1?"}})
+        self.assertEqual(asked, "fp-sprinkler: asking fa-releasing")
+        changed = describe_activity({"type": "tool_start", "name": "set_input",
+                                     "input": {"name": "q_fill_gpm", "value": "750", "why": "the pump test"}})
+        self.assertEqual(changed, "recording a project input")
+        for word in ("q_fill_gpm", "750", "pump"):
+            self.assertNotIn(word, changed)
+        objected = describe_activity({"type": "tool_start", "name": "review_finding", "agent": "fa-releasing",
+                                      "input": {"id": "abc", "position": "object", "note": "t_release is 5 s, not 0"}})
+        self.assertEqual(objected, "fa-releasing: reviewing another specialist's finding")
+        self.assertEqual(describe_activity({"type": "tool_start", "name": "set_plan", "input": {"objective": "x"}}),
+                         "setting out the plan")
+        self.assertEqual(describe_activity({"type": "tool_start", "name": "resolve_disagreement", "input": {}}),
+                         "settling a disagreement")
+        self.assertEqual(describe_activity({"type": "tool_start", "name": "answer_question", "input": {"answer": "40"}}),
+                         "recording your answer")
+        self.assertEqual(describe_activity({"type": "tool_start", "name": "withdraw_finding", "input": {}}),
+                         "withdrawing a finding")
         # A calc tool is named. Its inputs and its figures are not shown.
         line = describe_activity({"type": "tool_start", "name": "zone_trapped_volume",
                                   "input": {"segments": [{"length_ft": 900}]}, "agent": "fp-sprinkler"})
@@ -397,7 +417,14 @@ class StreamingWindowTests(unittest.TestCase):
         self.assertEqual(app._lives, {})
         self.assertFalse(app._pending_here())
         saved = load_project(app.project["id"])
-        self.assertTrue(saved["chat"][-1]["text"].endswith(ANSWER))
+        posted = saved["chat"][-1]["text"]
+        self.assertIn(ANSWER, posted)
+        # The reply quoted two figures and the job's record holds no calculation. The application says so
+        # under the reply, in its own words.
+        tail = posted.split(ANSWER, 1)[1]
+        self.assertIn("**Figures in this reply**", tail)
+        self.assertIn("could not find on the record or in anything the lead read: 281.3 gal, 38.1 s. "
+                      "Treat them as unverified.", tail)
         self.assertEqual([job.status for job in app.jobs.snapshot()], ["done"])
 
     def test_a_specialists_words_stay_out_of_the_thread(self):

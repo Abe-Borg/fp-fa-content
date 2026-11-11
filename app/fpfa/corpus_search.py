@@ -1,13 +1,19 @@
-"""Search corpus/**/*.md in a content pack.
+"""Read the content pack's reviewed notes: search them, and look one cite up in them.
 
-Edition pins and decision notes live in that tree. The tool returns short
-hits so a turn can quote a pin instead of assuming one.
+Edition pins and decision notes live in corpus/. search_corpus is the tool
+a model calls; it returns short hits so a turn can quote a pin instead of
+assuming one. trace_cite is what the trace check calls: given a document,
+an edition, and a section, it returns the pack's own sentences on that
+section from corpus/ and specs/, so a claim is judged against the content
+team's reviewed words and not against a note its own author wrote. Both
+return paraphrases the content team reviewed. Neither opens a standard.
 """
 
 from __future__ import annotations
 
 import json
 import re
+from functools import lru_cache
 from pathlib import Path
 
 _CAP = 40_000
@@ -115,3 +121,150 @@ def _clip(line: str, needle: str) -> str:
     if start + _LINE > len(text):
         start = max(0, len(text) - _LINE)
     return text[start:start + _LINE]
+
+
+# -- looking one cite up in the pack's notes -------------------------------------------------
+
+# A section number as a note writes it: two or more dotted parts.
+_SECTION = re.compile(r"\d+(?:\.\d+)+")
+_YEAR = re.compile(r"\b(?:19|20)\d{2}\b")
+_SENTENCE = re.compile(r"(?<=\.)\s+")
+_CLAUSE = re.compile(r"(?<=;)\s+")
+# A clause that names a section of its own: §8.2.4.2.2, Table 19.2.3.1.2, Section 4.1, s8.3.2.
+_REF = re.compile(r"(?:§|\bTable\s|\bSection\s|\bFigure\s|(?<![A-Za-z])s(?=\d))\s*[A-Z]?\.?\d+(?:\.\d+)*")
+_TRACE_DIRS = ("corpus", "specs")
+_MAX_PASSAGES = 3
+_PASSAGE = 700
+# Any document a note might name, to tell when a paragraph has moved on to another one.
+_ANY_DOC = re.compile(r"\b(?:NFPA\s*\d+[A-Z]?|(?:FM\s+)?DS\s*\d{1,2}-\d{1,3}|IBC|IFC|NBC|NFC|NEC|UL\s*\d+)\b")
+
+
+def _doc_pattern(document: str) -> re.Pattern | None:
+    """A pattern for a document's name as the pack's notes write it. None when there is nothing to match."""
+    text = " ".join(str(document or "").split())
+    if not text:
+        return None
+    nfpa = re.match(r"(?i)NFPA\s*(\d+[A-Z]?)\b", text)
+    if nfpa:
+        return re.compile(rf"\bNFPA\s*{re.escape(nfpa.group(1))}(?![\dA-Z])", re.IGNORECASE)
+    fm = re.search(r"(?i)\b(\d{1,2}-\d{1,3}[A-Z]?)\b", text)
+    if re.match(r"(?i)FM\b", text) and fm:
+        return re.compile(rf"\b(?:FM\s+)?(?:DS|Data\s+Sheet)\s*{re.escape(fm.group(1))}\b", re.IGNORECASE)
+    code = re.match(r"(?i)(IBC|IFC|NBC|NFC|NEC|UL)\b", text)
+    if code:
+        return re.compile(rf"\b{code.group(1)}\b", re.IGNORECASE)
+    words = [re.escape(word) for word in text.split()[:4]]
+    return re.compile(r"\b" + r"\s+".join(words) + r"\b", re.IGNORECASE)
+
+
+def _section_pattern(section: str) -> re.Pattern | None:
+    found = _SECTION.search(str(section or ""))
+    if not found:
+        return None
+    number = found.group(0)
+    # The section itself: not a longer number that starts with it, and not the tail of another.
+    return re.compile(rf"(?<![\d.]){re.escape(number)}(?!\.?\d)")
+
+
+@lru_cache(maxsize=8)
+def _pack_lines(root: str, stamp: float) -> tuple:
+    """Every prose line of the pack's reviewed notes: (relative path, line number, text)."""
+    base = Path(root)
+    lines = []
+    for folder in _TRACE_DIRS:
+        top = base / folder
+        if not top.is_dir():
+            continue
+        for path in sorted(top.rglob("*.md")):
+            if path.name.lower() == "readme.md":
+                continue
+            try:
+                text = path.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                continue
+            rel = path.relative_to(base).as_posix()
+            for number, line in enumerate(text.splitlines(), start=1):
+                if line.strip():
+                    lines.append((rel, number, line.strip()))
+    return tuple(lines)
+
+
+def _pack_stamp(root: Path) -> float:
+    """Changes when a note under the traced folders changes, so the cache follows a pack update."""
+    newest = 0.0
+    for folder in _TRACE_DIRS:
+        top = root / folder
+        if not top.is_dir():
+            continue
+        for path in top.rglob("*.md"):
+            try:
+                newest = max(newest, path.stat().st_mtime)
+            except OSError:
+                continue
+    return newest
+
+
+def trace_cite(content_root: Path | str, document: str, edition: str = "", section: str = "") -> list[dict]:
+    """The pack's own notes on one section of one document. Empty when the pack holds none.
+
+    The match is one clause of a note in corpus/ or specs/ that names the
+    section and either names the document or follows a clause of the same
+    paragraph that does. With an edition, a clause that names other years
+    and not that one does not count: the pack holds the section for another
+    edition.
+
+    Each passage is {"path", "line", "sentence", "scope", "text"}:
+
+    - sentence is the clause that names the section.
+    - scope is what the pack says about that section: the clause, and the
+      clauses of the same sentence that name no section of their own. The
+      figures a claim may take from this cite are the figures in scope. A
+      figure the note gives for another section, or in the next sentence,
+      is not one of them.
+    - text is the sentence with the one before it and the one after it, for
+      a reader who needs the context.
+
+    These are the content team's reviewed paraphrases. They are not the standard.
+    """
+    doc = _doc_pattern(document)
+    sec = _section_pattern(section)
+    if doc is None or sec is None:
+        return []
+    root = Path(content_root).resolve()
+    year = (_YEAR.search(str(edition or "")) or [None])[0] if edition else None
+    if year is None:
+        in_name = _YEAR.search(str(document or ""))
+        year = in_name.group(0) if in_name else None
+    found: list[dict] = []
+    seen: set[str] = set()
+    for rel, number, line in _pack_lines(str(root), _pack_stamp(root)):
+        if not sec.search(line):
+            continue
+        named = False
+        sentences = _SENTENCE.split(line)
+        for index, sentence in enumerate(sentences):
+            clauses = _CLAUSE.split(sentence)
+            for clause in clauses:
+                # A section number belongs to the document named last in its paragraph.
+                if doc.search(clause):
+                    named = True
+                elif _ANY_DOC.search(clause):
+                    named = False
+                if not sec.search(clause) or not named:
+                    continue
+                years = set(_YEAR.findall(clause))
+                if year and years and year not in years:
+                    # The pack holds this section number for another edition.
+                    continue
+                matched = " ".join(clause.split())
+                if matched in seen:
+                    continue
+                seen.add(matched)
+                scope = " ".join(" ".join(part.split()) for part in clauses if part is clause or not _REF.search(part))
+                around = sentences[max(0, index - 1): index + 2]
+                text = " ".join(" ".join(around).split())
+                found.append({"path": rel, "line": number, "text": text[:_PASSAGE],
+                              "sentence": matched[:_PASSAGE], "scope": scope[:_PASSAGE]})
+                if len(found) >= _MAX_PASSAGES:
+                    return found
+    return found

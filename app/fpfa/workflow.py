@@ -17,6 +17,7 @@ from fpfa.claude_client import MODEL_ID, TurnCancelled, incomplete_notice, safe_
 from fpfa.everyday import EVERYDAY_ROLE, SPECIALIST_ROLES, assemble_system
 from fpfa.modes_loader import MODE_SLUGS, list_modes, normalize_mode
 from fpfa.record import Record
+from fpfa.releasing import reader_view, releasing_logic, releasing_sentence, second_leg_value  # noqa: F401  (re-exported)
 from fpfa.roles_loader import list_roles
 from fpfa.skills_loader import list_skills
 
@@ -340,7 +341,7 @@ def template_narrative(di: dict, tools: dict[str, Any], basis: dict | None = Non
             f"{nitrogen['fill_bases']}"
         ),
         (
-            f"Releasing: {truth['boolean']}. Manual station {manual}. "
+            f"{releasing_sentence(truth, trim.get('family'))} Manual station {manual}. "
             f"A second smoke zone does not change the solenoid "
             f"({truth['solenoid_true_count']} true rows of {truth['row_count']})."
         ),
@@ -596,7 +597,8 @@ def format_transcript(calls: list[dict]) -> str:
     for index, call in enumerate(calls, start=1):
         chunks.append(f"{index}. {call.get('name')}  ({call.get('by') or 'tool'})")
         chunks.append("input: " + json.dumps(call.get("input"), default=str))
-        output = json.dumps(call.get("output"), default=str)
+        # The Results tab is read by the designer: the kernel's deprecated names stay out of it.
+        output = json.dumps(reader_view(str(call.get("name") or ""), call.get("output")), default=str)
         if len(output) > 4000:
             output = output[:4000] + " …"
         chunks.append("output: " + output)

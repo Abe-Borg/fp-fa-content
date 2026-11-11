@@ -56,6 +56,7 @@ export function App() {
   const formRev = useRef(-1);
   const [drawer, setDrawer] = useState(false);
   const [tab, setTab] = useState<Tab>("zone");
+  // The drawer is the form's and the team's. It is a little wider on the Team tab, where there is prose to read.
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const [flash, setFlash] = useState("");
@@ -199,6 +200,7 @@ export function App() {
     { label: `Export draft Section ${app.draft_section}…`, onSelect: () => void act("export-section") },
     { label: `Export ${app.design_basis_title}…`, onSelect: () => void act("export-basis") },
     { label: "Team panel", onSelect: openTeam },
+    { label: "Where this job stands", hint: "/status", onSelect: () => void act("status") },
     { label: "Usage and cost", hint: "/usage", onSelect: () => void act("usage") },
     { kind: "separator" },
     { kind: "check", label: "Narrate zone runs with Claude", checked: state.narrate, onSelect: () => void act("narrate", { on: !state.narrate }) },
@@ -224,7 +226,7 @@ export function App() {
   const projectName = (id: string) => state.projects.find((project) => project.id === id)?.name || "this job";
 
   return (
-    <div className={`window${drawer ? " with-drawer" : ""}`}>
+    <div className={`window${drawer ? " with-drawer" : ""}${drawer && tab === "team" ? " team-open" : ""}`}>
       {state.banner ? (
         <div className="banner-row">
           <button type="button" className="banner" onClick={() => void act("banner-dismiss")} title="Dismiss">
@@ -273,6 +275,18 @@ export function App() {
               <More />
             </MenuButton>
           </header>
+          {state.team.strip ? (
+            <button
+              type="button"
+              className={`team-strip${state.team.attention ? " waiting" : ""}`}
+              onClick={openTeam}
+              title="What the team has done on this job. Opens the Team panel."
+            >
+              <span className="strip-label">Team</span>
+              <span className="strip-text">{state.team.strip}</span>
+              <span className="strip-open">Open</span>
+            </button>
+          ) : null}
           <Thread
             project={state.thread.project}
             turns={turns}
@@ -308,6 +322,7 @@ export function App() {
             values={values}
             set={setField}
             results={state.results}
+            resultsNote={state.results_note}
             team={state.team}
             running={state.running_here}
             onClose={() => setDrawer(false)}
@@ -320,6 +335,8 @@ export function App() {
             onCancel={() => void act("cancel")}
             onCheck={() => void act("check-record")}
             onExportBasis={() => void act("export-basis")}
+            onStatus={() => void act("status")}
+            onAnswer={async (id, answer) => (await act("answer", { id, answer })) !== null}
           />
         ) : null}
       </div>

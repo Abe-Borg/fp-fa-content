@@ -200,12 +200,30 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--browser", action="store_true", help="Open the page in the default browser, not a window")
     parser.add_argument("--serve", action="store_true", help="Serve the page and print its address; open nothing")
     parser.add_argument("--port", type=int, default=0, help="With --serve or --browser, the port to listen on")
+    parser.add_argument(
+        "--live-eval", default="", metavar="FOLDER",
+        help="Run the live evaluation path with no window and write a report into FOLDER. "
+             "Calls the model with the saved key and is billed. See docs/live-evaluation.md",
+    )
+    parser.add_argument("--max-usd", type=float, default=25.0, help="With --live-eval, stop at about this spend. Default 25")
+    parser.add_argument("--effort", default="", help="With --live-eval, the model's effort for the run. Default: the model's own")
+    parser.add_argument("--eval-steps", default="", help="With --live-eval, the steps to run, comma-separated. Default: all")
     args = parser.parse_args(argv)
     if args.theme:
         os.environ["FPFA_THEME"] = args.theme
     if args.versions:
         sys.stdout.write(version_text() + "\n")
         return
+    if args.live_eval:
+        # Asked for by name, with a cap. A windowed build has no console to ask again on.
+        from fpfa import live_eval
+
+        options = ["--out", args.live_eval, "--max-usd", str(args.max_usd), "--yes"]
+        if args.effort:
+            options += ["--effort", args.effort]
+        if args.eval_steps:
+            options += ["--steps", args.eval_steps]
+        sys.exit(live_eval.main(options))
     if args.demo:
         # Skip the OS keyring probe. The demo never calls Claude.
         write_config({"key_backend": "file"})

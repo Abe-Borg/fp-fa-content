@@ -1,7 +1,7 @@
 {
   "name": "cynosure-frontend",
   "private": true,
-  "version": "0.1.4",
+  "version": "0.2.0",
   "description": "The +Cynosure window's page. npm run build writes it into ../fpfa/web/static.",
   "license": "SEE LICENSE IN ../../LICENSE",
   "type": "module",

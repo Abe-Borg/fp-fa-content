@@ -80,6 +80,8 @@ ACTIONS: dict[str, Callable[[Desk, dict], Any]] = {
     "check-record": lambda d, b: d.start_record_check(),
     "cancel": lambda d, b: d.cancel_running_jobs(),
     "usage": lambda d, b: d.show_usage(),
+    "status": lambda d, b: d.show_status(),
+    "answer": lambda d, b: d.answer_question(_text(b.get("id"), 200), _text(b.get("answer"), 20000)),
     "help": lambda d, b: d.show_help(),
     "segment-add": lambda d, b: d.add_segment(
         _text(b.get("role"), 40), _text(b.get("nps"), 40), _text(b.get("schedule"), 40), _text(b.get("length"), 40)
