@@ -31,7 +31,8 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
-from fpfa import coherence, inputs, sample_data
+from fpfa import coherence, inputs, reply_audit, sample_data
+from fpfa import status as job_status
 from fpfa import theme as palette
 from fpfa.about import (
     APP_NAME,
@@ -79,7 +80,8 @@ from fpfa.managed import anthropic_request, reply_with_delete_status, run_heavy_
 from fpfa.modes_loader import DEFAULT_MODE, MODE_SLUGS, list_modes, normalize_mode
 from fpfa.paths import content_root, data_dir, is_content_pack, read_config, write_config
 from fpfa.projects import delete_project, list_projects, load_project, new_project, save_project
-from fpfa.record import BASIS_LABELS, INTERRUPTED_NOTE, Record
+from fpfa.checker import check_line, export_reason
+from fpfa.record import ANSWERED_ON_PANEL, BASIS_LABELS, INTERRUPTED_NOTE, Record, RecordError
 from fpfa.spec_docx import DRAFT_SECTION, write_docx
 from fpfa.team import check_record, export_gate, latest_check, team_summary
 from fpfa.team_panel import recovery_text, team_view
@@ -190,6 +192,17 @@ WELCOME_FOOTNOTE = (
     "The sample is optional. It opens its own job and runs the zone tool plan on this machine.\n"
     "Type /help for commands."
 )
+STALE_RUN_NOTE = (
+    "A tool plan ran for this zone before these inputs changed: {names}. Its figures are out of date. "
+    "Do not quote them and do not treat them as governing. The Results tab and Section {section} still show "
+    "that run until the zone is run again. Work from the project inputs as they are now, and tell the "
+    "designer the zone has to be run again (/run) before the tables or that export are used."
+)
+EXPORT_STALE_RUN = (
+    "The zone form changed after the last run ({names}). Section {section} would be written from the old "
+    "run. Press Run zone (or type /run) and export again."
+)
+RESULTS_STALE_LINE = "These figures are from a run before the form changed ({names}). Run the zone again."
 EXPORT_NEEDS_RUN = (
     f"Export of draft Section {DRAFT_SECTION} needs a zone run on this job first. "
     "Fill in Zone details and press Run zone (or type /run). /sample-di loads a sample zone to try it."
@@ -284,14 +297,16 @@ def slash_help_text() -> str:
         "- /heavy task — text-only hosted reasoning on the zone packet already in the message. "
         "The reply comes back into this thread. It does not call read_role, read_skill, read_mode, "
         "or a calc tool, and it is the only path that uses the hosted runtime.\n"
-        "- /usage — tokens and estimated cost for this job, from the record\n"
+        "- /status — where this job stands: the plan, who did what, what the team needs from you, "
+        "what is out of date, and what is not settled. Read from the record; no model call\n"
+        "- /usage — tokens, time, and estimated cost for this job, from the record\n"
         "- /help — this list\n\n"
         "## Keys and menus\n"
         "- Ctrl+S saves the open job. Closing the window saves it too. Ctrl+N starts a new chat.\n"
         "- Right-click a job in the sidebar, or use its ⋯ button, to rename or delete it.\n"
         f"- ⋯ menu: the samples, Run zone, Export draft Section {DRAFT_SECTION} "
         "(after a run and a blind claim check in this thread), Export Design Basis and Open Questions "
-        "(from this job's project record), and Settings.\n\n"
+        "(from this job's project record, after a trace check), and Settings.\n\n"
         "## Labels\n"
         "- Pipe gallons and trip time come from the calc tools. "
         "Blank trim and the screen-limit seconds stay labeled ASSUMED.\n"
@@ -401,6 +416,9 @@ def describe_activity(event: dict) -> str | None:
     kind = event.get("type")
     agent = str(event.get("agent") or "")
     prefix = f"{agent}: " if agent else ""
+    if kind == "retry":
+        # The API refused or dropped a request and it is being sent again. Nothing was lost.
+        return f"waiting to try again (attempt {event.get('attempt')} of {event.get('of')})"
     if kind == "round":
         return prefix + "thinking"
     if kind == "tool_end":
@@ -477,6 +495,36 @@ def suggested_prompts(
         ("Explain the screen", f"Explain the delivery-time screen result for {name} and what would change it."),
         ("Questions for the engineer", f"What should I ask the engineer of record about {name}?"),
     ]
+
+
+def resume_prompts(team: dict | None, *, key_saved: bool, busy: bool, untouched: bool,
+                   run_changes: list[str] | None = None) -> list[tuple[str, str]]:
+    """One-tap next steps read from where the job stands. Shown only when something is waiting.
+
+    team is team_view()'s result. untouched is true while the designer has
+    not typed since the job was opened, which is when "where things stand"
+    is worth offering. Nothing here calls a model; a chip sends a message.
+    """
+    if busy or not team:
+        return []
+    chips: list[tuple[str, str]] = []
+    worked = bool(team.get("people")) or bool(team.get("findings"))
+    if key_saved:
+        if team.get("unseen_answers"):
+            chips.append(("Continue with my answers",
+                          "I answered your questions on the Team panel. Continue from there."))
+        if team.get("stale") or run_changes:
+            chips.append(("Bring it up to date",
+                          "An input changed. Bring the affected work up to date and tell me what moved."))
+        if team.get("interrupted"):
+            chips.append(("Finish what was interrupted",
+                          "The last run was interrupted. Finish what was in progress."))
+        if team.get("disagreements") or team.get("conflicts"):
+            chips.append(("Settle what is open",
+                          "The specialists are not agreed. Settle it, or tell me what you need from me to settle it."))
+    if worked and (untouched or chips):
+        chips.append(("Where things stand", "/status"))
+    return chips[:4]
 
 
 def reduce_motion() -> bool:
@@ -611,6 +659,8 @@ class Desk:
         self._activity: dict[str, str] = {}
         # Inputs the designer typed since the form was last written to a job. Their source is the designer.
         self._typed: set[str] = set()
+        # How long the thread was when the open job was opened, to tell a returning designer from a typing one.
+        self._opened_len = 0
 
         touch = self._touch
         self.status = Var("", touch)
@@ -1142,6 +1192,7 @@ class Desk:
         self._apply_basis(project.get("basis") or {})
         self._apply_di(project.get("di") or {})
         self.chat_log = list(project.get("chat") or [])
+        self._opened_len = len(self.chat_log)
         self._render_chat()
         self._show_saved_run(project.get("last_run") or project.get("bess_run"))
         self._apply_mode(project.get("mode"))
@@ -1230,6 +1281,8 @@ class Desk:
         save_project(self.project)
         self.refresh_projects(self.project["id"])
         self._open_record(self.project)
+        # A saved field may have left calcs and findings behind. The panel says so at once.
+        self._refresh_team()
         if error:
             self.notify("Save", error, kind="error")
             self.status.set(error)
@@ -1342,8 +1395,94 @@ class Desk:
             except Exception as exc:
                 self.status.set("Project record is not available. " + safe_error(exc))
                 snapshot = None
-        self.team = team_view(snapshot)
+        reason = None
+        if snapshot is not None:
+            try:
+                reason = self._basis_reason(snapshot)
+            except Exception:
+                reason = None
+        self.team = team_view(snapshot, export_reason=reason)
+        self.team["unseen_answers"] = len((snapshot or {}).get("unseen_answers") or [])
         self._touch()
+
+    def _basis_reason(self, snapshot: dict) -> str:
+        """Why the Design Basis export waits, or "" when it is ready. From a snapshot already read."""
+        if not snapshot.get("calcs") and not snapshot.get("findings") and not snapshot.get("decisions"):
+            return (
+                "Nothing is on this job's record yet. Run /sample-di or /run, or ask a question, "
+                "then export the design basis."
+            )
+        return export_reason(snapshot)
+
+    def run_changes(self) -> list[str]:
+        """The inputs that changed after the last zone run on the open job. Empty when the run is current."""
+        if not self.project or not isinstance(self.project.get("last_run"), dict):
+            return []
+        try:
+            di = self.collect_di()
+            basis = self.collect_basis()
+        except ValueError:
+            di = self.project.get("di") or {}
+            basis = self.project.get("basis") or {}
+        try:
+            return inputs.changed_since(self.project.get("last_run"), di, basis)
+        except Exception:
+            return []
+
+    def show_status(self, raw: str = "/status") -> None:
+        """Post where the job stands into the thread, read from the record. No model call."""
+        self._ensure_project()
+        if not self.project:
+            return
+        self._open_record(self.project)
+        try:
+            snapshot = self.record.snapshot(self.project["id"])
+            digest = job_status.build(snapshot, export_reason=self._basis_reason(snapshot))
+            text = job_status.designer_text(digest, check_line(snapshot), self.project.get("name") or UNTITLED_JOB)
+            changed = self.run_changes()
+            if changed:
+                text += "\n\n" + RESULTS_STALE_LINE.format(names=", ".join(changed))
+        except Exception as exc:
+            text = "Status could not be read. " + safe_error(exc)
+        self._local_exchange(raw, text)
+        self._refresh_team()
+
+    def answer_question(self, question_id: str, answer: str) -> None:
+        """The designer answers one of the team's questions on the Team panel. No model call.
+
+        The answer goes on the record under the designer's name and into the
+        thread, and the lead is told at the top of its next turn. Nothing runs
+        until the designer says to go on, so several can be answered first.
+        """
+        if not self.project:
+            self.notify("Answer", "Open a job first.")
+            return
+        text = (answer or "").strip()
+        if not text:
+            self.notify("Answer", "Type the answer first.")
+            return
+        project_id = self.project["id"]
+        self._open_record(self.project)
+        try:
+            row = next((item for item in self.record.questions(project_id) if item["id"] == question_id), None)
+            if row is None:
+                raise RecordError("That question is not on this job any more.")
+            if row["status"] != "open":
+                raise RecordError("That question was already answered.")
+            self.record.answer_question(project_id, question_id, answer=text, by=ANSWERED_ON_PANEL)
+        except RecordError as exc:
+            self.notify("Answer", str(exc))
+            self._refresh_team()
+            return
+        except Exception as exc:
+            self.notify("Answer", "The answer could not be saved. " + safe_error(exc))
+            return
+        self._local_exchange(
+            f"Answer to the team's question \"{row['text']}\":\n{text}",
+            "Recorded. The lead reads it at the start of its next turn. Answer what else you can on the Team panel, "
+            "then press Continue with my answers, or say so in your own words.",
+        )
+        self._refresh_team()
 
     def cancel_running_jobs(self) -> None:
         """Ask every queued or running job on the open job to stop at its next model round."""
@@ -1787,6 +1926,8 @@ class Desk:
             self._local_exchange(raw, slash_help_text())
         elif command == "usage":
             self.show_usage(raw)
+        elif command == "status":
+            self.show_status(raw)
         elif command == "mode":
             self._slash_mode(raw, argument)
         else:
@@ -2377,6 +2518,9 @@ class Desk:
         """
         if not self.project or not self.project.get("last_run"):
             raise RuntimeError("Run /sample-di or /run before exporting.")
+        changed = self.run_changes()
+        if changed:
+            raise RuntimeError(EXPORT_STALE_RUN.format(names=", ".join(changed), section=DRAFT_SECTION))
         snapshot = copy.deepcopy(self.project["last_run"])
         outcome = self._claim_outcome(create, snapshot)
         job = self.jobs.record(
@@ -2408,16 +2552,11 @@ class Desk:
             return "Open a job first."
         self._open_record(self.project)
         snapshot = self.record.snapshot(self.project["id"])
-        # Basis facts alone come from the form defaults. A design basis needs
-        # at least one recorded calculation, finding, or decision.
-        if not snapshot["calcs"] and not snapshot["findings"] and not snapshot["decisions"]:
-            return (
-                "Nothing is on this job's record yet. Run /sample-di or /run, or ask a question, "
-                "then export the design basis."
-            )
-        # Findings are model claims. The export prints the tier each one earned, so it waits only for a
-        # trace check that judged the findings as they are now, and for nothing on the record to be out of date.
-        return export_gate(self.record, self.project["id"])
+        # Basis facts alone come from the form defaults. A design basis needs at least one recorded
+        # calculation, finding, or decision. Findings are model claims: the export prints the tier each one
+        # earned, so it waits only for a trace check that judged the findings as they are now, and for
+        # nothing on the record to be out of date.
+        return self._basis_reason(snapshot)
 
     def export_design_basis_to(self, path: Path) -> Path:
         """Write the Design Basis and Open Questions document for the open job."""
@@ -2479,6 +2618,11 @@ class Desk:
         self._ensure_project()
         if not self.project or not self.project.get("last_run"):
             self.notify("Export", EXPORT_NEEDS_RUN)
+            return
+        changed = self.run_changes()
+        if changed:
+            # The section is written from the last run. A run on other inputs is not this zone's section.
+            self.notify("Export", EXPORT_STALE_RUN.format(names=", ".join(changed), section=DRAFT_SECTION))
             return
         snapshot = copy.deepcopy(self.project["last_run"])
         packet = build_packet(snapshot)
@@ -2780,8 +2924,13 @@ class Desk:
 
     def chips(self) -> list[dict]:
         try:
-            found = suggested_prompts(self.project, self.chat_log, key_saved=self._key_saved,
-                                      busy=self._pending_here())
+            busy = self._pending_here()
+            found = suggested_prompts(self.project, self.chat_log, key_saved=self._key_saved, busy=busy)
+            if not found and self.project is not None:
+                found = resume_prompts(
+                    self.team, key_saved=self._key_saved, busy=busy,
+                    untouched=len(self.chat_log) <= self._opened_len, run_changes=self.run_changes(),
+                )
         except Exception:
             found = []
         return [{"label": label, "action": action} for label, action in found]
@@ -2848,17 +2997,24 @@ class Desk:
             )
         prior = [dict(turn) for turn in self.chat_log[:-1]]
         mode = self.mode_slug.get()
+        # A run on inputs that have since changed does not govern anything. The lead is told so
+        # in place of the note that would have repeated its figures.
+        moved = inputs.changed_since(self.project.get("last_run"), di, basis)
         request = chat_request_text(
             prior,
             basis,
             di,
             text,
-            self.project.get("last_run"),
+            None if moved else self.project.get("last_run"),
             mode,
             self.project.get("bess_run"),
         )
+        if moved:
+            request += "\n\n" + STALE_RUN_NOTE.format(names=", ".join(moved), section=DRAFT_SECTION)
         if form_note:
             request = form_note + "\n\n" + request
+        said = [text] + [str(turn.get("text") or "") for turn in prior if turn.get("role") == "user"]
+        earlier = [str(turn.get("text") or "") for turn in prior if turn.get("role") != "user"]
 
         def work(job_id: str) -> None:
             cancel = self._cancel_event(job_id)
@@ -2868,6 +3024,11 @@ class Desk:
                 # The reply streams into the thread as it is written. A client with no
                 # streaming call answers whole, and the page eases that in instead.
                 on_event, observe = self._stream_listener(job_id)
+                # A request the API asked to have sent again says so on the working line.
+                try:
+                    client.on_retry = observe
+                except Exception:
+                    pass
                 streaming = getattr(client, "streaming", None)
                 create = streaming(on_event) if callable(streaming) else client.create
                 out = run_everyday(
@@ -2876,7 +3037,7 @@ class Desk:
                     observe=observe,
                 )
                 reply = everyday_reply(out)
-                summary = team_summary(out)
+                summary = team_summary(out, self._audit_reply(origin_id, pack, mode, out, said, earlier))
                 if summary:
                     reply = reply + "\n\n" + summary
                 used = usage_summary(out.get("usage"))
@@ -2904,6 +3065,29 @@ class Desk:
             work=work,
         )
         self.status.set(f"Asking {MODEL_ID}… {job.heading()}")
+
+    def _audit_reply(self, project_id: str, pack: Path, mode: str, out: dict, said: list[str],
+                     earlier: list[str]) -> dict | None:
+        """Look the reply's figures up in what the lead could have read them from. Runs on the worker.
+
+        The result is kept on the record so a figure flagged once is not
+        accepted later because the lead repeated it. A failure here never
+        fails the turn: the reply is posted without the note.
+        """
+        try:
+            from fpfa.everyday import assemble_system
+
+            result = reply_audit.audit(
+                out.get("text") or "", self.record.snapshot(project_id),
+                tool_calls=out.get("tool_calls"), said=said,
+                pack_text=assemble_system(pack, mode, team=True),
+                earlier_replies=earlier, flagged_before=reply_audit.flagged_before(self.record, project_id),
+            )
+            if result["figures"]:
+                self.record.log_event(project_id, reply_audit.AUDIT_EVENT, result, agent="app")
+            return result
+        except Exception:
+            return None
 
     def _takes_name_from(self, text: str) -> bool:
         """True for the first typed question in a job that still has the default name."""
@@ -3242,6 +3426,8 @@ class Desk:
                 "roles": list(SEGMENT_ROLES),
             },
             "results": self.results_text,
+            # Inputs that changed after the run the Results tab and the Section export are showing.
+            "run_changes": self.run_changes(),
             "notices": list(self.notices),
             "settings": self.settings_view(),
             "live_rev": self.live_rev,

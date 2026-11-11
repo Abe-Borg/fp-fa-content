@@ -999,21 +999,25 @@ class TeamSession:
         return out
 
 
-def team_summary(out: dict | None) -> str:
+def team_summary(out: dict | None, audit: dict | None = None) -> str:
     """Markdown the window appends under a lead reply: who contributed what, what passed between
-    the specialists, and the check.
+    the specialists, the check, and what the application found when it looked up the reply's figures.
 
-    Written by the app from the turn's result, not by the model. Empty when
-    the turn delegated nothing, ran no check, and changed no input.
+    Written by the app from the turn's result, not by the model. audit is
+    reply_audit.audit()'s result for the reply. Empty when the turn delegated
+    nothing, ran no check, changed no input, and every figure was found.
     """
     if not isinstance(out, dict):
         return ""
+    from fpfa import reply_audit
+
     delegations = out.get("delegations") or []
     checks = out.get("checks") or []
     changed = out.get("inputs_set") or []
     resolved = out.get("resolved") or []
+    figure_lines = reply_audit.lines(audit)
     if not delegations and not checks and not changed and not resolved:
-        return ""
+        return "\n".join(["**Figures in this reply**"] + figure_lines) if figure_lines else ""
     lines = ["**Team**"]
     for item in changed:
         lines.append(f"- input {item.get('name')}: {item.get('was')} → {item.get('now')} (from the chat)")
@@ -1060,6 +1064,7 @@ def team_summary(out: dict | None) -> str:
         from fpfa.checker import summary_line
 
         lines.append("- " + summary_line(checks[-1]))
+    lines.extend(figure_lines)
     lines.append("Details are on the Team tab under Zone details.")
     return "\n".join(lines)
 

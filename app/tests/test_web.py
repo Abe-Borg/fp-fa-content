@@ -309,7 +309,7 @@ class EventStreamTests(ServerCase):
         self.assertTrue(any(item["detail"] == "writing the reply" for item in working))
         self.assertTrue(all("{" not in item["detail"] for item in working), "the working line names, never shows inputs")
         last = [state for state in states if "turns" in state["thread"]][-1]
-        self.assertTrue(last["thread"]["turns"][-1]["text"].endswith(ANSWER))
+        self.assertIn(ANSWER, last["thread"]["turns"][-1]["text"])
         self.assertEqual(last["thread"]["turns"][-1]["job_id"], lives[0]["job_id"])
         # A state that did not change the thread does not send it again.
         self.assertTrue(any("turns" not in state["thread"] for state in states))
@@ -336,7 +336,7 @@ class EventStreamTests(ServerCase):
         self.assertEqual(live_after_switch, [])
         from fpfa.projects import load_project
 
-        self.assertTrue(load_project(origin)["chat"][-1]["text"].endswith(ANSWER))
+        self.assertIn(ANSWER, load_project(origin)["chat"][-1]["text"])
 
 
 def _source_hash() -> str:

@@ -7,6 +7,11 @@ its usage on the `record_check` event, each delegation writes a `delegation`
 event, and each question one specialist put to another writes a `consult`
 event. This module reads those events back and prices them.
 
+Time. A turn, a delegation, a consult, and a trace check each record how
+long they took on the wall clock (seconds). The report prints it beside
+the tokens and sums the counted kinds, so a run can be judged on time as
+well as cost. A delegation's time is inside its turn's, like its tokens.
+
 Prices are a dated snapshot, not a feed. RATES_PER_MILLION holds the Claude
 Opus 5.5 list prices in dollars per million tokens as published on RATES_DATE.
 Pass other rates on the command line when they change; the report always
@@ -104,6 +109,31 @@ def job_totals(rows: list[dict]) -> dict:
     return normalize(total)
 
 
+def job_seconds(rows: list[dict]) -> float:
+    """Wall-clock seconds over the counted contexts that recorded a time. Older rows recorded none."""
+    total = 0.0
+    for row in rows:
+        if row.get("counted"):
+            try:
+                total += float(row.get("seconds") or 0)
+            except (TypeError, ValueError):
+                continue
+    return round(total, 1)
+
+
+def clock(seconds: Any) -> str:
+    """Seconds as a person reads them: 42 s, 3 min 05 s."""
+    try:
+        value = float(seconds or 0)
+    except (TypeError, ValueError):
+        return ""
+    if value <= 0:
+        return ""
+    if value < 60:
+        return f"{value:.0f} s"
+    return f"{int(value // 60)} min {int(value % 60):02d} s"
+
+
 def _label(row: dict) -> str:
     kind = row["kind"]
     if kind == "turn":
@@ -151,12 +181,17 @@ def report_text(record: Any, project_id: str, rates: dict | None = None, *, name
     for row in rows:
         money = cost(row["usage"], rate)["total"]
         mark = "" if row["counted"] else "   (inside the turn above, not added)"
-        lines.append(f"{row['ts'][:19]}  {_label(row):<42} {_tokens(row['usage'])}  ${money:7.4f}{mark}")
+        took = clock(row.get("seconds"))
+        lines.append(f"{row['ts'][:19]}  {_label(row):<42} {_tokens(row['usage'])}  ${money:7.4f}"
+                     f"{'  ' + took if took else ''}{mark}")
     total = job_totals(rows)
     money = cost(total, rate)
     counted = [row for row in rows if row["counted"]]
     lines.append("")
     lines.append(f"Job total over {len(counted)} model context{'s' if len(counted) != 1 else ''}: {_tokens(total)}")
+    spent = clock(job_seconds(rows))
+    if spent:
+        lines.append(f"Time on the model: {spent}, summed over the turns and checks that recorded one.")
     lines.append(
         f"Estimated cost ${money['total']:.4f}: input ${money['input']:.4f}, cache write ${money['cache_write']:.4f}, "
         f"cache read ${money['cache_read']:.4f}, output ${money['output']:.4f}."
@@ -202,7 +237,8 @@ def main(argv: list[str] | None = None) -> int:
         out = {}
         for project_id in projects:
             rows = usage_events(record, project_id)
-            out[project_id] = {"rows": rows, "total": job_totals(rows), "cost": cost(job_totals(rows), rates),
+            out[project_id] = {"rows": rows, "total": job_totals(rows), "seconds": job_seconds(rows),
+                               "cost": cost(job_totals(rows), rates),
                                "rates": {**RATES_PER_MILLION, **rates}, "rates_date": RATES_DATE}
         sys.stdout.write(json.dumps(out, indent=2, default=str) + "\n")
         return 0

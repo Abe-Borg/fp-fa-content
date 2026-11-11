@@ -41,6 +41,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import time
 from pathlib import Path
 from typing import Any, Callable
 
@@ -335,6 +336,7 @@ def _clip(text: str, limit: int) -> str:
 def check_record(content_root: Path, record: Record, project_id: str, create: Callable[..., Any]) -> dict:
     """The trace check over the record. Verdicts are written back onto the findings."""
     claim_check = _claim_check()
+    started = time.time()
     packet = build_record_packet(record, project_id, content_root)
     if not packet["claim_count"]:
         outcome = {
@@ -401,6 +403,7 @@ def check_record(content_root: Path, record: Record, project_id: str, create: Ca
         block_reason = status_line
     outcome = {
         "usage": usage,
+        "seconds": round(time.time() - started, 1),
         "rows": rows,
         "all_supported": all_supported,
         "claim_count": len(rows),
@@ -554,7 +557,12 @@ def export_gate(record: Record, project_id: str) -> str:
     of date. And when the record has findings, a trace check must have judged
     exactly the findings that are there now.
     """
-    snapshot = record.snapshot(project_id)
+    return export_reason(record.snapshot(project_id))
+
+
+def export_reason(snapshot: dict | None) -> str:
+    """export_gate for a snapshot the caller already holds."""
+    snapshot = snapshot or {}
     digest = status.build(snapshot)
     if digest["stale"]:
         changed = "; ".join(item["reason"] for item in digest["changes"][:3])
@@ -564,7 +572,7 @@ def export_gate(record: Record, project_id: str) -> str:
             + (f" ({changed})" if changed else "")
             + ". Run the zone again, or ask the lead to bring the findings up to date. /status lists them."
         )
-    findings = snapshot["findings"]
+    findings = list(snapshot.get("findings") or [])
     if not findings:
         return ""
     check = _latest_check_in(snapshot)

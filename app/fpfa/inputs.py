@@ -390,6 +390,30 @@ def provenance(project: dict | None, name: str, value: Any) -> str:
     return SOURCE_DESIGNER
 
 
+def changed_since(run: dict | None, di: dict | None, basis: dict | None) -> list[str]:
+    """The inputs that differ between a finished zone run and the form as it is now.
+
+    A run keeps the zone and the basis it ran on. Empty when there is no run
+    or nothing moved. The tables and the Section export are that run's, so a
+    name here means they no longer describe the form.
+    """
+    if not isinstance(run, dict) or not isinstance(run.get("inputs"), dict):
+        return []
+    ran_on = run.get("inputs") or {}
+    ran_basis = run.get("basis") if isinstance(run.get("basis"), dict) else {}
+    now = di or {}
+    changed = []
+    for name in ZONE_FIELDS:
+        before = ran_on.get(name, default_of(name))
+        after = now.get(name, default_of(name))
+        if not same(canonical(name, before), canonical(name, after)):
+            changed.append(name)
+    for name in BASIS_FIELDS:
+        if str(ran_basis.get(name) or "").strip() != str((basis or {}).get(name) or "").strip():
+            changed.append(name)
+    return changed
+
+
 def source_text(source: str) -> str:
     return SOURCE_TEXT.get(source, source or SOURCE_TEXT[SOURCE_DESIGNER])
 

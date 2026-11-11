@@ -417,7 +417,14 @@ class StreamingWindowTests(unittest.TestCase):
         self.assertEqual(app._lives, {})
         self.assertFalse(app._pending_here())
         saved = load_project(app.project["id"])
-        self.assertTrue(saved["chat"][-1]["text"].endswith(ANSWER))
+        posted = saved["chat"][-1]["text"]
+        self.assertIn(ANSWER, posted)
+        # The reply quoted two figures and the job's record holds no calculation. The application says so
+        # under the reply, in its own words.
+        tail = posted.split(ANSWER, 1)[1]
+        self.assertIn("**Figures in this reply**", tail)
+        self.assertIn("could not find on the record or in anything the lead read: 281.3 gal, 38.1 s. "
+                      "Treat them as unverified.", tail)
         self.assertEqual([job.status for job in app.jobs.snapshot()], ["done"])
 
     def test_a_specialists_words_stay_out_of_the_thread(self):
