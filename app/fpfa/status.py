@@ -189,8 +189,10 @@ def build(snapshot: dict | None, *, export_reason: str | None = None) -> dict:
                      "requeued": str(row.get("result") or "").startswith("Re-queued")} for row in pending],
         "interrupted": [dict({"name": row.get("name"), "slug": row.get("role_slug"), "status": row.get("status")},
                              **_partial(snap, row.get("role_slug") or "")) for row in interrupted],
+        # Like an out-of-date row: one nothing current rests on is history. It is still marked where it is listed.
         "unchecked": [{"id": ident, "tool": calcs[ident]["tool"], "by": calcs[ident].get("agent") or "",
-                       "note": analysis["calcs"][ident]["unchecked"]} for ident in analysis.get("unchecked") or []],
+                       "note": analysis["calcs"][ident]["unchecked"]}
+                      for ident in analysis.get("unchecked") or [] if ident in cited],
         "interrupted_jobs": [{"id": row["id"], "kind": row.get("kind"), "title": _short(row.get("title"), 80)}
                              for row in interrupted_jobs],
         "export": {"ready": export_reason == "", "reason": export_reason or ""} if export_reason is not None else None,

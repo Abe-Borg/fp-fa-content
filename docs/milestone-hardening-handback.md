@@ -122,8 +122,10 @@ Everything here was run in this session, on Linux, in a cloud container. Nothing
 | --- | --- | --- | --- |
 | `calcs/fp` | 261 | pass | 1: the kernel reproduce check, which needs the kernel source folder |
 | `calcs/fa` | 88 | pass | 13: code-quote tests, because no code text is in the repository |
-| `app` | 508 | pass | none. Both browser tests ran, in Chromium on Linux |
+| `app` | 511 | pass | none. Both browser tests ran, in Chromium on Linux |
 | `app/frontend` | 29 | pass | none |
+
+**On GitHub.** The new test workflow ran on the pull request's first commit, on Python 3.12.16, and passed. Its app step ran the 508 tests that commit held, with 2 skipped: the two browser tests, because the runner has no Playwright. So the suites have now run on Python 3.12, there. The browser tests have run only in this session.
 
 The page was rebuilt (`npm run build`) and the build committed. The README's screenshots were regenerated from the scripted scenario.
 
@@ -142,12 +144,23 @@ The page was rebuilt (`npm run build`) and the build committed. The README's scr
 
 1. Any request to the live model. So: whether the lead plans and delegates unprompted, whether the specialists ask, review, and revise, whether they read skills and follow them, what the checker does with a wrong claim, and what a request costs and how long it takes.
 2. Anything on Windows: the installer, launch, WebView2, Credential Manager, a migration from an older install, sleep, a forced kill of the packaged app.
-3. The suites on Python 3.12.
-4. The new test workflow on GitHub, until this pull request runs it.
-5. The 13 skipped `calcs/fa` tests and the kernel reproduce check.
-6. The held electric/pneumatic draft under `calcs/fp/draft/`.
-7. Any comparison with the content team's live skills.
-8. Any reading of NFPA 13, NFPA 72, FM DS 5-32, or a manufacturer's document.
+3. The two browser tests anywhere but this session. The GitHub runner skips them.
+4. The 13 skipped `calcs/fa` tests and the kernel reproduce check.
+5. The held electric/pneumatic draft under `calcs/fp/draft/`.
+6. Any comparison with the content team's live skills.
+7. Any reading of NFPA 13, NFPA 72, FM DS 5-32, or a manufacturer's document.
+
+### After the pull request was opened: an automated review
+
+An automated code review of the first commit reported three defects in code this milestone added. Each was reproduced before it was changed, and each is corrected with a test.
+
+| Reported | Reproduced | Now | Evidence |
+| --- | --- | --- | --- |
+| An untracked calculation run again after an input changed stays listed as unreconciled, because the comparison used when it was first recorded | Yes. A rerun replays the row and left the note standing; a rerun with other arguments left the old row as a gap for good | The comparison uses when the calculation last ran, so a rerun clears it. An unreconciled row nothing current rests on is history: still marked where it is listed, no longer a gap | `test_running_an_untracked_calculation_again_reconciles_it` |
+| A handoff one specialist left for another, never delivered, does not stop the Design Basis from calling itself covered | Yes | A handoff waiting for a specialist is a gap. A note addressed to the lead is not: nothing delivers one, so it would never clear | `test_a_handoff_no_specialist_has_picked_up_is_a_gap` |
+| A zone total rounded by the caller can cross the 500 gal cap: a 500.3 gal takeoff passed as 500 was matched to the takeoff within tolerance and judged exempt | Yes. Exempt, marked current, no warning | The screen runs on the matched takeoff's own figure, the record holds that figure, and the result says the passed one was replaced | `test_a_rounded_zone_total_cannot_cross_the_cap` |
+
+The third has a sibling this change did not touch. `di_trip_to_water` and `nitrogen_gate` also take the zone total as passed, within the same tolerance, as they did before this milestone. A rounded volume there moves a time or a flow slightly and could in principle move a result across the screen limit. It is listed under later work.
 
 ## 4. A short guide for you
 
@@ -210,6 +223,8 @@ Each is a real improvement. None is needed for the live evaluation to produce re
 3. **Track the fire-alarm calculations** for staleness, by typing their inputs.
 4. **Re-run stale calculations on request** instead of only flagging them.
 5. **Unit conversion and same-quantity matching** in the figure rules.
+5a. **Run the trip time and the gas fill on the takeoff's own zone total** when a caller passes it rounded, as the delivery screen now does. Today they use the figure as passed, within the match's tolerance.
+5b. **A way to close a handoff addressed to the lead.** Nothing marks one delivered, so it stays pending on the record. It is not counted as a coverage gap for that reason.
 6. **Call the 500 gal figure a threshold, not a cap,** in every string. The kernel already says it is a threshold. It was left to keep this change small.
 7. **Owners for the 34 skills no role names.**
 8. **The Claude Developer SME's items:** move the status block after the chat history so the history caches; do not retry a monthly spend-cap refusal; a model per role; cap the `anthropic` package version; move data to `%LOCALAPPDATA%`; sign the installer.
@@ -219,6 +234,6 @@ Each is a real improvement. None is needed for the live evaluation to produce re
 
 ## 7. What is in 0.3.0
 
-New modules: `quantities.py`, `content_use.py`. New tests: `test_hardening.py` (41 tests). Changed: `reply_audit.py`, `checker.py`, `coherence.py`, `calc_tools.py`, `workflow.py`, `team.py`, `everyday.py`, `claude_client.py`, `usage_report.py`, `status.py`, `team_panel.py`, `design_basis_docx.py`, `results_panel.py`, `spec_docx.py`, `releasing.py`, `live_eval.py`, `record.py`, `desk.py`, `about.py`, `sample_data.py`, and the Team tab of the page. Content: one skill, four roles, one corpus note, the pack lint. New documents: this one, `known-answer-dh2.md`, `content-provenance.md`. Rewritten: `releasing-basis.md`, `live-evaluation.md`. New workflow: `tests.yml`.
+New modules: `quantities.py`, `content_use.py`. New tests: `test_hardening.py` (44 tests). Changed: `reply_audit.py`, `checker.py`, `coherence.py`, `calc_tools.py`, `workflow.py`, `team.py`, `everyday.py`, `claude_client.py`, `usage_report.py`, `status.py`, `team_panel.py`, `design_basis_docx.py`, `results_panel.py`, `spec_docx.py`, `releasing.py`, `live_eval.py`, `record.py`, `desk.py`, `about.py`, `sample_data.py`, and the Team tab of the page. Content: one skill, four roles, one corpus note, the pack lint. New documents: this one, `known-answer-dh2.md`, `content-provenance.md`. Rewritten: `releasing-basis.md`, `live-evaluation.md`. New workflow: `tests.yml`.
 
 The record's schema is unchanged at 4. An existing database opens without conversion. A zone run made by an older version keeps its pipe-only screen record, which now prints as not determined until the zone is run again. A content pack built from this tree asks for app 0.3.0 or newer.

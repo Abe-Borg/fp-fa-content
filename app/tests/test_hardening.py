@@ -277,6 +277,46 @@ class SizeExemptionTests(unittest.TestCase):
         self.assertEqual(exemption_answer(legacy), "not determined")
         self.assertNotIn("exemption: yes", key_figures("dry_delivery_screen", {}, legacy))
 
+    def test_a_rounded_zone_total_cannot_cross_the_cap(self):
+        """A takeoff of 500.3 gal passed to the screen as 500. The answer is the takeoff's, not the rounding's."""
+        from fpfa.calc_tools import ToolSession
+        from fpfa.coherence import analyze
+        from fpfa.sample_data import EXAMPLE_DI
+
+        record = _record()
+        di = copy.deepcopy(EXAMPLE_DI)
+        di.update(segments=[{"role": "main", "nps": "6", "schedule": "sch10", "length_ft": 300.45}],
+                  trim_gal=5.0, fittings_percent=0)
+        _seed_inputs(record, di=di)
+        session = ToolSession(REPO, record=record, project_id="job1", agent="fp-sprinkler")
+        takeoff = session.execute("zone_trapped_volume", {"segments": di["segments"], "fittings_percent": 0, "trim_gal": 5.0})
+        self.assertTrue(500.0 < takeoff["zone_gal"] < 500.5, takeoff["zone_gal"])
+        times = {"t_detect_s": 8, "t_release_s": 2, "t_exhaust_s": 0, "basis": "FM", "qod": False}
+        screen = session.execute("dry_delivery_screen", {"segments": di["segments"], "q_fill_gpm": 600,
+                                                         "system_type": "di", "zone_gal": 500, **times})
+        self.assertIs(screen["nfpa_delivery_time_exempt"], False, "500 is within the match's tolerance and across the cap")
+        self.assertEqual(screen["exemption_volume_gal"], takeoff["zone_gal"])
+        self.assertIn("zone_gal was passed as 500. The calculation used the figure on the zone_trapped_volume record "
+                      f"[{takeoff['record_id']}] itself", screen["figure_taken_from_the_record"])
+        row = next(item for item in record.calcs("job1") if item["id"] == screen["record_id"])
+        self.assertEqual(row["inputs"]["zone_gal"], takeoff["zone_gal"], "the record holds the figure the call ran on")
+        self.assertIn(takeoff["record_id"], row["depends"])
+        self.assertEqual(analyze(record.snapshot("job1"))["calcs"][row["id"]]["state"], "current")
+        # The same rounded call again replays that row. The takeoff's own figure passed as it is needs no note.
+        again = session.execute("dry_delivery_screen", {"segments": di["segments"], "q_fill_gpm": 600,
+                                                        "system_type": "di", "zone_gal": 500, **times})
+        self.assertEqual(again["record_id"], screen["record_id"])
+        exact = session.execute("dry_delivery_screen", {"segments": di["segments"], "q_fill_gpm": 600,
+                                                        "system_type": "di", "zone_gal": takeoff["zone_gal"], **times})
+        self.assertEqual(exact["record_id"], screen["record_id"])
+        self.assertNotIn("figure_taken_from_the_record", exact)
+        # A figure that matches no takeoff is used as passed, and the record says it is another case.
+        other = session.execute("dry_delivery_screen", {"segments": di["segments"], "q_fill_gpm": 600,
+                                                        "system_type": "di", "zone_gal": 450, **times})
+        self.assertIs(other["nfpa_delivery_time_exempt"], True)
+        self.assertEqual(other["exemption_volume_gal"], 450)
+        self.assertIn("matches no recorded zone_trapped_volume result", other["differs_from_project_inputs"])
+
     def test_the_sprinkler_role_tells_the_specialist_to_pass_the_zone_total(self):
         text = (REPO / "roles" / "fp-sprinkler" / "ROLE.md").read_text(encoding="utf-8")
         self.assertIn("pass its `zone_gal` to `dry_delivery_screen`", text)
@@ -339,6 +379,44 @@ class WhatAChangeReachesTests(unittest.TestCase):
         self.assertEqual(tier["tier"], "open", "consistent with a row the record cannot vouch for any more")
         self.assertTrue(any(reason.startswith("Not reconciled by the application") for reason in tier["reasons"]))
         self.assertTrue(any("cannot reconcile" in gap for gap in checker.coverage(record.snapshot("job1"))["gaps"]))
+
+
+    def test_running_an_untracked_calculation_again_reconciles_it(self):
+        """The views tell the author to run it again. Doing that has to clear what they said."""
+        import time
+
+        from fpfa import checker, status
+        from fpfa.calc_tools import ToolSession
+        from fpfa.coherence import analyze
+
+        record, _calcs, _di, _basis = _planned()
+        session = ToolSession(REPO, record=record, project_id="job1", agent="fp-sprinkler")
+        args = {"op": "pipe_volume", "inputs": {"segments": [{"d_in": 4.26, "length_ft": 100}]}}
+        first = session.execute("fp_calc", args)
+        finding = record.record_finding("job1", agent="fp-sprinkler", label="calculated", supports=[first["record_id"]],
+                                        text="A 100 ft run of 4 in. pipe holds 74.0 gal.")
+        time.sleep(1.1)   # the record's clock is whole seconds
+        _change(record, "q_fill_gpm", 750.0)
+        time.sleep(1.1)
+        self.assertEqual(analyze(record.snapshot("job1"))["unchecked"], [first["record_id"]])
+        # Run again with the same arguments: the row is replayed, and that is the author saying they still hold.
+        again = session.execute("fp_calc", args)
+        self.assertEqual(again["record_id"], first["record_id"])
+        self.assertEqual(analyze(record.snapshot("job1"))["unchecked"], [])
+        self.assertEqual(status.build(record.snapshot("job1"))["unchecked"], [])
+        # A second change, answered this time with other arguments: a new row, and the finding moved onto it.
+        time.sleep(1.1)
+        _change(record, "q_fill_gpm", 800.0)
+        time.sleep(1.1)
+        other = session.execute("fp_calc", {"op": "pipe_volume", "inputs": {"segments": [{"d_in": 4.26, "length_ft": 120}]}})
+        self.assertNotEqual(other["record_id"], first["record_id"])
+        record.record_finding("job1", agent="fp-sprinkler", label="calculated", supports=[other["record_id"]],
+                              text="A 120 ft run of 4 in. pipe holds 88.8 gal.", replaces=finding["id"])
+        snapshot = record.snapshot("job1")
+        # The old row is still marked where it is listed. Nothing current rests on it, so nobody has to act on it.
+        self.assertEqual(analyze(snapshot)["unchecked"], [first["record_id"]])
+        self.assertEqual(status.build(snapshot)["unchecked"], [])
+        self.assertFalse(any("cannot reconcile" in gap for gap in checker.coverage(snapshot)["gaps"]))
 
 
 class AssuranceTests(unittest.TestCase):
@@ -456,6 +534,36 @@ class CoverageTests(unittest.TestCase):
         self.assertIn("That is a statement about the record, not about the design.", text)
         self.assertNotIn(checker.INCOMPLETE_HEAD, text)
         self.assertIn("NOT PERFORMED", text, "complete is never verified")
+
+    def test_a_handoff_no_specialist_has_picked_up_is_a_gap(self):
+        """Every calculation has a finding, and one specialist left work for the other that was never delivered."""
+        from fpfa import checker
+        from fpfa.design_basis_docx import write_design_basis
+
+        record, calcs, _di, _basis = _planned()
+        for tool in ("dry_delivery_screen", "di_trip_to_water", "density_area", "nitrogen_gate", "elect_di_trim",
+                     "releasing_truth_table"):
+            record.record_finding("job1", agent="fp-sprinkler", label="use best judgment", supports=[calcs[tool]],
+                                  text=f"A statement on {tool}.")
+        self.assertTrue(checker.coverage(record.snapshot("job1"))["complete"])
+        # A note for the lead is read in its status block. It is not work waiting on a specialist.
+        record.create_handoff("job1", from_agent="fp-sprinkler", to_agent="lead", brief="The trim sheet is still owed.")
+        self.assertTrue(checker.coverage(record.snapshot("job1"))["complete"])
+        waiting = record.create_handoff("job1", from_agent="fp-sprinkler", to_agent="fa-releasing",
+                                        brief="Review the releasing sequence against the trim family.")
+        found = checker.coverage(record.snapshot("job1"))
+        self.assertFalse(found["complete"])
+        self.assertEqual(found["gaps"], ["1 handoff is waiting for fa-releasing: work one contributor left for another "
+                                         "has not been picked up."])
+        out = Path(tempfile.mkdtemp(prefix="fpfa-hardening-")) / "basis.docx"
+        write_design_basis(out, {"name": "Sample"}, record.snapshot("job1"), content_root=REPO)
+        text = _docx_text(out)
+        self.assertIn(checker.INCOMPLETE_HEAD, text)
+        self.assertNotIn(checker.COMPLETE_LINE, text)
+        # Once the receiver has it, nothing is waiting.
+        record.set_handoff("job1", waiting["id"], status="delivered", by="lead")
+        self.assertTrue(checker.coverage(record.snapshot("job1"))["complete"])
+        self.assertIn("no handoff is waiting for a specialist", checker.COMPLETE_LINE)
 
     def test_the_lead_is_told_what_is_not_covered_and_the_role_says_what_to_do_about_it(self):
         from fpfa.team import lead_status

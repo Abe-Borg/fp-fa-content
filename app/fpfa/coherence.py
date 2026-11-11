@@ -115,7 +115,7 @@ UNTRACKED_NOTE = (
     "so it is never marked out of date by a change."
 )
 UNCHECKED_NOTE = (
-    "A project input changed after this calculation ran, and the application cannot tell whether it used "
+    "A project input changed after this calculation last ran, and the application cannot tell whether it used "
     "that input. Check it by hand or run it again."
 )
 # A cite follows the edition the job names for its document.
@@ -253,23 +253,54 @@ def call_basis(
             depends.append(row["id"])
         else:
             varies[arg] = {"used": _plain(args.get(arg)), "project": _plain(given_value(row)), "input": arg}
-    for arg, (source_tool, key) in (DERIVED.get(tool) or {}).items():
+    for arg, (source_tool, _key) in (DERIVED.get(tool) or {}).items():
         if _blank(args.get(arg)):
             continue
-        candidates = [row for row in (calcs or []) if row.get("tool") == source_tool
-                      and isinstance(row.get("outputs"), dict)]
-        matching = [row for row in candidates if _result_matches(args.get(arg), row["outputs"].get(key))]
-        if matching:
-            # The newest matching result that ran on the project inputs; failing that, the newest that is not
-            # out of date; failing that, the newest.
-            fresh = [row for row in matching if row["id"] not in (stale or set())]
-            design = [row for row in fresh if row["id"] not in (alternative or set())]
-            depends.append((design or fresh or matching)[-1]["id"])
+        found = matched_source(tool, arg, args.get(arg), calcs, stale=stale, alternative=alternative)
+        if found is not None:
+            depends.append(found["id"])
         else:
+            candidates = [row for row in (calcs or []) if row.get("tool") == source_tool
+                          and isinstance(row.get("outputs"), dict)]
             note = (f"matches no recorded {source_tool} result" if candidates
                     else f"no {source_tool} result is on the record")
             varies[arg] = {"used": _plain(args.get(arg)), "from": source_tool, "note": note}
     return depends, varies
+
+
+def matched_source(
+    tool: str,
+    arg: str,
+    value: Any,
+    calcs: list[dict] | None,
+    *,
+    stale: set[str] | None = None,
+    alternative: set[str] | None = None,
+) -> dict | None:
+    """The recorded calc a figure passed as an argument was taken from. None when it matches none.
+
+    A caller often passes the figure rounded, so the match has a tolerance
+    (_result_matches). Of the results that match, the newest that ran on the
+    project inputs is taken; failing that, the newest that is not out of
+    date; failing that, the newest.
+    """
+    source = (DERIVED.get(tool) or {}).get(arg)
+    if source is None or _blank(value):
+        return None
+    source_tool, key = source
+    matching = [row for row in (calcs or []) if row.get("tool") == source_tool
+                and isinstance(row.get("outputs"), dict) and _result_matches(value, row["outputs"].get(key))]
+    if not matching:
+        return None
+    fresh = [row for row in matching if row["id"] not in (stale or set())]
+    design = [row for row in fresh if row["id"] not in (alternative or set())]
+    return (design or fresh or matching)[-1]
+
+
+# Arguments that decide a yes or no at a threshold. A tolerance that is harmless for a time or a flow can
+# carry such a figure across its threshold: a takeoff of 500.4 gal passed as 500 would read as exempt. So
+# the tool is handed the recorded figure itself, not the caller's rounding of it (ToolSession.execute).
+EXACT_FROM_SOURCE: dict[str, tuple[str, ...]] = {"dry_delivery_screen": ("zone_gal",)}
 
 
 def _plain(value: Any) -> Any:
@@ -396,7 +427,9 @@ def analyze(snapshot: dict | None) -> dict:
     ran; "alternative" when it ran on another value than a project input, or
     took a figure from a calc that did; else "current". A current calc on a
     tool the record does not track carries "unchecked" when an input changed
-    after it ran: the record cannot say whether it still holds. A cite is stale when the edition it follows changed. A finding
+    after it last ran: the record cannot say whether it still holds. Running
+    it again clears that, with the same arguments (a replay) or with others
+    (a new row; the old one is then history once nothing current rests on it). A cite is stale when the edition it follows changed. A finding
     or a decision is stale when a row it rests on is stale, was replaced, or
     was withdrawn.
     """
@@ -445,7 +478,10 @@ def analyze(snapshot: dict | None) -> dict:
         tracked = bool(row.get("depends") or row.get("varies"))
         unchecked = ""
         if not tracked and state == CURRENT and row.get("tool") not in TRACKED_TOOLS:
-            later = [when for when in changed_at if when > str(row.get("created") or "")]
+            # When it last ran, not when it first ran: a calculation run again after the change, with the
+            # same arguments, replays its row and is the author saying those arguments still hold.
+            ran = max(str(row.get("created") or ""), str(row.get("last_used") or ""))
+            later = [when for when in changed_at if when > ran]
             if later:
                 unchecked = UNCHECKED_NOTE
         calc_state[calc_id] = {

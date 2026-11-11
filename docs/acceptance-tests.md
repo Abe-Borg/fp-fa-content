@@ -143,7 +143,7 @@ Automated half, already passed: `app/tests/test_usage.py` proves the events, the
 | Any check of the engineering basis against NFPA 13, NFPA 72, FM DS 5-32, or a manufacturer's listing; any qualified engineer's review | **Not done** | `docs/releasing-basis.md`, section 8 |
 | The skipped tests: 13 `calcs/fa` code-quote tests (no code text in the repository) and the FP kernel reproduce check (needs the kernel source folder) | **Skipped** in every run here | `calcs/fa`, `calcs/fp/test_kernel_reproduce.py` |
 | The held electric/pneumatic draft under `calcs/fp/draft/` | **Not run** by these suites, imported by nothing | held work |
-| The test workflow on GitHub (`.github/workflows/tests.yml`) | **Unrun** until the pull request that adds it | new in this milestone |
+| The test workflow on GitHub (`.github/workflows/tests.yml`) | Ran and passed on the pull request that added it, on Python 3.12. It skips the two browser tests: the runner has no Playwright | new in this milestone |
 | The Windows installer, WebView2 window, Credential Manager, sleep and hibernate on real hardware | **Unrun** | Tests A, C, D, E above |
 | The pictures in the README | Taken from the simulated scenario | `docs/screenshots/` |
 

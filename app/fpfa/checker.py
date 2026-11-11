@@ -683,9 +683,12 @@ _TOOL_WORDS = {
 }
 # Lookups a finding is not expected to speak for by themselves.
 _HELPER_TOOLS = frozenset({"resolve_pipe_id"})
+# A handoff addressed to the lead is a note the lead reads in its status block. Nothing delivers it, so it
+# never leaves pending, and it is not work waiting on a specialist.
+LEAD_AGENT = "lead"
 COMPLETE_LINE = (
-    "Coverage: every calculation on this record has a specialist's finding, the plan's steps are done, and "
-    "nothing is waiting on the team. That is a statement about the record, not about the design. The table "
+    "Coverage: every calculation on this record has a specialist's finding, the plan's steps are done, no "
+    "handoff is waiting for a specialist, and nothing else is waiting on the team. That is a statement about the record, not about the design. The table "
     "below says what kind of checking each statement had, and what kind it did not."
 )
 INCOMPLETE_HEAD = "INCOMPLETE DRAFT. This document does not yet cover the whole design basis:"
@@ -758,8 +761,14 @@ def coverage(snapshot: dict | None) -> dict:
         count = len(digest["asks"])
         gaps.append(f"{count} question{'s' if count != 1 else ''} the team put to the designer "
                     f"{'are' if count != 1 else 'is'} not answered.")
-    if analysis.get("unchecked"):
-        count = len(analysis["unchecked"])
+    waiting = [row for row in digest["pending"] if row.get("to") != LEAD_AGENT]
+    if waiting:
+        count = len(waiting)
+        who = ", ".join(sorted({str(row.get("to") or "") for row in waiting}))
+        gaps.append(f"{count} handoff{'s' if count != 1 else ''} {'are' if count != 1 else 'is'} waiting for {who}: "
+                    "work one contributor left for another has not been picked up.")
+    if digest["unchecked"]:
+        count = len(digest["unchecked"])
         gaps.append(f"{count} calculation{'s' if count != 1 else ''} the application cannot reconcile after an "
                     "input change: the tool is not tied to the project inputs. Check by hand or run again.")
     if digest["stale"]:

@@ -484,6 +484,7 @@ class ToolSession:
         if name in RECORD_TOOLS:
             return self._record_tool(name, args)
         if name in CALC_TOOLS and self.recording:
+            args, taken = self._exact_from_record(name, args)
             found = self.record.find_calc(self.project_id, name, args, self.calc_identity)
             if found is not None:
                 # Same tool, inputs, calc code, and project: count the replay and return the recorded output.
@@ -493,7 +494,7 @@ class ToolSession:
                     self.project_id, tool=name, inputs=args, outputs=found["outputs"],
                     agent=self.agent, calc_identity=self.calc_identity, depends=depends, varies=varies,
                 )
-                return self._with_record_id(name, found["outputs"], row["id"], departs)
+                return self._with_record_id(name, found["outputs"], row["id"], departs, taken)
             output = self._run(name, args)
             depends, varies, departs = self._basis(name, args)
             row = self.record.record_calc(
@@ -501,7 +502,7 @@ class ToolSession:
                 agent=self.agent, pack_version=self.pack_version, calc_identity=self.calc_identity,
                 depends=depends, varies=varies,
             )
-            return self._with_record_id(name, output, row["id"], departs)
+            return self._with_record_id(name, output, row["id"], departs, taken)
         output = self._run(name, args)
         # A model never reads the kernel's deprecated names, with a record or without one.
         return reader_view(name, output) if self.model_facing else output
@@ -511,7 +512,51 @@ class ToolSession:
         """True when a model reads this session's results. The fixed tool plan and a bare session do not."""
         return self.agent not in ("", "tool-plan")
 
-    def _with_record_id(self, name: str, output: dict, record_id: str, departs: str = "") -> dict:
+    def _exact_from_record(self, name: str, args: dict) -> tuple[dict, list[str]]:
+        """Hand a threshold-deciding argument the recorded figure it was taken from, not the caller's rounding.
+
+        A model often passes a figure rounded, and the record ties it to the
+        calculation it came from within a tolerance. That tolerance must not
+        decide an answer: a takeoff of 500.4 gal passed as 500 would be judged
+        exempt. For the arguments in coherence.EXACT_FROM_SOURCE the call runs,
+        and is recorded, on the matched record's own figure. Returns the
+        arguments to use and a sentence for each figure that was replaced. A
+        figure that matches no record is left as passed; the record then marks
+        the call as an alternative, as it always did.
+        """
+        names = coherence.EXACT_FROM_SOURCE.get(name) or ()
+        if not names or not any(_number_was_passed(args, arg) for arg in names):
+            return args, []
+        notes: list[str] = []
+        try:
+            calcs = self.record.calcs(self.project_id)
+            standing = coherence.analyze({
+                "fact_history": self.record.facts(self.project_id, include_superseded=True), "calcs": calcs,
+            })["calcs"]
+            stale = {ident for ident, item in standing.items() if item["state"] == coherence.STALE}
+            alternative = {ident for ident, item in standing.items() if item["state"] == coherence.ALTERNATIVE}
+            used = dict(args)
+            for arg in names:
+                if not _number_was_passed(args, arg):
+                    continue
+                row = coherence.matched_source(name, arg, args[arg], calcs, stale=stale, alternative=alternative)
+                if row is None:
+                    continue
+                source_tool, key = coherence.DERIVED[name][arg]
+                exact = row["outputs"].get(key)
+                if isinstance(exact, bool) or not isinstance(exact, (int, float)) or float(exact) == float(args[arg]):
+                    continue
+                used[arg] = exact
+                notes.append(f"{arg} was passed as {args[arg]}. The calculation used the figure on the "
+                             f"{source_tool} record [{row['id']}] itself, {exact:.4g}, so that rounding cannot "
+                             "decide the answer.")
+            return used, notes
+        except Exception:
+            # Bookkeeping. A failure here never fails the calculation; the figure is used as passed.
+            return args, []
+
+    def _with_record_id(self, name: str, output: dict, record_id: str, departs: str = "",
+                        taken: list[str] | None = None) -> dict:
         """A model-facing result carries the calc record id so a finding can cite it.
 
         It also says, in one sentence, where the call departed from the project
@@ -525,6 +570,8 @@ class ToolSession:
             return output
         shown = dict(reader_view(name, output))
         shown["record_id"] = record_id
+        if taken:
+            shown["figure_taken_from_the_record"] = " ".join(taken)
         if name not in coherence.TRACKED_TOOLS:
             shown["not_tied_to_project_inputs"] = (
                 coherence.UNTRACKED_NOTE + " If a project input it used changes, run it again and replace the "
