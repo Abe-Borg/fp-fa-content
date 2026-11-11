@@ -1178,7 +1178,7 @@ class EverydayPathTests(unittest.TestCase):
         slugs = [item["slug"] for item in list_roles(self.root)]
         self.assertEqual(
             slugs,
-            ["everyday", "fa-releasing", "fp-sprinkler", "qa-specialist", "spec-draft"],
+            ["everyday", "fa-releasing", "fp-sprinkler", "lead", "qa-specialist", "spec-draft"],
         )
         text = read_role(self.root, "fp-sprinkler")
         self.assertIn("Pipe-only volume is not the exemption volume.", text)
@@ -2193,8 +2193,14 @@ class UiSmokeTests(unittest.TestCase):
             self.assertIn("El/El holds the prime.", seen[1])
             self.assertIn("explain that recommendation", seen[1])
             self.assertIn("Earlier turns:", seen[1])
-            marker = "Call list_roles and read_role before you answer as that specialist."
-            self.assertIn(marker, seen_meta[0]["system"])
+            # A job with a record is a team turn: the system text is the pack's lead role, the
+            # specialists by slug, and the team paragraph. The lead does not wear a specialist's role.
+            system = seen_meta[0]["system"]
+            self.assertIn("# Team lead", system)
+            self.assertIn("Specialists on this team.", system)
+            self.assertIn("- fp-sprinkler:", system)
+            self.assertNotIn("Call list_roles and read_role before you answer as that specialist.", system)
+            self.assertEqual(seen_meta[1]["system"], system)
             self.assertEqual(seen_meta[0]["model"], "claude-opus-5-5")
             self.assertNotIn("tool_choice", seen_meta[0])
             self.assertNotIn("temperature", seen_meta[0])
@@ -2203,7 +2209,6 @@ class UiSmokeTests(unittest.TestCase):
             self.assertNotIn("thinking", seen_meta[0])
             names = [tool["name"] for tool in seen_meta[0]["tools"]]
             for name in (
-                "read_role",
                 "read_skill",
                 "read_mode",
                 "list_modes",
@@ -2212,8 +2217,12 @@ class UiSmokeTests(unittest.TestCase):
                 "di_trip_to_water",
                 "elect_di_trim",
                 "releasing_truth_table",
+                "delegate",
+                "set_input",
+                "request_check",
             ):
                 self.assertIn(name, names)
+            self.assertNotIn("read_role", names, "the lead delegates to a specialist; it does not wear its role")
             self.assertIn("Active mode: mixed.", seen[0])
             self.assertIn("This mode may explore an option, quote a calc tool, and draft in the same reply.", seen_meta[0]["system"])
         finally:

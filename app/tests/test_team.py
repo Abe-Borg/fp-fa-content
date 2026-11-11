@@ -60,7 +60,8 @@ class Scripted:
         system = _system_text(kwargs)
         if "Judge each numbered claim from the cites file alone" in system:
             return "checker"
-        if "You are the design assistant inside a desktop application" in system:
+        # A team turn reads the pack's lead role. A turn with no record reads the everyday shell.
+        if "# Team lead" in system or "You are the design assistant inside a desktop application" in system:
             return "lead"
         for slug in ("fp-sprinkler", "fa-releasing", "spec-draft"):
             marker = {"fp-sprinkler": "# Sprinkler specialist", "fa-releasing": "# Releasing specialist",
@@ -102,16 +103,36 @@ class SpecialistRosterTests(unittest.TestCase):
             with self.assertRaises(RecordError):
                 specialist_system(REPO, bad)
 
-    def test_team_schemas_add_three_tools_and_specialists_get_none_of_them(self):
+    def test_the_lead_gets_the_team_tools_and_a_specialist_gets_consult_and_none_of_them(self):
         from fpfa.calc_tools import SCHEMAS
-        from fpfa.team import SPECIALIST_SCHEMAS, TEAM_SCHEMAS, TEAM_TOOL_NAMES
+        from fpfa.team import (CONSULT, LEAD_SCHEMAS, SPECIALIST_SCHEMAS, TEAM_SCHEMAS, TEAM_TOOL_NAMES,
+                               lead_schemas)
 
-        names = [item["name"] for item in TEAM_SCHEMAS]
+        self.assertEqual(TEAM_TOOL_NAMES, ("list_specialists", "delegate", "request_check", "set_input",
+                                           "answer_question", "set_plan", "resolve_disagreement"))
+        for schemas in (TEAM_SCHEMAS, LEAD_SCHEMAS):
+            names = [item["name"] for item in schemas]
+            for tool in TEAM_TOOL_NAMES:
+                self.assertIn(tool, names)
+            self.assertEqual(len(names), len(set(names)))
+            self.assertNotIn(CONSULT, names, "the lead delegates; it does not consult")
+        # A lead with its own role file does not read a specialist's role and answer in its place.
+        lead_names = [item["name"] for item in LEAD_SCHEMAS]
+        self.assertNotIn("read_role", lead_names)
+        self.assertNotIn("list_roles", lead_names)
+        self.assertIs(lead_schemas(REPO), LEAD_SCHEMAS)
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertIs(lead_schemas(Path(tmp)), TEAM_SCHEMAS, "a pack with no lead role keeps the shell's tools")
+        specialist = [item["name"] for item in SPECIALIST_SCHEMAS]
+        self.assertEqual(specialist, [item["name"] for item in SCHEMAS] + [CONSULT])
         for tool in TEAM_TOOL_NAMES:
-            self.assertIn(tool, names)
-        self.assertEqual(len(names), len(set(names)))
-        self.assertEqual([item["name"] for item in SPECIALIST_SCHEMAS], [item["name"] for item in SCHEMAS])
-        self.assertIn("handoff", [item["name"] for item in SPECIALIST_SCHEMAS])
+            self.assertNotIn(tool, specialist)
+        for tool in ("handoff", "review_finding", "withdraw_finding"):
+            self.assertIn(tool, specialist)
+        # Tool schemas use the basic JSON types only, and no tool is marked for eager input streaming.
+        for item in TEAM_SCHEMAS + [SPECIALIST_SCHEMAS[-1]]:
+            self.assertNotIn("eager_input_streaming", item)
+            self.assertEqual(item["input_schema"]["type"], "object")
 
 
 class DelegateTests(unittest.TestCase):
@@ -264,7 +285,7 @@ class DelegateTests(unittest.TestCase):
 class LeadTurnTests(unittest.TestCase):
     def test_everyday_turn_with_a_record_is_the_lead_and_sums_the_team_usage(self):
         from fpfa.everyday import assemble_system, run_everyday
-        from fpfa.team import TEAM_PARAGRAPH, TEAM_SCHEMAS
+        from fpfa.team import LEAD_SCHEMAS, TEAM_PARAGRAPH
 
         record = _record()
         record.ensure_project("job1")
@@ -292,9 +313,22 @@ class LeadTurnTests(unittest.TestCase):
         lead_calls = [call for call in create.calls if call["kind"] == "lead"]
         self.assertEqual(len(lead_calls), 3)
         for call in lead_calls:
-            self.assertIs(call["tools"], TEAM_SCHEMAS)
+            self.assertIs(call["tools"], LEAD_SCHEMAS)
             self.assertIn(TEAM_PARAGRAPH, _system_text(call))
+            # The system text is the same bytes on every round, so it is read from the cache.
+            self.assertEqual(_system_text(call), _system_text(lead_calls[0]))
         self.assertEqual(_system_text(lead_calls[0]), assemble_system(REPO, "mixed", team=True))
+        # The lead reads its own role from the pack. It is not handed a specialist's role to wear.
+        system = _system_text(lead_calls[0])
+        self.assertTrue(system.startswith("---"))
+        self.assertIn("# Team lead", system)
+        self.assertNotIn("# Sprinkler specialist", system)
+        self.assertNotIn("You are the design assistant inside a desktop application", system)
+        # What varies per turn rides in the user message: the status block, then the designer's words.
+        first_user = lead_calls[0]["messages"][0]["content"]
+        self.assertTrue(first_user.startswith("Status of this job, read from the project record by the application:"))
+        self.assertTrue(first_user.endswith("Give me the design basis for zone DH-1."))
+        self.assertIn("Contributors so far: none.", first_user)
         self.assertEqual(len(out["delegations"]), 1)
         self.assertEqual(out["delegations"][0]["specialist"], "fp-sprinkler")
         self.assertEqual(out["lead_usage"]["rounds"], 3)
@@ -337,7 +371,8 @@ class RecordCheckTests(unittest.TestCase):
         cite = record.record_evidence("job1", document="NFPA 13", edition="2025", section="19.2.3.1.3",
                                       note="Duration for ordinary hazard is 60 to 90 minutes", status="held",
                                       agent="fp-sprinkler")
-        pulled = record.record_evidence("job1", document="FM DS 5-32", edition="2026", section="2.4.3.2.1.2",
+        # A section the content pack holds no note on, so nothing but its author stands behind it.
+        pulled = record.record_evidence("job1", document="FM DS 5-32", edition="2026", section="9.9.9.9",
                                         note="", status="NOT PULLED", agent="fp-sprinkler")
         f_calc = record.record_finding("job1", agent="fp-sprinkler", text="Duration is 60 min",
                                        label="calculated", supports=[calc_id])
@@ -351,31 +386,48 @@ class RecordCheckTests(unittest.TestCase):
         return calc_id, [f_calc, f_cite, f_none, f_open, f_wrong]
 
     def test_check_builds_claims_from_findings_and_cites_from_their_supports(self):
+        from fpfa.checker import AUTHOR_MARK, PACK_MARK
         from fpfa.claim_check import OPEN_MARK, PACKAGE_MARK
         from fpfa.team import build_record_packet
 
         record = _record()
         calc_id, findings = self._seed(record)
-        packet = build_record_packet(record, "job1")
+        packet = build_record_packet(record, "job1", REPO)
         self.assertEqual(packet["claim_count"], 5)
         claims = packet["claims"].splitlines()
         sources = packet["sources"].splitlines()
         self.assertEqual(claims[0], "1. Duration is 60 min.")
+        # A calc record is a package assertion: what it states and its figures.
         self.assertIn(PACKAGE_MARK, sources[0])
         self.assertIn("hose_duration", sources[0])
-        self.assertIn("60", sources[0])
-        self.assertIn("NFPA 13-2025 §19.2.3.1.3. Duration for ordinary hazard is 60 to 90 minutes [held]", sources[1])
+        self.assertIn("duration_min=60", sources[0])
+        # A cite to a section the pack holds is read in the pack's words, with the file and line.
+        self.assertTrue(sources[1].startswith(f"2. NFPA 13-2025 §19.2.3.1.3. {PACK_MARK}: (corpus/fp/density-area.md:"))
+        self.assertIn("The lower duration needs supervision", sources[1])
+        self.assertNotIn("Duration for ordinary hazard is 60 to 90 minutes", sources[1],
+                         "the author's own note is not what the checker reads when the pack holds the section")
         self.assertEqual(sources[2], f"3. {OPEN_MARK}")
+        # A section the pack does not hold falls back to the author's note, marked as the author's.
+        self.assertIn(AUTHOR_MARK, sources[3])
         self.assertIn("[NOT PULLED]", sources[3])
         self.assertTrue(packet["meta"][3]["open"])
         self.assertTrue(packet["meta"][0]["calc_only"])
         self.assertFalse(packet["meta"][1]["calc_only"])
+        self.assertEqual([item["basis"] for item in packet["meta"]], ["source", "source", "none", "author", "source"])
+        self.assertEqual(packet["meta"][1]["sources"][0]["kind"], "pack")
+        # With no content root nothing is looked up, and every cite to a standard is its author's note.
+        bare = build_record_packet(record, "job1")
+        self.assertIn(AUTHOR_MARK, bare["sources"].splitlines()[1])
+        self.assertIn("Duration for ordinary hazard is 60 to 90 minutes [held]", bare["sources"].splitlines()[1])
+        self.assertEqual(bare["meta"][1]["basis"], "author")
+        self.assertEqual(bare["token"], packet["token"])
 
-    def test_check_applies_the_blind_verdicts_with_the_package_rule(self):
+    def test_check_applies_the_verdicts_with_the_rules_no_verdict_overrides(self):
         from fpfa.team import check_record, export_gate, latest_check
 
         record = _record()
         calc_id, findings = self._seed(record)
+        # The checker says Supported to everything. The application's own rules still hold.
         create = Scripted({"checker": [_turn("end_turn", Block(type="text", text=(
             '1. Supported. Cite: "hose_duration 60"\n'
             '2. Supported. Cite: "NFPA 13-2025 §19.2.3.1.3"\n'
@@ -383,26 +435,34 @@ class RecordCheckTests(unittest.TestCase):
             '4. Supported. Cite: "FM"\n'
             '5. Supported. Cite: "hose_duration 60"\n'
         )))]})
-        self.assertIn("no blind check has judged", export_gate(record, "job1"))
+        self.assertIn("no trace check has judged", export_gate(record, "job1"))
         outcome = check_record(REPO, record, "job1", create)
         self.assertEqual(len(create.calls), 1)
         self.assertEqual(create.calls[0]["kind"], "checker")
         self.assertNotIn("tools", create.calls[0])
         user = create.calls[0]["messages"][0]["content"]
         self.assertIn("1. Duration is 60 min.", user)
-        self.assertNotIn("Low air alone never releases.\n\n", user.split("sources.md")[0] + "x")
+        self.assertNotIn("fp-sprinkler", user.split("sources.md")[0], "the claims file does not say who wrote a claim")
         verdicts = [row["verdict"] for row in outcome["rows"]]
         self.assertEqual(verdicts, ["Supported", "Supported", "Source not found", "Source not found", "Not supported"])
+        # 45 min is not a figure the calc record holds, whatever the checker said.
+        self.assertIn("45 min", outcome["rows"][4]["reason"])
+        self.assertEqual([row["basis"] for row in outcome["rows"]], ["source", "source", "", "", ""])
         self.assertFalse(outcome["all_supported"])
+        self.assertEqual((outcome["supported"], outcome["on_source"], outcome["on_author"]), (2, 2, 0))
+        self.assertTrue(outcome["status_line"].startswith("Trace check: 2 of 5 findings are consistent with the rows they cite"))
         self.assertIn("3, 4, 5", outcome["status_line"])
+        self.assertIn("The standards were not opened.", outcome["status_line"])
+        self.assertIs(outcome["checked_against_standard"], False)
         statuses = {row["id"]: row["status"] for row in record.findings("job1")}
         self.assertEqual(statuses[findings[0]["id"]], "Supported")
         self.assertEqual(statuses[findings[2]["id"]], "Source not found")
         self.assertEqual(statuses[findings[4]["id"]], "Not supported")
         self.assertEqual(latest_check(record, "job1")["token"], outcome["token"])
-        self.assertIn("not Supported", export_gate(record, "job1"))
+        # The export no longer waits for every finding to be Supported: it prints the tier each one earned.
+        self.assertEqual(export_gate(record, "job1"), "")
 
-    def test_gate_opens_on_an_all_supported_current_check_and_closes_when_findings_change(self):
+    def test_gate_waits_for_a_current_check_and_closes_again_when_findings_change(self):
         from fpfa.calc_tools import ToolSession
         from fpfa.design_basis_docx import write_design_basis
         from fpfa.team import check_record, export_gate, latest_check
@@ -414,24 +474,31 @@ class RecordCheckTests(unittest.TestCase):
         session.execute("hose_duration", {"hazard": "ordinary", "supervised": True})
         calc_id = record.calcs("job1")[0]["id"]
         record.record_finding("job1", agent="fp-sprinkler", text="Duration is 60 min", label="calculated", supports=[calc_id])
+        self.assertIn("no trace check has judged", export_gate(record, "job1"))
         create = Scripted({"checker": [
             _turn("end_turn", Block(type="text", text='1. Supported. Cite: "hose_duration 60"')),
             _turn("end_turn", Block(type="text", text='1. Supported. Cite: "hose_duration 60"\n2. Supported. Cite: "x"')),
         ]})
         outcome = check_record(REPO, record, "job1", create)
         self.assertTrue(outcome["all_supported"])
+        self.assertTrue(outcome["status_line"].startswith("Trace check: all 1 findings are consistent with the rows they cite"))
         self.assertEqual(export_gate(record, "job1"), "")
         out = Path(tempfile.mkdtemp(prefix="fpfa-team-out-")) / "basis.docx"
         write_design_basis(out, {"name": "T"}, record.snapshot("job1"), claim_check=latest_check(record, "job1"))
         from docx import Document
 
-        text = "\n".join(cell.text for table in Document(str(out)).tables for row in table.rows for cell in row.cells)
+        document = Document(str(out))
+        text = "\n".join([para.text for para in document.paragraphs]
+                         + [cell.text for table in document.tables for row in table.rows for cell in row.cells])
+        self.assertIn("Duration is 60 min", text)
         self.assertIn("Supported", text)
         record.record_finding("job1", agent="fp-sprinkler", text="New claim with no cite", label="PRACTICE")
-        self.assertIn("changed after the last blind check", export_gate(record, "job1"))
+        self.assertEqual(export_gate(record, "job1"), "Findings changed after the last trace check. Run it again.")
         second = check_record(REPO, record, "job1", create)
         self.assertFalse(second["all_supported"])
         self.assertEqual([row["verdict"] for row in second["rows"]], ["Supported", "Source not found"])
+        # Judged and current: the unsupported finding is exported under its own tier, not hidden and not blocking.
+        self.assertEqual(export_gate(record, "job1"), "")
 
     def test_check_with_no_findings_says_so(self):
         from fpfa.team import check_record
@@ -458,7 +525,10 @@ class RecordCheckTests(unittest.TestCase):
         team = TeamSession(REPO, record, "job1", create)
         out = team.execute("request_check", {})
         self.assertTrue(out["all_supported"])
+        self.assertIs(out["checked_against_standard"], False)
         self.assertEqual(len(team.checks), 1)
+        # The check's cost closes on its own record_check event. It is not added to the turn's total as well.
+        self.assertEqual(team.usage["rounds"], 0)
         self.assertEqual(team.execute("list_specialists", {})["specialists"][0]["slug"], "fa-releasing")
         self.assertEqual(team.execute("hose_duration", {"hazard": "ordinary", "supervised": True})["duration_min"], 60)
         self.assertEqual(record.calcs("job1")[0]["replay_count"], 1)

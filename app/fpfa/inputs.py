@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 from typing import Any
 
 INPUT_KIND = "input"
@@ -51,6 +52,8 @@ MEDIA = ("nitrogen", "air", "unelected")
 PRIMES = ("nc_solenoid", "pneumatic_actuator", "unknown")
 LENGTH_BASES = ("center_to_center", "cut")
 SEGMENT_ROLES = ("branch", "drop", "cross", "main", "feed", "riser")
+
+_TYPED_NUMBER = re.compile(r"[-+]?(?:\d{1,3}(?:,\d{3})+|\d+)?(?:\.\d+)?(?:[eE][-+]?\d+)?")
 
 NUMBER = "number"
 TEXT = "text"
@@ -88,6 +91,43 @@ ZONE_FIELDS: dict[str, tuple] = {
 }
 BASIS_FIELDS = ("ahj", "nfpa_13", "nfpa_72", "insurer", "hazard_notes")
 INPUT_NAMES = tuple(ZONE_FIELDS) + BASIS_FIELDS
+# Ways a person writes a unit after a number. A number with its own input's unit is that number;
+# any other trailing text is refused, so nothing is converted and nothing is guessed.
+_UNIT_WORDS = {
+    "gpm": ("gpm",),
+    "s": ("s", "sec", "secs", "second", "seconds"),
+    "psi": ("psi",),
+    "psig": ("psig", "psi"),
+    "gal": ("gal", "gals", "gallon", "gallons"),
+    "min": ("min", "mins", "minute", "minutes"),
+    "%": ("%", "percent", "pct"),
+    "ft2": ("ft2", "ft²", "sq ft", "sqft", "sf", "square feet"),
+    "gpm/ft2": ("gpm/ft2", "gpm/ft²", "gpm/sq ft", "gpm/sf"),
+}
+# Other words for a choice. A choice is matched without regard to case.
+_CHOICE_WORDS = {
+    "system_type": {
+        "double-interlock": "di", "double interlock": "di", "double-interlock preaction": "di",
+        "double interlock preaction": "di", "preaction": "di", "dry pipe": "dry", "dry-pipe": "dry",
+        "wet pipe": "wet", "wet-pipe": "wet",
+    },
+    "medium": {"n2": "nitrogen", "compressed air": "air"},
+    "prime_held_by": {
+        "solenoid": "nc_solenoid", "nc solenoid": "nc_solenoid", "normally closed solenoid": "nc_solenoid",
+        "actuator": "pneumatic_actuator", "pneumatic actuator": "pneumatic_actuator",
+    },
+    "length_basis": {"center to center": "center_to_center", "c-c": "center_to_center", "cut lengths": "cut"},
+}
+# What a reader needs to know about an input beyond its name.
+_INPUT_NOTES = {
+    "area_increase": "a fraction: 0.30 is a 30 percent increase",
+    "supervisory_psi": "the low-air supervisory setting",
+    "supervisory_psig": "the supervisory gas fill pressure",
+    "fill_minutes": "the time allowed to fill to that pressure",
+    "t_detect_s": "detection time; owned by the releasing design",
+    "t_release_s": "releasing time; owned by the releasing design",
+    "segments": "the pipe takeoff, as a list",
+}
 
 
 class InputError(ValueError):
@@ -107,11 +147,33 @@ def unit_of(name: str) -> str:
     return ZONE_FIELDS[name][3] if name in ZONE_FIELDS else ""
 
 
+def describe() -> str:
+    """Every input with what it takes, for a tool description: its choices, its unit, and a note where one helps."""
+    parts = []
+    for name, (kind, choices, _default, unit) in ZONE_FIELDS.items():
+        if kind == CHOICE:
+            takes = " | ".join(choices)
+        elif kind == NUMBER:
+            takes = f"number, {unit}" if unit else "number"
+        elif kind == FLAG:
+            takes = "true | false"
+        elif kind == SEGMENTS:
+            takes = "list"
+        else:
+            takes = "text"
+        note = _INPUT_NOTES.get(name)
+        parts.append(f"{name} ({takes}{'; ' + note if note else ''})")
+    parts.extend(f"{name} (text)" for name in BASIS_FIELDS)
+    return "; ".join(parts)
+
+
 def _number(name: str, value: Any) -> float | None:
     if value is None or (isinstance(value, str) and not value.strip()):
         return None
     if isinstance(value, bool):
         raise InputError(f"{name} takes a number")
+    if isinstance(value, str):
+        value = _bare_number(name, value)
     try:
         number = float(value)
     except (TypeError, ValueError) as exc:
@@ -119,6 +181,26 @@ def _number(name: str, value: Any) -> float | None:
     if not math.isfinite(number):
         raise InputError(f"{name} takes a finite number")
     return number
+
+
+def _bare_number(name: str, text: str) -> str:
+    """A typed number without its thousands commas and without its own unit.
+
+    "1,500 ft2" for an area is 1500. A number followed by anything else, such
+    as a percent sign on an input that is a fraction, is refused with what the
+    input takes, so the value is never converted here.
+    """
+    raw = text.strip()
+    found = _TYPED_NUMBER.match(raw)
+    if not found:
+        return raw
+    tail = raw[found.end():].strip().lower().rstrip(".")
+    unit = unit_of(name)
+    if tail and tail not in _UNIT_WORDS.get(unit, ()):
+        takes = f"a number in {unit}" if unit else "a bare number"
+        note = _INPUT_NOTES.get(name)
+        raise InputError(f"{name} takes {takes}{' (' + note + ')' if note else ''}, not {text!r}")
+    return found.group(0).replace(",", "")
 
 
 def _flag(name: str, value: Any) -> bool:
@@ -175,9 +257,14 @@ def coerce(name: str, value: Any) -> Any:
         return _flag(name, value)
     if kind == CHOICE:
         text = "" if value is None else str(value).strip()
-        if text not in choices:
+        if text in choices:
+            return text
+        folded = " ".join(text.lower().split())
+        by_case = {choice.lower(): choice for choice in choices}
+        found = by_case.get(folded) or _CHOICE_WORDS.get(name, {}).get(folded)
+        if found is None:
             raise InputError(f"{name} must be one of: " + ", ".join(choices))
-        return text
+        return found
     if kind == SEGMENTS:
         if value in (None, ""):
             return []

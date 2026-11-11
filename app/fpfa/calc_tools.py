@@ -551,6 +551,9 @@ class ToolSession:
             kind = str(args.get("kind") or "").strip()
             if kind:
                 rows = record.detail(project_id, kind, str(args.get("id") or "").strip() or None)
+                if kind == "calcs":
+                    # A model reads a recorded output the same way it reads a fresh one.
+                    rows = [dict(row, outputs=reader_view(row.get("tool") or "", row.get("outputs"))) for row in rows]
                 return {"kind": kind, "rows": rows}
             snap = record.snapshot(project_id)
             return {

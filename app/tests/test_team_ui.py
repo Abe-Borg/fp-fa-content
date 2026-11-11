@@ -153,11 +153,12 @@ class CancelledNarrationTests(unittest.TestCase):
         # A PRACTICE finding with no supports is open, so the check does not pass; the line still speaks for it.
         check_record(REPO, record, "job1", create)
         before = check_line(record.snapshot("job1"))
-        self.assertIn("Blind check:", before)
+        self.assertIn("Trace check:", before)
+        self.assertIn("The standards were not opened.", before)
         self.assertNotIn("changed since", before)
         record.record_finding("job1", agent="fp-sprinkler", text="A new claim", label="PRACTICE")
         self.assertEqual(check_line(record.snapshot("job1")),
-                         "Blind check: findings changed since the last check. Run it again.")
+                         "Trace check: findings changed since the last check. Run it again.")
 
 
 class PanelHelperTests(unittest.TestCase):
@@ -169,7 +170,7 @@ class PanelHelperTests(unittest.TestCase):
         record.ensure_project("job1")
         self.assertEqual(roster_lines(record.snapshot("job1")), [])
         self.assertEqual(blocker_lines(record.snapshot("job1")), [])
-        self.assertEqual(check_line(record.snapshot("job1")), "Blind check: nothing to check yet.")
+        self.assertEqual(check_line(record.snapshot("job1")), "Trace check: nothing to check yet.")
         record.set_agent("job1", name="FP specialist", role_slug="fp-sprinkler", status="done")
         record.set_agent("job1", name="Lead", role_slug="lead", status="working")
         record.record_finding("job1", agent="fp-sprinkler", text="Zone total 281.3 gal", label="calculated")
@@ -183,11 +184,11 @@ class PanelHelperTests(unittest.TestCase):
         blockers = blocker_lines(snap)
         self.assertIn("? Trim sheet? (raised by fp-sprinkler)", blockers)
         self.assertIn("… handoff waiting for fa-releasing: Boolean", blockers)
-        self.assertEqual(check_line(snap), "Blind check: not run on the current findings.")
+        self.assertEqual(check_line(snap), "Trace check: not run on the current findings.")
         record.set_finding_status("job1", record.findings("job1")[0]["id"], status="Not supported")
         self.assertIn("! finding not supported: Zone total 281.3 gal", blocker_lines(record.snapshot("job1")))
-        record.log_event("job1", "record_check", {"status_line": "Blind check: findings not Supported: 1."})
-        self.assertEqual(check_line(record.snapshot("job1")), "Blind check: findings not Supported: 1.")
+        record.log_event("job1", "record_check", {"status_line": "Trace check: findings not Supported: 1."})
+        self.assertEqual(check_line(record.snapshot("job1")), "Trace check: findings not Supported: 1.")
         self.assertEqual(NO_TEAM_LINE[:22], "No team activity on th")
         self.assertEqual(team_summary({"text": "x"}), "")
         summary = team_summary({
@@ -196,7 +197,8 @@ class PanelHelperTests(unittest.TestCase):
         })
         self.assertIn("**Team**", summary)
         self.assertIn("- fp-sprinkler: 2 findings, 1 question, 1 calc record", summary)
-        self.assertIn("- checker: 1 of 2 findings Supported", summary)
+        self.assertIn("- trace check: 1 of 2 findings consistent with what they cite", summary)
+        self.assertIn("The standards were not opened.", summary)
         self.assertIn("Team tab", summary)
         self.assertEqual(pending["status"], "pending")
 
@@ -249,7 +251,7 @@ class TeamWindowTests(unittest.TestCase):
         self.assertIn("✓ Tool plan (tool-plan) done", roster)
         self.assertTrue(bool(app.team["roster"]))
         self.assertEqual(tuple(app.team["roster"]), ("✓ Tool plan (tool-plan) done",))
-        self.assertIn("Blind check: nothing to check yet.", app.team["blockers_text"])
+        self.assertIn("Trace check: nothing to check yet.", app.team["blockers_text"])
         self.assertFalse(app._pending_here())
         # The page draws the Team tab and the sidebar roster from this view.
         self.assertEqual(app.snapshot()["team"]["roster"], ["✓ Tool plan (tool-plan) done"])
@@ -294,7 +296,7 @@ class TeamWindowTests(unittest.TestCase):
         app.record.record_finding(project_id, agent="fp-sprinkler", text="Zone total 281.3 gal", label="calculated",
                                   supports=[calc_id])
         app._refresh_team()
-        self.assertIn("Blind check: not run", app.team["blockers_text"])
+        self.assertIn("Trace check: not run", app.team["blockers_text"])
 
         class Checker:
             def __init__(self, _key):
@@ -305,9 +307,10 @@ class TeamWindowTests(unittest.TestCase):
 
         with patch("fpfa.desk.AnthropicMessages", Checker):
             app.start_record_check()
-            self._wait_for(app, "every one of the 1 findings is Supported")
+            self._wait_for(app, "Trace check: all 1 findings are consistent with the rows they cite")
+        self.assertIn("The standards were not opened.", app.thread_text())
         self.assertEqual([job.kind for job in app.jobs.snapshot() if job.kind == "claim"], ["claim"])
-        self.assertIn("every one of the 1 findings is Supported", app.team["blockers_text"])
+        self.assertIn("all 1 findings are consistent with the rows they cite", app.team["blockers_text"])
         self.assertEqual(app.record.findings(project_id)[0]["status"], "Supported")
         self.assertEqual(app.design_basis_ready(), "")
 
@@ -445,7 +448,7 @@ class TeamWindowTests(unittest.TestCase):
                 hold.wait(5)
             return work
 
-        # Both workers busy, so the blind check waits in the queue.
+        # Both workers busy, so the trace check waits in the queue.
         for index in range(2):
             app.jobs.submit(project_id=project_id, project_name="n", kind="chat", title="busy", work=block(index))
         self.assertTrue(started[0].wait(3) and started[1].wait(3))
@@ -464,7 +467,7 @@ class TeamWindowTests(unittest.TestCase):
             app.cancel_running_jobs()
             self.assertIn("Cancel requested for 3 jobs", app.status.get())
             hold.set()
-            self._wait_for(app, "Cancelled before the blind check started")
+            self._wait_for(app, "Cancelled before the trace check started")
         claim = [job for job in app.jobs.snapshot() if job.kind == "claim"]
         self.assertEqual([job.status for job in claim], ["cancelled"])
         self.assertEqual(app.record.findings(project_id)[0]["status"], "open")

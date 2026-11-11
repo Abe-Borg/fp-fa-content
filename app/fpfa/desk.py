@@ -4,7 +4,7 @@ The window is a web page (fpfa/web) drawn by the system's WebView2 control.
 Everything the page shows comes from Desk.snapshot(), and everything the page
 does is a Desk method the local server calls. The rules live here, not in
 the page: which project a result lands on, what a slash command does, when
-the export waits for the blind check, what the working line may say.
+the export waits for the trace check, what the working line may say.
 
 Threads. The server calls a method while it holds Desk.lock. Workers on the
 job inbox never touch the desk directly: they put a callback on Desk.queue,
@@ -378,6 +378,17 @@ KIND_ACTIVITY = {
 _RECORD_TOOLS = frozenset({
     "record_fact", "record_evidence", "record_finding", "open_question", "record_decision", "handoff",
 })
+# The team's own moves, in a few words each. A line names the move, never what it carried.
+_TEAM_ACTIVITY = {
+    "list_specialists": "looking at the team",
+    "request_check": "running the trace check",
+    "set_input": "recording a project input",
+    "answer_question": "recording your answer",
+    "set_plan": "setting out the plan",
+    "resolve_disagreement": "settling a disagreement",
+    "review_finding": "reviewing another specialist's finding",
+    "withdraw_finding": "withdrawing a finding",
+}
 _LISTING_TOOLS = frozenset({"list_skills", "list_roles", "list_modes"})
 
 
@@ -413,13 +424,14 @@ def describe_activity(event: dict) -> str | None:
         return prefix + "reading the project record"
     if name in _RECORD_TOOLS:
         return prefix + "writing to the project record"
-    if name == "list_specialists":
-        return prefix + "looking at the team"
     if name == "delegate":
         who = str(args.get("specialist") or "").strip()
         return prefix + (f"handing off to {who}" if who else "handing off to a specialist")
-    if name == "request_check":
-        return prefix + "running the blind check"
+    if name == "consult":
+        who = str(args.get("specialist") or "").strip()
+        return prefix + (f"asking {who}" if who else "asking another specialist")
+    if name in _TEAM_ACTIVITY:
+        return prefix + _TEAM_ACTIVITY[name]
     if name:
         return prefix + f"running {name}"
     return None
@@ -1455,20 +1467,20 @@ class Desk:
         self._refresh_team()
 
     def start_record_check(self) -> None:
-        """Run the blind checker over this job's findings as a claim job, without a chat turn."""
+        """Run the trace check over this job's findings as a claim job, without a chat turn."""
         if not self.project:
-            self.notify("Blind check", "Open a job first.")
+            self.notify("Trace check", "Open a job first.")
             return
         self._open_record(self.project)
         origin_id = self.project["id"]
         project_name = self.project.get("name") or UNTITLED_JOB
         if not self.record.findings(origin_id):
-            self._local_exchange("Run blind check", "The record has no findings to check yet.")
+            self._local_exchange("Run trace check", "The record has no findings to check yet.")
             self._refresh_team()
             return
         key = self._api_key()
         if not key:
-            self._local_exchange("Run blind check", "Save an Anthropic API key in Settings before running the blind check.")
+            self._local_exchange("Run trace check", "Save an Anthropic API key in Settings before running the trace check.")
             return
 
         def work(job_id: str) -> None:
@@ -1476,11 +1488,11 @@ class Desk:
             try:
                 if cancel.is_set():
                     # Cancelled while it waited in the queue. No model call, no verdicts written.
-                    text = "Cancelled before the blind check started. No model call was made."
+                    text = "Cancelled before the trace check started. No model call was made."
                     self.jobs.mark(job_id, "cancelled", text)
                 else:
                     outcome = check_record(content_root(), self.record, origin_id, AnthropicMessages(key).create)
-                    text = outcome.get("status_line") or "Blind check ran."
+                    text = outcome.get("status_line") or "Trace check ran."
                     if outcome.get("verdict"):
                         text += "\n" + outcome["verdict"]
             except Exception as exc:
@@ -1494,10 +1506,10 @@ class Desk:
             project_id=origin_id,
             project_name=project_name,
             kind="claim",
-            title="Blind check of the record",
+            title="Trace check of the record",
             work=work,
         )
-        self.status.set(f"Blind check… {job.heading()}")
+        self.status.set(f"Trace check… {job.heading()}")
 
     # The inbox ---------------------------------------------------------------------
 
@@ -2399,7 +2411,8 @@ class Desk:
                 "Nothing is on this job's record yet. Run /sample-di or /run, or ask a question, "
                 "then export the design basis."
             )
-        # Findings are model claims. They need a current blind check that supports every one.
+        # Findings are model claims. The export prints the tier each one earned, so it waits only for a
+        # trace check that judged the findings as they are now, and for nothing on the record to be out of date.
         return export_gate(self.record, self.project["id"])
 
     def export_design_basis_to(self, path: Path) -> Path:

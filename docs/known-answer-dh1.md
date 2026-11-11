@@ -76,10 +76,32 @@ OWNER TO CONFIRM the list. Draft:
 
 Trim 5 gal. Screen limit 30 s from the FM time basis. Any schedule the shop default filled in (none on this sample; every segment names its schedule).
 
-## 6. What the checker must find
+## 6. What the trace check must find
 
-Every claim with a number traces to a calc record or a cite in the record. No claim is Supported on a cite that only repeats the claim. A section the tools did not emit stays NOT PULLED and blocks export until it is resolved or removed.
+The check is a trace check. It asks whether each finding is consistent with the rows it cites. It does not open a standard, and nothing in the app says it does.
 
-## 7. What the team panel must show
+Every claim with a number traces to a calc record, a content-pack note the app looked up, or a project input. A figure in a claim that is not in the rows it cites makes the claim Not supported, whatever the checker said. No claim is Supported on a note that only repeats the claim. A cite to a section the content pack does not hold rests on its author's note alone and is reported that way. A finding whose basis changed is not judged; it is out of date.
 
-An FP contribution covering items 1 through 5, 7, and 8 of section 3. An FA contribution covering item 6 and the supervisory points that follow from it. A checker verdict list. An exchange from FP to FA carrying the trim family and the supervisory pressure settings, and one back carrying the releasing logic for that trim. The lead summary quoting the governing zone total and t_total texts.
+The Design Basis export waits for a trace check that judged the findings as they are now, and for nothing on the record to be out of date. It does not wait for every finding to be Supported: a finding that is not supported, has no source, or is objected to is printed under "Needs further evidence or engineering review", where the engineer of record can see it. The Section 21 13 19 export keeps its own stricter gate: every claim Supported.
+
+## 7. What the record must show about the team's work
+
+The request is a plain objective. It names no specialist and no sequence. The evidence below is read from the Team panel, `/status`, and the export. Two role names on a roster are not evidence. A handoff row with nothing in it is not evidence. Two specialists run one after the other, neither reading the other's rows, is not evidence.
+
+1. **A plan the lead set.** An objective and steps with owners, before the first delegation.
+2. **Both contributions.** A sprinkler contribution covering items 1 through 5, 7, and 8 of section 3. A releasing contribution covering item 6 and the supervisory points that follow from it. Each finding names the calc records, cites, or inputs it rests on.
+3. **The dependency, carried by the record.** The releasing sequence depends on the trim family and the supervisory pressures the sprinkler specialist owns. The delivery screen depends on a detection time and a release time that describe the releasing specialist's devices. The record shows each fact reaching the other specialist: a finding or calc record the other one cites or reviews, or a consult with its question and its answer.
+4. **A position on the other's work.** At least one review of a finding by the specialist who did not write it: agree, or object with the reason. The two times in the delivery screen (8 s and 2 s on the sample) are the natural case. They are form inputs with no stated basis, so an objection or an ASSUMED note on them is a correct outcome, not a failure.
+5. **Every disagreement has an end.** An objection is closed by the author's revision, settled by the lead with a recorded decision, or escalated as a question to the designer or the engineer of record. None is left open without a word in the lead's reply.
+6. **A trace check** with a verdict per finding, and the tier each finding earned.
+7. **The lead's reply quotes only what is on the record.** The governing zone total and t_total texts come from current calc records. The app lists under the reply any figure it could not find on one.
+
+## 8. What a live run may add, and how to read it
+
+The sample is generic and some of its inputs are loose on purpose. A live specialist may raise points this page does not list. Read each against the content pack before calling it wrong.
+
+- The sample carries a 40 psig supervisory fill pressure beside a 15 psi low-air supervisory setting. The trim skill teaches supervisory bands per valve family, and a specialist may object that 40 psig sits outside the band for an electric/electric trim. That is a fair catch against the sample's inputs. It belongs in the open questions.
+- The detection and release times (8 s and 2 s) have no stated basis. Expect them to be carried as ASSUMED or questioned.
+- A specialist may run an alternative (another fill flow, a split zone). The app marks a calc that left the project inputs as an alternative. The reply must not present it as the design case.
+
+A run that produces every figure in section 2 and none of the evidence in section 7 did the arithmetic and not the teamwork. Score it that way.

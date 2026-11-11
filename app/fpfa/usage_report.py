@@ -2,8 +2,9 @@
 
 Every model context already sums its own usage. The lead turn writes a `turn`
 event with the task total (lead rounds plus every delegation and check it ran),
-a narrated zone run or starter writes a `narration` event, a blind check writes
-its usage on the `record_check` event, and each delegation writes a `delegation`
+a narrated zone run or starter writes a `narration` event, a trace check writes
+its usage on the `record_check` event, each delegation writes a `delegation`
+event, and each question one specialist put to another writes a `consult`
 event. This module reads those events back and prices them.
 
 Prices are a dated snapshot, not a feed. RATES_PER_MILLION holds the Claude
@@ -26,8 +27,9 @@ RATES_DATE = "2026-10-06"
 # Dollars per million tokens. Cache write is the 5-minute write price, 1.25 times input.
 RATES_PER_MILLION = {"input": 4.00, "output": 20.00, "cache_write": 5.00, "cache_read": 0.20}
 # Event kinds that carry usage, and whether the kind counts toward a job's total.
-# A delegation's usage is already inside its turn's total, so it is shown but not added.
-USAGE_KINDS = ("turn", "narration", "record_check", "delegation")
+# A delegation's usage is already inside its turn's total, and a consult's is inside its
+# delegation's, so both are shown but not added.
+USAGE_KINDS = ("turn", "narration", "record_check", "delegation", "consult")
 COUNTED_KINDS = ("turn", "narration", "record_check")
 
 
@@ -87,7 +89,7 @@ def usage_events(record: Any, project_id: str) -> list[dict]:
             "usage": normalize(usage),
             "counted": event["kind"] in COUNTED_KINDS,
         }
-        for key in ("specialist", "delegations", "checks", "cancelled", "source", "stop_reason"):
+        for key in ("specialist", "delegations", "checks", "cancelled", "source", "stop_reason", "seconds", "from", "to"):
             if key in payload:
                 row[key] = payload[key]
         rows.append(row)
@@ -119,8 +121,11 @@ def _label(row: dict) -> str:
     if kind == "narration":
         note = "cancelled" if row.get("cancelled") else (row.get("source") or "")
         return f"narration ({row.get('agent') or 'narrator'}{', ' + note if note else ''})"
+    if kind == "consult":
+        note = ", cancelled" if row.get("cancelled") else ""
+        return f"    within that: {row.get('from') or 'a specialist'} asked {row.get('to') or 'another'}{note}"
     if kind == "record_check":
-        return "blind check"
+        return "trace check"
     return kind
 
 

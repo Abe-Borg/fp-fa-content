@@ -56,6 +56,13 @@ HANDOFF_STATUSES = ("pending", "delivered", "returned", "cancelled")
 # delivered at the receiver's next delegation. consult: one specialist's question to another,
 # answered inside the asker's turn.
 HANDOFF_KINDS = ("delegation", "handoff", "consult")
+# Event kinds whose newest row a snapshot always carries: the lead's plan and the last trace check.
+LATEST_KINDS = ("plan", "record_check")
+# Written when a lead turn has read the job's status, so the next one can tell what is new since.
+TURN_START = "turn_start"
+# Who closed a question: the designer on the panel, or the lead passing on what the designer said in chat.
+ANSWERED_ON_PANEL = "designer"
+ANSWERED_IN_CHAT = "designer, in chat"
 # Agents that write an input because the form held it. Any other agent set it on the designer's word.
 FORM_AGENTS = ("job form", "migration")
 REVIEW_POSITIONS = ("agree", "object")
@@ -1337,6 +1344,24 @@ class Record:
             row["payload"] = json.loads(row["payload"] or "{}")
         return rows
 
+    def unseen_answers(self, project_id: str) -> list[str]:
+        """Questions the designer answered on the panel since a lead turn last read the job's status.
+
+        Read by event order, not by clock, so an answer given while a turn was
+        running is news to the next turn and an answer a turn has seen is not.
+        """
+        rows = self._read(
+            "SELECT payload FROM events WHERE project_id = ? AND kind = 'answer' AND agent = ? AND seq > "
+            "COALESCE((SELECT MAX(seq) FROM events WHERE project_id = ? AND kind = ?), 0) ORDER BY seq",
+            (project_id, ANSWERED_ON_PANEL, project_id, TURN_START),
+        )
+        found: list[str] = []
+        for row in rows:
+            ident = json.loads(row["payload"] or "{}").get("id")
+            if ident and ident not in found:
+                found.append(ident)
+        return found
+
     def snapshot(self, project_id: str) -> dict:
         """Every table for one project. The export reads this, not the database."""
         return {
@@ -1357,48 +1382,22 @@ class Record:
             "agents": self.agents(project_id),
             "jobs": self.jobs(project_id),
             "events": self.events(project_id),
+            # The newest event of each kind a view reads whole. events is a recent window and
+            # could miss one on a long job.
+            "latest": {kind: self.latest_event(project_id, kind) for kind in LATEST_KINDS},
+            "unseen_answers": self.unseen_answers(project_id),
         }
 
     def summary_text(self, project_id: str, *, max_rows: int = 40) -> str:
-        """Short plain-text view of the record for a model turn. Not the export."""
-        snap = self.snapshot(project_id)
-        lines = []
-        if snap["facts"]:
-            lines.append("Facts:")
-            for row in snap["facts"][:max_rows]:
-                lines.append(f"- [{row['id']}] {row['kind']}/{row['key']}: {row['value']} ({row['label']})")
-        if snap["calcs"]:
-            lines.append("Calculation records (cite the id in supports):")
-            for row in snap["calcs"][:max_rows]:
-                lines.append(
-                    f"- [{row['id']}] {row['tool']} by {row['agent'] or 'tool'}; "
-                    f"inputs {_clip(canonical_json(row['inputs']), 160)}; "
-                    f"outputs {_clip(canonical_json(_key_outputs(row['outputs'])), 240)}"
-                )
-        if snap["evidence"]:
-            lines.append("Evidence (cite the id in supports):")
-            for row in snap["evidence"][:max_rows]:
-                where = " ".join(part for part in (row["document"], row.get("edition") or "", row.get("section") or "") if part)
-                lines.append(f"- [{row['id']}] {where}: {row.get('note') or ''} [{row['status']}]")
-        if snap["findings"]:
-            lines.append("Findings:")
-            for row in snap["findings"][:max_rows]:
-                lines.append(f"- [{row['id']}] {row['agent']}: {row['text']} ({row['label']})")
-        if snap["decisions"]:
-            lines.append("Decisions:")
-            for row in snap["decisions"][:max_rows]:
-                lines.append(f"- [{row['id']}] {row['text']} ({row['label']}; {row['decided_by']})")
-        open_questions = [row for row in snap["questions"] if row["status"] == "open"]
-        if open_questions:
-            lines.append("Open questions:")
-            for row in open_questions[:max_rows]:
-                lines.append(f"- [{row['id']}] {row['text']} (raised by {row['raised_by']})")
-        pending = [row for row in snap["handoffs"] if row["status"] == "pending"]
-        if pending:
-            lines.append("Pending handoffs:")
-            for row in pending[:max_rows]:
-                lines.append(f"- [{row['id']}] {row['from_agent']} to {row['to_agent']}: {row['brief']}")
-        return "\n".join(lines) if lines else "The project record is empty."
+        """Short plain-text view of the record for a model turn, with row ids and each row's standing.
+
+        Not the export. fpfa.status builds it, so a model reads the same view
+        everywhere: out-of-date rows are marked, and a calc output is the
+        reader's view of it.
+        """
+        from fpfa import status
+
+        return status.record_text(self.snapshot(project_id), max_rows=max_rows)
 
     # -- migration from the JSON job files ---------------------------------
 
@@ -1472,17 +1471,6 @@ def _add_missing_columns(conn: sqlite3.Connection) -> None:
         for name, spec in columns:
             if name not in present:
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {spec}")
-
-
-def _clip(text: str, limit: int) -> str:
-    return text if len(text) <= limit else text[: limit - 1] + "…"
-
-
-def _key_outputs(outputs: Any) -> Any:
-    """Scalar outputs only, so a summary line stays short. Lists and nested rows are dropped."""
-    if not isinstance(outputs, dict):
-        return outputs
-    return {key: value for key, value in outputs.items() if isinstance(value, (int, float, str, bool)) or value is None}
 
 
 def _calc_row(row: dict) -> dict:

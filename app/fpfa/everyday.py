@@ -8,13 +8,14 @@ does not paste method bodies, role prompts, or mode text.
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from typing import Any, Callable
 
 from fpfa.calc_tools import SCHEMAS, ToolSession
 from fpfa.claude_client import TurnCancelled, incomplete_notice, run_tool_loop
 from fpfa.modes_loader import list_modes, normalize_mode, read_mode
-from fpfa.record import Record
+from fpfa.record import TURN_START, Record
 from fpfa.roles_loader import list_roles, read_role
 from fpfa.skills_loader import list_skills, spec_notes
 
@@ -41,6 +42,11 @@ def assemble_system(content_root: Path, mode: str | None = None, *, team: bool =
     read_skill is called.
     """
     selected = normalize_mode(mode)
+    if team:
+        from fpfa.team import has_lead_role
+
+        if has_lead_role(content_root):
+            return _lead_system(content_root, selected)
     shell = read_role(content_root, EVERYDAY_ROLE).strip()
     active = read_mode(content_root, selected).strip()
     lines = [
@@ -92,6 +98,61 @@ def assemble_system(content_root: Path, mode: str | None = None, *, team: bool =
     return "\n".join(lines)
 
 
+def _lead_system(content_root: Path, selected: str) -> str:
+    """System text for the lead of a team: its own role file, the active mode, and the indexes.
+
+    The lead's role file is the shell. It is told who the specialists are and
+    delegates to them; it is not handed their role bodies to wear. The text is
+    the same on every round and every turn in a mode, so it is read from the
+    cache after the first request.
+    """
+    from fpfa.team import CHECKER_ROLE, LEAD_ROLE, TEAM_PARAGRAPH, list_specialists
+
+    lines = [
+        read_role(content_root, LEAD_ROLE).strip(),
+        "",
+        f"Active mode file ({selected}). It shapes the reply. The team rules above still hold.",
+        read_mode(content_root, selected).strip(),
+        "",
+        "Other modes in this content pack. Call read_mode before you apply one. "
+        "The description is not the mode.",
+    ]
+    for item in list_modes(content_root):
+        if item["slug"] == selected:
+            continue
+        lines.append(f"- {item['slug']}: {item['description']}")
+    lines.append("")
+    lines.append(
+        "Specialists on this team. Delegate to them with delegate. list_specialists says what each owns, "
+        "what it needs from the others, and what it reviews."
+    )
+    for role in list_specialists(content_root):
+        lines.append(f"- {role['slug']}: {role['description']}")
+    lines.append(f"The checker is {CHECKER_ROLE}. request_check runs it. You do not delegate to it.")
+    lines.append("")
+    lines.append("Skills in this content pack:")
+    for skill in list_skills(content_root):
+        lines.append(f"- {skill['slug']}: {skill['description']}")
+    lines.append("")
+    lines.append(
+        "Project record. record_fact, record_evidence, record_finding, open_question, and "
+        "record_decision write to this job's record. read_record shows it with row ids. "
+        "Calc tools record themselves. Write a finding with the calc record ids that support it. "
+        "A question the designer must answer is open_question with to designer."
+    )
+    lines.append("")
+    lines.append(TEAM_PARAGRAPH)
+    # Every spec file goes in whole. Nothing here shortens or summarizes it.
+    notes = spec_notes(content_root)
+    if notes:
+        lines.append("")
+        lines.append("Spec notes from the content pack. They are draft language. Verify before issuing.")
+        for note in notes:
+            lines.append(f"## {note['name']}")
+            lines.append(note["text"])
+    return "\n".join(lines)
+
+
 def everyday_reply(out: dict) -> str:
     """Thread text for one everyday turn. An unfinished reply is labeled first."""
     text = out.get("text") or "(Claude returned no text.)"
@@ -118,7 +179,7 @@ def run_everyday(
     *,
     mode: str | None = None,
     required: list[str] | None = None,
-    max_rounds: int = 16,
+    max_rounds: int | None = None,
     max_tokens: int = 16000,
     record: Record | None = None,
     project_id: str | None = None,
@@ -139,26 +200,29 @@ def run_everyday(
     nothing is recorded and the tool list is the plain one.
     """
     if record is not None and project_id:
-        from fpfa.team import TEAM_SCHEMAS, TeamSession, pending_handoff_note
+        from fpfa.team import LEAD_ROUNDS, SPECIALIST_ROUNDS, TeamSession, lead_schemas, lead_status
 
+        started = time.time()
         team = TeamSession(
             content_root, record, project_id, create,
-            max_rounds=max_rounds, max_tokens=max_tokens, cancel=cancel, observe=observe,
+            max_rounds=SPECIALIST_ROUNDS, max_tokens=max_tokens, cancel=cancel, observe=observe,
         )
-        # Pending handoffs ride in the user message, so the lead sees them without a tool call.
-        waiting = pending_handoff_note(record, project_id)
-        if waiting:
-            user_text = waiting + "\n\n" + user_text
+        # Where the job stands rides at the top of the user message, read from the record: the plan,
+        # the inputs, what changed, what is out of date, open objections, and handoffs waiting. It
+        # varies per turn, so it is never part of the cached system text.
+        user_text = lead_status(record, project_id) + "\n\n" + user_text
+        # What the block showed has now been read. An answer given on the panel after this is news to the next turn.
+        record.log_event(project_id, TURN_START, {}, agent=agent)
         record.set_agent(project_id, name="Lead", role_slug=agent, status="working")
         try:
             out = run_tool_loop(
                 create,
                 system=assemble_system(content_root, mode, team=True),
                 user_text=user_text,
-                tools=TEAM_SCHEMAS,
+                tools=lead_schemas(content_root),
                 execute=team.execute,
                 required=list(required or []),
-                max_rounds=max_rounds,
+                max_rounds=max_rounds or LEAD_ROUNDS,
                 max_tokens=max_tokens,
                 cancel=cancel,
                 observe=observe,
@@ -170,7 +234,7 @@ def run_everyday(
                 "usage": _task_total(getattr(exc, "usage", None), team.usage),
                 "lead_usage": dict(getattr(exc, "usage", None) or {}),
                 "delegations": len(team.delegations), "checks": len(team.checks),
-                "cancelled": True, "stop_reason": "cancelled",
+                "cancelled": True, "stop_reason": "cancelled", "seconds": round(time.time() - started, 1),
             }, agent=agent)
             raise
         except Exception:
@@ -183,11 +247,15 @@ def run_everyday(
         out["lead_usage"] = lead_usage
         out["delegations"] = team.delegations
         out["checks"] = team.checks
+        out["inputs_set"] = team.inputs_set
+        out["answered"] = team.answered
+        out["resolved"] = team.resolved
+        out["seconds"] = round(time.time() - started, 1)
         # The events row that closes the task carries the whole task's usage.
         record.log_event(project_id, "turn", {
             "usage": total, "lead_usage": lead_usage,
             "delegations": len(team.delegations), "checks": len(team.checks),
-            "cancelled": False, "stop_reason": out.get("stop_reason") or "",
+            "cancelled": False, "stop_reason": out.get("stop_reason") or "", "seconds": out["seconds"],
         }, agent=agent)
         return out
     session = ToolSession(content_root, record=record, project_id=project_id, agent=agent)
@@ -198,7 +266,7 @@ def run_everyday(
         tools=SCHEMAS,
         execute=session.execute,
         required=list(required or []),
-        max_rounds=max_rounds,
+        max_rounds=max_rounds or 16,
         max_tokens=max_tokens,
         cancel=cancel,
         observe=observe,

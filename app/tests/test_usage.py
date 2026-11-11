@@ -96,7 +96,7 @@ class CostMathTests(unittest.TestCase):
         self.assertIn("within the turn: fp-sprinkler", text)
         self.assertIn("(inside the turn above, not added)", text)
         self.assertIn("narration (narrator, claude)", text)
-        self.assertIn("blind check", text)
+        self.assertIn("trace check", text)
         self.assertIn("Job total over 3 model contexts", text)
         self.assertIn("Estimated cost $", text)
         self.assertIn("Rates per million tokens as of", text)

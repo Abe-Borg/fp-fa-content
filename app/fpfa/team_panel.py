@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from fpfa.team import check_token
+from fpfa.checker import check_line, check_token  # noqa: F401  (check_line is read from here by older callers)
 
 STATUS_GLYPH = {
     "working": "●",
@@ -107,23 +107,6 @@ def recovery_text(item: dict | None) -> str:
         )
     lines.append("Nothing on the record was lost. The Team tab under Zone details shows the state.")
     return "\n".join(lines)
-
-
-def check_line(snapshot: dict | None) -> str:
-    snap = snapshot or {}
-    latest = None
-    for row in snap.get("events") or []:
-        if row.get("kind") == "record_check":
-            latest = row
-    if latest is None:
-        if snap.get("findings"):
-            return "Blind check: not run on the current findings."
-        return "Blind check: nothing to check yet."
-    payload = latest.get("payload") or {}
-    # A check speaks for the findings it saw. New or changed findings need a new one.
-    if payload.get("token") and payload.get("token") != check_token(list(snap.get("findings") or [])):
-        return "Blind check: findings changed since the last check. Run it again."
-    return str(payload.get("status_line") or "Blind check ran.")
 
 
 def _short(text: Any, limit: int = 90) -> str:
