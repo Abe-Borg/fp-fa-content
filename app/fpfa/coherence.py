@@ -32,6 +32,7 @@ import re
 from typing import Any, Callable
 
 from fpfa import inputs
+from fpfa.record import WITHDRAWN
 
 # tool -> argument -> (project input it is filled from, what the tool uses when it is left out)
 BINDINGS: dict[str, dict[str, tuple[str, Any]]] = {
@@ -187,6 +188,7 @@ def call_basis(
     *,
     resolve_id: Callable | None = None,
     stale: set[str] | None = None,
+    alternative: set[str] | None = None,
 ) -> tuple[list[str], dict]:
     """What one calc call followed, and where it departed from the project inputs.
 
@@ -196,6 +198,11 @@ def call_basis(
     call used another value than the project input, or to {"used", "from",
     "note"} when a figure that should come from an earlier calc matches none.
     With no inputs on the record there is nothing to follow and both are empty.
+
+    stale and alternative are the ids of the recorded calcs that are out of
+    date or ran on another case (analyze). A figure that matches more than one
+    recorded result is tied to one that ran on the project inputs when there
+    is one, so a call is not marked as an alternative on a coincidence.
     """
     args = args if isinstance(args, dict) else {}
     givens = givens or {}
@@ -230,9 +237,11 @@ def call_basis(
                       and isinstance(row.get("outputs"), dict)]
         matching = [row for row in candidates if _result_matches(args.get(arg), row["outputs"].get(key))]
         if matching:
-            # The newest matching result that is still current; failing that, the newest.
+            # The newest matching result that ran on the project inputs; failing that, the newest that is not
+            # out of date; failing that, the newest.
             fresh = [row for row in matching if row["id"] not in (stale or set())]
-            depends.append((fresh or matching)[-1]["id"])
+            design = [row for row in fresh if row["id"] not in (alternative or set())]
+            depends.append((design or fresh or matching)[-1]["id"])
         else:
             note = (f"matches no recorded {source_tool} result" if candidates
                     else f"no {source_tool} result is on the record")
@@ -271,14 +280,39 @@ def varies_text(varies: dict | None) -> str:
     return "; ".join(parts)
 
 
+def _carried_text(tool: str, calc_id: str, note: str) -> str:
+    """How a calc that took a figure from an alternative says so. It reads after "ran on" like varies_text."""
+    return f"a figure from {tool} [{calc_id}], which ran on {note}"
+
+
+def departure_text(depends: list | None, varies: dict | None, calcs: dict[str, dict] | None,
+                   standing: dict[str, dict] | None) -> str:
+    """Where a call departs from the project inputs: its own arguments, then what it took from an alternative.
+
+    calcs and standing are the recorded calcs by id and analyze()'s answer for
+    them. This is the note analyze() gives the call's row once it is recorded,
+    worked out beforehand so the tool result can carry it. Empty when the call
+    is the design case.
+    """
+    parts = [varies_text(varies)]
+    for ident in depends or []:
+        item = (standing or {}).get(ident)
+        if item is not None and ident in (calcs or {}) and item.get("state") == ALTERNATIVE:
+            parts.append(_carried_text(calcs[ident]["tool"], ident, item["note"]))
+    return "; ".join(part for part in parts if part)
+
+
 # -- what is still current ----------------------------------------------------------------
 
 def _fact_changes(history: list[dict]) -> dict[str, dict]:
     """For every fact row, whether its value was since replaced by a different one.
 
     A row replaced by a row with the same value (a re-confirmed input) did not change.
+    An input the designer emptied on the form (Record.clear_given) changed, to
+    nothing, until it is stated again; then it is compared with what states it now.
     """
     by_id = {row["id"]: row for row in history}
+    stated = {(row.get("kind"), row.get("key")): row for row in history if not row.get("superseded_by")}
     out: dict[str, dict] = {}
     for row in history:
         current = row
@@ -286,6 +320,16 @@ def _fact_changes(history: list[dict]) -> dict[str, dict]:
         while current.get("superseded_by") and current["superseded_by"] in by_id and current["id"] not in seen:
             seen.add(current["id"])
             current = by_id[current["superseded_by"]]
+        if current.get("superseded_by") == WITHDRAWN:
+            later = stated.get((row.get("kind"), row.get("key")))
+            if later is None:
+                held = given_value(row)
+                held = inputs.show(row["key"], held) if row.get("kind") == inputs.INPUT_KIND else held
+                name = row["key"] if row.get("kind") == inputs.INPUT_KIND else f"{row['kind']}/{row['key']}"
+                out[row["id"]] = {"changed": True, "reason": f"{name} was emptied on the form; it was {held}",
+                                  "key": row.get("key"), "current_id": "", "emptied": True}
+                continue
+            current = later
         if current is row:
             out[row["id"]] = {"changed": False, "reason": ""}
             continue
@@ -310,9 +354,10 @@ def analyze(snapshot: dict | None) -> dict:
 
     States. A calc is "stale" when an input it used has since changed, or a
     calc it took a figure from is stale; "alternative" when it ran on another
-    value than a project input; else "current". A cite is stale when the
-    edition it follows changed. A finding or a decision is stale when a row it
-    rests on is stale, was replaced, or was withdrawn.
+    value than a project input, or took a figure from a calc that did; else
+    "current". A cite is stale when the edition it follows changed. A finding
+    or a decision is stale when a row it rests on is stale, was replaced, or
+    was withdrawn.
     """
     snap = snapshot or {}
     history = list(snap.get("fact_history") or snap.get("facts") or [])
@@ -329,6 +374,7 @@ def analyze(snapshot: dict | None) -> dict:
             return calc_state[calc_id]
         row = calcs[calc_id]
         reasons: list[str] = []
+        carried: list[str] = []
         for ident in row.get("depends") or []:
             if ident in facts and facts[ident]["changed"]:
                 reasons.append(facts[ident]["reason"])
@@ -337,7 +383,10 @@ def analyze(snapshot: dict | None) -> dict:
                 if upstream["state"] == STALE:
                     reasons.append(f"it took a figure from {calcs[ident]['tool']} [{ident}], which is out of date: "
                                    + "; ".join(upstream["reasons"]))
-        note = varies_text(row.get("varies"))
+                elif upstream["state"] == ALTERNATIVE:
+                    # A figure worked out for another case carries that case into whatever is built on it.
+                    carried.append(_carried_text(calcs[ident]["tool"], ident, upstream["note"]))
+        note = "; ".join(part for part in [varies_text(row.get("varies")), *carried] if part)
         if reasons:
             state = STALE
         elif note:
@@ -354,7 +403,8 @@ def analyze(snapshot: dict | None) -> dict:
         calc_standing(calc_id)
     evidence_state: dict[str, dict] = {}
     for ident, row in evidence.items():
-        reasons = [facts[dep]["reason"] + "; verify the section in that edition"
+        reasons = [facts[dep]["reason"] + ("; the job states no edition for this cite now"
+                                           if facts[dep].get("emptied") else "; verify the section in that edition")
                    for dep in row.get("depends") or [] if dep in facts and facts[dep]["changed"]]
         evidence_state[ident] = {"state": STALE if reasons else CURRENT, "reasons": reasons}
     finding_state: dict[str, dict] = {}
@@ -377,7 +427,7 @@ def analyze(snapshot: dict | None) -> dict:
                 if facts[ident]["changed"]:
                     reasons.append(facts[ident]["reason"])
             elif ident in retired:
-                how = "withdrawn" if retired[ident].get("superseded_by") == "withdrawn" else "replaced"
+                how = "withdrawn" if retired[ident].get("superseded_by") == WITHDRAWN else "replaced"
                 reasons.append(f"it rests on finding [{ident}], which was {how}")
             elif ident in findings and ident != own_id and ident not in trail:
                 upstream = finding_standing(ident, trail + (own_id,))
@@ -444,10 +494,6 @@ def analyze(snapshot: dict | None) -> dict:
         "conflicts": conflicts,
         "any_stale": any(stale.values()),
     }
-
-
-def stale_calc_ids(snapshot: dict | None) -> set[str]:
-    return set(analyze(snapshot)["stale"]["calcs"])
 
 
 def backfill(record: Any, project_id: str, *, resolve_id: Callable | None = None) -> int:

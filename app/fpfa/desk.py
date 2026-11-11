@@ -1211,17 +1211,19 @@ class Desk:
             return
         try:
             self.record.import_project(project)
-            self._sync_inputs(project)
         except Exception as exc:
             self.status.set("Project record is not available. " + safe_error(exc))
+            return
+        self._pull_inputs_onto_form(project)
 
     def _sync_inputs(self, project: dict) -> list[str]:
         """Sync one job's basis and zone inputs with the record. Returns the inputs the record put on the form."""
         project_id = project["id"]
         shown = project.get("synced") if isinstance(project.get("synced"), dict) else {}
-        basis = project.get("basis") if isinstance(project.get("basis"), dict) else {}
-        basis_now = {key: str(basis.get(key) or "").strip() for key, _label in BASIS_LABELS
-                     if str(basis.get(key) or "").strip()}
+        # Every basis field goes to the sync, an empty one too: the lead may have recorded it from the chat, and
+        # one the designer emptied has to leave the record. A job with no basis block has nothing to compare.
+        basis = project.get("basis") if isinstance(project.get("basis"), dict) else None
+        basis_now = {key: str(basis.get(key) or "").strip() for key, _label in BASIS_LABELS} if basis is not None else {}
         zone = inputs.zone_values(project)
         zone_now = {name: inputs.encode(name, value) for name, value in zone.items()}
         sources = {name: inputs.source_text(inputs.provenance(project, name, zone[name])) for name in zone}
@@ -1260,18 +1262,47 @@ class Desk:
         return pulled
 
     def _pull_inputs_onto_form(self, project: dict) -> list[str]:
-        """After a turn: put what the lead recorded on the form, save the job, and redraw the form if it is open."""
+        """Sync the job with the record and, when the record put an input on it and it is the open job, redraw the form.
+
+        The form has to show what the sync pulled before it is read again: a
+        field still showing the old value would be captured as the designer's
+        change and would overrule what the lead recorded.
+        """
         try:
             pulled = self._sync_inputs(project)
         except Exception as exc:
             self.status.set("Project record is not available. " + safe_error(exc))
             return []
         if pulled and self.project is not None and self.project.get("id") == project.get("id"):
-            self._apply_basis(project.get("basis") or {})
-            self._apply_di(project.get("di") or {})
-            # Putting the record's values on the form is not the designer typing them.
-            self._typed = set()
+            self._show_pulled(project, pulled)
         return pulled
+
+    def _show_pulled(self, project: dict, pulled: list[str]) -> None:
+        """Put the inputs the record supplied on the open form. The other fields stay as the designer has them.
+
+        Not every caller saved the form first (/status, an answer on the
+        panel), so a field typed since the last save is still only on the
+        form. It is kept, with its mark that the designer typed it.
+        """
+        basis = dict(project.get("basis") or {})
+        di = dict(project.get("di") or {})
+        try:
+            shown_basis, shown_di = self.collect_basis(), self.collect_di()
+        except ValueError:
+            # A number on the form does not parse, so the form cannot be read. The job's own values go back on it.
+            self._apply_basis(basis)
+            self._apply_di(di)
+            self._typed = set()
+            return
+        for name in pulled:
+            if name in basis and name in shown_basis:
+                shown_basis[name] = basis[name]
+            elif name in di:
+                shown_di[name] = di[name]
+        self._apply_basis(shown_basis)
+        self._apply_di(shown_di)
+        # Putting the record's values on the form is not the designer typing them.
+        self._typed -= set(pulled)
 
     def save_current(self) -> None:
         self._ensure_project()

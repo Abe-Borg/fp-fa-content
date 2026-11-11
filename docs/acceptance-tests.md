@@ -105,6 +105,8 @@ Automated half, already passed: `app/tests/test_usage.py` proves the events, the
 | Calc kernels, the DH-1 figures, the pack lint (no low-air release wording, no standards text) | Tested | `calcs/fp`, `calcs/fa` |
 | The releasing truth table row by row: low air alone never releases; release needs the detection leg and P | Tested | `app/tests/test_releasing_basis.py` |
 | Inputs on the record with who supplied each; a changed input marks exactly what used it; a re-run clears it | Tested | `test_coherence.py` |
+| A basis field stated in chat reaching an empty field on the Basis tab; a basis field the designer emptied leaving the record, with what rested on it out of date | Tested, with the lead's `set_input` called directly and no model | `test_coherence.py` |
+| A calc that took a figure from an alternative marked as an alternative, with the tool result saying so; a figure two takeoffs share tied to the one on the project inputs | Tested | `test_coherence.py` |
 | A cite looked up in the content pack; a wrong figure beside a matching author's note is caught; an out-of-date finding is not judged; tiers | Tested, with a checker stand-in that says Supported to everything | `test_checker.py` |
 | The export gate, the Design Basis layout, the Section 21 13 19 guard against a run the form moved past | Tested | `test_checker.py`, `test_design_basis.py`, `test_desk_team.py` |
 | The figures in a reply looked up on the record | Tested on written replies | `test_desk_team.py` |

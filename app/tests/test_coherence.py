@@ -152,7 +152,7 @@ class FormSyncTests(unittest.TestCase):
         again = record.sync_form("job1", inputs.INPUT_KIND,
                                  {row["key"]: row["value"] for row in rows},
                                  sources={row["key"]: "sample data" for row in rows})
-        self.assertEqual(again, {"written": [], "pulled": {}})
+        self.assertEqual(again, {"written": [], "pulled": {}, "cleared": []})
         givens = record.givens("job1")
         self.assertEqual(givens["insurer"]["value"], "FM")
         self.assertEqual(inputs.decode(givens["q_fill_gpm"]["value"]), 600.0)
@@ -193,7 +193,7 @@ class FormSyncTests(unittest.TestCase):
         # Once the form shows 750, a later sync is quiet and keeps who said it.
         shown_now = dict(shown, q_fill_gpm="750.0")
         out = record.sync_form("job1", inputs.INPUT_KIND, shown_now, sources=sources, shown_before=shown_now)
-        self.assertEqual(out, {"written": [], "pulled": {}})
+        self.assertEqual(out, {"written": [], "pulled": {}, "cleared": []})
         self.assertEqual(record.givens("job1")["q_fill_gpm"]["agent"], "lead")
         # A form that was never synced before (an older job file) does not overrule the lead either.
         out = record.sync_form("job1", inputs.INPUT_KIND, shown, sources=sources, shown_before=None)
@@ -223,6 +223,79 @@ class FormSyncTests(unittest.TestCase):
         analysis = analyze(record.snapshot("job1"))
         self.assertFalse(analysis["any_stale"])
         self.assertEqual({item["state"] for item in analysis["calcs"].values()}, {"current"})
+
+    def _basis_form(self, record, **fields):
+        """A job whose Basis tab was synced once. Returns the labels and what the tab showed."""
+        from fpfa import inputs
+        from fpfa.record import BASIS_LABELS
+
+        record.ensure_project("job1", "Sample")
+        shown = {"ahj": "", "nfpa_13": "2025", "nfpa_72": "2025", "insurer": "FM", "hazard_notes": ""}
+        shown.update(fields)
+        record.sync_form("job1", inputs.BASIS_KIND, shown, labels=dict(BASIS_LABELS))
+        return dict(BASIS_LABELS), shown
+
+    def test_a_basis_field_the_lead_recorded_reaches_a_form_field_that_was_empty(self):
+        from fpfa import inputs
+
+        record = _record()
+        labels, shown = self._basis_form(record)
+        quiet = {"written": [], "pulled": {}, "cleared": []}
+        # An empty field writes nothing: a fact has a value.
+        self.assertEqual(set(record.givens("job1")), {"nfpa_13", "nfpa_72", "insurer"})
+        self.assertEqual(record.sync_form("job1", inputs.BASIS_KIND, shown, labels=labels, shown_before=shown), quiet)
+        # The designer states the AHJ in chat and the lead records it. The Basis tab still shows an empty field.
+        record.set_given("job1", kind=inputs.BASIS_KIND, key="ahj", value="City fire marshal", label=labels["ahj"],
+                         source="designer, in chat", agent="lead")
+        out = record.sync_form("job1", inputs.BASIS_KIND, shown, labels=labels, shown_before=shown)
+        self.assertEqual(out, {"written": [], "pulled": {"ahj": "City fire marshal"}, "cleared": []})
+        # A job file last synced when an empty field was left out of the sync holds no note of the field.
+        older = {key: value for key, value in shown.items() if value}
+        out = record.sync_form("job1", inputs.BASIS_KIND, shown, labels=labels, shown_before=older)
+        self.assertEqual(out["pulled"], {"ahj": "City fire marshal"})
+        out = record.sync_form("job1", inputs.BASIS_KIND, shown, labels=labels, shown_before=None)
+        self.assertEqual(out["pulled"], {"ahj": "City fire marshal"})
+        # Once the tab shows it, a later sync is quiet and the row is still the lead's.
+        shown_now = dict(shown, ahj="City fire marshal")
+        self.assertEqual(record.sync_form("job1", inputs.BASIS_KIND, shown_now, labels=labels, shown_before=shown_now), quiet)
+        row = record.givens("job1")["ahj"]
+        self.assertEqual((row["agent"], row["source"]), ("lead", "designer, in chat"))
+
+    def test_a_basis_field_the_designer_emptied_leaves_the_record_and_does_not_come_back(self):
+        from fpfa import inputs
+
+        record = _record()
+        labels, shown = self._basis_form(record, ahj="City fire marshal")
+        quiet = {"written": [], "pulled": {}, "cleared": []}
+        held = record.givens("job1")["ahj"]
+        emptied = dict(shown, ahj="")
+        out = record.sync_form("job1", inputs.BASIS_KIND, emptied, labels=labels, shown_before=shown)
+        self.assertEqual(out, {"written": [], "pulled": {}, "cleared": ["ahj"]})
+        self.assertNotIn("ahj", record.givens("job1"))
+        history = [row for row in record.facts("job1", inputs.BASIS_KIND, include_superseded=True) if row["key"] == "ahj"]
+        self.assertEqual([(row["id"], row["value"], row["superseded_by"]) for row in history],
+                         [(held["id"], "City fire marshal", "withdrawn")])
+        event = record.latest_event("job1", "input_changed")
+        self.assertEqual((event["payload"]["key"], event["payload"]["old"], event["payload"]["new"]),
+                         ("ahj", "City fire marshal", ""))
+        # The field stays empty and nothing more happens.
+        self.assertEqual(record.sync_form("job1", inputs.BASIS_KIND, emptied, labels=labels, shown_before=emptied), quiet)
+        # Emptying a value the lead recorded is the designer's change as well, and the value does not come back.
+        record.set_given("job1", kind=inputs.BASIS_KIND, key="ahj", value="County fire district", label=labels["ahj"],
+                         source="designer, in chat", agent="lead")
+        with_lead = dict(shown, ahj="County fire district")
+        out = record.sync_form("job1", inputs.BASIS_KIND, emptied, labels=labels, shown_before=with_lead)
+        self.assertEqual(out, {"written": [], "pulled": {}, "cleared": ["ahj"]})
+        self.assertEqual(record.sync_form("job1", inputs.BASIS_KIND, emptied, labels=labels, shown_before=emptied), quiet)
+        self.assertNotIn("ahj", record.givens("job1"))
+        # The lead records it once more after that. The field was empty and untouched, so it is put on the form.
+        record.set_given("job1", kind=inputs.BASIS_KIND, key="ahj", value="City fire marshal", label=labels["ahj"],
+                         source="designer, in chat", agent="lead")
+        out = record.sync_form("job1", inputs.BASIS_KIND, emptied, labels=labels, shown_before=emptied)
+        self.assertEqual(out["pulled"], {"ahj": "City fire marshal"})
+        # A zone input never arrives empty. Its blank is a value, written like any other.
+        self.assertEqual(inputs.encode("trim_gal", None), "null")
+        self.assertEqual(record.clear_given("job1", kind=inputs.BASIS_KIND, key="hazard_notes", agent="job form"), [])
 
 
 class CallBasisTests(unittest.TestCase):
@@ -267,6 +340,97 @@ class CallBasisTests(unittest.TestCase):
             "v_gal": zone_gal, "q_fill_gpm": 600, "t_detect_s": 8, "t_release_s": 2, "t_exhaust_s": 0, "basis": "FM",
         })
         self.assertNotIn("differs_from_project_inputs", same)
+
+    def test_a_calc_that_took_a_figure_from_an_alternative_is_an_alternative_and_the_model_is_told(self):
+        """A what-if takeoff, then a trip time on its gallons. The trip time is not the design case either."""
+        from fpfa import status
+        from fpfa.calc_tools import ToolSession
+        from fpfa.coherence import analyze
+        from fpfa.team_panel import team_view
+
+        record = _record()
+        di, basis = _seed_inputs(record)
+        _run_plan(record, di, basis)
+        design = next(row for row in record.calcs("job1") if row["tool"] == "zone_trapped_volume")
+        design_trip = next(row for row in record.calcs("job1") if row["tool"] == "di_trip_to_water")
+        session = ToolSession(REPO, record=record, project_id="job1", agent="fp-sprinkler")
+        longer = copy.deepcopy(di["segments"])
+        longer[1]["length_ft"] = 420                     # 200 ft more 2 in branch than the project inputs hold
+        takeoff = session.execute("zone_trapped_volume", {"segments": longer})
+        own = "segments 4 segments where the project input segments is 4 segments"
+        self.assertIn(own, takeoff["differs_from_project_inputs"])
+        self.assertGreater(takeoff["zone_gal"], design["outputs"]["zone_gal"])
+        # The trip time uses the project's own fill flow and times. Only its gallons belong to another case.
+        common = {"q_fill_gpm": 600, "t_detect_s": 8, "t_release_s": 2, "t_exhaust_s": 0, "basis": "FM"}
+        trip = session.execute("di_trip_to_water", dict(common, v_gal=takeoff["zone_gal"]))
+        carried = f"a figure from zone_trapped_volume [{takeoff['record_id']}], which ran on {own}"
+        self.assertEqual(
+            trip["differs_from_project_inputs"],
+            f"This call used {carried}. It is recorded as an alternative, not the design case. "
+            "If the project input is wrong, the lead changes it; do not present this result as the design case.",
+        )
+        row = record.calc("job1", trip["record_id"])
+        self.assertEqual(row["varies"], {})
+        self.assertIn(takeoff["record_id"], row["depends"])
+        nitrogen = session.execute("nitrogen_gate", {"v_gal": takeoff["zone_gal"], "p_psig": 40, "t_min": 30})
+        self.assertIn(carried, nitrogen["differs_from_project_inputs"])
+        finding = record.record_finding("job1", agent="fp-sprinkler", label="calculated",
+                                        text="With 200 ft more branch the trip time is longer.",
+                                        supports=[trip["record_id"]])
+        snapshot = record.snapshot("job1")
+        analysis = analyze(snapshot)
+        self.assertEqual(analysis["calcs"][takeoff["record_id"]]["state"], "alternative")
+        self.assertEqual(analysis["calcs"][trip["record_id"]],
+                         {"state": "alternative", "reasons": [], "note": carried, "tracked": True})
+        self.assertEqual(analysis["calcs"][nitrogen["record_id"]]["state"], "alternative")
+        # The finding on the derived trip time is named as resting on another case, to the lead and on the panel.
+        self.assertEqual(analysis["findings"][finding["id"]]["state"], "current")
+        self.assertEqual(analysis["findings"][finding["id"]]["notes"],
+                         [f"di_trip_to_water [{trip['record_id']}] ran on {carried}"])
+        self.assertEqual([item["finding_id"] for item in status.build(snapshot)["alternatives"]], [finding["id"]])
+        self.assertIn(f"[{finding['id']}] by fp-sprinkler", status.lead_text(status.build(snapshot)))
+        self.assertEqual([item["id"] for item in team_view(snapshot)["alternatives"]], [finding["id"]])
+        # The design case is untouched, and the same call on its gallons says nothing.
+        self.assertEqual(analysis["calcs"][design_trip["id"]]["state"], "current")
+        self.assertFalse(analysis["any_stale"])
+        again = session.execute("di_trip_to_water", dict(common, v_gal=design["outputs"]["zone_gal"]))
+        self.assertNotIn("differs_from_project_inputs", again)
+
+    def test_a_figure_two_takeoffs_share_is_tied_to_the_one_on_the_project_inputs(self):
+        """An alternative takeoff can land on the design gallons. The design trip time must not inherit its case."""
+        from fpfa.calc_tools import ToolSession
+
+        record = _record()
+        di, basis = _seed_inputs(record)
+        _run_plan(record, di, basis)
+        design = next(row for row in record.calcs("job1") if row["tool"] == "zone_trapped_volume")
+        session = ToolSession(REPO, record=record, project_id="job1", agent="fp-sprinkler")
+        # The same pipe with a zero fittings allowance, where the project leaves the allowance blank.
+        twin = session.execute("zone_trapped_volume", {"segments": di["segments"], "fittings_percent": 0})
+        self.assertIn("fittings_percent 0 where the project input fittings_percent is blank",
+                      twin["differs_from_project_inputs"])
+        self.assertEqual(twin["zone_gal"], design["outputs"]["zone_gal"])
+        common = {"q_fill_gpm": 600, "t_detect_s": 8, "t_release_s": 2, "t_exhaust_s": 0, "basis": "FM"}
+        trip = session.execute("di_trip_to_water", dict(common, v_gal=design["outputs"]["zone_gal"]))
+        self.assertNotIn("differs_from_project_inputs", trip)
+        row = record.calc("job1", trip["record_id"])
+        self.assertIn(design["id"], row["depends"])
+        self.assertNotIn(twin["record_id"], row["depends"])
+        # The tool plan run again replays its own calls. Every one of them still follows the project inputs.
+        _run_plan(record, di, basis)
+        analysis, by_tool = _states(record)
+        self.assertEqual(by_tool["di_trip_to_water"], ["current"])
+        self.assertEqual(by_tool["nitrogen_gate"], ["current"])
+        self.assertEqual(sorted(by_tool["zone_trapped_volume"]), ["alternative", "current"])
+        # With only the alternative left standing on that figure, a call on it is tied to the alternative.
+        from fpfa.coherence import call_basis
+
+        givens = record.givens("job1")
+        calcs = record.calcs("job1")
+        depends, varies = call_basis("di_trip_to_water", dict(common, v_gal=design["outputs"]["zone_gal"]), givens, calcs,
+                                     stale={design["id"]}, alternative={twin["record_id"]})
+        self.assertIn(twin["record_id"], depends)
+        self.assertEqual(varies, {})
 
     def test_an_argument_left_out_is_compared_on_what_the_tool_used(self):
         from fpfa.calc_tools import ToolSession
@@ -482,6 +646,54 @@ class StalenessTests(unittest.TestCase):
         self.assertIn("verify the section in that edition", analysis["evidence"][nfpa13["id"]]["reasons"][0])
         self.assertEqual(analysis["evidence"][nfpa72["id"]]["state"], "current")
         self.assertEqual(analysis["findings"][finding["id"]]["state"], "stale")
+
+    def test_what_rests_on_an_input_the_designer_emptied_is_out_of_date_until_it_is_stated_again(self):
+        from fpfa import inputs
+        from fpfa import status
+        from fpfa.calc_tools import ToolSession
+        from fpfa.coherence import analyze
+        from fpfa.record import BASIS_LABELS
+
+        record, di, basis = self._seeded()
+        labels = dict(BASIS_LABELS)
+        shown = {key: basis[key] for key, _ in BASIS_LABELS}
+        session = ToolSession(REPO, record=record, project_id="job1", agent="fp-sprinkler")
+        cite = session.execute("record_evidence", {"document": "NFPA 13", "edition": "2025", "section": "8.3.2.3.1.1"})
+        on_ahj = record.record_finding("job1", agent="fp-sprinkler", label="use best judgment",
+                                       text="The submittal goes to the fire marshal named on the Basis tab.",
+                                       supports=[record.givens("job1")["ahj"]["id"]])
+        on_cite = record.record_finding("job1", agent="fp-sprinkler", label="CODE",
+                                        text="No specific delivery time is required at this size.", supports=[cite["id"]])
+        emptied = dict(shown, ahj="", nfpa_13="")
+        out = record.sync_form("job1", inputs.BASIS_KIND, emptied, labels=labels, shown_before=shown)
+        self.assertEqual(out["cleared"], ["ahj", "nfpa_13"])
+        snapshot = record.snapshot("job1")
+        analysis = analyze(snapshot)
+        self.assertEqual(analysis["findings"][on_ahj["id"]],
+                         {"state": "stale", "notes": [],
+                          "reasons": [f"basis/ahj was emptied on the form; it was {basis['ahj']}"]})
+        self.assertEqual(analysis["evidence"][cite["id"]]["reasons"],
+                         ["basis/nfpa_13 was emptied on the form; it was 2025; the job states no edition for this cite now"])
+        self.assertEqual(analysis["findings"][on_cite["id"]]["state"], "stale")
+        # The calcs follow the zone inputs, and none of those moved.
+        self.assertEqual(analysis["stale"]["calcs"], [])
+        # The status names both changes while something current still rests on the old values.
+        digest = status.build(snapshot)
+        self.assertEqual({item["key"] for item in digest["changes"]}, {"ahj", "nfpa_13"})
+        self.assertNotIn("ahj", {row["name"] for row in digest["inputs"]})
+        # Typed back as they were: both rest on values the job states again.
+        out = record.sync_form("job1", inputs.BASIS_KIND, shown, labels=labels, shown_before=emptied)
+        self.assertEqual({row["key"] for row in out["written"]}, {"ahj", "nfpa_13"})
+        analysis = analyze(record.snapshot("job1"))
+        self.assertFalse(analysis["any_stale"])
+        # Emptied and then stated as something else: it changed, from what the finding used to what the job says now.
+        record.sync_form("job1", inputs.BASIS_KIND, dict(shown, ahj=""), labels=labels, shown_before=shown)
+        record.sync_form("job1", inputs.BASIS_KIND, dict(shown, ahj="County fire district"), labels=labels,
+                         shown_before=dict(shown, ahj=""))
+        analysis = analyze(record.snapshot("job1"))
+        reason = analysis["findings"][on_ahj["id"]]["reasons"][0]
+        self.assertTrue(reason.startswith(f"basis/ahj changed from {basis['ahj']} to County fire district"), reason)
+        self.assertEqual(analysis["findings"][on_cite["id"]]["state"], "current")
 
     def test_a_decision_is_replaced_withdrawn_or_closes_with_the_finding_it_ruled_on(self):
         from fpfa.calc_tools import ToolSession
@@ -760,6 +972,78 @@ class DeskInputTests(unittest.TestCase):
         second.open_project(project_id)
         self.assertEqual(inputs.decode(second.record.givens(project_id)["q_fill_gpm"]["value"]), 750.0)
         self.assertEqual(second.record.givens(project_id)["q_fill_gpm"]["agent"], "lead")
+        # The form shows the lead's value as well, so the next save does not read 600 off it as a change.
+        self.assertEqual(second.q_fill.get(), "750.0")
+        second.save_current()
+        row = second.record.givens(project_id)["q_fill_gpm"]
+        self.assertEqual((row["agent"], inputs.decode(row["value"])), ("lead", 750.0))
+
+    def test_an_input_the_lead_set_mid_turn_reaches_the_form_and_unsaved_typing_stays(self):
+        """The team is working and has recorded 750. The designer has typed a field and asks where things stand.
+
+        /status opens the record without saving the form first. The lead's value must show on the form at once,
+        or the next save reads the old 600 off it as the designer's change. What the designer typed and has not
+        saved must not be lost to that.
+        """
+        from fpfa import inputs
+
+        desk = self._desk()
+        desk.ask_claude.set(False)
+        desk.start_sample_di()
+        desk.pump()
+        project_id = desk.project["id"]
+        desk.save_current()
+        desk.patch_form({"t_detect": "12", "ahj": "County fire district"})        # typed, not saved
+        _change(desk.record, "q_fill_gpm", 750, project_id=project_id, agent="lead")
+        desk.show_status()
+        self.assertEqual(desk.q_fill.get(), "750.0")
+        self.assertEqual(desk.t_detect.get(), "12.0")
+        self.assertEqual(desk.ahj.get(), "County fire district")
+        desk.save_current()
+        rows = desk.record.givens(project_id)
+        self.assertEqual((rows["q_fill_gpm"]["agent"], inputs.decode(rows["q_fill_gpm"]["value"])), ("lead", 750.0))
+        self.assertEqual((rows["t_detect_s"]["agent"], inputs.decode(rows["t_detect_s"]["value"])), ("job form", 12.0))
+        self.assertEqual(rows["t_detect_s"]["source"], "zone form")
+        self.assertEqual((rows["ahj"]["agent"], rows["ahj"]["value"]), ("job form", "County fire district"))
+        self.assertEqual(desk.project["given"]["t_detect_s"], inputs.SOURCE_DESIGNER)
+        self.assertEqual(desk.project["given"]["q_fill_gpm"], inputs.SOURCE_CHAT)
+
+    def test_a_basis_field_stated_in_chat_reaches_an_empty_field_on_the_basis_tab(self):
+        """The AHJ field is empty and the designer names the AHJ in chat. The lead's set_input must show on the tab."""
+        from fpfa import inputs
+        from fpfa.projects import load_project
+        from fpfa.team import TeamSession
+
+        desk = self._desk()
+        desk.patch_form({"t_detect": "12"})
+        desk.save_current()
+        project_id = desk.project["id"]
+        self.assertEqual(desk.ahj.get(), "")
+        self.assertNotIn("ahj", desk.record.givens(project_id))
+        # The lead's own tool, as a turn would call it. No model is involved: the call is made directly.
+        lead = TeamSession(REPO, desk.record, project_id, lambda **_kwargs: None)
+        out = lead.execute("set_input", {"name": "ahj", "value": "City fire marshal", "why": "stated in chat"})
+        self.assertEqual((out["was"], out["now"]), ("not on the record", "City fire marshal"))
+        # The turn ends: the desk puts what the lead recorded on the form and the job file.
+        pulled = desk._pull_inputs_onto_form(desk.project)
+        self.assertEqual(pulled, ["ahj"])
+        self.assertEqual(desk.ahj.get(), "City fire marshal")
+        desk.save_current()
+        saved = load_project(project_id)
+        self.assertEqual(saved["basis"]["ahj"], "City fire marshal")
+        self.assertEqual(saved["given"]["ahj"], inputs.SOURCE_CHAT)
+        row = desk.record.givens(project_id)["ahj"]
+        self.assertEqual((row["agent"], row["value"]), ("lead", "City fire marshal"))
+        # The designer empties the field on the Basis tab. The record stops stating it and it does not come back.
+        desk.patch_form({"ahj": ""})
+        desk.save_current()
+        self.assertNotIn("ahj", desk.record.givens(project_id))
+        desk.save_current()
+        self.assertEqual(desk.ahj.get(), "")
+        self.assertNotIn("ahj", desk.record.givens(project_id))
+        self.assertEqual(load_project(project_id)["basis"]["ahj"], "")
+        # The editions and the insurer never leave: the tab always holds a value for them.
+        self.assertEqual({"nfpa_13", "nfpa_72", "insurer"} - set(desk.record.givens(project_id)), set())
 
 
 if __name__ == "__main__":

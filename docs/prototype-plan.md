@@ -81,7 +81,7 @@ One SQLite database at `<data_dir>/fpfa.db`. Every table has `project_id`. The J
 
 | Table | Holds | Written by |
 | --- | --- | --- |
-| `facts` | Basis of design: AHJ, adopted code and editions, insurer, owner standard, assumptions. `kind`, `key`, `value`, `source`, `label` (calculated, ASSUMED, use best judgment, GIVEN, CODE, OWNER, PRACTICE). Kind `input` holds every field of the zone form, with who supplied it. A replaced row is kept (`superseded_by`). | `record_fact` tool, the zone form, the lead's `set_input` |
+| `facts` | Basis of design: AHJ, adopted code and editions, insurer, owner standard, assumptions. `kind`, `key`, `value`, `source`, `label` (calculated, ASSUMED, use best judgment, GIVEN, CODE, OWNER, PRACTICE). Kind `input` holds every field of the zone form, with who supplied it. A replaced row is kept (`superseded_by`), and so is the row of a basis field the designer emptied, marked withdrawn. | `record_fact` tool, the zone form, the lead's `set_input` |
 | `evidence` | Cites: document, edition, section, short paraphrase, applicability, status (held, NOT PULLED, NEEDS HOLD). | `record_evidence` tool |
 | `calc_records` | Tool name, input hash, inputs, outputs, pack version, time, caller. `depends`: the input facts it used and the calc it took a figure from. `varies`: where it left the project inputs. | Every calc tool, automatically |
 | `findings` | A specialist's statement with its label and its supporting calc, evidence, input, or finding ids. Replaced or withdrawn rows are kept (`superseded_by`, `retire_note`). | `record_finding`, `withdraw_finding` tools |
@@ -98,7 +98,7 @@ Rules:
 
 - An agent never opens the database. It calls a tool. The tool validates, writes one transaction, and appends an event.
 - A calc tool computes a hash of the tool, its inputs, and the identity of the calc code in the running pack (a hash of the kernel files). If a record with that hash exists for the project, the tool returns the recorded output and marks the call as a replay. This is the duplicate prevention for Phase 5. A pack update that changes a kernel file changes the identity, so old results are never replayed by new code; the old rows stay as history.
-- The inputs follow the form and the form follows the record. A field the designer changed writes a new row and supersedes the old one; an input the lead recorded from the chat is put on the form. Import from a JSON job happens once; the sync runs on every open, save, run, and turn.
+- The inputs follow the form and the form follows the record. A field the designer changed writes a new row and supersedes the old one; an input the lead recorded from the chat is put on the form, an empty basis field included. A basis field the designer emptied leaves the current set (a fact has a value, so there is no blank row to write), and what rested on it is out of date until it is stated again. Import from a JSON job happens once; the sync runs on every open, save, run, and turn, and whenever it puts a value on the open job the form is redrawn before it is read again.
 - A row whose basis changed is out of date, with the reason. `coherence.analyze` derives it from what each calc followed; nothing is stored about it and nothing is recomputed on its own. Only a row that something current rests on waits on anyone.
 - A finding or a decision is never edited. It is replaced or withdrawn by its author or the lead, and the old row stays.
 - A fact or finding carries exactly one of the three labels from the current app, or a cite class. The tool rejects a row with none.

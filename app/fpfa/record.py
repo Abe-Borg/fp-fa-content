@@ -68,6 +68,7 @@ FORM_AGENTS = ("job form", "migration")
 REVIEW_POSITIONS = ("agree", "object")
 REVIEW_STATUSES = ("open", "resolved", "escalated", "withdrawn")
 # How a finding leaves the current set: a newer finding replaced it, or its author withdrew it.
+# A decision leaves the same way, and so does an input the designer emptied on the form (clear_given).
 WITHDRAWN = "withdrawn"
 FINDING_STATUSES = ("open", "Supported", "Not supported", "Source not found")
 TASK_STATUSES = ("open", "working", "done", "blocked", "cancelled")
@@ -501,9 +502,19 @@ class Record:
         and is returned in "pulled" for the caller to put on the form. A
         form-owned row is rewritten when its value or its source changed.
 
-        Returns {"written": rows, "pulled": {name: value text}}. Each written
-        row carries "previous", the value it replaced or None. An
-        input_changed event is logged for every value that actually changed.
+        A field that holds nothing is passed as "" and is never written: a
+        fact has a value. With no row it is left alone. When the field was
+        empty at the last sync too, or was never synced, and an agent has set
+        the input, the record's value is pulled onto the form like any other.
+        When the field held a value at the last sync, the designer emptied it:
+        the input leaves the current set (clear_given) and is named in
+        "cleared". A zone input never arrives empty; its blank is the text
+        "null", which is a value.
+
+        Returns {"written": rows, "pulled": {name: value text}, "cleared":
+        [names]}. Each written row carries "previous", the value it replaced
+        or None. An input_changed event is logged for every value that
+        actually changed.
         """
         project_id = _text(project_id, "project_id", limit=64)
         kind = _text(kind, "kind", limit=80)
@@ -513,11 +524,23 @@ class Record:
         current = {row["key"]: row for row in self.facts(project_id, kind)}
         written: list[dict] = []
         pulled: dict[str, str] = {}
+        cleared: list[str] = []
         for key, value in values.items():
             text = str(value)
             source = str(sources.get(key) or agent)
             label = labels.get(key, GIVEN) if isinstance(labels, dict) else labels
             row = current.get(key)
+            if not text.strip():
+                if row is None:
+                    continue
+                if str(before.get(key) or "").strip():
+                    # The field held a value at the last sync and holds none now: the designer emptied it.
+                    if self.clear_given(project_id, kind=kind, key=key, agent=agent, source=source):
+                        cleared.append(key)
+                elif (row.get("agent") or "") not in FORM_AGENTS:
+                    # The field was empty and an agent has recorded the input: the record's value goes on the form.
+                    pulled[key] = row["value"]
+                continue
             if row is not None:
                 agent_set = (row.get("agent") or "") not in FORM_AGENTS
                 form_changed = key in before and before[key] != text
@@ -541,7 +564,36 @@ class Record:
                     "source": source, "id": new["id"],
                 }, agent=agent)
             written.append(new)
-        return {"written": written, "pulled": pulled}
+        return {"written": written, "pulled": pulled, "cleared": cleared}
+
+    def clear_given(self, project_id: str, *, kind: str, key: str, agent: str, source: str = "") -> list[dict]:
+        """An input was emptied where it is edited and has no blank value to store. It leaves the current set.
+
+        The rows stay as history, marked withdrawn, and an input_changed event
+        keeps what the input held. Returns the rows that left. An input with
+        no current row returns none and writes nothing.
+        """
+        project_id = _text(project_id, "project_id", limit=64)
+        kind = _text(kind, "kind", limit=80)
+        key = _text(key, "key", limit=200)
+        agent = _text(agent, "agent", required=False, limit=80)
+        source = _text(source, "source", required=False, limit=2000)
+
+        def work(conn):
+            rows = [dict(row) for row in conn.execute(
+                "SELECT * FROM facts WHERE project_id = ? AND kind = ? AND key = ? AND superseded_by IS NULL "
+                "ORDER BY created, rowid",
+                (project_id, kind, key),
+            ).fetchall()]
+            for row in rows:
+                conn.execute("UPDATE facts SET superseded_by = ? WHERE id = ?", (WITHDRAWN, row["id"]))
+                self._event(conn, project_id, "input_changed", agent, {
+                    "kind": kind, "key": key, "old": row["value"], "new": "", "by": agent,
+                    "source": source, "id": row["id"],
+                })
+            return rows
+
+        return self._write(work)
 
     def set_given(self, project_id: str, *, kind: str, key: str, value: str, label: str,
                   source: str, agent: str) -> dict:

@@ -480,20 +480,20 @@ class ToolSession:
             if found is not None:
                 # Same tool, inputs, calc code, and project: count the replay and return the recorded output.
                 # A replay is the same call checked against the inputs as they are now, so its basis is rewritten.
-                depends, varies = self._basis(name, args)
+                depends, varies, departs = self._basis(name, args)
                 row = self.record.record_calc(
                     self.project_id, tool=name, inputs=args, outputs=found["outputs"],
                     agent=self.agent, calc_identity=self.calc_identity, depends=depends, varies=varies,
                 )
-                return self._with_record_id(name, found["outputs"], row["id"], varies)
+                return self._with_record_id(name, found["outputs"], row["id"], departs)
             output = self._run(name, args)
-            depends, varies = self._basis(name, args)
+            depends, varies, departs = self._basis(name, args)
             row = self.record.record_calc(
                 self.project_id, tool=name, inputs=args, outputs=output,
                 agent=self.agent, pack_version=self.pack_version, calc_identity=self.calc_identity,
                 depends=depends, varies=varies,
             )
-            return self._with_record_id(name, output, row["id"], varies)
+            return self._with_record_id(name, output, row["id"], departs)
         output = self._run(name, args)
         # A model never reads the kernel's deprecated names, with a record or without one.
         return reader_view(name, output) if self.model_facing else output
@@ -503,22 +503,23 @@ class ToolSession:
         """True when a model reads this session's results. The fixed tool plan and a bare session do not."""
         return self.agent not in ("", "tool-plan")
 
-    def _with_record_id(self, name: str, output: dict, record_id: str, varies: dict | None = None) -> dict:
+    def _with_record_id(self, name: str, output: dict, record_id: str, departs: str = "") -> dict:
         """A model-facing result carries the calc record id so a finding can cite it.
 
         It also says, in one sentence, where the call departed from the project
         inputs, so a specialist sees at once that it ran an alternative and not
-        the design case. The fixed tool plan (agent tool-plan) gets the bare
+        the design case. departs is that sentence's middle (_basis): the call's
+        own arguments, and a figure it took from a calc that was itself an
+        alternative. The fixed tool plan (agent tool-plan) gets the bare
         output, so its tables and export stay byte-identical to a run with no record.
         """
         if not self.model_facing or not isinstance(output, dict):
             return output
         shown = dict(reader_view(name, output))
         shown["record_id"] = record_id
-        note = coherence.varies_text(varies)
-        if note:
+        if departs:
             shown["differs_from_project_inputs"] = (
-                f"This call used {note}. It is recorded as an alternative, not the design case. "
+                f"This call used {departs}. It is recorded as an alternative, not the design case. "
                 "If the project input is wrong, the lead changes it; do not present this result as the design case."
             )
         return shown
@@ -526,24 +527,35 @@ class ToolSession:
     def _resolve_id(self, nps, schedule, role) -> dict:
         return self.di.pipe_ids.resolve(nps, schedule, role)
 
-    def _basis(self, name: str, args: dict) -> tuple[list[str], dict]:
-        """What this call follows on the record: the inputs it used and the calcs it took a figure from."""
+    def _basis(self, name: str, args: dict) -> tuple[list[str], dict, str]:
+        """What this call follows on the record: the inputs it used and the calcs it took a figure from.
+
+        The third value says where the call departs from the project inputs,
+        the way the record's own analysis will once the row is written: by its
+        own arguments, or by taking a figure from a calc that ran on another
+        case. It is empty for the design case.
+        """
         if name not in coherence.TRACKED_TOOLS:
-            return [], {}
+            return [], {}, ""
         try:
             givens = self.record.givens(self.project_id)
             if not givens:
-                return [], {}
+                return [], {}, ""
             calcs = self.record.calcs(self.project_id) if name in coherence.DERIVED else []
-            stale: set[str] = set()
+            standing: dict[str, dict] = {}
             if calcs:
-                stale = coherence.stale_calc_ids({
+                standing = coherence.analyze({
                     "fact_history": self.record.facts(self.project_id, include_superseded=True), "calcs": calcs,
-                })
-            return coherence.call_basis(name, args, givens, calcs, resolve_id=self._resolve_id, stale=stale)
+                })["calcs"]
+            stale = {ident for ident, item in standing.items() if item["state"] == coherence.STALE}
+            alternative = {ident for ident, item in standing.items() if item["state"] == coherence.ALTERNATIVE}
+            depends, varies = coherence.call_basis(name, args, givens, calcs, resolve_id=self._resolve_id,
+                                                   stale=stale, alternative=alternative)
+            departs = coherence.departure_text(depends, varies, {row["id"]: row for row in calcs}, standing)
+            return depends, varies, departs
         except Exception:
             # The basis is bookkeeping. A failure here never fails the calculation.
-            return [], {}
+            return [], {}, ""
 
     def _record_tool(self, name: str, args: dict) -> dict:
         if not self.recording:

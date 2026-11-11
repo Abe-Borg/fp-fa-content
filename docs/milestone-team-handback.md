@@ -43,7 +43,7 @@ One thing was right and is kept: the decision to run the team on the existing Me
 - `review_finding`: agree, or object with a note that says what would settle it. An objection ends when the author revises or withdraws the finding, the objector changes its position, or the lead settles it with a recorded decision or escalates it as a question.
 - Each specialist's brief lists what on the record needs it: its own findings whose basis changed, objections to its findings, and the other contributor's findings it has not reviewed.
 - Each specialist role says what it owns, what it needs from the other, and what it reviews. The delivery screen's detection and release times belong to the releasing specialist; the trim family and pressures belong to the sprinkler specialist.
-- The application sees one kind of inconsistency by itself: a calc run on a value other than the project input is marked as an alternative, and a finding resting on it is put in front of the lead.
+- The application sees one kind of inconsistency by itself: a calc run on a value other than the project input is marked as an alternative, and a finding resting on it is put in front of the lead. A calc that took a figure from an alternative is marked the same way.
 - Nothing forces an exchange. If the model does not ask or review, the record shows two contributions with nothing between them.
 
 ### C. The project stays coherent
@@ -97,7 +97,7 @@ New modules: `inputs.py`, `coherence.py`, `status.py`, `checker.py`, `reply_audi
 
 ### What was run
 
-All four suites pass on Linux with Python 3.12 and Node 22: `calcs/fp` 251 tests (1 skipped: the kernel reproduce check needs a kernel source folder), `calcs/fa` 88 (13 skipped, as before), `app` 442, and the page's 22. The app suite includes two runs of the built page in Chromium, each with more than thirty checks.
+All four suites pass on Linux with Python 3.12 and Node 22: `calcs/fp` 251 tests (1 skipped: the kernel reproduce check needs a kernel source folder), `calcs/fa` 88 (13 skipped, as before), `app` 449, and the page's 22. The app suite includes two runs of the built page in Chromium, each with more than thirty checks.
 
 What those tests establish, in the words of `docs/acceptance-tests.md`:
 
