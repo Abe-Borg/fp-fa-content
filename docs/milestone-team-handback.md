@@ -97,7 +97,7 @@ New modules: `inputs.py`, `coherence.py`, `status.py`, `checker.py`, `reply_audi
 
 ### What was run
 
-All four suites pass on Linux with Python 3.12 and Node 22: `calcs/fp` 250 tests, `calcs/fa` 88 (13 skipped, as before), `app` 442, and the page's 22. The app suite includes two runs of the built page in Chromium, each with more than thirty checks.
+All four suites pass on Linux with Python 3.12 and Node 22: `calcs/fp` 251 tests (1 skipped: the kernel reproduce check needs a kernel source folder), `calcs/fa` 88 (13 skipped, as before), `app` 442, and the page's 22. The app suite includes two runs of the built page in Chromium, each with more than thirty checks.
 
 What those tests establish, in the words of `docs/acceptance-tests.md`:
 
