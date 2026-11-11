@@ -603,10 +603,15 @@ def _normalize_v_basis(v_basis: Any) -> Any:
 
 
 def _v_basis_clause(v_basis: Any) -> str:
-    """Which V the <=500 / <=750 test used. None and pipe-only keep the pipe-only clause."""
+    """Which V the <=500 / <=750 test used. None and pipe-only share one clause.
+
+    The clause no longer says pipe-only V is "tested" as the
+    statutory comparison. The <=500 gal DI exemption uses system size (zone_gal), NFPA 13-2019/2025
+    s8.3.2.3.1.1. Pipe-only is the reported lower-bound screen. Label only."""
     if v_basis in (None, "pipe-only"):
-        return ("V tested is pipe-only trapped volume, not V_allow "
-                "(= pipe × 1.05 + 5 gal, ASSUMED; verify with engineer of record)")
+        return ("V passed is pipe-only trapped volume, a lower-bound screen (not V_allow = pipe × 1.05 + 5 gal, "
+                "ASSUMED; verify with engineer of record); the statutory size test uses full system size (zone_gal), "
+                "not pipe-only volume")
     if v_basis == "v_allow":
         return ("V tested is V_allow (= pipe × 1.05 + 5 gal, ASSUMED; verify with engineer of record), "
                 "not pipe-only trapped volume")
@@ -626,8 +631,9 @@ def _delivery_cite_note(st: str, v: float, cites: dict, ed: int, qod: bool = Fal
     Dry (held 2019 s8.2.3.3/.4, 2025 s8.2.4.2.1/.2): V <= 500 no test; <= 750 with QOD no test; else legacy label.
     Claim "FM 30 s governs" only when basis is FM (the backward-compatible default). NFPA-* and
     explicit limit_s (limit_basis "explicit") cite the held NFPA 13 path only — they do not claim FM 30 s.
-    The <=500 / <=750 test uses the caller-supplied V, which in di_trip_to_water and dry_delivery_screen
-    is pipe-only trapped volume, not V_allow (= pipe x 1.05 + 5 gal, ASSUMED; verify with engineer of record).
+    The caller-supplied V in di_trip_to_water and dry_delivery_screen is typically pipe-only trapped volume,
+    a lower-bound screen, not V_allow (= pipe x 1.05 + 5 gal, ASSUMED; verify with engineer of record). The
+    statutory <=500 gal DI comparison uses full system size (zone_gal), NFPA 13-2019/2025 s8.3.2.3.1.1; the note says so and does not call pipe-only V the statutory test.
     Label only: no numeric output depends on this. FM-basis threshold notes stay byte-identical.
     Optional v_basis (None / pipe-only / v_allow / caller) selects the V-tested clause.
     None and pipe-only keep the wording. v_allow and caller must not claim pipe-only.
@@ -687,8 +693,10 @@ def di_trip_to_water(v_gal: Number, q_fill_gpm: Number, t_detect_s: Number = 0.0
     HP 40 / DU 15); "NFPA" = NFPA-OH. Table numerics identical 2019 Table 8.2.3.6.1 ↔ 2025
     Table 8.2.4.3.2 (B-DRYED); edition only changes the cite label (and DU row location note).
     note_60s_option claims "FM 30 s governs" only when limit_basis is FM; NFPA-* /
-    explicit limit_s cite the held NFPA 13 path only. The <=500 test uses pipe-only trapped V,
-    not V_allow (= pipe x 1.05 + 5 gal, ASSUMED; verify with engineer of record). Label only; FM-default notes byte-identical.
+    explicit limit_s cite the held NFPA 13 path only. The V passed is typically pipe-only trapped V (a
+    lower-bound screen, not V_allow = pipe x 1.05 + 5 gal, ASSUMED; verify with engineer of record); the statutory <=500 gal DI
+    comparison uses system size (zone_gal), NFPA 13-2019/2025 s8.3.2.3.1.1. Label only;
+    FM-default notes byte-identical.
     Do NOT treat the 60 s single-orifice test-connection OPTION (2019 s8.2.3.2 / 2025 s8.2.4.2)
     as automatically granted — it is one of several conditional sizing paths. limit_s overrides
     basis. edition default 2025 (backward compatible); 2019|2025 only.
@@ -704,7 +712,7 @@ def di_trip_to_water(v_gal: Number, q_fill_gpm: Number, t_detect_s: Number = 0.0
     note_60s_option, the dry default label and every number/verdict unchanged.
         Optional v_basis (None / 'pipe-only' / 'v_allow' / 'caller'; aliases accepted).
     When omitted, every existing key/value stays byte-identical and the v_basis output key is
-    absent (the non-FM threshold note still says the <=500 test used pipe-only V). When
+    absent (the non-FM threshold note carries the lower-bound / zone_gal clause). When
     given, the additive output key reports the label and is threaded through _delivery_cite_note.
     The cite note must not claim "pipe-only" for v_allow or caller. Label only: no numeric or
     verdict output depends on v_basis.
@@ -1078,8 +1086,11 @@ def dry_delivery_screen(segments: Any, q_fill_gpm: Number, qod: Any = False,
     FM DS 5-32 provisional 30 s default still applies when basis=FM (design practice).
     "FM 30 s governs" is claimed only when basis/limit_basis is FM; NFPA-* / explicit
     limit_s cite the held NFPA 13 path only (DI s8.3.2.3.1.1 / dry 2019 s8.2.3.3/.4 = 2025 s8.2.4.2.1/.2).
-    The <=500 / <=750 test uses pipe-only trapped V from pipe_volume, not V_allow
-    (= pipe x 1.05 + 5 gal, ASSUMED; verify with engineer of record). Label only; FM-default notes byte-identical.
+    V here is pipe-only trapped V from pipe_volume, a lower-bound screen, not V_allow
+    (= pipe x 1.05 + 5 gal, ASSUMED; verify with engineer of record). `nfpa_delivery_time_exempt` is that pipe-only
+    lower-bound screen and does not by itself claim the exemption; the statutory <=500 gal DI comparison uses
+    full system size (zone_gal), NFPA 13-2019/2025 s8.3.2.3.1.1. Key name kept (rename deferred).
+    Label only; FM-default notes byte-identical.
     note_60s_option is VOLUME-aware (DI <=500 gal s8.3.2.3.1.1 threshold; DI >500 elected
     .1.2/.1.3/.1.4; dry <=500 / <=750 with QOD -> 2019 s8.2.3.3/.4, 2025 s8.2.4.2.1/.2; dry above that keeps the
     path-specific s8.2.3.2 / s8.2.4.2 label). Label only; all numerics and verdicts unchanged.
