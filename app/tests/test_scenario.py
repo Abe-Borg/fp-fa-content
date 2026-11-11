@@ -44,7 +44,8 @@ class Scenario:
         save_api_key("sk-ant-local-test")
         self.root = Loop()
         self.after = {}
-        self._play()
+        with patch("fpfa.desk.AnthropicMessages", side_effect=AssertionError("Unscripted model call in scenario")):
+            self._play()
 
     def _settle(self, app, timeout: float = 20.0) -> None:
         deadline = time.time() + timeout
@@ -106,6 +107,7 @@ class Scenario:
         app.export_docx()
         self.after["two"]["section_notice"] = app.notices[-1]["message"]
         # The designer runs the zone again, as the lead and the app both said. Then the draft can be exported.
+        app.ask_claude.set(False)
         app.start_zone_run()
         self._settle(app)
         self.after["rerun"] = {"basis_ready": app.design_basis_ready(), "run_changes": app.run_changes(), "team": app.team}
