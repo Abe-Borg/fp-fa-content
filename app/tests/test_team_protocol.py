@@ -510,7 +510,7 @@ class LeadToolTests(unittest.TestCase):
         create = Play({"fp-sprinkler": [volume, screen, replace, say("Brought up to date.")]})
         out = delegate(REPO, record, "job1", create, specialist="fp-sprinkler", brief="Bring the screen up to date.")
         told = create.of("fp-sprinkler")[0]["user"]
-        self.assertIn("Your findings whose basis changed. Run the calcs again on the current inputs", told)
+        self.assertIn("Your findings and decisions whose basis changed. Run the calcs again on the current inputs", told)
         self.assertIn(f"- [{old['id']}] Trip to water screens against the 30 s clock", told)
         self.assertIn("t_release_s", told)
         self.assertIn("Out-of-date calculation records (an input changed after they ran; do not cite them):", told)

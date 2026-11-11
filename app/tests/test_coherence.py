@@ -483,6 +483,112 @@ class StalenessTests(unittest.TestCase):
         self.assertEqual(analysis["evidence"][nfpa72["id"]]["state"], "current")
         self.assertEqual(analysis["findings"][finding["id"]]["state"], "stale")
 
+    def test_a_decision_is_replaced_withdrawn_or_closes_with_the_finding_it_ruled_on(self):
+        from fpfa.calc_tools import ToolSession
+        from fpfa.coherence import analyze
+        from fpfa.record import RecordError
+
+        record, di, basis = self._seeded()
+        calcs = {row["tool"]: row["id"] for row in record.calcs("job1")}
+        fp = ToolSession(REPO, record=record, project_id="job1", agent="fp-sprinkler")
+        fa = ToolSession(REPO, record=record, project_id="job1", agent="fa-releasing")
+        lead = ToolSession(REPO, record=record, project_id="job1", agent="lead")
+        first = fp.execute("record_decision", {"text": "Keep one zone; verify by a listed calculation.",
+                                               "label": "use best judgment", "supports": [calcs["di_trip_to_water"]]})
+        _change(record, "q_fill_gpm", 750)
+        self.assertEqual(analyze(record.snapshot("job1"))["decisions"][first["id"]]["state"], "stale")
+        # Only the author or the lead replaces it. The old row is kept as history.
+        with self.assertRaises(RecordError):
+            fa.execute("record_decision", {"text": "x", "label": "use best judgment", "replaces": first["id"]})
+        _run_plan(record, dict(di, q_fill_gpm=750), basis)
+        fresh = next(row["id"] for row in record.calcs("job1")
+                     if row["tool"] == "di_trip_to_water" and row["inputs"]["q_fill_gpm"] == 750)
+        second = fp.execute("record_decision", {"text": "Keep one zone at the higher fill flow.", "label": "use best judgment",
+                                                "supports": [fresh], "replaces": first["id"]})
+        self.assertEqual(second["replaces"], first["id"])
+        self.assertEqual([row["id"] for row in record.decisions("job1")], [second["id"]])
+        snap = record.snapshot("job1")
+        self.assertEqual([(row["id"], row["superseded_by"]) for row in snap["retired_decisions"]], [(first["id"], second["id"])])
+        self.assertFalse(analyze(snap)["stale"]["decisions"])
+        with self.assertRaises(RecordError):
+            fp.execute("record_decision", {"text": "again", "label": "use best judgment", "replaces": first["id"]})
+        # withdraw_finding takes a decision's id too. A specialist withdraws its own; the lead withdraws any.
+        with self.assertRaises(RecordError):
+            fa.execute("withdraw_finding", {"id": second["id"], "reason": "not mine"})
+        gone = lead.execute("withdraw_finding", {"id": second["id"], "reason": "The designer split the zone."})
+        self.assertEqual((gone["withdrawn"], gone["kind"]), (True, "decision"))
+        self.assertEqual(record.decisions("job1"), [])
+        self.assertEqual(len(record.decisions("job1", include_retired=True)), 2)
+
+        # A ruling on an objection is over when the finding it ruled on is revised. Another decision that
+        # rests on the same finding is not: it is out of date until its author deals with it.
+        finding = record.record_finding("job1", agent="fp-sprinkler", label="calculated", text="The screen misses.", supports=[fresh])
+        review = record.put_review("job1", finding_id=finding["id"], agent="fa-releasing", position="object", note="Clock start.")
+        ruling = record.record_decision("job1", text="The objection is not upheld. The finding stands.", decided_by="lead",
+                                        label="use best judgment", supports=[finding["id"]], review_id=review["id"])
+        plain = record.record_decision("job1", text="Carry the miss to the owner.", decided_by="lead",
+                                       label="use best judgment", supports=[finding["id"]])
+        record.record_finding("job1", agent="fp-sprinkler", label="calculated", text="The screen misses by 2.5 s.",
+                                  supports=[fresh], replaces=finding["id"])
+        current = [row["id"] for row in record.decisions("job1")]
+        self.assertEqual(current, [plain["id"]])
+        closed = next(row for row in record.decisions("job1", include_retired=True) if row["id"] == ruling["id"])
+        self.assertEqual(closed["superseded_by"], "withdrawn")
+        self.assertIn("The finding it ruled on was revised", closed["retire_note"])
+        analysis = analyze(record.snapshot("job1"))
+        self.assertEqual(analysis["decisions"][plain["id"]]["state"], "stale")
+        self.assertNotIn(ruling["id"], analysis["decisions"])
+
+    def test_only_what_something_current_rests_on_is_waiting_on_anyone(self):
+        """An out-of-date row nothing current rests on is history. It must not hold a job up for ever."""
+        from fpfa import status
+        from fpfa.calc_tools import ToolSession
+        from fpfa.checker import export_gate
+
+        record, di, basis = self._seeded()
+        fp = ToolSession(REPO, record=record, project_id="job1", agent="fp-sprinkler")
+        # A specialist's exploratory calc with no finding on it, a calc with one, and a cite with and without one.
+        loose = fp.execute("nitrogen_gate", {"v_gal": 281.3, "p_psig": 40, "t_min": 30})
+        screen = fp.execute("di_trip_to_water", {"v_gal": 281.3, "q_fill_gpm": 600, "t_detect_s": 8, "t_release_s": 2, "basis": "FM"})
+        used = fp.execute("record_evidence", {"document": "NFPA 13", "edition": "2025", "section": "8.3.2.3.1.1"})
+        unused = fp.execute("record_evidence", {"document": "NFPA 13", "edition": "2025", "section": "8.3.2.3.2"})
+        finding = fp.execute("record_finding", {"text": "The FM screen misses.", "label": "calculated", "supports": [screen["record_id"]]})
+        cited = fp.execute("record_finding", {"text": "No delivery time at this size.", "label": "CODE", "supports": [used["id"]]})
+        self.assertEqual(status.build(record.snapshot("job1"))["stale"], [])
+        _change(record, "q_fill_gpm", 750)
+        _change(record, "supervisory_psig", 30)
+        _change(record, "nfpa_13", "2022")
+        digest = status.build(record.snapshot("job1"))
+        waiting = {(row["kind"], row["id"]) for row in digest["stale"]}
+        self.assertIn(("finding", finding["id"]), waiting)
+        self.assertIn(("calc", screen["record_id"]), waiting, "a current finding rests on it")
+        self.assertIn(("finding", cited["id"]), waiting)
+        self.assertIn(("cite", used["id"]), waiting)
+        self.assertNotIn(("calc", loose["record_id"]), waiting, "nothing rests on the specialist's loose calc")
+        self.assertNotIn(("cite", unused["id"]), waiting, "nothing rests on the unused cite")
+        plan_rows = {row["id"] for row in record.calcs("job1") if row["agent"] == "tool-plan"}
+        self.assertTrue(plan_rows & {ident for kind, ident in waiting if kind == "calc"},
+                        "the tool plan's own rows feed the tables, so they wait for a re-run")
+        self.assertEqual({item["key"] for item in digest["changes"]}, {"q_fill_gpm", "supervisory_psig", "nfpa_13"})
+        self.assertIn("out of date", export_gate(record, "job1"))
+        # It is still marked where a model reads the record, so it is not cited by mistake.
+        self.assertIn(f"- [{loose['record_id']}] nitrogen_gate:", status.record_text(record.snapshot("job1")).split(
+            "Out-of-date calculation records")[1])
+
+        # Bring it up to date: run the zone again, replace the two findings on fresh rows.
+        _run_plan(record, dict(di, q_fill_gpm=750, supervisory_psig=30), dict(basis, nfpa_13="2022"))
+        again = fp.execute("di_trip_to_water", {"v_gal": 281.3, "q_fill_gpm": 750, "t_detect_s": 8, "t_release_s": 2, "basis": "FM"})
+        fp.execute("record_finding", {"text": "The FM screen still misses.", "label": "calculated",
+                                      "supports": [again["record_id"]], "replaces": finding["id"]})
+        newer = fp.execute("record_evidence", {"document": "NFPA 13", "edition": "2022", "section": "8.3.2.3.1.1"})
+        fp.execute("record_finding", {"text": "No delivery time at this size.", "label": "CODE",
+                                      "supports": [newer["id"]], "replaces": cited["id"]})
+        digest = status.build(record.snapshot("job1"))
+        self.assertEqual(digest["stale"], [])
+        self.assertEqual(digest["changes"], [], "a change is not news once nothing waits on it")
+        self.assertNotIn("out of date", export_gate(record, "job1"))
+        self.assertNotIn("Inputs changed after work was done on them", status.lead_text(digest))
+
     def test_calcs_recorded_before_the_basis_was_kept_get_one_from_the_inputs(self):
         from fpfa.coherence import analyze, backfill
 

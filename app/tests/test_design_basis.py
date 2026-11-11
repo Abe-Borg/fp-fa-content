@@ -81,7 +81,9 @@ def _seed_sample(record, project_id="job1"):
 
 class DesignBasisExportTests(unittest.TestCase):
     def test_export_shows_every_section_from_the_record(self):
-        from fpfa.design_basis_docx import DESIGN_BASIS_TITLE, NO_CHECK_LINE, SCREEN_LINE, write_design_basis
+        from fpfa.checker import NOT_STANDARD, TIER_TITLE
+        from fpfa.design_basis_docx import (DESIGN_BASIS_TITLE, DRAFT_LINE, NO_CHECK_LINE, SCREEN_LINE,
+                                            write_design_basis)
 
         record = _record()
         run, calc_ids = _seed_sample(record)
@@ -93,10 +95,18 @@ class DesignBasisExportTests(unittest.TestCase):
         self.assertIn("Sample data hall DI zone", text)
         self.assertIn(SCREEN_LINE, text)
         self.assertIn("use best judgment", text)
-        # 1. basis facts from the import
-        for needle in ("basis/ahj", "basis/nfpa_13 | 2025 | CODE", "basis/insurer | FM | OWNER"):
+        # The opening says what kind of document this is and how far each statement was taken.
+        self.assertIn(DRAFT_LINE, text)
+        self.assertIn(NOT_STANDARD, text)
+        self.assertIn("How far each statement was taken", text)
+        self.assertIn(f"{TIER_TITLE['stated']} | 2 | A specialist recorded these. No trace check has judged them.", text)
+        self.assertIn(f"{TIER_TITLE['source']} | 0 |", text)
+        # 1. the project inputs, with the label and who supplied each
+        for needle in ("ahj | Local fire marshal (sample)", "nfpa_13 | 2025 | CODE", "insurer | FM | OWNER"):
             self.assertIn(needle, text)
+        # 9. cites, with who recorded each
         self.assertIn("NFPA 13 | 2025 | 8.3.2.3.1.1", text)
+        self.assertIn("| held | fp-sprinkler |", text)
         # 2. elections read from the calc records and the decision
         self.assertIn("Trim family | El/El (provisional)", text)
         # The second leg is P. The kernel's deprecated low_air alias is never printed.
@@ -113,24 +123,33 @@ class DesignBasisExportTests(unittest.TestCase):
         for tool, calc_id in calc_ids.items():
             self.assertIn(tool, text)
             self.assertIn(calc_id, text)
-        # 4. findings grouped by contributor
-        self.assertIn("fp-sprinkler", text)
-        self.assertIn("fa-releasing", text)
-        self.assertIn("the FM 30 s screen still misses at 38.1 s", text)
-        self.assertIn("supports: " + ", ".join([calc_ids["zone_trapped_volume"], calc_ids["di_trip_to_water"]]), text)
-        # 5. no checker yet
-        self.assertIn(NO_CHECK_LINE, text)
+        # 4. findings grouped by how far each was taken, each with its author and what it rests on
+        self.assertIn(f"{TIER_TITLE['stated']} (2)", text)
+        self.assertIn(f"{TIER_TITLE['open']} (0)", text)
+        self.assertIn("the FM 30 s screen still misses at 38.1 s. | calculated | fp-sprinkler | "
+                      f"zone_trapped_volume [{calc_ids['zone_trapped_volume']}]; di_trip_to_water [{calc_ids['di_trip_to_water']}]; "
+                      "NFPA 13-2025 §8.3.2.3.1.1 [", text)
+        self.assertIn("| calculated | fa-releasing | releasing_truth_table [", text)
+        self.assertIn("| No trace check has judged it. |", text)
+        # 5 and 10. nobody reviewed anything and no checker ran, and the document says so
+        self.assertIn("No contributor has reviewed another's finding on this record.", text)
+        self.assertEqual(text.count(NO_CHECK_LINE), 2)
         # 6. assumptions from the calc flags and the screen limit
         self.assertIn("ASSUMED trim volume 5 gal", text)
         self.assertIn("ASSUMED from time basis FM", text)
         # 7. open and answered questions
         self.assertIn("Trim volume from the elected valve data sheet? (raised by fp-sprinkler)", text)
         self.assertIn("Enforced NFPA 13 edition for this AHJ? (raised by lead)", text)
-        self.assertIn("Manual station on this zone? Answer: Yes, one station at the riser.", text)
-        # 8. handoff log
+        self.assertIn("For the engineer of record, the owner, or the authority:", text)
+        self.assertNotIn("The team needs these from the designer", text)
+        self.assertIn("Manual station on this zone? Answer: Yes, one station at the riser. (answered by owner)", text)
+        # 8. what passed between the agents, with what came back
         self.assertIn(
-            "fp-sprinkler | fa-releasing | Trim family El/El with a 15 psi low-air supervisory switch | returned", text
+            "handoff | fp-sprinkler | fa-releasing | Trim family El/El with a 15 psi low-air supervisory switch | "
+            "Releasing boolean written | returned", text
         )
+        # 11. nothing changed on this record
+        self.assertIn("Nothing on this record was changed, replaced, or withdrawn.", text)
         # contributors line
         self.assertIn("FP specialist (fp-sprinkler, done)", text)
 
@@ -184,9 +203,11 @@ class DesignBasisExportTests(unittest.TestCase):
         write_design_basis(out, {"name": "DH-1"}, record.snapshot("job1"), claim_check=check)
         text = _docx_text(out)
         self.assertNotIn(NO_CHECK_LINE, text)
+        self.assertIn("Export of Section 21 13 19 is blocked until every claim is Supported. Open claims: 2.", text)
         self.assertIn("1 | Supported | PACKAGE ASSERTION. Tool-plan figures: 281.3", text)
         self.assertIn("2 | Source not found | NOT PULLED", text)
-        self.assertIn("Not every claim is Supported. This draft is not cleared for issue.", text)
+        self.assertIn("Not every finding is supported by the rows it cites.", text)
+        self.assertIn("It is not cleared for issue.", text)
 
     def test_empty_record_exports_a_document_that_says_so(self):
         from fpfa.design_basis_docx import write_design_basis
@@ -197,13 +218,16 @@ class DesignBasisExportTests(unittest.TestCase):
         write_design_basis(out, {"name": "Nothing yet"}, record.snapshot("empty"))
         text = _docx_text(out)
         for needle in (
-            "No basis facts are on the record yet.",
+            "No project inputs are on the record yet.",
             "No elections are on the record yet.",
             "No calculation has been recorded on this job.",
             "No findings are on the record yet.",
+            "No contributor has reviewed another's finding on this record.",
             "No ASSUMED rows are on the record.",
             "No open questions are on the record.",
-            "No handoffs are on the record.",
+            "No exchanges between agents are on the record.",
+            "No cites are on the record.",
+            "Nothing on this record was changed, replaced, or withdrawn.",
         ):
             self.assertIn(needle, text)
 
@@ -268,7 +292,10 @@ class DesignBasisWindowTests(unittest.TestCase):
         self.assertIn("Sample data hall DI zone", text)
         self.assertIn("Zone total 281.3 gal (calculated)", text)
         self.assertIn("zone_trapped_volume | tool-plan", text)
-        self.assertIn("basis/insurer | FM | OWNER", text)
+        self.assertIn("insurer | FM | OWNER | sample data", text)
+        # The zone inputs are in the document with who supplied them, and the plan's calcs follow them.
+        self.assertIn("q_fill_gpm | 600 gpm | GIVEN | sample data", text)
+        self.assertIn("| follows the project inputs |", text)
         # The ⋯ menu's row names the document from the state the page reads.
         self.assertEqual(app.snapshot()["app"]["design_basis_title"], DESIGN_BASIS_TITLE)
 

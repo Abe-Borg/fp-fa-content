@@ -1,10 +1,18 @@
 """Design Basis and Open Questions export. Every line comes from the project record.
 
 This is the second document the app writes. The Section 21 13 19 export
-stays as it is. Nothing here is typed by hand: basis facts, elections,
-calculation records, findings, checker verdicts, assumptions, open
-questions, and the handoff log are read from Record.snapshot(). A figure
-is shown with the label the record holds for it.
+stays as it is. Nothing here is typed by hand: project inputs, elections,
+calculation records, findings, reviews, the trace check, assumptions, open
+questions, and the exchanges between agents are read from Record.snapshot().
+A figure is shown with the label the record holds for it.
+
+The document is built so an engineer can tell four kinds of statement apart
+without reading the code: what was checked against an identified source,
+what the checker only reviewed against its author's own cite, what a
+specialist stated and nothing judged, and what still needs evidence or an
+engineer's review. fpfa.checker derives the tier of each finding; no model
+types one. Rows whose basis changed, and rows that were replaced or
+withdrawn, are shown as history and never as current.
 """
 
 from __future__ import annotations
@@ -15,6 +23,7 @@ from typing import Any
 
 from docx import Document
 
+from fpfa import checker, coherence, inputs, status
 from fpfa.workflow import (
     fmt1,
     judgment_label_line,
@@ -25,15 +34,23 @@ from fpfa.workflow import (
 
 DESIGN_BASIS_TITLE = "Design Basis and Open Questions (draft)"
 NO_CHECK_LINE = (
-    "No blind claim check has run on this record. "
-    "Every finding below is unverified against its cite until the checker runs."
+    "No trace check has run on this record. "
+    "No finding below has been judged against the rows it cites."
+)
+STALE_CHECK_LINE = (
+    "Findings changed after the last trace check. The verdicts shown are for the findings that check saw; "
+    "a finding written since is listed as not reviewed."
 )
 SCREEN_LINE = (
     "A delivery time in this document is an optimistic screen from trapped volume and an "
     "assumed fill flow. It is not a listed water-delivery-time calculation."
 )
-_BASIS_KINDS = ("basis", "edition", "owner", "insurer", "ahj", "jurisdiction")
+DRAFT_LINE = (
+    "This is a draft for the engineer of record. It is not cleared for issue. The team that wrote it is one "
+    "AI model in several roles; the trace check is a second pass by the same model on a blind packet."
+)
 _MAX_JSON = 600
+_PLAN = status.PLAN_AGENTS
 
 
 def _yn(value: Any) -> str:
@@ -142,18 +159,33 @@ def key_figures(tool: str, inputs: Any, outputs: Any) -> str:
     return f"Inputs {_compact(inp, 240)}. Outputs {_compact(out, 360)}."
 
 
-def elections_from_calcs(calcs: list[dict]) -> list[list[str]]:
-    """Election rows the tool plan settled, read from calc records. Not typed by hand."""
+def _who(row: dict) -> str:
+    agent = row.get("agent") or ""
+    return "tool plan" if agent in _PLAN else agent
+
+
+def elections_from_calcs(calcs: list[dict], analysis: dict | None = None) -> list[list[str]]:
+    """Election rows read from calc records. Not typed by hand.
+
+    With analysis, a calc whose basis changed is left out, and one that ran
+    on another value than the project input says so.
+    """
+    states = (analysis or {}).get("calcs") or {}
     rows: list[list[str]] = []
     for row in calcs:
+        standing = states.get(row.get("id"), {})
+        if standing.get("state") == coherence.STALE:
+            continue
+        note = f" (alternative: ran on {standing['note']})" if standing.get("state") == coherence.ALTERNATIVE else ""
         tool = row.get("tool")
         out = row.get("outputs") if isinstance(row.get("outputs"), dict) else {}
         inp = row.get("inputs") if isinstance(row.get("inputs"), dict) else {}
+        source = f"{_who(row)}: {tool}{note}"
         if tool == "elect_di_trim":
             rows.append([
                 "Trim family",
                 f"{out.get('family') or 'none'} ({out.get('status')})",
-                "tool plan: elect_di_trim",
+                source,
                 row.get("id", ""),
             ])
             if inp.get("system_type"):
@@ -161,9 +193,9 @@ def elections_from_calcs(calcs: list[dict]) -> list[list[str]]:
             if out.get("medium") and out.get("medium") != "unelected":
                 rows.append(["Supervisory medium", str(out["medium"]), "zone form", row.get("id", "")])
         elif tool == "releasing_truth_table":
-            rows.append(["Releasing logic", releasing_logic(out)["expression"], "tool plan: releasing_truth_table", row.get("id", "")])
+            rows.append(["Releasing logic", releasing_logic(out)["expression"], source, row.get("id", "")])
         elif tool == "nitrogen_gate":
-            rows.append(["Design Hazen-Williams C", str(out.get("design_c", "")), "tool plan: nitrogen_gate", row.get("id", "")])
+            rows.append(["Design Hazen-Williams C", str(out.get("design_c", "")), source, row.get("id", "")])
     return rows
 
 
@@ -179,7 +211,10 @@ def assumption_lines(snapshot: dict) -> list[str]:
     for row in snapshot.get("decisions") or []:
         if row.get("label") == "ASSUMED":
             lines.append(f"{row['decided_by']}: {row['text']} [{row['id']}]")
+    states = coherence.analyze(snapshot)["calcs"]
     for row in snapshot.get("calcs") or []:
+        if states.get(row["id"], {}).get("state") == coherence.STALE:
+            continue
         out = row.get("outputs") if isinstance(row.get("outputs"), dict) else {}
         for flag in out.get("flags") or []:
             if isinstance(flag, str) and "ASSUMED" in flag:
@@ -189,6 +224,57 @@ def assumption_lines(snapshot: dict) -> list[str]:
     return lines
 
 
+def _clip(text: Any, limit: int) -> str:
+    text = " ".join(str(text or "").split())
+    return text if len(text) <= limit else text[: limit - 1] + "…"
+
+
+def _rests_on(finding: dict, rows: dict[str, dict]) -> str:
+    """What a finding or a decision cites, in words, each with its id."""
+    parts = []
+    for ident in finding.get("supports") or []:
+        row = rows.get(ident)
+        if row is None:
+            parts.append(f"[{ident}] (not on the record)")
+        elif row["_kind"] == "calc":
+            parts.append(f"{row['tool']} [{ident}]")
+        elif row["_kind"] == "evidence":
+            parts.append(f"{checker.cite_name(row)} [{ident}]")
+        elif row["_kind"] == "fact":
+            word = "input" if row.get("kind") in (inputs.INPUT_KIND, inputs.BASIS_KIND) else "fact"
+            parts.append(f"{word} {row['key']} [{ident}]")
+        else:
+            parts.append(f"finding [{ident}]")
+    return "; ".join(parts) or "nothing cited"
+
+
+_SOURCE_WORDS = {
+    "calc": "calculation record",
+    "pack": "content-pack note",
+    "author": "its author's own note; the section is not in the content pack",
+    "input": "project input",
+    "finding": "another finding",
+    "missing": "a row that is not on the record",
+}
+
+
+def _checked_against(item: dict) -> str:
+    """How far the trace check took one finding, and why it stands where it does."""
+    parts = []
+    for source in item.get("sources") or []:
+        text = f"{_SOURCE_WORDS.get(source.get('kind'), source.get('kind'))}: {source.get('text')}"
+        if source.get("where"):
+            text += " (" + ", ".join(source["where"]) + ")"
+        parts.append(text)
+    lines = []
+    if item.get("checked"):
+        lines.append(f"Trace check: {item.get('verdict')}." + (" Against " + "; ".join(parts) + "." if parts else ""))
+    else:
+        lines.append("No trace check has judged it.")
+    lines.extend(item.get("reasons") or [])
+    return " ".join(lines)
+
+
 def write_design_basis(
     path: Path | str,
     project: dict,
@@ -196,7 +282,11 @@ def write_design_basis(
     *,
     claim_check: dict | None = None,
 ) -> Path:
-    """Write the document from a Record.snapshot(). Returns the path written."""
+    """Write the document from a Record.snapshot(). Returns the path written.
+
+    claim_check is the trace check to print. None reads the newest one the
+    snapshot carries.
+    """
     path = Path(path)
     facts = list(snapshot.get("facts") or [])
     calcs = list(snapshot.get("calcs") or [])
@@ -206,6 +296,20 @@ def write_design_basis(
     handoffs = list(snapshot.get("handoffs") or [])
     evidence = list(snapshot.get("evidence") or [])
     agents = list(snapshot.get("agents") or [])
+    reviews = list(snapshot.get("reviews") or [])
+    analysis = coherence.analyze(snapshot)
+    digest = status.build(snapshot)
+    check = claim_check if isinstance(claim_check, dict) else checker._latest_check_in(snapshot)
+    tiers = checker.assurance(snapshot, check)
+    rows_by_id: dict[str, dict] = {}
+    for row in calcs:
+        rows_by_id[row["id"]] = dict(row, _kind="calc")
+    for row in evidence:
+        rows_by_id[row["id"]] = dict(row, _kind="evidence")
+    for row in snapshot.get("fact_history") or facts:
+        rows_by_id[row["id"]] = dict(row, _kind="fact")
+    for row in findings + list(snapshot.get("retired_findings") or []):
+        rows_by_id[row["id"]] = dict(row, _kind="finding")
 
     doc = Document()
     doc.core_properties.title = DESIGN_BASIS_TITLE
@@ -222,34 +326,78 @@ def write_design_basis(
         doc.add_paragraph(
             "Contributors: " + ", ".join(f"{row['name']} ({row['role_slug']}, {row['status']})" for row in agents) + "."
         )
+    plan = digest.get("plan")
+    if plan and plan["objective"]:
+        doc.add_paragraph(f"Objective the team worked to: {plan['objective']}")
 
-    doc.add_heading("1. Basis of design", level=2)
-    basis_rows = [row for row in facts if row.get("kind") in _BASIS_KINDS]
-    other_rows = [row for row in facts if row.get("kind") not in _BASIS_KINDS and row.get("label") != "ASSUMED"]
-    if basis_rows or other_rows:
+    doc.add_heading("How far each statement was taken", level=2)
+    doc.add_paragraph(DRAFT_LINE)
+    if check and check.get("rows"):
+        doc.add_paragraph(str(check.get("status_line") or "A trace check ran."))
+        if check.get("token") and check.get("token") != checker.check_token(findings):
+            doc.add_paragraph(STALE_CHECK_LINE)
+    else:
+        doc.add_paragraph(NO_CHECK_LINE)
+    counts = {tier: 0 for tier in checker.TIERS}
+    for item in tiers.values():
+        counts[item["tier"]] += 1
+    _table(
+        doc,
+        ["Standing", "Findings", "What it means"],
+        [[checker.TIER_TITLE[tier], counts[tier], checker.TIER_NOTE[tier]] for tier in checker.TIERS],
+    )
+    doc.add_paragraph(checker.NOT_STANDARD)
+    if digest["stale"]:
+        doc.add_paragraph(
+            f"{len(digest['stale'])} row{'s' if len(digest['stale']) != 1 else ''} on this record "
+            f"{'are' if len(digest['stale']) != 1 else 'is'} out of date because an input changed. They are marked "
+            "where they appear and listed in section 11. Do not read them as current."
+        )
+    open_objections = [row for row in digest["objections"]]
+    if open_objections or digest["conflicts"]:
+        count = len(open_objections) + len(digest["conflicts"])
+        doc.add_paragraph(
+            f"{count} disagreement{'s' if count != 1 else ''} between contributors "
+            f"{'are' if count != 1 else 'is'} not settled. See section 5."
+        )
+
+    doc.add_heading("1. Project inputs and basis of design", level=2)
+    given = digest["inputs"]
+    if given:
+        doc.add_paragraph(
+            "What the designer supplied. The team works from these. A starting value the designer has not "
+            "confirmed is marked; it is the form's default and not their input."
+        )
+        _table(
+            doc,
+            ["Input", "Value", "Label", "Supplied by", "Id"],
+            [[row["name"], "(blank)" if row["blank"] else row["text"], row["label"],
+              (row["source"] or row["by"]) + (" UNCONFIRMED" if row["unconfirmed"] and not row["blank"] else ""),
+              row["id"]] for row in given],
+        )
+    other_rows = [row for row in facts
+                  if row.get("kind") != inputs.INPUT_KIND
+                  and not (row.get("kind") == inputs.BASIS_KIND and row.get("key") in inputs.BASIS_FIELDS)
+                  and row.get("label") != "ASSUMED"]
+    if other_rows:
+        doc.add_paragraph("Other facts the team recorded:")
         _table(
             doc,
             ["Item", "Value", "Label", "Source", "By", "Id"],
             [[f"{row['kind']}/{row['key']}", row["value"], row["label"], row.get("source") or "", row.get("agent") or "", row["id"]]
-             for row in basis_rows + other_rows],
+             for row in other_rows],
         )
-    else:
-        doc.add_paragraph("No basis facts are on the record yet.")
-    if evidence:
-        doc.add_paragraph("Cites held on the record:")
-        _table(
-            doc,
-            ["Document", "Edition", "Section", "Note", "Applies to", "Status", "Id"],
-            [[row["document"], row.get("edition") or "", row.get("section") or "", row.get("note") or "",
-              row.get("applicability") or "", row["status"], row["id"]] for row in evidence],
-        )
+    if not given and not other_rows:
+        doc.add_paragraph("No project inputs are on the record yet.")
 
-    doc.add_heading("2. Elections", level=2)
-    election_rows = elections_from_calcs(calcs)
+    doc.add_heading("2. Elections and decisions", level=2)
+    election_rows = elections_from_calcs(calcs, analysis)
     for row in decisions:
+        standing = analysis["decisions"].get(row["id"], {})
+        stale = " OUT OF DATE: " + "; ".join(standing.get("reasons") or [])[:300] if standing.get("state") == coherence.STALE else ""
         election_rows.append([
             "Decision",
-            row["text"] + (f" Basis: {row['basis']}" if row.get("basis") else ""),
+            row["text"] + (f" Basis: {row['basis']}" if row.get("basis") else "") + stale,
             f"{row['decided_by']} ({row['label']})",
             row["id"],
         ])
@@ -259,17 +407,25 @@ def write_design_basis(
         doc.add_paragraph("No elections are on the record yet.")
 
     doc.add_heading("3. Calculation records", level=2)
-    if calcs:
+    current_calcs = [row for row in calcs if analysis["calcs"][row["id"]]["state"] != coherence.STALE]
+    if current_calcs:
+        def standing_of(row: dict) -> str:
+            item = analysis["calcs"][row["id"]]
+            if item["state"] == coherence.ALTERNATIVE:
+                return f"ALTERNATIVE: ran on {item['note']}. Not the design case."
+            return "follows the project inputs" if item.get("tracked") else "current"
+
         _table(
             doc,
-            ["Tool", "By", "Recorded", "Replays", "Figures", "Id"],
+            ["Tool", "By", "Recorded", "Replays", "Figures", "Standing", "Id"],
             [[row["tool"], row.get("agent") or "", row.get("created") or "", row.get("replay_count", 0),
-              key_figures(row["tool"], row.get("inputs"), row.get("outputs")), row["id"]] for row in calcs],
+              key_figures(row["tool"], row.get("inputs"), row.get("outputs")), standing_of(row), row["id"]]
+             for row in current_calcs],
         )
         doc.add_paragraph(
             "Inputs for each record, as passed to the tool:"
         )
-        for row in calcs:
+        for row in current_calcs:
             code = row.get("calc_identity") or "unknown"
             pack = row.get("pack_version") or "unknown"
             doc.add_paragraph(
@@ -277,35 +433,64 @@ def write_design_basis(
                 style="List Bullet",
             )
     else:
-        doc.add_paragraph("No calculation has been recorded on this job.")
+        doc.add_paragraph("No calculation has been recorded on this job." if not calcs
+                          else "Every calculation on this job is out of date. See section 11.")
 
-    doc.add_heading("4. Findings by contributor", level=2)
+    doc.add_heading("4. Findings, by how far each was taken", level=2)
     if findings:
-        by_agent: dict[str, list[dict]] = {}
-        for row in findings:
-            by_agent.setdefault(row.get("agent") or "unknown", []).append(row)
-        for agent, rows in by_agent.items():
-            doc.add_heading(agent, level=3)
-            for row in rows:
-                supports = ", ".join(row.get("supports") or []) or "none"
-                doc.add_paragraph(
-                    f"{row['text']} ({row['label']}; supports: {supports}) [{row['id']}]",
-                    style="List Bullet",
-                )
+        agreed: dict[str, list[str]] = {}
+        for item in reviews:
+            if item.get("position") == "agree":
+                agreed.setdefault(item["finding_id"], []).append(item.get("agent") or "")
+        for tier in checker.TIERS:
+            rows = [row for row in findings if tiers[row["id"]]["tier"] == tier]
+            doc.add_heading(f"{checker.TIER_TITLE[tier]} ({len(rows)})", level=3)
+            doc.add_paragraph(checker.TIER_NOTE[tier])
+            if not rows:
+                doc.add_paragraph("None.")
+                continue
+            _table(
+                doc,
+                ["Finding", "Label", "By", "Rests on", "How far it was taken", "Agreed by", "Id"],
+                [[row["text"], row["label"], row.get("agent") or "unknown", _rests_on(row, rows_by_id),
+                  _checked_against(tiers[row["id"]]), ", ".join(sorted(set(agreed.get(row["id"], [])))) or "",
+                  row["id"]] for row in rows],
+            )
     else:
         doc.add_paragraph("No findings are on the record yet.")
 
-    doc.add_heading("5. Checker verdicts", level=2)
-    rows = (claim_check or {}).get("rows") if isinstance(claim_check, dict) else None
-    if rows:
-        status = (claim_check or {}).get("status_line") or ""
-        if status:
-            doc.add_paragraph(str(status))
-        _table(doc, ["Claim", "Verdict", "Cite"], [[row.get("n"), row.get("verdict"), row.get("cite")] for row in rows])
-        if not (claim_check or {}).get("all_supported"):
-            doc.add_paragraph("Not every claim is Supported. This draft is not cleared for issue.")
+    doc.add_heading("5. Reviews and disagreements", level=2)
+    all_findings = {row["id"]: row for row in findings + list(snapshot.get("retired_findings") or [])}
+    if reviews or digest["conflicts"]:
+        if reviews:
+            doc.add_paragraph(
+                "One contributor's position on another's finding. An objection ends when the author revises or "
+                "withdraws the finding, the lead settles it with a recorded decision, or it is sent to the designer "
+                "or the engineer of record as a question."
+            )
+
+            def ended(row: dict) -> str:
+                if row.get("position") == "agree":
+                    return ""
+                if row.get("status") == "open":
+                    return "OPEN. Not settled."
+                if row.get("status") == "escalated":
+                    return "ESCALATED, not settled. " + str(row.get("resolution") or "")
+                return str(row.get("resolution") or row.get("status") or "")
+
+            _table(
+                doc,
+                ["Finding", "Author", "Reviewer", "Position", "Note", "How it ended"],
+                [[_clip((all_findings.get(row["finding_id"]) or {}).get("text") or f"[{row['finding_id']}]", 220),
+                  (all_findings.get(row["finding_id"]) or {}).get("agent") or "", row.get("agent") or "",
+                  "objects" if row.get("position") == "object" else "agrees", row.get("note") or "", ended(row)]
+                 for row in reviews],
+            )
+        for item in digest["conflicts"]:
+            values = "; ".join(f"{row['agent']} recorded {row['value']} [{row['id']}]" for row in item["rows"])
+            doc.add_paragraph(f"Conflicting values for {item['kind']}/{item['key']}, not settled: {values}.", style="List Bullet")
     else:
-        doc.add_paragraph(NO_CHECK_LINE)
+        doc.add_paragraph("No contributor has reviewed another's finding on this record.")
 
     doc.add_heading("6. Assumptions", level=2)
     assumed = assumption_lines(snapshot)
@@ -314,30 +499,102 @@ def write_design_basis(
             doc.add_paragraph(line, style="List Bullet")
     else:
         doc.add_paragraph("No ASSUMED rows are on the record.")
+    for row in digest["unconfirmed"]:
+        doc.add_paragraph(f"Starting value not confirmed by the designer: {row['name']} {row['text']} [{row['id']}]",
+                          style="List Bullet")
 
     doc.add_heading("7. Open questions and RFIs", level=2)
     open_rows = [row for row in questions if row.get("status") == "open"]
     answered_rows = [row for row in questions if row.get("status") == "answered"]
-    if open_rows:
-        for row in open_rows:
+    for_designer = [row for row in open_rows if row.get("audience") == "designer"]
+    for_engineer = [row for row in open_rows if row.get("audience") != "designer"]
+    if for_designer:
+        doc.add_paragraph("The team needs these from the designer before the work they block can go on:")
+        for row in for_designer:
             doc.add_paragraph(f"{row['text']} (raised by {row['raised_by']}) [{row['id']}]", style="List Number")
-    else:
+    if for_engineer:
+        doc.add_paragraph("For the engineer of record, the owner, or the authority:")
+        for row in for_engineer:
+            doc.add_paragraph(f"{row['text']} (raised by {row['raised_by']}) [{row['id']}]", style="List Number")
+    if not open_rows:
         doc.add_paragraph("No open questions are on the record.")
     if answered_rows:
         doc.add_paragraph("Answered:")
         for row in answered_rows:
-            doc.add_paragraph(f"{row['text']} Answer: {row['answer']} [{row['id']}]", style="List Bullet")
+            by = f" (answered by {row['answered_by']})" if row.get("answered_by") else ""
+            doc.add_paragraph(f"{row['text']} Answer: {row['answer']}{by} [{row['id']}]", style="List Bullet")
 
-    doc.add_heading("8. Handoff log", level=2)
+    doc.add_heading("8. Exchanges between agents", level=2)
     if handoffs:
+        doc.add_paragraph(
+            "A delegation is the lead's brief to a specialist and the summary that came back. A consult is one "
+            "specialist's question to another, answered inside the asker's turn. A handoff is work left for later."
+        )
         _table(
             doc,
-            ["From", "To", "Brief", "Status", "Created", "Returned", "Id"],
-            [[row["from_agent"], row["to_agent"], row["brief"], row["status"], row.get("created") or "",
-              row.get("returned") or "", row["id"]] for row in handoffs],
+            ["Kind", "From", "To", "Brief", "What came back", "Status", "Created", "Id"],
+            [[row.get("kind") or "handoff", row["from_agent"], row["to_agent"], row["brief"],
+              _clip(row.get("result"), 500), row["status"], row.get("created") or "", row["id"]] for row in handoffs],
         )
     else:
-        doc.add_paragraph("No handoffs are on the record.")
+        doc.add_paragraph("No exchanges between agents are on the record.")
+
+    doc.add_heading("9. Cites on the record", level=2)
+    if evidence:
+        doc.add_paragraph(
+            "Each cite is a contributor's paraphrase with the section it names. held means the contributor says "
+            "it read the section in the content pack. It does not mean the standard was opened."
+        )
+        _table(
+            doc,
+            ["Document", "Edition", "Section", "Note", "Applies to", "Status", "By", "Id"],
+            [[row["document"], row.get("edition") or "", row.get("section") or "", row.get("note") or "",
+              row.get("applicability") or "",
+              row["status"] + (" OUT OF DATE: the edition changed" if analysis["evidence"][row["id"]]["state"] == coherence.STALE else ""),
+              row.get("agent") or "", row["id"]] for row in evidence],
+        )
+    else:
+        doc.add_paragraph("No cites are on the record.")
+
+    doc.add_heading("10. Trace check, claim by claim", level=2)
+    rows = (check or {}).get("rows") if isinstance(check, dict) else None
+    if rows:
+        _table(doc, ["Claim", "Verdict", "Cite", "Why"],
+               [[row.get("n"), row.get("verdict"), _clip(row.get("cite"), 900), row.get("reason") or ""] for row in rows])
+        if not (check or {}).get("all_supported"):
+            doc.add_paragraph(
+                "Not every finding is supported by the rows it cites. Those are listed in section 4 under "
+                f"\"{checker.TIER_TITLE[checker.TIER_OPEN]}\"."
+            )
+    else:
+        doc.add_paragraph(NO_CHECK_LINE)
+
+    doc.add_heading("11. History: changed inputs and replaced, withdrawn, or out-of-date rows", level=2)
+    history: list[str] = []
+    for item in analysis["changes"]:
+        history.append(f"Input changed: {item['reason']}")
+    for row in snapshot.get("retired_findings") or []:
+        how = (f"withdrawn: {row.get('retire_note') or ''}" if row.get("superseded_by") == "withdrawn"
+               else f"replaced by [{row.get('superseded_by')}]")
+        history.append(f"Finding by {row.get('agent')}, {how}: {_clip(row.get('text'), 300)} [{row['id']}]")
+    for row in snapshot.get("retired_decisions") or []:
+        how = (f"withdrawn: {row.get('retire_note') or ''}" if row.get("superseded_by") == "withdrawn"
+               else f"replaced by [{row.get('superseded_by')}]")
+        history.append(f"Decision by {row.get('decided_by')}, {how}: {_clip(row.get('text'), 300)} [{row['id']}]")
+    for row in calcs:
+        item = analysis["calcs"][row["id"]]
+        if item["state"] == coherence.STALE:
+            history.append(f"Calculation out of date: {row['tool']} by {_who(row)} [{row['id']}]. "
+                           + _clip("; ".join(item["reasons"]), 400))
+    for row in digest["stale"]:
+        if row["kind"] in ("finding", "decision", "cite"):
+            history.append(f"OUT OF DATE and still on the record as current: {row['kind']} by {row['by'] or 'the app'} "
+                           f"[{row['id']}]: {row['text']}. " + _clip("; ".join(row["reasons"]), 400))
+    if history:
+        for line in history:
+            doc.add_paragraph(line, style="List Bullet")
+    else:
+        doc.add_paragraph("Nothing on this record was changed, replaced, or withdrawn.")
 
     path.parent.mkdir(parents=True, exist_ok=True)
     doc.save(path)

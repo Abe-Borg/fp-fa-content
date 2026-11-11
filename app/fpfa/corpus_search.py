@@ -128,7 +128,10 @@ def _clip(line: str, needle: str) -> str:
 # A section number as a note writes it: two or more dotted parts.
 _SECTION = re.compile(r"\d+(?:\.\d+)+")
 _YEAR = re.compile(r"\b(?:19|20)\d{2}\b")
-_SENTENCE = re.compile(r"(?<=[.;])\s+")
+_SENTENCE = re.compile(r"(?<=\.)\s+")
+_CLAUSE = re.compile(r"(?<=;)\s+")
+# A clause that names a section of its own: §8.2.4.2.2, Table 19.2.3.1.2, Section 4.1, s8.3.2.
+_REF = re.compile(r"(?:§|\bTable\s|\bSection\s|\bFigure\s|(?<![A-Za-z])s(?=\d))\s*[A-Z]?\.?\d+(?:\.\d+)*")
 _TRACE_DIRS = ("corpus", "specs")
 _MAX_PASSAGES = 3
 _PASSAGE = 700
@@ -204,15 +207,24 @@ def _pack_stamp(root: Path) -> float:
 def trace_cite(content_root: Path | str, document: str, edition: str = "", section: str = "") -> list[dict]:
     """The pack's own notes on one section of one document. Empty when the pack holds none.
 
-    The match is one sentence of a note in corpus/ or specs/ that names the
-    section and either names the document or follows a sentence of the same
-    paragraph that does. With an edition, a sentence that names other years
+    The match is one clause of a note in corpus/ or specs/ that names the
+    section and either names the document or follows a clause of the same
+    paragraph that does. With an edition, a clause that names other years
     and not that one does not count: the pack holds the section for another
-    edition. The passage returned is that sentence with the one before it
-    and the one after it in the same paragraph, because the notes put a
-    figure and its section in neighbouring sentences.
-    Each passage is {"path", "line", "text", "sentence"}. These are the
-    content team's reviewed paraphrases. They are not the standard.
+    edition.
+
+    Each passage is {"path", "line", "sentence", "scope", "text"}:
+
+    - sentence is the clause that names the section.
+    - scope is what the pack says about that section: the clause, and the
+      clauses of the same sentence that name no section of their own. The
+      figures a claim may take from this cite are the figures in scope. A
+      figure the note gives for another section, or in the next sentence,
+      is not one of them.
+    - text is the sentence with the one before it and the one after it, for
+      a reader who needs the context.
+
+    These are the content team's reviewed paraphrases. They are not the standard.
     """
     doc = _doc_pattern(document)
     sec = _section_pattern(section)
@@ -231,24 +243,28 @@ def trace_cite(content_root: Path | str, document: str, edition: str = "", secti
         named = False
         sentences = _SENTENCE.split(line)
         for index, sentence in enumerate(sentences):
-            # A section number belongs to the document named last in its paragraph.
-            if doc.search(sentence):
-                named = True
-            elif _ANY_DOC.search(sentence):
-                named = False
-            if not sec.search(sentence) or not named:
-                continue
-            years = set(_YEAR.findall(sentence))
-            if year and years and year not in years:
-                # The pack holds this section number for another edition.
-                continue
-            matched = " ".join(sentence.split())
-            if matched in seen:
-                continue
-            seen.add(matched)
-            around = sentences[max(0, index - 1): index + 2]
-            text = " ".join(" ".join(around).split())
-            found.append({"path": rel, "line": number, "text": text[:_PASSAGE], "sentence": matched[:_PASSAGE]})
-            if len(found) >= _MAX_PASSAGES:
-                return found
+            clauses = _CLAUSE.split(sentence)
+            for clause in clauses:
+                # A section number belongs to the document named last in its paragraph.
+                if doc.search(clause):
+                    named = True
+                elif _ANY_DOC.search(clause):
+                    named = False
+                if not sec.search(clause) or not named:
+                    continue
+                years = set(_YEAR.findall(clause))
+                if year and years and year not in years:
+                    # The pack holds this section number for another edition.
+                    continue
+                matched = " ".join(clause.split())
+                if matched in seen:
+                    continue
+                seen.add(matched)
+                scope = " ".join(" ".join(part.split()) for part in clauses if part is clause or not _REF.search(part))
+                around = sentences[max(0, index - 1): index + 2]
+                text = " ".join(" ".join(around).split())
+                found.append({"path": rel, "line": number, "text": text[:_PASSAGE],
+                              "sentence": matched[:_PASSAGE], "scope": scope[:_PASSAGE]})
+                if len(found) >= _MAX_PASSAGES:
+                    return found
     return found

@@ -143,7 +143,8 @@ class RecordStoreTests(unittest.TestCase):
         snap = record.snapshot("p1")
         self.assertEqual(set(snap), {"project", "facts", "fact_history", "evidence", "calcs", "findings",
                                      "retired_findings", "reviews", "questions", "decisions", "handoffs",
-                                     "tasks", "agents", "jobs", "events", "latest", "unseen_answers"})
+                                     "retired_decisions", "tasks", "agents", "jobs", "events", "latest",
+                                     "unseen_answers"})
         # The newest plan and trace-check rows ride with the snapshot whatever the event window holds.
         self.assertEqual(set(snap["latest"]), {"plan", "record_check"})
         self.assertEqual(snap["project"]["name"], "Sample")

@@ -368,7 +368,7 @@ class RecordCheckTests(unittest.TestCase):
         session = ToolSession(REPO, record=record, project_id="job1", agent="fp-sprinkler")
         session.execute("hose_duration", {"hazard": "ordinary", "supervised": True})
         calc_id = record.calcs("job1")[0]["id"]
-        cite = record.record_evidence("job1", document="NFPA 13", edition="2025", section="19.2.3.1.3",
+        cite = record.record_evidence("job1", document="NFPA 13", edition="2025", section="Table 19.2.3.1.2",
                                       note="Duration for ordinary hazard is 60 to 90 minutes", status="held",
                                       agent="fp-sprinkler")
         # A section the content pack holds no note on, so nothing but its author stands behind it.
@@ -402,8 +402,8 @@ class RecordCheckTests(unittest.TestCase):
         self.assertIn("hose_duration", sources[0])
         self.assertIn("duration_min=60", sources[0])
         # A cite to a section the pack holds is read in the pack's words, with the file and line.
-        self.assertTrue(sources[1].startswith(f"2. NFPA 13-2025 §19.2.3.1.3. {PACK_MARK}: (corpus/fp/density-area.md:"))
-        self.assertIn("The lower duration needs supervision", sources[1])
+        self.assertTrue(sources[1].startswith(f"2. NFPA 13-2025 Table 19.2.3.1.2. {PACK_MARK}: (corpus/fp/density-area.md:"))
+        self.assertIn("ordinary hazard 250 gpm for 60 or 90 minutes", sources[1])
         self.assertNotIn("Duration for ordinary hazard is 60 to 90 minutes", sources[1],
                          "the author's own note is not what the checker reads when the pack holds the section")
         self.assertEqual(sources[2], f"3. {OPEN_MARK}")
@@ -430,7 +430,7 @@ class RecordCheckTests(unittest.TestCase):
         # The checker says Supported to everything. The application's own rules still hold.
         create = Scripted({"checker": [_turn("end_turn", Block(type="text", text=(
             '1. Supported. Cite: "hose_duration 60"\n'
-            '2. Supported. Cite: "NFPA 13-2025 §19.2.3.1.3"\n'
+            '2. Supported. Cite: "NFPA 13-2025 Table 19.2.3.1.2"\n'
             '3. Supported. Cite: "none"\n'
             '4. Supported. Cite: "FM"\n'
             '5. Supported. Cite: "hose_duration 60"\n'

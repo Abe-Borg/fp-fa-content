@@ -20,6 +20,8 @@ from fpfa import coherence, inputs
 from fpfa.releasing import reader_view
 
 PLAN_EVENT = "plan"
+# Who writes the fixed tool plan's calc rows: the plan itself, and a bare session with no agent.
+PLAN_AGENTS = ("tool-plan", "")
 STEP_STATES = ("todo", "doing", "done", "blocked")
 STEP_MARK = {"todo": "○", "doing": "●", "done": "✓", "blocked": "!"}
 LEAD = "lead"
@@ -98,20 +100,28 @@ def build(snapshot: dict | None, *, export_reason: str | None = None) -> dict:
         row = decisions[ident]
         stale.append({"kind": "decision", "id": ident, "by": row.get("decided_by") or "", "text": _short(row.get("text")),
                       "reasons": analysis["decisions"][ident]["reasons"]})
+    # What a current finding or decision rests on. An out-of-date row nothing current rests on is history:
+    # it is marked where it is listed and it is not exported as current, but nobody has to act on it.
     cited = {support for row in findings for support in row.get("supports") or []}
+    cited |= {support for row in decisions.values() for support in row.get("supports") or []}
     for ident in analysis["stale"]["calcs"]:
         row = calcs[ident]
-        # An out-of-date calc nothing current rests on is history. The plan's own rows count until they are re-run.
-        superseded = any(
-            other["tool"] == row["tool"] and other["id"] != ident and analysis["calcs"][other["id"]]["state"] != coherence.STALE
-            and (other.get("agent") or "") == (row.get("agent") or "")
-            for other in calcs.values()
-        )
-        if ident not in cited and superseded:
-            continue
+        if ident not in cited:
+            # The tool plan's rows feed the tables and the exports directly, so they count until the zone is run again.
+            if (row.get("agent") or "") not in PLAN_AGENTS:
+                continue
+            rerun = any(
+                other["tool"] == row["tool"] and other["id"] != ident and (other.get("agent") or "") in PLAN_AGENTS
+                and analysis["calcs"][other["id"]]["state"] != coherence.STALE
+                for other in calcs.values()
+            )
+            if rerun:
+                continue
         stale.append({"kind": "calc", "id": ident, "by": row.get("agent") or "", "text": row["tool"],
                       "reasons": analysis["calcs"][ident]["reasons"]})
     for ident in analysis["stale"]["evidence"]:
+        if ident not in cited:
+            continue
         row = evidence[ident]
         where = " ".join(part for part in (row.get("document"), row.get("edition"), row.get("section")) if part)
         stale.append({"kind": "cite", "id": ident, "by": row.get("agent") or "", "text": where,
@@ -161,7 +171,9 @@ def build(snapshot: dict | None, *, export_reason: str | None = None) -> dict:
         "plan": latest_plan(snap),
         "inputs": rows,
         "unconfirmed": [row for row in rows if row["unconfirmed"] and not row["blank"]],
-        "changes": [item for item in analysis["changes"] if item.get("calcs")],
+        # A change is news while something that used the old value still has to be brought up to date.
+        "changes": [item for item in analysis["changes"]
+                    if any(item["reason"] in reason for row in stale for reason in row["reasons"])],
         "people": people,
         "findings": len(findings),
         "calcs": sum(1 for item in analysis["calcs"].values() if item["state"] != coherence.STALE),
@@ -383,8 +395,8 @@ def attention_for(digest: dict, slug: str, snapshot: dict | None) -> list[str]:
     lines: list[str] = []
     mine = [row for row in digest["stale"] if row["by"] == slug and row["kind"] in ("finding", "decision")]
     if mine:
-        lines.append("Your findings whose basis changed. Run the calcs again on the current inputs, then replace "
-                     "each (record_finding with replaces) or withdraw it:")
+        lines.append("Your findings and decisions whose basis changed. Run the calcs again on the current inputs, "
+                     "then replace each (record_finding or record_decision with replaces) or withdraw it:")
         for row in mine:
             lines.append(f"- [{row['id']}] {row['text']}. " + "; ".join(row["reasons"][:2]))
     against = [row for row in digest["objections"] if row["author"] == slug]

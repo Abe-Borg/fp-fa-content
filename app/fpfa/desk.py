@@ -1174,9 +1174,13 @@ class Desk:
         zone = inputs.zone_values(project)
         zone_now = {name: inputs.encode(name, value) for name, value in zone.items()}
         sources = {name: inputs.source_text(inputs.provenance(project, name, zone[name])) for name in zone}
+        # A basis field has no starting value, so one the job holds no note on was typed on the Basis tab.
+        noted = project.get("given") if isinstance(project.get("given"), dict) else {}
+        basis_sources = {key: (inputs.source_text(noted[key]) if noted.get(key) in inputs.SOURCE_TEXT else "job form")
+                         for key in basis_now}
         from_basis = self.record.sync_form(
             project_id, inputs.BASIS_KIND, basis_now, labels=dict(BASIS_LABELS),
-            sources={key: "job form" for key in basis_now}, shown_before=shown.get("basis"),
+            sources=basis_sources, shown_before=shown.get("basis"),
         )
         from_zone = self.record.sync_form(
             project_id, inputs.INPUT_KIND, zone_now, labels=inputs.GIVEN, sources=sources,

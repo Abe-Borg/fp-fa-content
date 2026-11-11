@@ -146,6 +146,15 @@ def _calc_numbers(tool: str, outputs: Any, calc_inputs: Any) -> set[str]:
 
 # -- the packet --------------------------------------------------------------------------
 
+def cite_name(row: dict) -> str:
+    """A cite as a reader writes it: NFPA 13-2025 §8.3.2.3.1.1, or NFPA 13-2025 Table 19.2.3.1.2."""
+    edition = f"-{row['edition']}" if row.get("edition") else ""
+    section = str(row.get("section") or "").strip()
+    if section:
+        section = (" " if section[:1].isalpha() or section.startswith("§") else " §") + section
+    return f"{row.get('document') or ''}{edition}{section}"
+
+
 def check_token(findings: list[dict]) -> str:
     payload = json.dumps(
         [[row["id"], row["text"], row["label"], row.get("supports") or []] for row in findings],
@@ -188,9 +197,7 @@ def _cite_for(content_root: Path | None, rows: dict[str, dict], finding: dict, a
                 label = "calculation record on another value than the project input"
             sources.append({"id": ident, "kind": "calc", "text": f"{row['tool']} ({label})"})
         elif kind == "evidence":
-            edition = f"-{row['edition']}" if row.get("edition") else ""
-            section = f" §{row['section']}" if row.get("section") else ""
-            where = f"{row['document']}{edition}{section}"
+            where = cite_name(row)
             passages = trace_cite(content_root, row["document"], row.get("edition") or "", row.get("section") or "") \
                 if content_root is not None else []
             # NEEDS HOLD is the content team's own stop and stays one. NOT PULLED is the author saying
@@ -201,7 +208,9 @@ def _cite_for(content_root: Path | None, rows: dict[str, dict], finding: dict, a
                 quoted = " | ".join(f"({item['path']}:{item['line']}) {item['text']}" for item in passages)
                 pieces.append(f"{where}. {PACK_MARK}: {quoted}")
                 for item in passages:
-                    numbers |= _numbers_in(_strip_cites(item["text"]))
+                    # The figures this cite can carry are the ones the pack gives for this section,
+                    # not every figure in the paragraph around it.
+                    numbers |= _numbers_in(_strip_cites(item.get("scope") or item["text"]))
                 sources.append({"id": ident, "kind": "pack", "text": where,
                                 "where": [f"{item['path']}:{item['line']}" for item in passages]})
             else:
@@ -459,16 +468,18 @@ def summary_line(outcome: dict | None) -> str:
 
 # -- tiers -------------------------------------------------------------------------------
 
-def assurance(snapshot: dict | None) -> dict[str, dict]:
+def assurance(snapshot: dict | None, check: dict | None = None) -> dict[str, dict]:
     """The tier each current finding has earned, with the reasons a reader needs.
 
     Returns {finding id: {"tier", "reasons", "sources", "verdict", "checked"}}.
     Derived from the finding's label, its checker verdict, the open objections
     on it, and whether its basis changed. Nothing here is typed by a model.
+    check is the trace check to read the sources from; None reads the newest
+    one the snapshot carries.
     """
     snap = snapshot or {}
     analysis = coherence.analyze(snap)
-    payload = _latest_check_in(snap) or {}
+    payload = check if isinstance(check, dict) else (_latest_check_in(snap) or {})
     by_finding = {row.get("finding_id"): row for row in payload.get("rows") or []}
     objections: dict[str, list[dict]] = {}
     agreements: dict[str, list[str]] = {}

@@ -188,7 +188,9 @@ CREATE TABLE IF NOT EXISTS decisions (
     label TEXT NOT NULL,
     created TEXT NOT NULL,
     supports TEXT NOT NULL DEFAULT '[]',
-    superseded_by TEXT
+    superseded_by TEXT,
+    retire_note TEXT NOT NULL DEFAULT '',
+    review_id TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS decisions_project ON decisions(project_id);
 CREATE TABLE IF NOT EXISTS handoffs (
@@ -639,6 +641,7 @@ class Record:
                 self._event(conn, row["project_id"], "finding_replaced", row["agent"], {"id": old_id, "by": row["id"]})
                 self._close_objections(conn, row["project_id"], old_id,
                                        f"The finding was revised by {row['agent']}: see [{row['id']}].", row["agent"])
+                self._close_rulings(conn, row["project_id"], old_id, f"The finding it ruled on was revised: see [{row['id']}].")
                 row["replaces"] = old_id
             return row
 
@@ -666,6 +669,7 @@ class Record:
             )
             self._event(conn, project_id, "finding_withdrawn", by, {"id": finding_id})
             self._close_objections(conn, project_id, finding_id, f"The finding was withdrawn by {by}: {note}", by)
+            self._close_rulings(conn, project_id, finding_id, f"The finding it ruled on was withdrawn by {by}.")
             row = dict(conn.execute("SELECT * FROM findings WHERE id = ?", (finding_id,)).fetchone())
             row["supports"] = json.loads(row["supports"] or "[]")
             return row
@@ -685,6 +689,23 @@ class Record:
                 (resolution, by, now_text(), item["id"]),
             )
             self._event(conn, project_id, "review_resolved", by, {"id": item["id"], "finding": finding_id})
+
+    def _close_rulings(self, conn: sqlite3.Connection, project_id: str, finding_id: str, note: str) -> None:
+        """A ruling on an objection is over when the finding it ruled on leaves the current set.
+
+        Only a decision written to settle a review (review_id set) closes this
+        way. Any other decision that rests on the finding stays, and is out of
+        date until its author replaces or withdraws it.
+        """
+        rows = conn.execute(
+            "SELECT id, supports FROM decisions WHERE project_id = ? AND review_id != '' AND superseded_by IS NULL",
+            (project_id,),
+        ).fetchall()
+        for item in rows:
+            if finding_id not in _json_list(item["supports"]):
+                continue
+            conn.execute("UPDATE decisions SET superseded_by = ?, retire_note = ? WHERE id = ?", (WITHDRAWN, note, item["id"]))
+            self._event(conn, project_id, "decision_closed", "", {"id": item["id"], "finding": finding_id})
 
     # -- reviews: one agent's position on another agent's finding ------------------------
 
@@ -825,7 +846,15 @@ class Record:
         return self._write(work)
 
     def record_decision(self, project_id: str, *, text: str, decided_by: str, label: str,
-                        basis: str = "", supports: Any = None) -> dict:
+                        basis: str = "", supports: Any = None, replaces: Any = None,
+                        may_replace_any: bool = False, review_id: str = "") -> dict:
+        """Write one decision. replaces names an earlier decision this one takes the place of.
+
+        The earlier row stays as history. Only its author, or the lead
+        (may_replace_any), may replace it. review_id marks a ruling the lead
+        made on an objection; such a ruling closes by itself when the finding
+        it ruled on is revised or withdrawn.
+        """
         row = {
             "id": new_id(),
             "project_id": _text(project_id, "project_id", limit=64),
@@ -835,18 +864,65 @@ class Record:
             "label": _label(label),
             "created": now_text(),
             "supports": canonical_json(_ids(supports, "supports")),
+            "review_id": _text(review_id, "review_id", required=False, limit=64),
         }
+        old_id = _text(replaces, "replaces", required=False, limit=64)
 
         def work(conn):
+            if old_id:
+                old = conn.execute(
+                    "SELECT * FROM decisions WHERE id = ? AND project_id = ?", (old_id, row["project_id"])
+                ).fetchone()
+                if old is None:
+                    raise RecordError(f"no decision {old_id} on this project to replace")
+                if old["superseded_by"]:
+                    raise RecordError(f"decision {old_id} was already replaced or withdrawn")
+                if old["decided_by"] != row["decided_by"] and not may_replace_any:
+                    raise RecordError(f"decision {old_id} was made by {old['decided_by']}. Only its author or the lead replaces it.")
             conn.execute(
-                "INSERT INTO decisions (id, project_id, text, basis, decided_by, label, created, supports) "
-                "VALUES (:id, :project_id, :text, :basis, :decided_by, :label, :created, :supports)",
+                "INSERT INTO decisions (id, project_id, text, basis, decided_by, label, created, supports, review_id) "
+                "VALUES (:id, :project_id, :text, :basis, :decided_by, :label, :created, :supports, :review_id)",
                 row,
             )
             self._event(conn, row["project_id"], "decision", row["decided_by"], {"id": row["id"], "label": row["label"]})
+            if old_id:
+                conn.execute("UPDATE decisions SET superseded_by = ? WHERE id = ?", (row["id"], old_id))
+                self._event(conn, row["project_id"], "decision_replaced", row["decided_by"], {"id": old_id, "by": row["id"]})
+                row["replaces"] = old_id
+            row["supports"] = json.loads(row["supports"])
             return row
 
         return self._write(work)
+
+    def retire_decision(self, project_id: str, decision_id: str, *, by: str, reason: str,
+                        may_retire_any: bool = False) -> dict:
+        """Withdraw a decision. It stays on the record as history and leaves the current set."""
+        decision_id = _text(decision_id, "decision_id", limit=64)
+        by = _text(by, "by", limit=80)
+        note = _text(reason, "reason", limit=2000)
+
+        def work(conn):
+            old = conn.execute(
+                "SELECT * FROM decisions WHERE id = ? AND project_id = ?", (decision_id, project_id)
+            ).fetchone()
+            if old is None:
+                raise RecordError(f"no decision {decision_id} on this project")
+            if old["superseded_by"]:
+                raise RecordError(f"decision {decision_id} was already replaced or withdrawn")
+            if old["decided_by"] != by and not may_retire_any:
+                raise RecordError(f"decision {decision_id} was made by {old['decided_by']}. Only its author or the lead withdraws it.")
+            conn.execute(
+                "UPDATE decisions SET superseded_by = ?, retire_note = ? WHERE id = ?", (WITHDRAWN, note, decision_id)
+            )
+            self._event(conn, project_id, "decision_withdrawn", by, {"id": decision_id})
+            row = dict(conn.execute("SELECT * FROM decisions WHERE id = ?", (decision_id,)).fetchone())
+            row["supports"] = _json_list(row.get("supports"))
+            return row
+
+        return self._write(work)
+
+    def has_decision(self, project_id: str, decision_id: str) -> bool:
+        return bool(self._read("SELECT id FROM decisions WHERE id = ? AND project_id = ?", (decision_id, project_id)))
 
     # -- calculation records --------------------------------------------
 
@@ -1288,8 +1364,10 @@ class Record:
             return self._read("SELECT * FROM questions WHERE project_id = ? AND status = ? ORDER BY created, rowid", (project_id, status))
         return self._read("SELECT * FROM questions WHERE project_id = ? ORDER BY created, rowid", (project_id,))
 
-    def decisions(self, project_id: str) -> list[dict]:
-        rows = self._read("SELECT * FROM decisions WHERE project_id = ? ORDER BY created, rowid", (project_id,))
+    def decisions(self, project_id: str, *, include_retired: bool = False) -> list[dict]:
+        """The current decisions: those not replaced and not withdrawn. include_retired adds the history."""
+        where = "project_id = ?" + ("" if include_retired else " AND superseded_by IS NULL")
+        rows = self._read(f"SELECT * FROM decisions WHERE {where} ORDER BY created, rowid", (project_id,))
         for row in rows:
             row["supports"] = _json_list(row.get("supports"))
         return rows
@@ -1376,6 +1454,7 @@ class Record:
             "retired_findings": [row for row in self.findings(project_id, include_retired=True) if row.get("superseded_by")],
             "reviews": self.reviews(project_id),
             "questions": self.questions(project_id),
+            "retired_decisions": [row for row in self.decisions(project_id, include_retired=True) if row.get("superseded_by")],
             "decisions": self.decisions(project_id),
             "handoffs": self.handoffs(project_id),
             "tasks": self.tasks(project_id),
@@ -1463,7 +1542,8 @@ def _add_missing_columns(conn: sqlite3.Connection) -> None:
         "evidence": [("depends", "TEXT NOT NULL DEFAULT '[]'")],
         "findings": [("superseded_by", "TEXT"), ("retire_note", "TEXT NOT NULL DEFAULT ''")],
         "questions": [("audience", "TEXT NOT NULL DEFAULT 'engineer'"), ("answered_by", "TEXT NOT NULL DEFAULT ''")],
-        "decisions": [("supports", "TEXT NOT NULL DEFAULT '[]'"), ("superseded_by", "TEXT")],
+        "decisions": [("supports", "TEXT NOT NULL DEFAULT '[]'"), ("superseded_by", "TEXT"),
+                      ("retire_note", "TEXT NOT NULL DEFAULT ''"), ("review_id", "TEXT NOT NULL DEFAULT ''")],
         "handoffs": [("kind", "TEXT NOT NULL DEFAULT 'handoff'")],
     }
     for table, columns in wanted.items():

@@ -976,7 +976,7 @@ class TeamSession:
                 self.project_id, decided_by=LEAD, label="use best judgment", supports=[review["finding_id"]],
                 text=(f"The objection by {review['agent']} to {finding.get('agent', 'the')} finding "
                       f"[{review['finding_id']}] is not upheld. The finding stands."),
-                basis=reason,
+                basis=reason, review_id=review["id"],
             )
             self.record.close_review(self.project_id, review["id"], status="resolved", by=LEAD,
                                      resolution=f"The lead settled it; the finding stands: {reason} [decision {decision['id']}]")

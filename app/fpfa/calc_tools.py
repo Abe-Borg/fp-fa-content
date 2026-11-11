@@ -326,11 +326,12 @@ SCHEMAS = [
     {
         "name": "withdraw_finding",
         "description": (
-            "Withdraw a finding you wrote that no longer holds and that you have nothing to put in the place of: "
-            "its basis changed, or an objection to it was right. It stays on the record as history."
+            "Withdraw a finding or a decision you wrote that no longer holds and that you have nothing to put in "
+            "the place of: its basis changed, or an objection to it was right. It stays on the record as history."
         ),
         "input_schema": _obj(
-            {"id": {"type": "string"}, "reason": {"type": "string", "description": "Why it no longer holds."}},
+            {"id": {"type": "string", "description": "The finding's id, or the decision's."},
+             "reason": {"type": "string", "description": "Why it no longer holds."}},
             ["id", "reason"],
         ),
     },
@@ -367,7 +368,8 @@ SCHEMAS = [
         "name": "record_decision",
         "description": (
             "Write an election or a judgment to the project record, with its basis and label. "
-            "A decision the tools did not return is use best judgment."
+            "A decision the tools did not return is use best judgment. To revise a decision you made earlier, "
+            "pass its id in replaces."
         ),
         "input_schema": _obj(
             {
@@ -375,6 +377,7 @@ SCHEMAS = [
                 "label": {"type": "string", "description": "One of: " + ", ".join(FINDING_LABELS)},
                 "basis": {"type": "string", "description": "The reasoning behind the decision, in a sentence. Optional."},
                 "supports": {"type": "array", "description": "Record ids the decision rests on. Optional.", "items": {"type": "string"}},
+                "replaces": {"type": "string", "description": "Id of your earlier decision this one takes the place of. Optional."},
             },
             ["text", "label"],
         ),
@@ -585,11 +588,15 @@ class ToolSession:
                 out["replaces"] = row["replaces"]
             return out
         if name == "withdraw_finding":
-            row = record.retire_finding(
-                project_id, str(args.get("id") or ""), by=self.agent or LEAD, reason=args.get("reason"),
-                may_retire_any=(self.agent or LEAD) == LEAD,
-            )
-            return {"id": row["id"], "withdrawn": True}
+            ident = str(args.get("id") or "").strip()
+            is_lead = (self.agent or LEAD) == LEAD
+            if record.has_decision(project_id, ident):
+                row = record.retire_decision(project_id, ident, by=self.agent or LEAD, reason=args.get("reason"),
+                                             may_retire_any=is_lead)
+                return {"id": row["id"], "withdrawn": True, "kind": "decision"}
+            row = record.retire_finding(project_id, ident, by=self.agent or LEAD, reason=args.get("reason"),
+                                        may_retire_any=is_lead)
+            return {"id": row["id"], "withdrawn": True, "kind": "finding"}
         if name == "review_finding":
             row = record.put_review(
                 project_id, finding_id=str(args.get("id") or ""), agent=self.agent or LEAD,
@@ -611,8 +618,12 @@ class ToolSession:
             row = record.record_decision(
                 project_id, text=args.get("text"), decided_by=self.agent or LEAD,
                 label=args.get("label"), basis=args.get("basis") or "", supports=args.get("supports"),
+                replaces=args.get("replaces"), may_replace_any=(self.agent or LEAD) == LEAD,
             )
-            return {"id": row["id"], "label": row["label"]}
+            out = {"id": row["id"], "label": row["label"]}
+            if row.get("replaces"):
+                out["replaces"] = row["replaces"]
+            return out
         if name == "handoff":
             payload = args.get("payload")
             if payload is not None and not isinstance(payload, dict):
