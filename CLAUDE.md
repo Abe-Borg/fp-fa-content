@@ -8,7 +8,53 @@ Guidance for coding agents working in this repository. `docs/prototype-plan.md` 
 
 The product was FP/FA Design Assistant. The `fpfa` package name, the `FPFA_*` variables, the data directory name, the keyring service name, and the installer's AppId are not renamed: an existing install and its data depend on them.
 
+## Ownership and division of responsibilities
+
+**Owner direction, November 11, 2026.** These rules govern future work. Existing differences between the repository and the Grok team's working materials remain unreconciled; do not assume either entire collection is authoritative or overwrite either one wholesale.
+
+### Product and content ownership
+
+- **Abe owns product priorities and consequential decisions.** Choom coordinates independent review, consolidates feedback, and prepares handoffs for Abe. Review comments and another agent's suggestions are not permission to expand a task.
+- **Claude coding agents own the application implementation:** desktop UI, orchestration, project records, API integration, content loading and updating, export mechanisms, recovery, application checks, and application tests.
+- **The Grok Bot team owns the engineering substance:** skills, specialist engineering guidance, reference corpus, specification content, engineering assumptions, formulas, and calculation implementations. Its research and "training" develop this material; that does not itself establish engineering validity or imply model-weight training.
+- **The FP/FA App Grok Bot is the primary content integration coordinator.** It coordinates publication of the team's reviewed material into the repository's content pack, involving the relevant specialists and factories as needed. This is a responsibility assignment, not unrestricted permission to publish or change repositories.
+- The Grok team can review application behavior and recommend app changes. Claude can identify content defects and propose corrections. Neither role silently takes ownership of the other's work.
+
+### Classify by purpose, not file extension
+
+The content pack includes executable engineering calculation code, not only Markdown. Engineering content may also appear inside Python, tests, schemas, prompts, or templates. Application logic and engineering substance can coexist in one file.
+
+Claude may change how the app invokes a calculation, preserves precision, records dependencies, displays results, or reports failures within the assigned task. Claude must not independently change the calculation's engineering formula, assumptions, thresholds, interpretation, or authoritative expected values.
+
+Likewise, orchestration prompts are application work, but embedded discipline rules are engineering content. Export layout is application work; engineering specification language is content. When a change crosses this boundary, separate the concerns and coordinate both owners rather than treating the whole file as app-owned.
+
+### Required behavior when content is implicated
+
+1. Preserve the evidence: affected file/version, reproducible behavior, expected versus observed result, and whether the issue is application behavior, engineering content, or both.
+2. Route the engineering question and any proposed content correction to the FP/FA App Grok Bot and appropriate specialist through the established handoff process. Do not silently patch production skills, engineering role instructions, corpus, specifications, or calculation substance.
+3. For a mixed change, agree on the interface, inputs, units, precision, outputs, error behavior, provenance, and compatibility expectations. Claude implements the app side; the Grok team supplies and validates the engineering side.
+4. If source validity or ownership is unresolved, flag the limitation and continue independent app work. Do not invent an engineering answer to unblock coding. Escalate material scope, ownership, or engineering decisions to Abe through Choom.
+5. A content correction must return to its authoritative editable source and controlled publication path, once those are established. An isolated repository patch must not become a hidden competing version.
+
+### Tests and fixtures
+
+Claude may create clearly labeled synthetic fixtures, mock skills, and deliberately incorrect inputs in isolated test locations. They must not be promoted into the production content pack or represented as validated engineering.
+
+Application tests may verify loading, precision preservation, recording, failure handling, and consistency against a documented contract. Expected engineering answers must have an independent basis or be explicitly labeled provisional/synthetic. Do not derive an oracle solely from the implementation under test or weaken a test merely to make it pass.
+
+Claude may propose a content schema migration and supply migration tooling. Do not apply semantic changes or publish migrated engineering content without the content owner's review and the applicable task authorization.
+
+### Versioning and handback
+
+Treat app releases and content-pack releases as distinct, compatible artifacts. Record the app revision and the content/calculation identities used by tests and delivered builds. Hashes establish identity and integrity, not engineering correctness.
+
+Do not perform blind bidirectional syncs. Do not silently choose the repository or Grok working collection as the master. Until reconciliation establishes authoritative sources and a publication process, preserve both and identify which frozen snapshot each run uses. `docs/content-provenance.md` records where the two stand: a correction that was made to a packaged file is listed in that page's table with the test that guards it, so that it is not a hidden competing version.
+
+Every handback must distinguish app changes, content dependencies or proposed changes, tests actually run, untested behavior, and unresolved engineering validation. No software test result constitutes code compliance, manufacturer approval, or qualified engineering sign-off.
+
 ## Engineering rules
+
+These hold in everything the app writes, shows, and exports. Changing one is an engineering decision, not an application change (see Ownership).
 
 - Numbers come from the calc tools. The model never computes gallons, seconds, gpm, psi, scfm, or the releasing table.
 - Three labels stay distinct: calculated, ASSUMED, use best judgment. A delivery time is an optimistic screen, not a listed water-delivery-time calculation.
@@ -31,7 +77,6 @@ The product was FP/FA Design Assistant. The `fpfa` package name, the `FPFA_*` va
 - `python -m fpfa.live_eval` runs against the live model and is billed. Never run it from a test or a build, and never to see whether a change works: the owner runs it. Its tests inject a scripted client through `Runner(client_factory=...)`.
 - An evaluation check has to be able to fail. Before adding one to `live_eval.py`, name what would fool it: a replayed calc row is not collaboration, a bare agreement is not a position, a checker that approves everything is not a check. A scenario blocked on an owner's confirmation is reported as blocked, not chosen for them.
 - A failure does not un-spend what ran before it: an event that ends on an error is written `failed` with the usage that had finished (`claude_client.attach_usage`). A failed request reports no usage; say that, never guess a figure, and never call `--max-usd` or any other guard a spending limit.
-- Which copy of the skills is authoritative, the packaged one or the content team's live one, is the owner's decision and is not made (`docs/content-provenance.md`). Do not copy either over the other. A correction to a packaged file goes in that page's table with the test that guards it.
 
 ## How the app is built
 
@@ -45,7 +90,7 @@ The record and the team:
 - The record reconciles a change only for the tools in `coherence.BINDINGS` and `DERIVED`. A tool with no entry is not tracked, and every view says so; do not let an untracked path imply it was reconciled. A calc row whose `calc_identity` differs from the installed pack's is out of date.
 - A figure is a number and a kind of unit (`quantities.py`); the trace check and the reply audit match on the pair. A figure on an out-of-date row is out of date whatever a finding or an earlier reply says.
 - A Results tile is a calc tool's output and nothing else: `results_panel.py` prints a field of the tool result with the narrative's rounding and words, computes nothing, and the page formats nothing.
-- How the team is run is content: `roles/lead/ROLE.md` and the "Working with the team" section of each specialist's role. `team.py` holds the tools and the plumbing. A `consult`, a review, or an objection exists only when a model made it. Do not add code that manufactures one.
+- How the team is run is content: `roles/lead/ROLE.md` and the "Working with the team" section of each specialist's role. `team.py` holds the tools and the plumbing. A `consult`, a review, or an objection exists only when a model made it. Do not add code that manufactures one. Those orchestration prompts are application work; the discipline rules in the same role files are engineering content (see Ownership).
 - The inbox is in memory; the record is all that survives a relaunch. `Record.recover()` runs once at launch and only marks: nothing is re-run on its own. One window per data directory (`instance_lock.py`).
 
 The model client:
@@ -75,16 +120,16 @@ The window:
 | `app/frontend/` | The page: React and TypeScript, built by Vite into `app/fpfa/web/static` (committed) |
 | `app/packaging/` | PyInstaller build, Inno Setup script, third-party notices, icon |
 | `app/tests/` | App suite. `team_scenario.py` is one job scripted end to end; `test_hardening.py` holds one class per defect two reviews found |
-| `calcs/fp`, `calcs/fa` | Deterministic kernels and their tests. In `calcs/fp`, `formulas.py`, `run.py`, and `test_formulas.py` are staged from the kernel source (`scripts/check_fp_kernel_reproduce.py`); `di_zone.py` is pack-only |
-| `skills/`, `roles/`, `modes/` | One folder per item with one markdown file (`SKILL.md`, `ROLE.md`, `MODE.md`) and `name` and `description` frontmatter. `roles/lead` runs the team; `fp-sprinkler`, `fa-releasing`, and `spec-draft` are the specialists; `qa-specialist` is the checker; `everyday` is the shell for a turn with no record |
-| `specs/`, `corpus/` | Draft CSI sections, sent to the model in full; paraphrased pins and notes, searched by `search_corpus` |
+| `calcs/fp`, `calcs/fa` | Deterministic kernels and their tests. Engineering content (see Ownership). In `calcs/fp`, `formulas.py`, `run.py`, and `test_formulas.py` are staged from the kernel source (`scripts/check_fp_kernel_reproduce.py`); `di_zone.py` is pack-only |
+| `skills/`, `roles/`, `modes/` | One folder per item with one markdown file (`SKILL.md`, `ROLE.md`, `MODE.md`) and `name` and `description` frontmatter. Skills and the specialists' discipline rules are engineering content. `roles/lead` runs the team; `fp-sprinkler`, `fa-releasing`, and `spec-draft` are the specialists; `qa-specialist` is the checker; `everyday` is the shell for a turn with no record |
+| `specs/`, `corpus/` | Engineering content. Draft CSI sections, sent to the model in full; paraphrased pins and notes, searched by `search_corpus` |
 | `docs/` | Plan of record, known answers, acceptance and recovery protocols, live evaluation, releasing basis, content provenance, milestone hand-backs. Not part of the content pack |
 | `scripts/` | `build_content_pack.py` strips paths named foam, clean-agent, canada, catalog, and `_sources`, and refuses any file that holds an API key |
 
 ## Working here
 
 - Python 3.11 or newer; 3.12 is what the suites are run with. Install `app/requirements.txt`. Node.js 22 builds and tests the page. The target machine is Windows.
-- Tests, from the folders named. Run all four before a push and put the counts in the pull request body; `.github/workflows/tests.yml` runs them on every pull request.
+- Tests, from the folders named. Run all four before a push and put the counts in the pull request body, which is a handback (see Ownership); `.github/workflows/tests.yml` runs them on every pull request.
   - `calcs/fp`: `python -m unittest discover -s . -p 'test_*.py'`
   - `calcs/fa`: `python -m unittest discover -s tests`
   - `app`: `python -m unittest discover -s tests`
