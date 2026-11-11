@@ -35,7 +35,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
-from fpfa import coherence, inputs, status
+from fpfa import inputs, status
 from fpfa.calc_tools import SCHEMAS, ToolSession
 from fpfa.claude_client import TurnCancelled, empty_usage, incomplete_notice, run_tool_loop
 from fpfa.record import ANSWERED_IN_CHAT, BASIS_LABELS, GIVEN, Record, RecordError

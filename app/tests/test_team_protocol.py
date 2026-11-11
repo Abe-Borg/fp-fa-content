@@ -22,7 +22,7 @@ REPO = APP_DIR.parent
 if str(APP_DIR) not in sys.path:
     sys.path.insert(0, str(APP_DIR))
 
-from test_coherence import _change, _seed_inputs  # noqa: E402
+from test_coherence import _seed_inputs  # noqa: E402
 from test_team import Block, _record, _system_text, _turn, _usage  # noqa: E402
 
 _ids = itertools.count(1)

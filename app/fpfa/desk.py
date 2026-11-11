@@ -83,7 +83,7 @@ from fpfa.projects import delete_project, list_projects, load_project, new_proje
 from fpfa.checker import check_line, export_reason
 from fpfa.record import ANSWERED_ON_PANEL, BASIS_LABELS, INTERRUPTED_NOTE, Record, RecordError
 from fpfa.spec_docx import DRAFT_SECTION, write_docx
-from fpfa.team import check_record, export_gate, latest_check, team_summary
+from fpfa.team import check_record, latest_check, team_summary
 from fpfa.team_panel import recovery_text, team_view
 from fpfa.usage_report import report_text
 from fpfa.workflow import (

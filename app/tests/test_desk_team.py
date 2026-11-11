@@ -242,7 +242,7 @@ class StaleRunTests(DeskCase):
         from fpfa.desk import EXPORT_STALE_RUN, STALE_RUN_NOTE
 
         app = self._app()
-        project_id = self._sample(app)
+        self._sample(app)
         self.assertEqual(app.run_changes(), [])
         self.assertEqual(app.snapshot()["run_changes"], [])
         first = Play({"lead": [say("Fine.")]})
