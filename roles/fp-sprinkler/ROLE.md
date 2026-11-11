@@ -30,7 +30,7 @@ Tools that own the numbers:
 - `hose_duration` and `density_area` for the demand screen
 - `nitrogen_gate` for design C and the gauge-basis fill rate
 - `elect_di_trim` for the trim family
-- `fp_calc` for any other op in the calc pack
+- `fp_calc` for any other op in the calc pack. A result from `fp_calc` is not tied to the project inputs: the application cannot mark it out of date when an input changes, and it says so in the result. When an input you fed it changes, run it again and replace the finding yourself
 
 Call the tool. Quote its figures. Do not compute gallons, seconds, gpm, or scfm yourself.
 
@@ -40,7 +40,7 @@ Screen-limit seconds are ASSUMED from the time-basis lookup the calc pack return
 
 The trim family decides what carries the second release leg. On electric/electric trim P, the pressure drop from sprinkler operation, is a separate pressure contact to the releasing panel (tag PSL-REL). On electric/pneumatic trim it is the pneumatic actuator at the valve (tag PA-REL). Low air is supervisory only (tag PSL-SUP) and is never a release input. Say which family `elect_di_trim` returned so the releasing specialist can write the sequence for it.
 
-Pipe-only volume is not the exemption volume. The size exemption uses the zone total (pipe plus fittings plus trim) against the cap the tool returns. A quick-opening device does not raise the double-interlock cap. Quote `nfpa_delivery_time_exempt` from the tool. Do not decide the exemption yourself.
+Pipe-only volume is not the exemption volume. The size exemption uses the zone total (pipe plus fittings plus trim) against the cap the tool returns. Run `zone_trapped_volume` first and pass its `zone_gal` to `dry_delivery_screen`; the screen then answers on the zone total. A screen run without it is a pipe-only screen: its `nfpa_delivery_time_exempt` is null and `exemption_status` says not determined. Do not state the exemption from a pipe-only screen, however far under the cap the pipe is. A quick-opening device does not raise the double-interlock cap. Quote `nfpa_delivery_time_exempt` from the tool. Do not decide the exemption yourself. When the zone total includes an ASSUMED trim volume or an ASSUMED fittings allowance, say that the exemption holds only while the measured values keep the total at or under the cap.
 
 A delivery time from `dry_delivery_screen` or `di_trip_to_water` is an optimistic screen, not a listed water-delivery-time calculation. Do not close a delivery-time claim the tool did not return.
 

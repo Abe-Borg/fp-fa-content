@@ -169,6 +169,25 @@ def add_usage(totals: dict, usage: Any) -> dict:
     return totals
 
 
+def attach_usage(exc: BaseException, usage: dict | None) -> None:
+    """Put the usage known so far on an exception, added to any it already carries.
+
+    A failure does not un-spend the rounds that ran before it. Every layer a
+    failure passes through (the tool loop, a consult, a delegation, the lead's
+    turn) adds what it knows, so the record can close the task with it.
+    """
+    known = dict(getattr(exc, "usage", None) or {})
+    for key, value in (usage or {}).items():
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            continue
+        known[key] = int(known.get(key, 0)) + int(value)
+    try:
+        exc.usage = known
+    except Exception:
+        # An exception type that takes no attributes. The usage is lost with it; nothing else can be done.
+        pass
+
+
 def usage_summary(usage: dict | None) -> str:
     """One status-line sentence on token use. Empty when no round was counted.
 
@@ -297,13 +316,21 @@ def run_tool_loop(
             cancelled.usage = dict(usage)
             raise cancelled
         _tell(observe, {"type": "round", "round": int(usage["rounds"]) + 1})
-        response = create(
-            model=MODEL_ID,
-            max_tokens=max_tokens,
-            system=system,
-            tools=tools,
-            messages=messages,
-        )
+        try:
+            response = create(
+                model=MODEL_ID,
+                max_tokens=max_tokens,
+                system=system,
+                tools=tools,
+                messages=messages,
+            )
+        except TurnCancelled:
+            raise
+        except Exception as exc:
+            # The rounds before this one were billed. The caller records them with the failure. The request
+            # that failed returned no usage: whether any part of it was billed is not known here.
+            attach_usage(exc, usage)
+            raise
         add_usage(usage, getattr(response, "usage", None))
         _log.info(
             "totals after round %d: input %d, cache write %d, cache read %d, output %d",
@@ -395,6 +422,9 @@ class AnthropicMessages:
         self.effort = configured_effort(effort)
         # Hears {"type": "retry", "attempt", "of", "wait_s", "status"} before each wait.
         self.on_retry = on_retry
+        # Requests sent again after a failure, since this client was made. A failed attempt reports no
+        # usage, so nothing here can say what it cost; the count is what can be said.
+        self.retries = 0
         # Retries live in create() so a 429 or 529 is visible and bounded.
         self._client = anthropic.Anthropic(api_key=api_key, timeout=300.0, max_retries=0)
 
@@ -450,6 +480,7 @@ class AnthropicMessages:
                     raise
                 # The words of the failed attempt are not the reply. The listener drops them.
                 _tell(on_event, {"type": "reset"})
+                self.retries += 1
                 wait = retry_wait(exc, attempt)
                 _tell(self.on_retry, {
                     "type": "retry", "attempt": attempt + 2, "of": RETRY_ATTEMPTS, "wait_s": wait,

@@ -51,7 +51,16 @@ try {
   check("the plan's four steps are listed", (await page.$$(".steps li")).length === 4);
   check("each contributor is listed with what it did", stand.includes("Sprinkler specialist") && stand.includes("5 findings") && stand.includes("reviewed 3"), stand);
   check("the check line says what the check is", stand.includes("Trace check:") && stand.includes("The standards were not opened."));
-  check("the export's readiness is said", stand.includes("Design Basis export: ready."));
+  // The fixture's team left calculations with no finding, so the export is ready as an incomplete draft and
+  // the panel lists what is missing. Neither line may read as a finished design basis.
+  check("the export's readiness is said", stand.includes("Design Basis export: ready"), stand);
+  const coverage = await page.$("#team-coverage");
+  check("what a design basis would be missing is listed", coverage !== null
+    && (await coverage.innerText()).includes("A DESIGN BASIS WOULD BE INCOMPLETE"));
+  check("an incomplete draft is not called simply ready",
+    coverage === null || stand.includes("Design Basis export: ready, as an incomplete draft."), stand);
+  check("the kinds of checking are on the panel", (await page.$("#team-assurance")) !== null);
+  check("the methods read are on the panel", (await page.$("#team-methods")) !== null);
 
   // Findings: the group that needs attention is open; the others wait to be opened.
   const tiers = await page.$$eval(".tier", (nodes) => nodes.map((node) => [node.querySelector(".tier-title").textContent, node.open]));

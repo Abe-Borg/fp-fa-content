@@ -132,6 +132,30 @@ def client_for(players):
     return Client
 
 
+def _numbered(kwargs) -> list[tuple[int, str]]:
+    claims = kwargs["messages"][0]["content"].split("sources.md")[0]
+    found = []
+    for line in claims.splitlines():
+        head, _, rest = line.partition(". ")
+        if head.isdigit():
+            found.append((int(head), rest))
+    return found
+
+
+def discerning(kwargs):
+    """A checker that reads: Supported, except a claim that the trim screen elects a family it does not.
+
+    The stand-in for a checker that works, for the evaluation's planted
+    claim that no rule of the application covers. It shows the runner reads
+    such a verdict correctly. It shows nothing about the live checker.
+    """
+    lines = []
+    for number, text in _numbered(kwargs):
+        wrong = "The trim screen elects the" in text
+        lines.append(f'{number}. {"Not supported" if wrong else "Supported"}. Cite: "row"')
+    return say("\n".join(lines), usage=_usage(2600, 180))
+
+
 def supported_by_default(kwargs):
     """The checker's part: Supported for every claim. The application's own rules decide the rest."""
     claims = kwargs["messages"][0]["content"].split("sources.md")[0]
@@ -290,6 +314,8 @@ def turn_one(record, project_id: str) -> Players:
             say("Revised the screen finding to carry the two allowances as ASSUMED. I agree with the releasing sequence."),
         ],
         "fa-releasing": [
+            # It reads its method before it answers, so what it then records can be traced to what it read.
+            call(use("read_skill", slug="fa-double-interlock-releasing-cause-and-effect"), usage=_usage(4800, 80, written=4800)),
             fa_answer,
             say("Nothing on the record gives the releasing time a basis. Use the form's 2 s and carry it as ASSUMED."),
             fa_sequence, fa_record,

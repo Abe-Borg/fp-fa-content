@@ -37,7 +37,7 @@ from typing import Any, Callable
 
 from fpfa import inputs, status
 from fpfa.calc_tools import SCHEMAS, ToolSession
-from fpfa.claude_client import TurnCancelled, empty_usage, incomplete_notice, run_tool_loop
+from fpfa.claude_client import TurnCancelled, attach_usage, empty_usage, incomplete_notice, run_tool_loop, safe_error
 from fpfa.record import ANSWERED_IN_CHAT, BASIS_LABELS, GIVEN, Record, RecordError
 from fpfa.roles_loader import list_roles, read_role
 from fpfa.skills_loader import list_skills, spec_notes
@@ -447,10 +447,13 @@ def pending_handoff_note(record: Record, project_id: str) -> str:
 
 def lead_status(record: Record, project_id: str) -> str:
     """The status block at the top of the lead's message, read from the record."""
-    from fpfa.checker import check_line
+    from fpfa.checker import check_line, coverage_lines
 
     snapshot = record.snapshot(project_id)
-    return status.lead_text(status.build(snapshot), check_line(snapshot))
+    text = status.lead_text(status.build(snapshot), check_line(snapshot))
+    # What a design basis written now would be missing, so the lead does not present a partial one as whole.
+    gaps = coverage_lines(snapshot)
+    return text + ("\n" + "\n".join(gaps) if gaps else "")
 
 
 def _new_rows(before: set[str], rows: list[dict]) -> list[dict]:
@@ -513,6 +516,7 @@ class SpecialistSession:
         self.observe = observe
         self.tools = ToolSession(content_root, record=record, project_id=project_id, agent=agent)
         self.consults: list[dict] = []
+        self.failed_consults = 0
         self.usage = empty_usage()
 
     def execute(self, name: str, arguments: dict | None) -> dict:
@@ -540,6 +544,12 @@ class SpecialistSession:
             )
         except TurnCancelled as exc:
             _merge_usage(self.usage, getattr(exc, "usage", None))
+            raise
+        except Exception as exc:
+            # The asker goes on with an error in place of an answer. What the failed consult had already
+            # spent still belongs to this task.
+            _merge_usage(self.usage, getattr(exc, "usage", None))
+            self.failed_consults += 1
             raise
         self.consults.append(answer)
         _merge_usage(self.usage, answer.get("usage"))
@@ -608,9 +618,17 @@ def consult(
             "seconds": round(time.time() - started, 1),
         }, agent=asker)
         raise
-    except Exception:
+    except Exception as exc:
         record.set_agent(project_id, name=name, role_slug=slug, status="error")
-        record.set_handoff(project_id, row["id"], status="cancelled", result="The specialist did not answer.", by=asker)
+        record.set_handoff(project_id, row["id"], status="cancelled",
+                           result=("The specialist did not answer: " + safe_error(exc))[:4000], by=asker)
+        # The rounds it ran before it failed were billed. The request that failed returned no usage.
+        spent = dict(getattr(exc, "usage", None) or empty_usage())
+        record.log_event(project_id, CONSULT, {
+            "from": asker, "to": slug, "handoff": row["id"], "findings": 0, "failed": True,
+            "error": safe_error(exc)[:400], "usage": spent, "stop_reason": "error",
+            "seconds": round(time.time() - started, 1),
+        }, agent=asker)
         raise
     answer = (out.get("text") or "").strip()
     unfinished = incomplete_notice(out.get("stop_reason"))
@@ -721,9 +739,20 @@ def delegate(
             "seconds": round(time.time() - started, 1),
         }, agent=LEAD)
         raise
-    except Exception:
+    except Exception as exc:
         record.set_agent(project_id, name=name, role_slug=slug, status="error")
-        record.set_handoff(project_id, lead_handoff["id"], status="cancelled", result="The specialist did not finish.", by=LEAD)
+        record.set_handoff(project_id, lead_handoff["id"], status="cancelled",
+                           result=("The specialist did not finish: " + safe_error(exc))[:4000], by=LEAD)
+        # A failure does not un-spend what ran before it: the specialist's earlier rounds and its consults
+        # were billed, and they close on the record like a finished delegation. The request that failed
+        # returned no usage, so whether any part of it was billed is not known and is not in this figure.
+        attach_usage(exc, session.usage)
+        spent = dict(getattr(exc, "usage", None) or empty_usage())
+        record.log_event(project_id, "delegation", {
+            "specialist": slug, "handoff": lead_handoff["id"], "findings": 0, "questions": 0, "handoffs": 0,
+            "usage": spent, "stop_reason": "error", "failed": True, "error": safe_error(exc)[:400],
+            "seconds": round(time.time() - started, 1),
+        }, agent=LEAD)
         raise
     unfinished = incomplete_notice(out.get("stop_reason"))
     summary = (out.get("text") or "").strip() or "(The specialist returned no text.)"
@@ -822,6 +851,8 @@ class TeamSession:
         self.inputs_set: list[dict] = []
         self.answered: list[dict] = []
         self.resolved: list[dict] = []
+        # Delegations and checks that ended on an error this turn: what, who, and the error.
+        self.failed: list[dict] = []
         self.usage = empty_usage()
         self.usage["rounds"] = 0
 
@@ -843,13 +874,26 @@ class TeamSession:
                 # The interrupted specialist's rounds count toward the task.
                 _merge_usage(self.usage, getattr(exc, "usage", None))
                 raise
+            except Exception as exc:
+                # The lead goes on with an error in place of a contribution. What the specialist had spent
+                # before it failed counts toward the task, and the block under the reply says it failed.
+                _merge_usage(self.usage, getattr(exc, "usage", None))
+                self.failed.append({"what": "delegation", "who": str(args.get("specialist") or ""),
+                                    "error": safe_error(exc)[:300]})
+                raise
             self.delegations.append(contribution)
             _merge_usage(self.usage, contribution.get("usage"))
             return contribution
         if name == "request_check":
             from fpfa.checker import check_record
 
-            outcome = check_record(self.root, self.record, self.project_id, self.create)
+            try:
+                outcome = check_record(self.root, self.record, self.project_id, self.create)
+            except TurnCancelled:
+                raise
+            except Exception as exc:
+                self.failed.append({"what": "trace check", "who": CHECKER_ROLE, "error": safe_error(exc)[:300]})
+                raise
             # The check's usage closes on its own record_check event, which the cost report counts.
             # It is not added to the turn's total, or it would be counted twice.
             self.checks.append(outcome)
@@ -1015,10 +1059,18 @@ def team_summary(out: dict | None, audit: dict | None = None) -> str:
     checks = out.get("checks") or []
     changed = out.get("inputs_set") or []
     resolved = out.get("resolved") or []
+    failed = out.get("failed") or []
     figure_lines = reply_audit.lines(audit)
-    if not delegations and not checks and not changed and not resolved:
-        return "\n".join(["**Figures in this reply**"] + figure_lines) if figure_lines else ""
+    if not delegations and not checks and not changed and not resolved and not failed:
+        about_figures = bool((audit or {}).get("unfound") or (audit or {}).get("stale"))
+        head = "**Figures in this reply**" if about_figures else "**In this reply**"
+        return "\n".join([head] + figure_lines) if figure_lines else ""
     lines = ["**Team**"]
+    for item in failed:
+        who = f" to {item.get('who')}" if item.get("what") == "delegation" and item.get("who") else ""
+        lines.append(f"- FAILED: the {item.get('what')}{who} ended on an error ({_clip(item.get('error'), 160)}). "
+                     "What had been recorded before it is kept and may be partial. Asking again repeats that work "
+                     "and is billed again; recorded calculations replay.")
     for item in changed:
         lines.append(f"- input {item.get('name')}: {item.get('was')} → {item.get('now')} (from the chat)")
     exchanges: list[str] = []

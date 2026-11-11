@@ -115,8 +115,22 @@ export interface Team {
   findings: FindingRow[];
   inputs: { id: string; name: string; text: string; source: string; unconfirmed: boolean; blank: boolean }[];
   interrupted: string[];
+  /** The same agents with what each had recorded when it stopped. The work is partial. */
+  partial: string[];
+  /** What asking again repeats and what it does not. Empty when nothing was cut off. */
+  retry_line: string;
+  /** Calculations the app cannot reconcile after an input change: the tool is not tied to the project inputs. */
+  unchecked: string[];
   export: { ready: boolean; reason: string } | null;
   not_standard: string;
+  /** What a design basis exported now would be missing (app/fpfa/checker.py, coverage). */
+  coverage: { complete: boolean; gaps: string[]; uncovered: string[] };
+  /** Every kind of assurance a reader might assume, and where this job has it. The last two are never performed. */
+  ladder: { name: string; what: string; where: string }[];
+  /** Which contributor read which skill, and whether a cite in its work is one the skill holds. */
+  skills_used: { agent: string; slug: string; line: string; before_findings: boolean }[];
+  /** The content the job is read against: version, fingerprint, calc code. */
+  content: { content_version?: string; content_fingerprint?: string; calc_identity?: string };
   unseen_answers?: number;
 }
 

@@ -137,14 +137,16 @@ def run_tool_plan(session: ToolSession, di: dict, basis: dict) -> tuple[dict[str
         "t_exhaust_s": di.get("t_exhaust_s") or 0,
         "basis": di.get("delivery_basis") or "FM",
     }
+    # The kernel screen compares pipe volume with the threshold. The size exemption is judged on the zone
+    # total, so the screen is handed the takeoff's own zone_gal and the recorded row carries that answer.
+    # What is recorded is then what the narrative, the tiles, and both documents print.
     screen = call("dry_delivery_screen", {
         "segments": pipe_only,
         "qod": bool(di.get("qod")),
         "system_type": di.get("system_type") or "di",
+        "zone_gal": volume["zone_gal"],
         **common_time,
     })
-    # The kernel screen exempts on pipe volume. Capacity gates use the zone total.
-    screen = govern_nfpa_exemption(screen, volume["zone_gal"])
     trip = call("di_trip_to_water", {
         "v_gal": volume["zone_gal"],
         **common_time,
@@ -204,21 +206,103 @@ def _plan_transcript(tools: dict[str, Any], sent: dict[str, dict]) -> list[dict]
     return calls
 
 
-def govern_nfpa_exemption(screen: dict, zone_gal: float) -> dict:
+EXEMPTION_NOT_DETERMINED = (
+    "Not determined. This is a pipe-only screen: fittings and trim are not in it, and the size exemption is "
+    "judged on the zone total. Run zone_trapped_volume and pass its zone_gal."
+)
+EXEMPTION_PIPE_ALREADY_OVER = (
+    "No. The pipe alone is over the cap, so the zone total is too."
+)
+
+
+def govern_nfpa_exemption(screen: dict, zone_gal: float, volume_basis: str = "") -> dict:
     """Size exemption follows the zone total (pipe + fittings + trim).
 
     ``dry_delivery_screen`` reports the exemption on pipe volume. Timing for that
     pipe-only screen stays. ``nfpa_delivery_time_exempt`` becomes the zone-total
     check against the same cap, including the double-interlock rule that a
-    quick-opening device does not raise the 500 gal cap.
+    quick-opening device does not raise it. ``exemption_volume_basis`` says
+    what the zone total was made of.
     """
     governed = dict(screen)
     cap = float(screen["nfpa_size_cap_gal"])
     governed["pipe_only_volume_gal"] = float(screen["volume_gal"])
-    governed["pipe_only_nfpa_delivery_time_exempt"] = bool(screen["nfpa_delivery_time_exempt"])
+    governed["pipe_only_nfpa_delivery_time_exempt"] = bool(
+        screen.get("pipe_only_nfpa_delivery_time_exempt", screen["nfpa_delivery_time_exempt"]))
     governed["exemption_volume_gal"] = float(zone_gal)
     governed["nfpa_delivery_time_exempt"] = float(zone_gal) <= cap + 1e-9
+    governed["exemption_volume_basis"] = volume_basis or "the zone total (pipe + fittings + trim)"
+    governed["exemption_status"] = "zone total"
     return governed
+
+
+def pipe_only_screen(screen: dict) -> dict:
+    """A screen with no zone total behind it. It never says the size exemption is met.
+
+    The kernel's own flag is kept under its true name. When the pipe alone is
+    over the threshold the answer is no. Otherwise there is no answer.
+    """
+    shown = dict(screen)
+    pipe_exempt = bool(screen["nfpa_delivery_time_exempt"])
+    shown["pipe_only_volume_gal"] = float(screen["volume_gal"])
+    shown["pipe_only_nfpa_delivery_time_exempt"] = pipe_exempt
+    shown["nfpa_delivery_time_exempt"] = None if pipe_exempt else False
+    shown["exemption_status"] = "not determined" if pipe_exempt else "pipe alone is over the threshold"
+    shown["exemption_note"] = EXEMPTION_NOT_DETERMINED if pipe_exempt else EXEMPTION_PIPE_ALREADY_OVER
+    return shown
+
+
+def exemption_answer(screen: dict | None) -> str:
+    """yes, no, or not determined: the size exemption as a calc record states it.
+
+    A row from before the screen was handed the zone total carries only the
+    kernel's pipe-only flag. That flag is not the exemption, so such a row
+    reads not determined unless the pipe alone is already over.
+    """
+    screen = screen if isinstance(screen, dict) else {}
+    if "exemption_volume_gal" in screen:
+        return "yes" if screen.get("nfpa_delivery_time_exempt") else "no"
+    if screen.get("nfpa_delivery_time_exempt") is False:
+        return "no"
+    return "not determined"
+
+
+def exemption_text(volume: dict | None, screen: dict) -> str:
+    """One sentence on the size exemption for the narrative, the tile, and the documents.
+
+    It names the volume the answer was judged on, and says so when part of
+    that volume is an assumption: the answer then holds only while the real
+    trim and fittings keep the zone total at or under the threshold.
+    """
+    cap = f"{float(screen['nfpa_size_cap_gal']):.0f}"
+    answer = exemption_answer(screen)
+    if "exemption_volume_gal" not in screen:
+        return (f"NFPA size exemption against the {cap} gal cap: {answer}. "
+                "This is a pipe-only screen; fittings and trim are not in it.")
+    text = (f"NFPA size exemption on the zone total of {fmt1(screen['exemption_volume_gal'])} gal "
+            f"against the {cap} gal cap: {answer}.")
+    qualifier = exemption_qualifier(volume, screen)
+    return f"{text} {qualifier}" if qualifier else text
+
+
+def exemption_qualifier(volume: dict | None, screen: dict) -> str:
+    """What in the zone total behind the exemption is an assumption. Empty when nothing is.
+
+    It carries no figure of its own: the assumed trim and the allowance are
+    stated, with their labels, in the sentence on the trapped volume.
+    """
+    assumed = []
+    if isinstance(volume, dict):
+        if volume.get("trim_assumed"):
+            assumed.append("trim that is ASSUMED")
+        if any(isinstance(flag, str) and flag.startswith("ASSUMED fittings") for flag in volume.get("flags") or []):
+            assumed.append("a fittings allowance that is ASSUMED")
+    if not assumed:
+        return ""
+    if exemption_answer(screen) == "yes":
+        return ("That zone total includes " + " and ".join(assumed) + ", so the answer holds only while the "
+                "measured trim and fittings keep the zone total at or under the cap.")
+    return "That zone total includes " + " and ".join(assumed) + "."
 
 
 def trim_assumption_text(volume: dict) -> str:
@@ -308,7 +392,6 @@ def template_narrative(di: dict, tools: dict[str, Any], basis: dict | None = Non
     nitrogen = tools["nitrogen_gate"]
     density = tools["density_area"]
     hose = tools["hose_duration"]
-    exempt = "yes" if screen["nfpa_delivery_time_exempt"] else "no"
     screen_word = "passes" if trip["passes_screen"] else "does not pass"
     family = trim.get("family") or "unresolved"
     manual = "on" if truth["manual_station"] else "off"
@@ -325,8 +408,7 @@ def template_narrative(di: dict, tools: dict[str, Any], basis: dict | None = Non
             f"Zone total is {fmt1(volume['zone_gal'])} gal."
         ),
         (
-            f"NFPA size exemption on the zone total of {fmt1(volume['zone_gal'])} gal "
-            f"against the {screen['nfpa_size_cap_gal']:.0f} gal cap: {exempt}. "
+            f"{exemption_text(volume, screen)} "
             "A quick-opening device does not raise the double-interlock cap. "
             f"{screen_limit_assumption_text(trip)} "
             f"The zone-total screen {screen_word}. "

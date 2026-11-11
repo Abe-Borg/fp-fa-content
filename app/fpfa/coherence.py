@@ -23,7 +23,20 @@ argument out, so a call that omits an argument is compared on what the tool
 actually used.
 
 A tool with no entry here (fp_calc, fa_calc, lfl_setpoints, resolve_pipe_id)
-is not tracked. Its rows are never marked out of date by an input change.
+is not tracked. Its rows are never marked out of date by an input change,
+because nothing here knows which input its arguments came from. The record
+does not pretend otherwise: such a row's standing carries "tracked": False,
+and when a project input changed after the row was written it also carries
+"unchecked", the sentence every view prints beside it. Reconciling that row
+is a person's job or its author's; the application will not do it and does
+not say it did.
+
+A calc is also out of date when the calc code changed. Every calc row
+keeps the identity of the kernel files that produced it. When the snapshot
+says which identity is installed now (Record.context) and a row carries a
+different one, the row is out of date: the figure was produced by code that
+is no longer the code that would run. Running it again computes it afresh.
+A row with no identity, or a snapshot with no context, is not judged.
 """
 
 from __future__ import annotations
@@ -90,11 +103,21 @@ BINDINGS: dict[str, dict[str, tuple[str, Any]]] = {
 _ONLY_WHEN_PASSED = {"dry_delivery_screen": ("trim_gal", "fittings_percent")}
 # tool -> argument -> (the tool whose result it is taken from, that result's key)
 DERIVED: dict[str, dict[str, tuple[str, str]]] = {
+    # The size exemption is judged on the zone total, which the screen takes from the takeoff.
+    "dry_delivery_screen": {"zone_gal": ("zone_trapped_volume", "zone_gal")},
     "di_trip_to_water": {"v_gal": ("zone_trapped_volume", "zone_gal")},
     "nitrogen_gate": {"v_gal": ("zone_trapped_volume", "zone_gal")},
     "density_area": {"duration_min": ("hose_duration", "duration_min")},
 }
 TRACKED_TOOLS = frozenset(BINDINGS) | frozenset(DERIVED)
+UNTRACKED_NOTE = (
+    "Not tied to the project inputs: the application cannot tell which input this calculation used, "
+    "so it is never marked out of date by a change."
+)
+UNCHECKED_NOTE = (
+    "A project input changed after this calculation ran, and the application cannot tell whether it used "
+    "that input. Check it by hand or run it again."
+)
 # A cite follows the edition the job names for its document.
 _EDITION_OF = (
     (re.compile(r"\bNFPA\s*13\b(?!\s*[DR])", re.I), "nfpa_13"),
@@ -349,13 +372,31 @@ def _fact_changes(history: list[dict]) -> dict[str, dict]:
     return out
 
 
+def _change_times(history: list[dict], facts: dict[str, dict]) -> list[str]:
+    """When each project input changed: the time the row that replaced it was written.
+
+    An input the designer emptied has no later row and no time of its own; it
+    counts as changed after everything, which is the careful reading.
+    """
+    by_id = {row["id"]: row for row in history}
+    times: list[str] = []
+    for row in history:
+        if row.get("kind") not in (inputs.INPUT_KIND, inputs.BASIS_KIND) or not facts.get(row["id"], {}).get("changed"):
+            continue
+        later = by_id.get(str(row.get("superseded_by") or ""))
+        times.append(str(later.get("created") or "") if later else "9999")
+    return times
+
+
 def analyze(snapshot: dict | None) -> dict:
     """Which rows of a record snapshot are current, out of date, or an alternative, and why.
 
-    States. A calc is "stale" when an input it used has since changed, or a
-    calc it took a figure from is stale; "alternative" when it ran on another
-    value than a project input, or took a figure from a calc that did; else
-    "current". A cite is stale when the edition it follows changed. A finding
+    States. A calc is "stale" when an input it used has since changed, a
+    calc it took a figure from is stale, or the calc code changed after it
+    ran; "alternative" when it ran on another value than a project input, or
+    took a figure from a calc that did; else "current". A current calc on a
+    tool the record does not track carries "unchecked" when an input changed
+    after it ran: the record cannot say whether it still holds. A cite is stale when the edition it follows changed. A finding
     or a decision is stale when a row it rests on is stale, was replaced, or
     was withdrawn.
     """
@@ -368,6 +409,10 @@ def analyze(snapshot: dict | None) -> dict:
     retired = {row["id"]: row for row in snap.get("retired_findings") or []}
     decisions = {row["id"]: row for row in snap.get("decisions") or []}
     calc_state: dict[str, dict] = {}
+    code_now = str((snap.get("context") or {}).get("calc_identity") or "")
+    # When each input change was written. A calc on a tool the record does not track, recorded before one
+    # of them, may or may not have used the input that changed.
+    changed_at = _change_times(history, facts)
 
     def calc_standing(calc_id: str, trail: tuple = ()) -> dict:
         if calc_id in calc_state:
@@ -375,6 +420,10 @@ def analyze(snapshot: dict | None) -> dict:
         row = calcs[calc_id]
         reasons: list[str] = []
         carried: list[str] = []
+        code_then = str(row.get("calc_identity") or "")
+        if code_now and code_then and code_then != code_now:
+            reasons.append(f"the calc code changed after it ran (it was computed by calc code {code_then}; "
+                           f"the installed content pack's is {code_now})")
         for ident in row.get("depends") or []:
             if ident in facts and facts[ident]["changed"]:
                 reasons.append(facts[ident]["reason"])
@@ -393,9 +442,14 @@ def analyze(snapshot: dict | None) -> dict:
             state = ALTERNATIVE
         else:
             state = CURRENT
+        tracked = bool(row.get("depends") or row.get("varies"))
+        unchecked = ""
+        if not tracked and state == CURRENT and row.get("tool") not in TRACKED_TOOLS:
+            later = [when for when in changed_at if when > str(row.get("created") or "")]
+            if later:
+                unchecked = UNCHECKED_NOTE
         calc_state[calc_id] = {
-            "state": state, "reasons": reasons, "note": note,
-            "tracked": bool(row.get("depends") or row.get("varies")),
+            "state": state, "reasons": reasons, "note": note, "tracked": tracked, "unchecked": unchecked,
         }
         return calc_state[calc_id]
 
@@ -408,6 +462,8 @@ def analyze(snapshot: dict | None) -> dict:
                    for dep in row.get("depends") or [] if dep in facts and facts[dep]["changed"]]
         evidence_state[ident] = {"state": STALE if reasons else CURRENT, "reasons": reasons}
     finding_state: dict[str, dict] = {}
+    # By finding or decision id: the untracked calcs it rests on that an input change may have left behind.
+    unchecked: dict[str, list[str]] = {}
 
     def rests_on(supports: list, own_id: str, trail: tuple = ()) -> tuple[list[str], list[str]]:
         reasons: list[str] = []
@@ -419,6 +475,8 @@ def analyze(snapshot: dict | None) -> dict:
                     reasons.append(f"{calcs[ident]['tool']} [{ident}] is out of date: " + "; ".join(standing["reasons"]))
                 elif standing["state"] == ALTERNATIVE:
                     notes.append(f"{calcs[ident]['tool']} [{ident}] ran on {standing['note']}")
+                elif standing.get("unchecked"):
+                    unchecked.setdefault(own_id, []).append(f"{calcs[ident]['tool']} [{ident}]: {standing['unchecked']}")
             elif ident in evidence:
                 if evidence_state[ident]["state"] == STALE:
                     reasons.append(f"the cite [{ident}] follows an edition that changed: "
@@ -439,7 +497,8 @@ def analyze(snapshot: dict | None) -> dict:
         if finding_id in finding_state:
             return finding_state[finding_id]
         reasons, notes = rests_on(findings[finding_id].get("supports") or [], finding_id, trail)
-        finding_state[finding_id] = {"state": STALE if reasons else CURRENT, "reasons": reasons, "notes": notes}
+        finding_state[finding_id] = {"state": STALE if reasons else CURRENT, "reasons": reasons, "notes": notes,
+                                     "unchecked": unchecked.get(finding_id, [])}
         return finding_state[finding_id]
 
     for finding_id in findings:
@@ -452,7 +511,8 @@ def analyze(snapshot: dict | None) -> dict:
             if token not in supports:
                 supports.append(token)
         reasons, notes = rests_on(supports, ident)
-        decision_state[ident] = {"state": STALE if reasons else CURRENT, "reasons": reasons, "notes": notes}
+        decision_state[ident] = {"state": STALE if reasons else CURRENT, "reasons": reasons, "notes": notes,
+                                 "unchecked": unchecked.get(ident, [])}
 
     changes = []
     seen_change = set()
@@ -493,6 +553,10 @@ def analyze(snapshot: dict | None) -> dict:
         "decisions": decision_state, "stale": stale, "changes": [item for item in changes],
         "conflicts": conflicts,
         "any_stale": any(stale.values()),
+        # Calcs the record cannot reconcile by itself, by id: untracked, with an input changed since.
+        "unchecked": [ident for ident, item in calc_state.items() if item.get("unchecked")],
+        "code_changed": bool(code_now) and any(
+            str(row.get("calc_identity") or "") not in ("", code_now) for row in calcs.values()),
     }
 
 

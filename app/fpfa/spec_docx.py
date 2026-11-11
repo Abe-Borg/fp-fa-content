@@ -11,6 +11,8 @@ from pathlib import Path
 from docx import Document
 
 from fpfa.workflow import (
+    exemption_answer,
+    exemption_qualifier,
     fmt1,
     governing_narrative,
     judgment_label_line,
@@ -143,10 +145,13 @@ def write_docx(path: Path | str, project: dict, result: dict) -> Path:
                 trip["limit_basis"],
                 _yn(trip["passes_screen"]),
                 f"{screen['nfpa_size_cap_gal']:.0f}",
-                _yn(screen["nfpa_delivery_time_exempt"]),
+                exemption_answer(screen).capitalize(),
             ],
         ],
     )
+    qualifier = exemption_qualifier(volume, screen)
+    if qualifier:
+        doc.add_paragraph(qualifier)
     doc.add_paragraph(screen["nfpa_basis"])
     doc.add_paragraph(screen_limit_assumption_text(trip))
     doc.add_paragraph(

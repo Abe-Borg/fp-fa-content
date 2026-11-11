@@ -205,7 +205,9 @@ def main(argv: list[str] | None = None) -> None:
         help="Run the live evaluation path with no window and write a report into FOLDER. "
              "Calls the model with the saved key and is billed. See docs/live-evaluation.md",
     )
-    parser.add_argument("--max-usd", type=float, default=25.0, help="With --live-eval, stop at about this spend. Default 25")
+    parser.add_argument("--max-usd", type=float, default=25.0,
+                        help="With --live-eval, a guard on spend, not a limit: a turn in flight finishes. Default 25")
+    parser.add_argument("--eval-job", default="", help="With --live-eval, the sample job to run: dh1 or dh2. Default dh1")
     parser.add_argument("--effort", default="", help="With --live-eval, the model's effort for the run. Default: the model's own")
     parser.add_argument("--eval-steps", default="", help="With --live-eval, the steps to run, comma-separated. Default: all")
     args = parser.parse_args(argv)
@@ -223,6 +225,8 @@ def main(argv: list[str] | None = None) -> None:
             options += ["--effort", args.effort]
         if args.eval_steps:
             options += ["--steps", args.eval_steps]
+        if args.eval_job:
+            options += ["--job", args.eval_job]
         sys.exit(live_eval.main(options))
     if args.demo:
         # Skip the OS keyring probe. The demo never calls Claude.

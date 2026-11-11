@@ -8,6 +8,10 @@ Everything that can run without a Windows machine or an API key has run and is m
 
 The team milestone (a plain objective, a real dependency between the specialists, a job that stays coherent as it changes, an output that says how far it can be trusted) has its own path in `docs/live-evaluation.md`. That path is the one to run with the live model. The section "What was tested, what was simulated, and what is unrun" below is the plain account of where it stands. Nothing in this repository has been run against the live model.
 
+**Five statuses, kept apart.** Software hardening: done for the hardening milestone (`docs/milestone-hardening-handback.md`). Offline regression evidence: the four suites pass, every agent scripted. Installed Windows evidence: none. Live-model evidence: none. Engineering validation: none; no standard was opened and no qualified engineer has reviewed the basis (`docs/releasing-basis.md`). A pass in one says nothing about the next.
+
+**Blocked, not failed.** Test A compares the export with `docs/known-answer-dh1.md`, which still has three items marked OWNER TO CONFIRM. Until the owner confirms or edits them, Test A cannot be passed or failed; it is blocked. The second job (`docs/known-answer-dh2.md`) is blocked for acceptance the same way: its inputs were chosen for the test and wait for the owner. Both can be run; neither run is an acceptance result until then.
+
 ## Before you start
 
 1. **Get the installer.** Two ways:
@@ -15,7 +19,7 @@ The team milestone (a plain objective, a real dependency between the specialists
    - **Release.** Push the tag `app-v<version>` where `<version>` equals `__version__` in `app/fpfa/__init__.py`, or run the same workflow with `publish` on. The release carries both files.
 2. **A clean Windows machine or VM.** No Python installed, no earlier copy of the app, no saved key. Windows 10 or 11, 64-bit. Note its edition and build (Settings, System, About).
 3. **An Anthropic API key** for the owner's account. It is typed into Settings on the machine and nowhere else.
-4. **`docs/known-answer-dh1.md` confirmed.** Three items are marked OWNER TO CONFIRM. Test A compares the export against that page, so confirm or edit them first.
+4. **`docs/known-answer-dh1.md` confirmed.** Three items are marked OWNER TO CONFIRM. Test A compares the export against that page, so confirm or edit them first. Until then Test A is blocked. The coding agent did not choose them for you.
 
 ## Test A. Clean Windows install
 
@@ -42,13 +46,14 @@ The request does not name a specialist, an order, or the check. An earlier versi
 1. On the Test A job, or a new one with a zone on the form, send the plain request in `docs/live-evaluation.md`, step 1.
 2. Expected, on the Team panel:
    - WHERE THINGS STAND: an objective and steps the lead set, both specialists listed with what each did.
-   - EXCHANGES BETWEEN AGENTS: a `brief` row from the lead to each specialist with what came back, and at least one row or finding that carries a fact from one specialist to the other: a `question` row with its answer, or a finding by one that rests on the other's finding or calc (open the finding and read "Rests on").
-   - FINDINGS: each finding names its author and the rows it rests on. At least one finding has a review by the specialist who did not write it (open it and read "Reviewed by").
+   - EXCHANGES BETWEEN AGENTS: a `brief` row from the lead to each specialist with what came back, and at least one row or finding that carries a fact from one specialist to the other: a `question` row with a real answer, or a finding by one that rests on the other's **finding** (open the finding and read "Rests on"). A finding that cites a calculation the other specialist ran first does not count when the citing specialist ran the same calculation itself: the record replays the first row, so it carries the other's name with nothing having passed between them.
+   - FINDINGS: each finding names its author and the rows it rests on. At least one finding has a review by the specialist who did not write it, with a reason (open it and read "Reviewed by"). An agreement with no reason beside it does not count.
+   - METHODS READ: each specialist that recorded findings read a skill before it did.
    - NOT YET RECONCILED is empty, or the lead's reply says what is open and why. HOW DISAGREEMENTS ENDED lists any objection with how it ended.
    - The check line says a trace check ran, and how many findings were consistent with a calculation record, a content-pack note, or a project input, and how many only with their author's own cite.
-3. Export the Design Basis. Expected: the table "How far each statement was taken", section 4 with findings under the tier each earned, section 5 with the reviews and how each objection ended, section 8 with the exchanges by kind, section 10 with the trace check claim by claim.
+3. Export the Design Basis. Expected: "What this document covers" at the head, saying INCOMPLETE DRAFT with the list when work is missing; the table "How far each statement was taken" with the kinds of assurance, the last two marked NOT PERFORMED; section 4 with findings under the tier each earned; section 5 with the reviews and how each objection ended; section 8 with the exchanges by kind; section 10 with the trace check claim by claim; section 12 with the content fingerprint and the skills each contributor read.
 
-Pass: step 2's first three bullets and step 3. A run with two contributions and no row that connects them does not pass, however good each contribution is. Write down which it was.
+Pass: step 2's first three bullets and step 3. A run with two contributions and no row that connects them does not pass, however good each contribution is. Neither does a run whose only connection is a replayed calculation or a bare agreement. Write down which it was.
 
 Automated half, already passed with stand-in model calls: `app/tests/test_team.py`, `test_team_protocol.py` (what each agent is told and what its tools do), and `test_scenario.py` (the whole job, scripted). These show the application's side. They do not show what the live model chooses to do.
 
@@ -76,8 +81,10 @@ Automated half, already passed: `app/tests/test_usage.py` proves the events, the
 
 ## How the figures are judged
 
-- Numbers come from the calc tools. A figure in a reply that is not on a calculation record is a defect, however plausible. The app looks every figure in the lead's reply up and names under the reply any it cannot find, or finds only on an out-of-date calculation. A reply with that note under it fails this line.
-- The check is a trace check. It says whether a finding is consistent with the rows it cites. It does not open a standard, and a reply or an export that says a standard was checked or verified fails.
+- Numbers come from the calc tools. A figure in a reply that is not on a calculation record is a defect, however plausible. The app looks every figure in the lead's reply up, by number and kind of unit, and names under the reply any it cannot find, or finds only on an out-of-date row: a calculation an input changed under, the value an input had before it changed, a finding that is out of date or was replaced. A finding that still repeats an old number does not make it current. A reply with that note under it fails this line.
+- The check is a trace check. It says whether a finding is consistent with the rows it cites. It does not open a standard, and a reply or an export that says a standard was checked or verified fails. No tier is a verification, and the export names verification against the primary standard and a qualified engineering review as not performed.
+- The size exemption is judged on the zone total. A reply, a finding, a tile, or an export that states it from the pipe alone fails.
+- A design basis with work missing says so at its head. One that reads complete while a calculation has no specialist's finding fails.
 - Release is the detection leg AND P, the pressure drop from sprinkler operation. Low air is supervisory only and is never a release input; a reply or an export that says otherwise fails (`docs/releasing-basis.md`).
 - Labels stay distinct: calculated, ASSUMED, use best judgment. A delivery time is an optimistic screen, not a listed water-delivery-time calculation, and the reply must say so.
 - The double-interlock draft section is 21 13 19. A reply or export that says 21 13 16 for the sample zone fails.
@@ -89,12 +96,13 @@ Automated half, already passed: `app/tests/test_usage.py` proves the events, the
 
 | Test | Automated half | Manual half (Windows) | Date | Notes |
 | --- | --- | --- | --- | --- |
-| A. Clean Windows install | Figures locked by `calcs/fp` and `app/tests/test_prototype.py`; versions by `app/tests/test_usage.py`; packaging config checked | Not run | | Needs the installer and the clean machine |
-| B. Specialist collaboration | Passed with stand-in model calls: `app/tests/test_team.py`, `test_team_protocol.py`, `test_scenario.py` | Not run | | Needs a key. The plain request, not the old one that named the specialists |
+| A. Clean Windows install | Figures locked by `calcs/fp` and `app/tests/test_prototype.py`; versions by `app/tests/test_usage.py`; packaging config checked | **Blocked**, and not run | | Blocked on the three OWNER TO CONFIRM items in the known answer. Needs the installer and the clean machine |
+| B. Specialist collaboration | Passed with stand-in model calls: `app/tests/test_team.py`, `test_team_protocol.py`, `test_scenario.py`; what counts as collaboration and what does not, `test_hardening.py` | Not run | | Needs a key. The plain request, not the old one that named the specialists |
 | C. Continuity | Passed, `app/tests/test_recovery.py` | Not run | | Protocol in `docs/recovery-protocol.md` |
 | D. Recovery | Passed, including a real process kill | Not run | | Protocol in `docs/recovery-protocol.md` |
 | E. Usability and cost | Passed, `app/tests/test_usage.py`, `test_team_ui.py`, `test_desk_team.py`, `test_prototype.py`; the Team panel in Chromium, `test_web.py` | Not run | | Needs a key for the cost figures |
 | Team milestone path (`docs/live-evaluation.md`) | Simulated end to end, `app/tests/test_scenario.py`; the unattended runner with a scripted model, `test_live_eval.py` | Not run | | The live model has not been called once |
+| The second job (`docs/known-answer-dh2.md`) | Its figures locked by `test_hardening.py`; `/sample-di2` loads it | **Blocked** for acceptance, and not run | | Its inputs wait for the owner's confirmation. The runner takes `--job dh2` |
 
 ### What was tested, what was simulated, and what is unrun
 
@@ -114,14 +122,28 @@ Automated half, already passed: `app/tests/test_usage.py` proves the events, the
 | Kill and relaunch, the instance lock, sleep and wake as a clock gap | Tested, with a real process kill | `test_recovery.py` |
 | The window's page: menus, thread, the job panel and its three tabs, the form, the figures of a run, and the Team tab with an answer typed into it | Tested in Chromium on Linux | `test_web.py` (`e2e.mjs`, `e2e_team.mjs`) |
 | The Results tab's figures held to the tool output and to the narrative, label for label; the window's layout remembered between runs | Tested | `test_results_panel.py`, `frontend/tests/layout.test.ts` |
+| A stale, replaced, or basis-free finding cannot keep an old figure current in a reply; a figure is matched with its unit | Tested on written replies | `test_hardening.py` |
+| The size exemption on the recorded row, the narrative, the tile, and both documents is the zone-total answer; a pipe-only screen gives none | Tested, including the 475 gal pipe and 505.5 gal zone case | `test_hardening.py`, `test_prototype.py` |
+| A calculation made by other calc code is out of date; one on a tool the record does not track says it cannot be reconciled | Tested | `test_hardening.py` |
+| A finding that departs from the releasing rule, or holds a figure only as another quantity, is not supported whatever the checker says | Tested, with a checker stand-in that says Supported to everything | `test_hardening.py` |
+| A design basis with a calculation no finding speaks for says INCOMPLETE DRAFT at its head; the kinds of assurance name the two never performed | Tested | `test_hardening.py` |
+| A failed delegation, consult, turn, or trace check keeps the usage that had finished and is marked failed; retries are counted | Tested with scripted failures | `test_hardening.py`, `test_scenario.py` |
+| Which contributor read which skill, before or after its findings, and whether a cite it recorded is one the skill holds | Tested with scripted reads | `test_hardening.py` |
+| The pack lint and the app's detector flag the same sentences, including the paraphrases the first lint missed | Tested | `calcs/fp/test_pack_content_lowair.py`, `test_releasing_basis.py` |
 | A lead that plans, records what the designer said, delegates, reconciles, and checks | **Simulated** | `test_team_protocol.py`, `test_scenario.py` |
 | One specialist asking the other, objecting, and the author revising | **Simulated** | `test_team_protocol.py`, `test_scenario.py` |
 | A job closed, reopened, changed, interrupted, and exported | **Simulated** | `test_scenario.py` |
-| The unattended evaluation runner and its report | **Simulated** | `test_live_eval.py` |
+| The unattended evaluation runner and its report, including a checker that approves everything being caught by a planted claim | **Simulated** | `test_live_eval.py` |
 | Any request to the live model: whether it plans, delegates without being told, asks, objects, revises | **Unrun** | `docs/live-evaluation.md` |
 | Time and cost of a real design-basis request | **Unrun** | `/usage` on a live job |
 | The lead and specialist role files as prompts: whether the model follows them | **Unrun** | live only |
-| The trace check's own judgment (the checker stand-in never disagrees) | **Unrun** | live only |
+| The trace check's own judgment (the checker stand-in never disagrees). The runner's probe step and step 8 of the guide are how to test it | **Unrun** | live only |
+| Whether a live specialist reads a skill before it records findings, and follows it | **Unrun** | live only |
+| The second job with the live model | **Unrun** | `--job dh2` |
+| Any check of the engineering basis against NFPA 13, NFPA 72, FM DS 5-32, or a manufacturer's listing; any qualified engineer's review | **Not done** | `docs/releasing-basis.md`, section 8 |
+| The skipped tests: 13 `calcs/fa` code-quote tests (no code text in the repository) and the FP kernel reproduce check (needs the kernel source folder) | **Skipped** in every run here | `calcs/fa`, `calcs/fp/test_kernel_reproduce.py` |
+| The held electric/pneumatic draft under `calcs/fp/draft/` | **Not run** by these suites, imported by nothing | held work |
+| The test workflow on GitHub (`.github/workflows/tests.yml`) | **Unrun** until the pull request that adds it | new in this milestone |
 | The Windows installer, WebView2 window, Credential Manager, sleep and hibernate on real hardware | **Unrun** | Tests A, C, D, E above |
 | The pictures in the README | Taken from the simulated scenario | `docs/screenshots/` |
 
@@ -146,12 +168,13 @@ Automated half, already passed: `app/tests/test_usage.py` proves the events, the
 
 ### Cost per task (from Usage and cost)
 
-Rates are the dated snapshot printed by the report. Record the date it prints.
+Rates are the dated snapshot printed by the report. Record the date it prints. If the report has a Failures line, copy it: the cost is then a floor, because a failed request reports no usage.
 
 | Task | Model contexts | Input tokens (fresh / cache write / cache read) | Output tokens | Estimated cost | Wall time |
 | --- | --- | --- | --- | --- | --- |
 | One plain design-basis request (`docs/live-evaluation.md`, step 1) | | | | | |
 | The whole path in `docs/live-evaluation.md` | | | | | |
+| The second job's request (`docs/live-evaluation.md`, step 10) | | | | | |
 | Narrated zone run (`/run` with Ask Claude on) | | | | | |
 
 ### Failures and limits found

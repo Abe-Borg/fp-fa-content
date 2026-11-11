@@ -23,6 +23,13 @@ jobs:
         with:
           python-version: "3.12"
 
+      # A tag used to publish whatever the tree held. The calc suites and the pack lint run first now: a pack
+      # whose prose names low air as a release input, or that lost a recorded correction, is not published.
+      - name: Test the content before it is packed
+        run: |
+          (cd calcs/fp && python -m unittest discover -s . -p 'test_*.py')
+          (cd calcs/fa && python -m unittest discover -s tests)
+
       - name: Build content pack
         run: |
           version="${GITHUB_REF_NAME#content-v}"
