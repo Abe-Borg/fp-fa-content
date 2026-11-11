@@ -9,9 +9,9 @@ Deterministic fire-protection and fire-alarm math. The desktop app loads `calcs/
 | `formulas.py` | Kernel: pipe volume, delivery screen, density/area, hose duration, nitrogen fill, and the other ops behind `dispatch` |
 | `run.py` | Small CLI over `dispatch` |
 | `pipe_ids.py` | Shop inside diameters and the blank-schedule rule |
-| `di_zone.py` | Zone gallons (fittings and trim), trim-family screen, releasing truth table (second leg is `p_second_leg`, the pressure drop from sprinkler operation; `low_air` is a deprecated alias and low air is supervisory only), nitrogen C = 100 |
+| `di_zone.py` | Zone gallons (fittings and trim), trim-family screen, releasing truth table (second leg is `p_second_leg`, the pressure drop from sprinkler operation; low air is supervisory only and is not a key or a term in the output), nitrogen C = 100. Pack-only: not in the kernel reproduce set |
 | `test_formulas.py` | Kernel tests. Run from this folder: `python -m unittest test_formulas` |
-| `test_di_zone.py` | Zone-screen tests, including the second-leg label tests (`p_second_leg`, deprecated `low_air` alias) |
+| `test_di_zone.py` | Zone-screen tests, including the second-leg label tests (`p_second_leg`; no `low_air` key or term in any output) |
 | `test_kernel_reproduce.py` | Runs the reproduce check below when `FP_KERNEL_DIR` is set; skipped otherwise |
 | `draft/` | Held El/Pn draft and its tests. Not wired, do not import. See `draft/README.md` |
 | `test_draft_held.py` | Fails if any pack or app code references `draft/`, and runs the draft's own tests in a separate process |

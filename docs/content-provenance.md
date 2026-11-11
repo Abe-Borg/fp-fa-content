@@ -56,7 +56,7 @@ Roles are part of the pack. The reviewers did not report on whether the team kee
 
 ### 2c. Not changed, and why
 
-- **`calcs/fp/di_zone.py`** still returns the deprecated `boolean` and `low_air` names beside the current ones. Nothing a model or a designer sees carries them. The file has a copy on the team's side, so removing the names here alone would be undone or would split the two. See `docs/releasing-basis.md`, section 6.
+- **`calcs/fp/di_zone.py`** is pack-only. It is not in the kernel reproduce set, so no kernel sync overwrites it. It no longer returns a `low_air` row key, a `low_air_note` or a `deprecated` block, and its `boolean` string equals `boolean_p`. See `docs/releasing-basis.md`, section 6.
 - **`calcs/fp/draft/`** (the held electric/pneumatic release draft and its test) ships in a built pack and is imported by nothing. It is held work and was left as it is.
 - **The 34 skills no role names.** They are reachable only if a model finds them in the skill index. Giving each an owner is content work for the team and is not needed by the bounded workflow.
 
