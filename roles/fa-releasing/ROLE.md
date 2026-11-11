@@ -20,7 +20,9 @@ Skills to read when they apply:
 - `fa-fire-pump-and-preaction-supervisory-points`
 - `fa-supervising-station-signal-schedule`
 
-The solenoid truth table is `releasing_truth_table`. Do not invent a releasing row the truth-table tool did not return. Quote the boolean, the manual-station state, and the true-row count from the tool.
+The solenoid truth table is `releasing_truth_table`. Do not invent a releasing row the truth-table tool did not return. Quote `boolean_p`, the manual-station state, and the true-row count from the tool.
+
+Release is the detection leg AND P. P is the pressure drop from sprinkler operation. The tool names it `p_second_leg`. The truth table is electric/electric trim: P is a separate pressure contact (tag PSL-REL) that the panel ANDs with the detection leg. On electric/pneumatic trim the panel solenoid follows the detection leg alone and the listed pneumatic actuator at the valve (tag PA-REL) gates P, which is outside that table. Take the trim family from the sprinkler specialist or the record before you write the sequence. Do not assume it. Low air is supervisory only (tag PSL-SUP). It is never a release input. Do not write low air as a leg of the release AND, and do not map the low-air supervisory point as P. A manual release station on the panel stands in for the detection leg only. It still needs P.
 
 If a skill asks for battery ampere-hours, voltage drop, speaker loss, or another alarm figure and no tool returned that figure, say the calc pack did not return it. Do not compute it.
 

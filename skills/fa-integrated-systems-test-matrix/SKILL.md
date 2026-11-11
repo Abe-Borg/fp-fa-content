@@ -21,7 +21,7 @@ description: >-
 - [CODE Table 14.4.3.2 18(8)]: counting-zone test at least four locations, all editions (72-28, 72-38).
 - [CODE Table 14.4.3.2 17(7)(d)]: ASD end-port test. 2019: required even with listed airflow supervision. 2022/2025: only where listed airflow supervision is absent (72-29).
 - [CODE Table 14.4.3.2 item 8]: secondary power test against the battery calc demand record.
-- FM DI release (company default): (Fire 1 or Action OR manual) AND low air AND NOT isolated. Basis: FM DS 5-32 §2.4.3.2.1.3 (Jan 2026) [OWNER/insurer] plus low-air supervisory 2022 §17.17.2.2.2 and 2025 §17.19.2.2.2 [CODE]; 2019 preaction low-air [PRACTICE]. Do not cite §23.8.5.4.3 for this row; low air is not a detector. Two-leg cross-zone rows and Table 14.4.3.2 item 18(4) apply only on non-FM jobs or where the owner requires cross-zone.
+- FM DI release (company default): (Fire 1 or Action OR manual) AND P AND NOT isolated on electric/electric trim. P is the pressure drop from sprinkler operation: a separate pressure contact (PSL-REL) that the panel ANDs with the detection leg on electric/electric trim, or the listed pneumatic actuator at the valve (PA-REL) on electric/pneumatic trim, where the panel solenoid follows the detection leg alone. Basis for the AND: [OWNER FM DS 5-32 (Jan 2026) definition and Table 2.4.1.2 Note 2]; §2.4.3.2.1.3.2 bars cross-zone [OWNER/insurer]. Low air is supervisory only (PSL-SUP) and is never a release input. The low-air supervisory row is 2022 §17.17.2.2.2 and 2025 §17.19.2.2.2 [CODE]; 2019 preaction low-air [PRACTICE]. Do not cite §23.8.5.4.3 for the release row; P is not a detector. Two-leg cross-zone rows and Table 14.4.3.2 item 18(4) apply only on non-FM jobs or where the owner requires cross-zone.
 
 ## Relation to other skills
 - The FP workflow `commissioning-ist-acceptance-packet` owns the acceptance and IST program stack. This skill only builds the FA scenario rows and FA ITM rows that feed it. Do not duplicate the program.
@@ -30,7 +30,7 @@ description: >-
 ## Steps
 1. Pull every C&E row from the releasing, HVAC/door, elevator, fire pump, gas relay and station skills.
 2. One IST scenario per row: initiating event, expected outputs per system, station class, pass criteria, who witnesses.
-3. Script checks: VEWFD Alert sounds nothing and is never a release leg [OWNER]; release only on (leg 1 OR manual) AND low air AND NOT isolated (count release states in the truth table and hand check); hall inputs do not recall elevators; every row has a basis.
+3. Script checks: VEWFD Alert sounds nothing and is never a release leg [OWNER]; release only on (leg 1 OR manual) AND P AND NOT isolated (count release states in the truth table and hand check); low air alone and detection alone never release; hall inputs do not recall elevators; every row has a basis.
 4. EPO: FA monitors only by default [PRACTICE]. FA-to-EPO trip is Verify with the engineer of record (owner and insurer decide; see `power-isolation-disconnect-control`).
 5. Add edition-keyed ITM rows (secure and restore, counting zone, ASD end-port, item 8 battery).
 5a. DI plus EVACS seed rows (one hall, synthetic example; method from NFPA 72-2025 Table 14.4.3.2 [CODE]; signal class tags [PRACTICE] unless noted):
@@ -38,7 +38,7 @@ description: >-
    - ASD end-port smoke test to Fire 1, item 17(7)(d).
    - Low air trip: supervisory only, no release, item 17(10)(b).
    - Riser valve tamper, item 17(10)(a).
-   - Fire 1 AND low air: solenoid energizes, EVACS pre-discharge, release NAC, supervising-station alarm, item 18(6).
+   - Fire 1 AND P (PSL-REL operated on electric/electric trim): solenoid energizes, EVACS pre-discharge, release NAC, supervising-station alarm, item 18(6).
    - Open each releasing circuit: trouble, item 18(9).
    - Fire 1 alone: EVACS alert and supervising-station alarm, no release, item 2(1).
    - EVACS amplifier failure: backup amplifier takes over, item 5(1).
@@ -61,7 +61,7 @@ Integrated testing is still required when a written plan is not required [CODE N
 - Waterflow, wet building: fire alarm, supervising-station alarm, and voice in that building. No elevator recall. General waterflow is not a Phase I initiator [CODE NFPA 72 §21.3.3.1]. An owner add is [OWNER]. Verify with the engineer of record.
 - Double-interlock detection only: pre-alarm or alarm. No valve release.
 - Double-interlock low air only: supervisory. No release.
-- Double-interlock detection and low air: release, waterflow, voice, and supervising station. No elevator recall. Release is not a Phase I initiator.
+- Double-interlock detection and P: release, waterflow, voice, and supervising station. No elevator recall. Release is not a Phase I initiator.
 - Elevator lobby smoke: Phase I recall [CODE NFPA 72 §21.3.3.1]. A dedicated valved pit line may recall on its own waterflow [CODE §21.3.3.2]. Detail is `fa-elevator-recall-and-shunt-trip`.
 - Generator-room detection: room ventilation shuts down [CODE NFPA 37-2024 §11.3.4, where adopted]. Fuel stays open. The interface is `fa-hvac-door-and-lock-interfaces`.
 - Supervising-station path loss: trouble at the station.
@@ -70,7 +70,7 @@ Integrated testing is still required when a written plan is not required [CODE N
   - When measured concentration exceeds 25 percent of LFL, start mechanical exhaust if it is not already running [CODE §9.6.5.1.5.4(1) on the exhaust-rate path].
   - Detector fault or power loss: trouble at the FACU [PRACTICE].
   - Maker response delay: use listed maker data [ASSUMED]. Do not invent a time.
-- Release only when both double-interlock conditions are present. Detection alone and low air alone never release.
+- Release only when both double-interlock conditions are present. Detection alone never releases. P alone never releases. Low air alone is supervisory and never releases.
 - Canada: stop. CAN/ULC-S1001 is NEEDS HOLD. Do not map NFPA 4 or NFPA 72 as Canada code. Do not invent Canadian integrated-test rows. Foam, clean agent, and single-interlock stay locked.
 
 ## Commissioning plan rows
@@ -89,7 +89,7 @@ Synthetic hall only. Do not copy the rows onto a live zone.
 
 - Second-level detection alone: alarm, no release. The trip setpoint stays [ASSUMED]. Verify with the engineer of record. Do not encode 0.2 %/ft as [CODE].
 - Low air alone: supervisory, no release. On a double-interlock or preaction job, 2019 preaction low-air supervisory is [PRACTICE]. 2022 §17.17.2.2 is [CODE]. Citing 2025 §17.17.2.2 is NEEDS HOLD. The 2025 number is §17.19.2.2.2.
-- Second-level detection and same-zone low air: release [OWNER]/insurer. Releasing-service listing and the §23.11 framework stay [CODE]. That section does not prescribe this Boolean.
+- Second-level detection and same-zone P: release [OWNER]/insurer. Releasing-service listing and the §23.11 framework stay [CODE]. That section does not prescribe this Boolean.
 - Disconnect active: no release [CODE §23.11.5]. The disconnect is a physical switch [CODE §23.11.5.2]. Operating it is supervisory [CODE §23.11.5.1].
 - Every cause-and-effect row has a matrix row [CODE NFPA 4-2024 §4.5.1(6)]. That item stays closed.
 - Alarm verification on a releasing circuit stays [PRACTICE]. Do not cite §23.8.5.4.3(3) as a code ban.
@@ -102,7 +102,7 @@ Synthetic teaching only. Do not copy the rows onto a live zone. Every cause-and-
 
 - Hall waterflow: alarm and supervising station. No elevator Phase I recall from general waterflow [CODE NFPA 72 §21.3.3.1].
 - Second-level detection alone: alarm, no release. The trip setpoint stays [ASSUMED] (GAP-B33R8-1). Do not encode 0.2 %/ft as [CODE].
-- Second-level detection and same-zone low air: release [OWNER]/insurer. Releasing-service listing and the §23.11 framework stay [CODE]. That section does not prescribe this Boolean.
+- Second-level detection and same-zone P: release [OWNER]/insurer. Releasing-service listing and the §23.11 framework stay [CODE]. That section does not prescribe this Boolean.
 - Energy-storage gas above 25 percent of LFL: start exhaust and hold it until the concentration is below that level [CODE IFC 2021 §1207.6.1.2.4]. The 2024 start at that threshold is the same duty [CODE IFC 2024 §1207.6.1.2.4]. After the concentration is under 25 percent of LFL, the exhaust may stop [CODE IFC 2021 and 2024 §1207.6.1.2.4]. A fan that is off before gas reaches the start threshold, or after gas clears, is normal standby on a demand-controlled exhaust. Do not treat that idle state as a supervisory fail.
 - Required exhaust, loss of proof: the supervisory case is failure to prove airflow after a run command (command active and no airflow). Wait out the command delay set at commissioning, ASSUMED 30 s to 60 s, before calling the loss of proof. That delay and the supervisory class of the loss of proof are [PRACTICE], the same screen as `fa-bess-gas-relay-map-and-cause-effect`. Required exhaust is supervised by a supervising station or a constantly attended location [CODE IFC 2021 §1207.6.1.2.3]. The 2024 supervision section is the same duty.
 - Loss of primary power: the control unit is on secondary power within 10 s [CODE NFPA 72 §10.6.6.1].

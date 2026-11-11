@@ -14,7 +14,9 @@ from fpfa.workflow import (
     fmt1,
     governing_narrative,
     judgment_label_line,
+    releasing_sentence,
     screen_limit_assumption_text,
+    second_leg_value,
     trim_assumption_text,
 )
 
@@ -164,17 +166,19 @@ def write_docx(path: Path | str, project: dict, result: dict) -> Path:
     )
 
     doc.add_heading("Releasing cause and effect", level=2)
-    doc.add_paragraph(truth["boolean"])
+    # The second leg is P, the pressure drop from sprinkler operation. Low air is a
+    # supervisory signal and has no column here.
+    doc.add_paragraph(releasing_sentence(truth, trim.get("family")))
     doc.add_paragraph(
         f"{truth['detection_leg']}. {truth['second_smoke']}. {truth['abort']}."
     )
     _table(
         doc,
-        ["Detection", "Manual", "Low air", "Isolated", "Solenoid"],
+        ["Detection", "Manual", "P (second leg)", "Isolated", "Solenoid"],
         [[
             _yn(row["detection"]),
             _yn(row["manual"]),
-            _yn(row["low_air"]),
+            _yn(second_leg_value(row)),
             _yn(row["isolated"]),
             _yn(row["solenoid"]),
         ] for row in truth["rows_without_second_smoke"]],

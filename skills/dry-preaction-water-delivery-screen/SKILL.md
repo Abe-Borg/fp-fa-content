@@ -204,7 +204,7 @@ Consume the assignment packet if present (optional). Do not rebuild it. Do not r
 - Pump envelope / hydrant curve → pump-envelope / hydrant-supply-curve
 - Node-by-node tree / SprinkFDT → hydraulic-tree / **not this Skill**
 - C=120 / 98 % / generator vs cylinders → **nitrogen-inerting-and-c-factor-gate**
-- Low-air / LOW AIR ALARM / SI vs DI Boolean → **preaction-releasing-c-and-e-soo**
+- Release Boolean (detection AND P) / low-air supervisory row / SI vs DI → **preaction-releasing-c-and-e-soo**
 - Valve-room El/El trim catalog / SKU schedule → **HAND OFF — preaction-el-el-trim-election.** Do not write a trim catalog here.
 - ITM interval tables / CD features checklist → **itm-design-for-testability** (writes 30 s + remote-end into spec; does not run fill)
 - Witnessed acceptance / IST script → **commissioning-ist-acceptance-packet**
@@ -362,7 +362,7 @@ Emit rows:
 
 - `HAND OFF — nitrogen-inerting-and-c-factor-gate: medium air vs N₂, generator vs cylinders, C=100 vs earned 120, 30-minute FILL (compressor half). This Skill only asked whether the elected QOD is listed for that medium.`
 - `HAND OFF — preaction-el-el-trim-election. Do not write a trim schedule or SKU list here.`
-- `HAND OFF — preaction-releasing-c-and-e-soo: DI simultaneous vs sequential; low-air is alarm-only on SI (comparison) and a trip input on DI. Peer named clocks; this Skill proves or marks unproved. Do not rewrite the matrix.`
+- `HAND OFF — preaction-releasing-c-and-e-soo: DI simultaneous vs sequential; low air is alarm-only on SI (comparison) and supervisory only on DI, where the trip input is P, the pressure drop from sprinkler operation. Peer named clocks; this Skill proves or marks unproved. Do not rewrite the matrix.`
 - `HAND OFF — itm-design-for-testability: 30 s + remote design-pressure criterion into CD; this Skill does not write the interval table.`
 - `HAND OFF — commissioning-ist-acceptance-packet: witnessed ITC / manifold / as-built delivery test script.`
 - Extra risers / zone count that changes hydraulic demand → density-area-dry-increase consumes the new zone map; this Skill does not re-run `qd`.
@@ -442,7 +442,7 @@ QOD = `none` is **not** a Stop — it is a lever **not taken**; volume-cut / ext
 | Pump envelope / hydrant curve | pump-envelope / hydrant-supply-curve |
 | Node-by-node tree / SprinkFDT | hydraulic-tree / **not this Skill** |
 | C=120 / 98 % / generator vs cylinders / 30-min **fill** | **nitrogen-inerting-and-c-factor-gate** |
-| Low-air / C&E / SI vs DI Boolean (names 30/60; does not prove) | **preaction-releasing-c-and-e-soo** |
+| Release Boolean (detection AND P) / C&E / SI vs DI (names 30/60; does not prove) | **preaction-releasing-c-and-e-soo** |
 | El/El / valve-room trim catalog | **preaction-el-el-trim-election** |
 | Head K / QR listing schedule | sprinkler-head-selection (flag K vs 30 s; do not pick heads here) |
 | ITM interval tables / CD features (writes 30 s criterion) | itm-design-for-testability |

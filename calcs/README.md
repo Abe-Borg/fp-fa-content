@@ -13,7 +13,7 @@ Deterministic fire-protection and fire-alarm math. The desktop app loads `calcs/
 | `test_formulas.py` | Kernel tests. Run from this folder: `python -m unittest test_formulas` |
 | `test_di_zone.py` | Zone-screen tests, including the second-leg label tests (`p_second_leg`, deprecated `low_air` alias) |
 | `test_pack_local.py` | Finite-number guard and fill-basis label tests |
-| `test_pack_content_lowair.py` | Scans `corpus/` and `specs/` for wording that makes low air a release input; release is detection and P |
+| `test_pack_content_lowair.py` | Scans every prose folder a model reads (`corpus/`, `specs/`, `skills/`, `roles/`, `modes/`) for wording that makes low air a release input; release is detection and P. The app suite runs the same detector over `docs/` and the app's own strings |
 
 The kernel file in this tree has 215 tests. `test_pack_local.py` adds 3 more for the finite-number guard and the two-basis fill labels, which this pack keeps on top of the kernel.
 

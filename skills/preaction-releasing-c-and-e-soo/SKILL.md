@@ -5,7 +5,7 @@ description: >-
  wet/dry/double-interlock system family are pinned (STS + matrix consumed
  when present, else ASSUMED and flagged; packet optional), and you must emit the authoritative releasing cause-and-effect matrix plus
  written sequence of operations the panel is programmed from — controlling
- DI water path (VEWFD_prealarm AND low_air), wet thermal-only, clean agent is out of scope; SI/NI comparison-only Stop if BOD;
+ DI water path (VEWFD_prealarm AND P, the pressure drop from sprinkler operation; low air is supervisory only), wet thermal-only, clean agent is out of scope; SI/NI comparison-only Stop if BOD;
  foam prohibited; mist PRACTICE REFUSED; not occupancy, density×area, pump,
  ITM, assignment packet, suppression-tech-selection, or ASD sizing.
 ---
@@ -19,7 +19,7 @@ Reusable US data-center fire-protection recipe. **This Skill EMITS the authorita
 
 | Branch | Typical space | What this Skill engineers (controlling) |
 |---|---|---|
-| **Water — company BOD** | Energized data hall / white space | **Controlling DI:** `preaction_trip := VEWFD_prealarm AND low_air`; **wet:** thermal-only / **no W1 trip**; **NO abort**, **NO pre-discharge delay on water**; smoke exhaust follows **water**, not smoke. Dry-pipe (if elected) is thermal / dry-valve regime — no VEWFD releasing trip unless the elected packet says otherwise. |
+| **Water — company BOD** | Energized data hall / white space | **Controlling DI:** `preaction_trip := VEWFD_prealarm AND P`; **wet:** thermal-only / **no W1 trip**; **NO abort**, **NO pre-discharge delay on water**; smoke exhaust follows **water**, not smoke. Dry-pipe (if elected) is thermal / dry-valve regime — no VEWFD releasing trip unless the elected packet says otherwise. |
 | **Out of scope** | Clean agent, foam, mist, single-interlock | Record and stop. Do not write a gas sequence. |
 
 Clean agent, foam, and water mist are out of scope beside this water-path sequence. Do not add a gas branch.
@@ -27,9 +27,11 @@ Clean agent, foam, and water mist are out of scope beside this water-path sequen
 **Company-controlling water Boolean (DI BOD):**
 
 ```
-preaction_trip := VEWFD_prealarm AND low_air
+preaction_trip := VEWFD_prealarm AND P
  AND NOT release_disconnect AND NOT panel_trouble
 ```
+
+P is the pressure drop from sprinkler operation. On electric/electric trim P is a separate pressure contact (tag PSL-REL) that the panel ANDs with the detection leg. On electric/pneumatic trim the panel solenoid follows the detection leg and the listed pneumatic actuator at the valve (tag PA-REL) is P. Low air is supervisory only (tag PSL-SUP). It is never a release input, and the panel must not map it as one.
 
 **Wet BOD:** no releasing trip — heads control discharge (`wet_pipe := thermal_operation_only`).
 
@@ -186,7 +188,7 @@ Under an **unamended 2024 I-Code** adoption (shop codebook: *Enforced-vs-latest 
 
 **Honesty on NFPA 72 numbering.** Reconcile releasing-service cites to the enforced edition and to NFPA 72-2025. Do not invent a 72-2025 subsection. Held now: NFPA 72-2025 §23.11.1 through §23.11.11. Numbering outside those stays unverified.
 
-**FM DS 2-0 §2.2.1.12.3.1(A):** do **not** use smoke detection to activate a preaction / deluge system **unless the occupancy sheet grants it**. **DS 5-32 grants it and names the threshold** — cite both: DS 2-0 gate **and** DS 5-32 **§2.4.3.2.1.3 / §2.4.3.2.1.3.1 (Jan-2026)**. On company DI BOD the **controlling** trip still requires the **AND** with low-air; the sheet’s trip-on-pre-alarm language remains **comparison evidence** when used to justify SI-as-BOD (which this Skill refuses).
+**FM DS 2-0 §2.2.1.12.3.1(A):** do **not** use smoke detection to activate a preaction / deluge system **unless the occupancy sheet grants it**. **DS 5-32 grants it and names the threshold** — cite both: DS 2-0 gate **and** DS 5-32 **§2.4.3.2.1.3 / §2.4.3.2.1.3.1 (Jan-2026)**. On company DI BOD the **controlling** trip still requires the **AND** with P, the pressure drop from sprinkler operation; the sheet’s trip-on-pre-alarm language remains **comparison evidence** when used to justify SI-as-BOD (which this Skill refuses).
 
 Consume the assignment packet (optional), STS election, and any BOD-matrix **releasing rows** if present. Do not rebuild them.
 
@@ -217,8 +219,8 @@ Clean agent, foam, water mist, deluge, and single-interlock preaction are out of
 
 On a company-elected **double-interlock** energized data hall:
 
-1. **Controlling Boolean:** `preaction_trip := VEWFD_prealarm AND low_air` (plus NOT disconnect / NOT panel_trouble). First detection cause is the **second** VEWFD stage (L2), **and** the sprinkler / low-air interlock. **Not** alarm-stage alone, **not** a second smoke zone.
-2. **Do not use cross-zoned detection (two smoke zones) to trip the preaction valve** — FM DS 5-32 **§2.4.3.2.1.3.2 (p.17)** is a **prohibition** on that configuration. Circuit 2 = low-air is the legitimate DI second gate (see table below).
+1. **Controlling Boolean:** `preaction_trip := VEWFD_prealarm AND P` (plus NOT disconnect / NOT panel_trouble). First detection cause is the **second** VEWFD stage (L2), **and** the sprinkler interlock P (the pressure drop from sprinkler operation). Low air is supervisory only and is not this interlock. **Not** alarm-stage alone, **not** a second smoke zone.
+2. **Do not use cross-zoned detection (two smoke zones) to trip the preaction valve** — FM DS 5-32 **§2.4.3.2.1.3.2 (p.17)** is a **prohibition** on that configuration. On electric/electric trim, circuit 2 = the P contact (PSL-REL) is the legitimate DI second gate (see table below).
 3. **No abort switch and no pre-discharge delay on the water path.** NFPA 13 does not recognize them on preaction (citation note: NFPA 13 2016–2025 contains no abort or cancel clause in the preaction text; the bar comes from UL 864 and company rule, not an NFPA 13 prohibition). **UL 864 does not permit “Abort on Pre-action or Deluge Systems.”** Abort with pre-discharge = 0 s cannot act.
 4. **Smoke exhaust follows WATER, never SMOKE.** DS 5-32 **§2.4.2.1.7 / .7.1 / .7.2**: do not install automatically operated smoke-exhaust in DP equipment rooms; where local code compels it, interlock to the **sprinkler / water-mist alarm**, **not** detection. The sheet’s *"water-mist"* wording is **sheet language only** — mist remains `PRACTICE REFUSED` for company election.
 
@@ -230,12 +232,13 @@ On a company-elected **wet** path: **no W1 releasing trip**. Thermal operation o
 
 | What is wired to initiating circuit **2**? | Verdict |
 |---|---|
-| **Low-air / air supervisory switch on the sprinkler piping** | ✔ This **is** the second interlock (the sprinkler). Correct **double-interlock**. Exactly ONE detection AND. |
+| **The release pressure contact P (PSL-REL) on the sprinkler piping, electric/electric trim** | ✔ This **is** the second interlock (the sprinkler). Correct **double-interlock**. Exactly ONE detection AND. |
+| **The low-air supervisory switch (PSL-SUP)** | ✘ Supervisory only. Never a release input. P is a separate contact. |
 | **A second smoke or heat detector / a second detection zone** | ✘ **Triple interlock.** Reject — FM’s warned configuration. |
 
 On a **single-interlock** system (comparison-only) there is **no legitimate second circuit**. **Best-practice spec text: delete the word “cross-zoned” and write the interlock explicitly.** Do not emit SI as controlling BOD.
 
-**Silent-OR trap:** `NORMAL` = Boolean **OR** over mapped zones; `CROSS ZONED` = Boolean **AND**. A `NORMAL` release output with detection **and** low-air both mapped releases on **either** input — **air loss alone opens the valve**. The closeout deliverable is the **as-programmed zone→output map, witnessed**.
+**Silent-OR trap:** `NORMAL` = Boolean **OR** over mapped zones; `CROSS ZONED` = Boolean **AND**. A `NORMAL` release output with detection **and** P both mapped releases on **either** input — **a pressure drop alone opens the valve**. The closeout deliverable is the **as-programmed zone→output map, witnessed**.
 
 **High-airflow AND can be physically unsatisfiable.** Full-scale tests (FM Global P14042) recorded **no response** against the direction of airflow. Pair along the flow (room + return), never across it.
 
@@ -272,9 +275,9 @@ Legend for **basis** cells: **C** code-floor · **I** insurer · **O** owner · 
 | VEWFD **pre-alarm / action** (L2) | – | Y | **AND⁵** | Y¹ | – | O² | Y | – | – | Y | **I/O** — company DI AND | `grounded` / `provisional` |
 | Second / **cross-zone** smoke satisfied | – | Y | **No³** | – | – | O | – | Y⁴ | – | Y | I (no cross-zone smoke for water) | `grounded` |
 | Manual release (preaction) | – | Y | O⁹ | – | – | O | – | – | – | Y | O/RV — FM DS 2-0 §2.2.1.12.1.4 | `[V]` / owner |
-| **Sprinkler operation** / low-air at head | – | Y | Y⁵ | – | – | O | – | – | – | Y | C/I — DI second gate | `grounded` |
+| **Sprinkler operation** / P (pressure drop; PSL-REL or PA-REL) | – | Y | Y⁵ | – | – | O | – | – | – | Y | C/I — DI second gate | `grounded` |
 | **Waterflow** switch | – | Y | – | O | O | **Y⁶** | Y | – | – | Y | I/O — de-energize ≤ waterflow (AXA) | `grounded` / owner |
-| Low / high air (or N₂) | – | – | **AND⁵** | – | – | – | – | – | Y | Y | C — DI: low-air is interlock, not SI stay-closed alone [CODE NFPA 72-2025 §17.19.2.1 (two separate and distinct signals: off-normal and restoration), §17.19.2.2.2(A) both high- and low-pressure conditions, (B) off-normal per NFPA 13 unless the valve manufacturer's instructions permit otherwise; 2019/2022 §17.17.2.1 same two-signal rule; off-normal at a 10 psi increase or decrease [CODE NFPA 72-2022 §17.17.2.2.2(B) (dry pipe and preaction, unless the manufacturer's published instructions permit otherwise); 2019 §17.17.2.2.2(B) (dry pipe valves only);]; **low-pressure DI caveat:** NFPA 72-2022 A.17.17.2.2.2 (annex) says a ±10 psi window "is not appropriate" for dry/preaction systems run at 8–15 psi and "could result in dry pipe valve actuation prior to transmission of a low air pressure supervisory signal". On a low-pressure N₂/air DI system, set the low-air supervisory point per the valve maker's published instructions, above the valve's trip point with margin, and show both values. Verify with the engineer of record on the setpoint margin; conservative assumption: the low-air signal is at least 5 psi above the maker's trip point (`[SYN]` margin)] | `grounded` |
+| Low / high air (or N₂) | – | – | – | – | – | – | – | – | Y | Y | C — DI: low and high air are supervisory only (PSL-SUP) and never a release input; P is the sprinkler-operation row above [CODE NFPA 72-2025 §17.19.2.1 (two separate and distinct signals: off-normal and restoration), §17.19.2.2.2(A) both high- and low-pressure conditions, (B) off-normal per NFPA 13 unless the valve manufacturer's instructions permit otherwise; 2019/2022 §17.17.2.1 same two-signal rule; off-normal at a 10 psi increase or decrease [CODE NFPA 72-2022 §17.17.2.2.2(B) (dry pipe and preaction, unless the manufacturer's published instructions permit otherwise); 2019 §17.17.2.2.2(B) (dry pipe valves only);]; **low-pressure DI caveat:** NFPA 72-2022 A.17.17.2.2.2 (annex) says a ±10 psi window "is not appropriate" for dry/preaction systems run at 8–15 psi and "could result in dry pipe valve actuation prior to transmission of a low air pressure supervisory signal". On a low-pressure N₂/air DI system, set the low-air supervisory point per the valve maker's published instructions, above the valve's trip point with margin, and show both values. Verify with the engineer of record on the setpoint margin; conservative assumption: the low-air signal is at least 5 psi above the maker's trip point (`[SYN]` margin)] | `grounded` |
 | Valve tamper / wrong position | – | – | – | – | – | – | – | – | Y | Y | C/I | `grounded` |
 | **Release disconnect OPEN** | – | – | **inhibited** | – | – | – | – | **inhibited** | Y | Y | C — physical switch | `grounded` |
 | Loss of detection power / panel trouble | – | – | **inhibited** | – | – | – | – | **inhibited** | Y | Y | C | `grounded` |
@@ -284,11 +287,11 @@ Legend for **basis** cells: **C** code-floor · **I** insurer · **O** owner · 
 ² P1 at L2 is **owner/insurer-tunable** — `[V]` if FM §2.5.3 level unpinned; handshake power-isolation Skill.
 ³ **No for company DI / wet water path** — second smoke zone is not a trip gate.
 ⁴ G1 enable needs **two independent VEWFD**.
-⁵ **DI controlling:** W1 fires only when **L2 AND low_air** (zone type `LOW AIR ALARM`, not `LOW AIR`). Wet: W1 = – (no releasing trip).
+⁵ **DI controlling:** W1 fires only when **L2 AND P**. On electric/electric trim P is the PSL-REL contact; on the panels in footnote ⁹ its zone is typed `LOW AIR ALARM`, not the supervisory `LOW AIR` type, which is PSL-SUP and is never a release input. On electric/pneumatic trim the panel solenoid follows L2 and the valve actuator (PA-REL) gates P. Wet: W1 = – (no releasing trip).
 ⁶ Usually room-level at waterflow.
 ⁹ **Manual release vs the DI AND (panel default).** On G3-family panels (Potter PFC-4410G3 *Standard Program Templates* 5403798 Rev C 11/24 p. 2; Viking VFR-500 manual 5403789 Rev A 10/23 p. 1-2 — the VFR-500 is the Viking-branded G3) a zone typed **Manual Release overrides cross-zoning and abort by default**. On **El/El (Pneu-Lectric) and SureFire** programs the panel *is* the interlock, so a pull station would release onto a still-pressurized pipe — **single-interlock behavior**. Elect and write one: (a) **no Manual Release zone** (the code/FM manual means is the mechanical emergency release at the trim); (b) station typed **DETECTION** (≤30 s pre-discharge per the manuals); (c) a **written owner + FM decision** to accept the override (row stays `[V]`/owner). On **El/Pn** the pneumatic leg is at the valve, so the panel manual release does not defeat the interlock. Confirm on the as-loaded program printout.
 
-**Explicit non-outputs:** automatic smoke exhaust on **detection** — **PROHIBITED** in the DP room. Abort row on a water-only job — **omit the row**. Pre-trip / pre-release time-delay cell on W1 — **W1 fires on L2 AND low_air (DI)** with **0 s** pre-discharge; wet has no W1 trip.
+**Explicit non-outputs:** automatic smoke exhaust on **detection** — **PROHIBITED** in the DP room. Abort row on a water-only job — **omit the row**. Pre-trip / pre-release time-delay cell on W1 — **W1 fires on L2 AND P (DI)** with **0 s** pre-discharge; wet has no W1 trip.
 
 #### 3.4.2 Comparison-only matrix / column — SI / NI (never controlling)
 
@@ -297,8 +300,8 @@ Emit **only** as `comparison-only` evidence (carrier ranking, historical trainin
 | Initiating event | W1 on SI (comparison) | W1 on NI (comparison) | Notes | Status |
 |---|---|---|---|---|
 | VEWFD L2 pre-alarm | **Y** (trip-on-pre-alarm) | Y (OR path) | FM §2.4.3.2.1.3 / .3.1 language — **comparison evidence**, not company election | `comparison-only` |
-| Low-air alone | **No** (SI: valve stays closed) | Y (OR opens) | Silent-OR trap if NORMAL maps both | `comparison-only` |
-| L2 AND low-air | N/A (no 2nd circuit on SI) | N/A | Company DI controlling path lives in §3.4.1 | `comparison-only` vs DI |
+| Pressure drop alone (P) | **No** (SI: valve stays closed) | Y (OR opens) | Silent-OR trap if NORMAL maps both | `comparison-only` |
+| L2 AND P | N/A (no 2nd circuit on SI) | N/A | Company DI controlling path lives in §3.4.1 | `comparison-only` vs DI |
 | Cross-zone second smoke | **No³** | **No³** | Prohibition still applies to water trip | `comparison-only` |
 
 Do **not** title any controlling schedule “Default … single-interlock white space.”
@@ -307,9 +310,11 @@ Do **not** title any controlling schedule “Default … single-interlock white 
 
 ```
 O_supervisory := low_air OR high_air OR valve_tamper OR release_disconnect OR panel_trouble
-O_preaction_trip := prealarm AND low_air_alarm
+O_preaction_trip := prealarm AND p_second_leg
  AND NOT release_disconnect AND NOT panel_trouble
- # zone type LOW AIR ALARM, not LOW AIR
+ # p_second_leg is P, the PSL-REL contact on electric/electric trim (zone type LOW AIR ALARM on the panels in footnote 9)
+ # low_air is the supervisory signal (PSL-SUP, zone type LOW AIR); it is in O_supervisory only
+ # electric/pneumatic trim: the panel solenoid follows prealarm; the valve actuator (PA-REL) gates P
  # wet BOD: O_preaction_trip := FALSE (thermal only)
 O_HVAC_reduce := prealarm AND airflow_high # velocity>=5 fps OR ACH>=60
 O_room_power_isolation := waterflow OR (prealarm AND OWNER_power_isolation_on_prealarm)
@@ -372,9 +377,9 @@ Specify the RCU **by function and listing**, never by model.
 
 **Walktest is not an impairment control** — it disables releasing outputs then **silently re-arms after 30 minutes of inactivity**. The control is the **physical, tagged** disconnect.
 
-**Program-verification hooks:** (1) as-programmed **zone→output map**; (2) **NORMAL vs CROSS ZONED** read off the panel; (3) air-supervisory zone type `LOW AIR ALARM` vs `LOW AIR`; (4) CONTINUOUS / 0 s pre-discharge / no abort on water; (5) physical disconnect present and supervised; (6) **three must-not-release tests on DI**; (7) `MANUAL RELEASE` mapped to a cross-zoned water output **silently defeats the AND** (footnote ⁹); (8) BMS point list: **alarm + supervisory + trouble + waterflow**; (9) **state brand + program # + drawing #** on the C&E and submittal — **Viking VFR-500 program numbers ≠ Potter G3 template numbers** (Viking F_072523 Rev 04 vs Potter 5403798 Rev C); never map one onto the other, and never accept "Program #n" alone (Program 0 edits can change any template — verify the as-loaded program); (10) **Low Air Alarm alone = supervisory**, never general alarm — the SOO must not say "low air → alarm"; (11) **"SUP 1 defaults to abort"** is printed on some G3 water templates (Potter #30/#32/#35) and abort is **not a UL-listed water-based function** (VFR-500 p. 5-36) → confirm no IDC is typed abort, SUP 1 retyped Supervisory, and witness it; (12) **monitored solenoid = a second supervisory IDC** (e.g. Viking F_031225 Rev 01 Apr 2025 surveillance switch) — count it in the IDC map; (13) panel program must match the trim's output count (a SureFire-type trim needs a program with an **N/O-solenoid output**; a one-release-output El/El program cannot drive it) — **identify by function, never freeze the SKU**.
+**Program-verification hooks:** (1) as-programmed **zone→output map**; (2) **NORMAL vs CROSS ZONED** read off the panel; (3) the P contact (PSL-REL) zone type `LOW AIR ALARM` vs the supervisory `LOW AIR` type (PSL-SUP), never swapped; (4) CONTINUOUS / 0 s pre-discharge / no abort on water; (5) physical disconnect present and supervised; (6) **three must-not-release tests on DI**; (7) `MANUAL RELEASE` mapped to a cross-zoned water output **silently defeats the AND** (footnote ⁹); (8) BMS point list: **alarm + supervisory + trouble + waterflow**; (9) **state brand + program # + drawing #** on the C&E and submittal — **Viking VFR-500 program numbers ≠ Potter G3 template numbers** (Viking F_072523 Rev 04 vs Potter 5403798 Rev C); never map one onto the other, and never accept "Program #n" alone (Program 0 edits can change any template — verify the as-loaded program); (10) **Low Air Alarm alone = supervisory**, never general alarm — the SOO must not say "low air → alarm"; (11) **"SUP 1 defaults to abort"** is printed on some G3 water templates (Potter #30/#32/#35) and abort is **not a UL-listed water-based function** (VFR-500 p. 5-36) → confirm no IDC is typed abort, SUP 1 retyped Supervisory, and witness it; (12) **monitored solenoid = a second supervisory IDC** (e.g. Viking F_031225 Rev 01 Apr 2025 surveillance switch) — count it in the IDC map; (13) panel program must match the trim's output count (a SureFire-type trim needs a program with an **N/O-solenoid output**; a one-release-output El/El program cannot drive it) — **identify by function, never freeze the SKU**.
 
-**Failsafe standby-power consequence.** Hand the amp-hour math to the battery method. A failsafe normally-open block solenoid is de-energized in normal standby and powered only on the pipe-damage or low-air leg. A normally energized pattern can exceed the panel battery at the FM 90 h / 10 min basis. Flag the standby state as a submittal question. Do not copy another panel's amp-hour total.
+**Failsafe standby-power consequence.** Hand the amp-hour math to the battery method. A failsafe normally-open block solenoid is de-energized in normal standby and powered only on the pipe-damage or P leg. A normally energized pattern can exceed the panel battery at the FM 90 h / 10 min basis. Flag the standby state as a submittal question. Do not copy another panel's amp-hour total.
 
 Name the 90 h vs 24 h delta; **do not** run the AH calc here.
 
@@ -419,10 +424,10 @@ Platform-agnostic. This SOO **supersedes** any simplified sketches in prior dete
 1. **S0 Normal / Standby.** Valve closed; piping dry, supervised (air or N₂); disconnects enabled.
 2. **Alert (L1).** A1 + N1 + L1. **No release. No mechanical action.**
 3. **Action / pre-alarm (L2).** A2 + N1 + L1. M1 if gate blown. P1 **only if** the pinned initiation level is L2. **W1 does not fire on L2 alone.**
-4. **L2 AND low_air (sprinkler operation / low-air alarm).** **W1** (detection **AND** low-air; **no cross-zone smoke; no abort; no pre-trip delay**) → pipe fills; **≤30 s** to most remote sprinkler (FM) — **named, not proved**. Code-floor **60 s to ITC** remains the other named clock.
+4. **L2 AND P (the pressure drop from sprinkler operation).** **W1** (detection **AND** P; **no cross-zone smoke; no abort; no pre-trip delay**) → pipe fills; **≤30 s** to most remote sprinkler (FM) — **named, not proved**. Code-floor **60 s to ITC** remains the other named clock.
 5. **Waterflow.** Thermal discharge continues. P1 complete at wetted equipment **before water arrives** (intent; timing method may be `[V]`).
 6. **L3 Alarm / Fire** (and/or waterflow). Complete P1 (direct UPS shutdown + shunt-trip). M2 **after** P1. **Do not** auto-operate smoke exhaust.
-7. **Supervisory / maintenance.** High air-or-N₂, valve tamper, disconnect, panel fault → T1. Low-air alone on DI is an interlock input **and** supervisory — it does **not** trip W1 without prealarm.
+7. **Supervisory / maintenance.** High air-or-N₂, valve tamper, disconnect, panel fault → T1. Low air alone on DI is supervisory only and is never a release input. P alone does **not** trip W1 without prealarm.
 
 **HVAC thermal clock — rows the SOO must carry when M1 / M2 exist (method; numbers are `[SYN]` screens, not defaults):**
 - **M2 (HVAC shutdown) := P1_complete OR waterflow** — never on pre-alarm alone, never on a timer alone (a prior layout package truth table; FM DS 5-32 Jan-2026 §3.4.2.2 keep cooling until equipment is de-energized).
@@ -437,7 +442,7 @@ Platform-agnostic. This SOO **supersedes** any simplified sketches in prior dete
 
 **Failure fallbacks:** Disconnect open → W1 and G1 **inhibited**, T1. Panel trouble → release **inhibited**. DI inoperative RCU: name the degraded state (dry-pipe vs nothing).
 
-**Commissioning hooks (name; handshake `commissioning-ist-acceptance-packet`; do not run other Skills’ tests):** heated-wire VEWFD (Alert/Pre-Alarm within **120 s**; fans ON and OFF; ≥3×/condition — DS 5-32 App. C / Table C.2); ASD transport **≤60 s** (consume from ASD Skill); functional test — company DI trips only on **pre-alarm AND low_air** with **no cross-zone smoke dependency**; as-programmed map + three must-not-release tests (DI). Detection ITM companion sheets: **FM DS 5-48** (opened) Tables 5–7; **FM DS 5-40** held Sep-2007 with **edition-stale** flag vs NFPA 72-2025 — cite, do not invent ASD lifecycle frequencies.
+**Commissioning hooks (name; handshake `commissioning-ist-acceptance-packet`; do not run other Skills’ tests):** heated-wire VEWFD (Alert/Pre-Alarm within **120 s**; fans ON and OFF; ≥3×/condition — DS 5-32 App. C / Table C.2); ASD transport **≤60 s** (consume from ASD Skill); functional test — company DI trips only on **pre-alarm AND P** with **no cross-zone smoke dependency**; as-programmed map + three must-not-release tests (DI). Detection ITM companion sheets: **FM DS 5-48** (opened) Tables 5–7; **FM DS 5-40** held Sep-2007 with **edition-stale** flag vs NFPA 72-2025 — cite, do not invent ASD lifecycle frequencies.
 
 ---
 
@@ -460,7 +465,7 @@ fm_clock = 30 s to most remote sprinkler at DESIGN PRESSURE
 # Name both; do not prove fill here.
 
 # Company DI Boolean check
-assert O_preaction_trip == (prealarm AND low_air_alarm
+assert O_preaction_trip == (prealarm AND p_second_leg
  AND NOT release_disconnect AND NOT panel_trouble)
 ```
 
@@ -493,7 +498,7 @@ Emit with Outputs. **Every controlling claim / matrix row / gate gets a Status-r
 
 **L1 vs L2 split:** FM grounds **two** effective per-port values — **0.2 %/ft** alert/pre-alarm and **1.0 %/ft** alarm (DS 5-32 §3.3.2.2/.3). The L1/L2 split *within* 0.2 %/ft is **configured ASD staging**, not a third grounded number.
 
-**L2 trip obscuration, open.** Where the pinned initiation level is L2, hold the trip at **0.2 %/ft (0.7 %/m) effective per port**. That figure is ASSUMED. It is not settled code and it is not a grounded insurer pin. FM DS 5-32 January 2026 body §2.4.3.2.1.3.1 (actuate the preaction valve on the pre-alarm) and §2.4.3.2.1.3.2 (do not cross-zone the detection) outrank the §3.3.2 rationale text that says an L3 alarm initiates suppression. Cite the obscuration numbers to the rationale. Cite the trip tier to the body. Do not cite the rationale as the trip requirement. Do not move the trip to 1.0 %/ft, and do not invent a 0.4 to 0.6 %/ft trip, without the engineer of record. The company Boolean stays `preaction_trip := VEWFD_prealarm AND low_air`. Status on this row is provisional, not grounded. The same hold goes on `fa-two-level-detection-stagger-and-fm-mapping` and on `fa-double-interlock-releasing-cause-and-effect`. On a Canada job, FM DS 5-32 still applies when that insurer is on the job. Do not assert an NBC or NFC detection overlay. Canadian detection clause text stays NEEDS HOLD. Verify with the engineer of record.
+**L2 trip obscuration, open.** Where the pinned initiation level is L2, hold the trip at **0.2 %/ft (0.7 %/m) effective per port**. That figure is ASSUMED. It is not settled code and it is not a grounded insurer pin. FM DS 5-32 January 2026 body §2.4.3.2.1.3.1 (actuate the preaction valve on the pre-alarm) and §2.4.3.2.1.3.2 (do not cross-zone the detection) outrank the §3.3.2 rationale text that says an L3 alarm initiates suppression. Cite the obscuration numbers to the rationale. Cite the trip tier to the body. Do not cite the rationale as the trip requirement. Do not move the trip to 1.0 %/ft, and do not invent a 0.4 to 0.6 %/ft trip, without the engineer of record. The company Boolean stays `preaction_trip := VEWFD_prealarm AND P`. Status on this row is provisional, not grounded. The same hold goes on `fa-two-level-detection-stagger-and-fm-mapping` and on `fa-double-interlock-releasing-cause-and-effect`. On a Canada job, FM DS 5-32 still applies when that insurer is on the job. Do not assert an NBC or NFC detection overlay. Canadian detection clause text stays NEEDS HOLD. Verify with the engineer of record.
 
 ---
 
@@ -505,7 +510,7 @@ An **authoritative releasing C&E matrix + written SOO** written **only** to the 
 
 1. Edition-pin block (13-2025 and 72-2025 deltas; FM DS 5-32 Jan-2026; DS 2-0 Oct-2021/Jan-2024; DS 5-48 opened / DS 5-40 stale flags as applicable).
 2. Inputs echoed — packet if present (optional); STS-elected `system_type` wet|dry|DI; VEWFD stages/zones; adjunct y/n; power-isolation posture. **No SI-as-BOD.**
-3. Branch banner with **company-controlling** Boolean: `preaction_trip := VEWFD_prealarm AND low_air` (DI) or wet thermal-only; SI trip-on-pre-alarm labeled `comparison-only` if shown.
+3. Branch banner with **company-controlling** Boolean: `preaction_trip := VEWFD_prealarm AND P` (DI) or wet thermal-only; SI trip-on-pre-alarm labeled `comparison-only` if shown.
 4. **Controlling** C&E matrix (DI / wet) with explicit **non-outputs** + **comparison-only** SI/NI matrix/column.
 5. Software truth table (company DI).
 6. Written SOO (DI or wet controlling; adjunct if present).
@@ -559,7 +564,7 @@ Shop codebook **by title**. **FM DS 5-32 Jan-2026:** §2.4.1.1 ranking (**compar
 ## 7. Design practice
 
 1. Three-layer, most stringent, per parameter. Code is the floor (NFPA 13 family permission + NFPA 72 Ch. 23 RCU). Insurer sheets supply sequence evidence; **company fence controls the BOD**: wet / dry / **DI** only. Report Δ vs **13-2025** and **72-2025**. Cite **section AND edition**.
-2. Per-parameter, not per-layer. A second smoke zone is prohibited as a trip gate on the water path. Low air is the second double-interlock gate.
+2. Per-parameter, not per-layer. A second smoke zone is prohibited as a trip gate on the water path. P, the pressure drop from sprinkler operation, is the second double-interlock gate. Low air is supervisory only.
 3. Owner may raise, never lower. NDA is structure, not an L2/L3 pin.
 4. Current editions; enforced is not the same as latest. Do not invent subsections.
 5. Show the airflow gate, the 30 s versus 60 s clocks (named, not proved), and the double-interlock AND Boolean.
@@ -601,7 +606,7 @@ Shop codebook **by title**. **FM DS 5-32 Jan-2026:** §2.4.1.1 ranking (**compar
 3. Confirm remaining inputs (detection stages, zones, HVAC policy, listing pair). Leave NFPA 72-2025 numbering outside §23.11 unverified.
 4. Pin editions; cite DS 2-0 gate **and** DS 5-32 grant together when smoke activates preaction.
 5. Confirm branch; do **not** re-select the system. Deluge → Stop company default.
-6. Encode **company-controlling** water Boolean: DI `preaction_trip := VEWFD_prealarm AND low_air`; wet = thermal-only / no W1. SI `:= VEWFD_prealarm` only as `comparison-only`. NO abort / delay on W1. Exhaust follows water. Sheet *"water-mist"* = language only.
+6. Encode **company-controlling** water Boolean: DI `preaction_trip := VEWFD_prealarm AND P`; wet = thermal-only / no W1. SI `:= VEWFD_prealarm` only as `comparison-only`. NO abort / delay on W1. Exhaust follows water. Sheet *"water-mist"* = language only.
 7. Ask circuit 2; ask El/El failsafe on DI; hand off trim. Name 30/60 clocks; do not prove. Handshake nitrogen / IST / power-isolation.
 8. Fill **controlling** C&E + truth table; emit SI/NI **comparison** matrix/column separately. Delete any “default SI white space” controlling title.
 9. If gas: coincidence, abort mode, delay ≤30 s as a cap, prove abort cannot reach W1, physical disconnect.

@@ -211,7 +211,7 @@ export function Drawer({
               <Text name="fittings" label="Fittings %" values={values} set={set} />
               <Choice name="medium" label="Medium" values={values} set={set} choices={choices.medium || []} />
               <Choice name="prime" label="Prime held by" values={values} set={set} choices={choices.prime || []} />
-              <Text name="supervisory_psi" label="Low-air psi" values={values} set={set} />
+              <Text name="supervisory_psi" label="Low-air supervisory psi" values={values} set={set} />
               <Text name="supervisory_psig" label="Supervisory psig" values={values} set={set} />
               <Choice name="length_label" label="Lengths" values={values} set={set} choices={choices.length_label || []} />
               <Text name="fill_minutes" label="Fill minutes" values={values} set={set} />

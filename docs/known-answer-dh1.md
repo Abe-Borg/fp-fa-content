@@ -16,7 +16,7 @@ The figures in section 2 are produced by the tool plan in `app/fpfa/workflow.py`
 | Fill flow | 600 gpm |
 | Times | detect 8 s, release 2 s, exhaust 0 s; FM time basis |
 | Trim | blank on the form |
-| Prime held by | normally closed solenoid; not failsafe on total power loss; low-air switch 15 psi |
+| Prime held by | normally closed solenoid; not failsafe on total power loss; low-air supervisory switch 15 psi |
 | Supervisory pressure and fill | 40 psig, 30 min |
 | Pipe, center-to-center lengths | 900 ft of 1 in. sch 40 branch (ID 1.049), 220 ft of 2 in. sch 40 branch (ID 2.067), 160 ft of 4 in. sch 10 cross main (ID 4.260), 48 ft of 6 in. sch 10 main (ID 6.357) |
 
@@ -35,7 +35,7 @@ The figures in section 2 are produced by the tool plan in `app/fpfa/workflow.py`
 | Screen limit | 30.0 s | ASSUMED from time basis FM (a lookup) |
 | Zone-total screen | does not pass; margin −8.1 s; about 200 gal would meet 30 s at this fill flow and these allowances | calculated, optimistic screen |
 | Trim family | El/El, provisional | election from what holds the prime |
-| Releasing | solenoid = (detection_leg OR manual_release) AND low_air AND NOT isolated; manual station on; 6 true rows of 32; a second smoke zone changes nothing | calculated truth table |
+| Releasing | solenoid = (detection_leg OR manual_release) AND p_second_leg AND NOT isolated; p_second_leg is P, the pressure drop from sprinkler operation; low air is supervisory only and is not in the Boolean; manual station on; 6 true rows of 32; a second smoke zone changes nothing | calculated truth table (electric/electric trim) |
 | Design Hazen-Williams C | 100; C 120 is comparison only and multiplies friction by about 0.714 | cite |
 | Nitrogen fill | 3.41 scfm gauge basis, 4.67 scfm absolute basis, at 40 psig in 30 min | calculated |
 | Design area | 1,950 ft² | calculated |
@@ -53,8 +53,8 @@ The export and the lead reply say these, in some wording, with the label kept:
 2. FM DS 5-32 is the insurer layer. Its 30 s criterion runs to design pressure at the single most remote sprinkler. It is not the NFPA floor. First water at the inspector's test connection is not that endpoint.
 3. The zone total of 281.3 gal is inside the 500 gal NFPA cap, so no specific delivery time is required by NFPA 13 §8.3.2.3.1.1. The FM 30 s insurer screen still misses at 38.1 s. The cap does not close the insurer screen.
 4. The delivery time is an optimistic screen from trapped volume and an assumed fill flow. It is not a listed water-delivery-time calculation. A listed calculation or a witnessed test is needed to claim 30 s.
-5. Trim is El/El, provisional. A normally closed solenoid holds the prime. The 15 psi low-air setting is an electric/electric nominal, not a pneumatic-actuator band. No catalog number is elected.
-6. Releasing is one detection leg or a manual station, AND same-zone low air, AND not isolated. No cross-zone on an FM job. FM DS 5-32 ranks double-interlock late; the conflict is flagged to the owner and the insurer and the basis stays double-interlock.
+5. Trim is El/El, provisional. A normally closed solenoid holds the prime. The 15 psi low-air supervisory setting is an electric/electric nominal, not a pneumatic-actuator band. No catalog number is elected.
+6. Releasing is the detection leg (one detection zone, or a manual station in its place) AND P, AND not isolated. P is the pressure drop from sprinkler operation: on this electric/electric trim, a separate pressure contact (PSL-REL) that the panel ANDs with the detection leg. Low air is supervisory only (PSL-SUP) and is never a release input. A manual release station still needs P. The basis of this statement, and what in it still needs a qualified engineer, is `docs/releasing-basis.md`. No cross-zone on an FM job. FM DS 5-32 ranks double-interlock late; the conflict is flagged to the owner and the insurer and the basis stays double-interlock.
 7. Design C is 100 on the nitrogen-supervised pipe. Nitrogen is a corrosion decision, not a hydraulic credit.
 8. Demand is 390 gpm sprinklers plus 250 gpm hose, 640 gpm total, 60 min, on the 30 percent dry and double-interlock area increase applied to the code-floor area and not stacked on an insurer absolute area.
 9. Hazard notes and any sentence the tools did not return are labeled use best judgment.
@@ -82,4 +82,4 @@ Every claim with a number traces to a calc record or a cite in the record. No cl
 
 ## 7. What the team panel must show
 
-An FP contribution covering items 1 through 5, 7, and 8 of section 3. An FA contribution covering item 6 and the supervisory points that follow from it. A checker verdict list. A handoff from FP to FA carrying the trim family and the low-air setting, and a handoff back carrying the releasing boolean. The lead summary quoting the governing zone total and t_total texts.
+An FP contribution covering items 1 through 5, 7, and 8 of section 3. An FA contribution covering item 6 and the supervisory points that follow from it. A checker verdict list. An exchange from FP to FA carrying the trim family and the supervisory pressure settings, and one back carrying the releasing logic for that trim. The lead summary quoting the governing zone total and t_total texts.

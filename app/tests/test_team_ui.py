@@ -261,8 +261,8 @@ class TeamWindowTests(unittest.TestCase):
         app.pump()
         project_id = app.project["id"]
         handoff = app.record.create_handoff(project_id, from_agent="fp-sprinkler", to_agent="fa-releasing",
-                                            brief="Trim family El/El with a 15 psi low-air switch",
-                                            payload={"family": "El/El", "low_air_psi": 15})
+                                            brief="Trim family El/El with a 15 psi low-air supervisory switch",
+                                            payload={"family": "El/El", "low_air_supervisory_psi": 15})
         app.record.set_handoff(project_id, handoff["id"], status="returned", result="Boolean written.")
         app.record.open_question(project_id, raised_by="fp-sprinkler", text="Trim volume from the valve sheet?")
         app._refresh_team()
@@ -277,7 +277,7 @@ class TeamWindowTests(unittest.TestCase):
         # Selecting the row in the page opens this detail.
         detail = row["detail"]
         self.assertIn("fp-sprinkler → fa-releasing: returned", detail)
-        self.assertIn('"low_air_psi": 15', detail)
+        self.assertIn('"low_air_supervisory_psi": 15', detail)
         self.assertIn("Boolean written.", detail)
         self.assertIn("? Trim volume from the valve sheet?", app.team["blockers_text"])
         # A refresh keeps the row and its detail.

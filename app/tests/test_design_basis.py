@@ -56,7 +56,9 @@ def _seed_sample(record, project_id="job1"):
     )
     record.record_finding(
         project_id, agent="fa-releasing",
-        text="Solenoid opens on one detection leg or a manual station, with same-zone low air, and not isolated.",
+        text=("Solenoid opens on the detection leg (one detection zone, or a manual station in its place) "
+              "AND P, the pressure drop from sprinkler operation, and not isolated. "
+              "Low air is supervisory only."),
         label="calculated", supports=[calc_ids["releasing_truth_table"]],
     )
     record.record_decision(
@@ -69,7 +71,8 @@ def _seed_sample(record, project_id="job1"):
     record.answer_question(project_id, answered["id"], answer="Yes, one station at the riser.", by="owner")
     handoff = record.create_handoff(
         project_id, from_agent="fp-sprinkler", to_agent="fa-releasing",
-        brief="Trim family El/El with a 15 psi low-air switch", payload={"family": "El/El", "low_air_psi": 15},
+        brief="Trim family El/El with a 15 psi low-air supervisory switch",
+        payload={"family": "El/El", "low_air_supervisory_psi": 15},
     )
     record.set_handoff(project_id, handoff["id"], status="delivered", by="lead")
     record.set_handoff(project_id, handoff["id"], status="returned", result="Releasing boolean written")
@@ -96,7 +99,13 @@ class DesignBasisExportTests(unittest.TestCase):
         self.assertIn("NFPA 13 | 2025 | 8.3.2.3.1.1", text)
         # 2. elections read from the calc records and the decision
         self.assertIn("Trim family | El/El (provisional)", text)
-        self.assertIn("Releasing logic | solenoid = (detection_leg OR manual_release) AND low_air AND NOT isolated", text)
+        # The second leg is P. The kernel's deprecated low_air alias is never printed.
+        self.assertIn(
+            "Releasing logic | solenoid = (detection_leg OR manual_release) AND p_second_leg AND NOT isolated", text
+        )
+        self.assertNotIn("AND low_air", text)
+        self.assertIn("p_second_leg is P, the pressure drop from sprinkler operation", text)
+        self.assertIn("Low air is supervisory only (PSL-SUP) and is never a release input.", text)
         self.assertIn("Design Hazen-Williams C | 100", text)
         self.assertIn("Trim family El/El, provisional; no catalog number elected.", text)
         self.assertIn("fp-sprinkler (use best judgment)", text)
@@ -119,7 +128,9 @@ class DesignBasisExportTests(unittest.TestCase):
         self.assertIn("Enforced NFPA 13 edition for this AHJ? (raised by lead)", text)
         self.assertIn("Manual station on this zone? Answer: Yes, one station at the riser.", text)
         # 8. handoff log
-        self.assertIn("fp-sprinkler | fa-releasing | Trim family El/El with a 15 psi low-air switch | returned", text)
+        self.assertIn(
+            "fp-sprinkler | fa-releasing | Trim family El/El with a 15 psi low-air supervisory switch | returned", text
+        )
         # contributors line
         self.assertIn("FP specialist (fp-sprinkler, done)", text)
 

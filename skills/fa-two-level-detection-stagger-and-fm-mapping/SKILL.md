@@ -31,7 +31,7 @@ Full port, return and head layout: `fa-asd-vewfd-data-hall-sampling-layout`. Rel
 - [OWNER]/insurer FM DS 5-32 s2.4.2.2 (pointer note): two levels 400 ft2 per port where trays block smoke. FM s2.4.2.2.6 : two levels where cable trays impede smoke; stagger no more than 200 ft2 between each level [OWNER/insurer]. Verify with the engineer of record (insurer criteria, not code). Conservative assumption: on FM jobs use two levels where cable trays impede smoke, with the stagger no more than 200 ft2 between levels.
 - [CODE] NFPA 76-2024 §8.4.1.3*, §8.4.2.2.4(1), §8.4.2.2.7, §8.4.2.2.9: VEWFD alert (prealarm) is a supervisory signal, distinguishable, and does not activate building NACs. NFPA 76 is telecom scope, not automatic for a hyperscale hall [PRACTICE].
 - [OWNER]/insurer FM DS 5-32 §2.4.3.2.1.3: actuate preaction on pre-alarm (§2.4.3.2.1.3.1); no cross-zone (§2.4.3.2.1.3.2). Confirm the edition with the insurer.
-- design practice item 7 : on FM jobs the owner VEWFD Action or Fire 1 counts as FM pre-alarm. It is alarm-level and arms the DI detection leg (valve opens only with low air). NFPA 76 Alert stays supervisory: no building NAC, never a release leg. Confirm which of Action or Fire 1 on the owner sequence.
+- design practice item 7 : on FM jobs the owner VEWFD Action or Fire 1 counts as FM pre-alarm. It is alarm-level and arms the DI detection leg (valve opens only with P, the pressure drop from sprinkler operation; low air is supervisory only). NFPA 76 Alert stays supervisory: no building NAC, never a release leg. Confirm which of Action or Fire 1 on the owner sequence.
 
 ## Inputs (ASSUME and flag any missing)
 1. NFPA 76 adopted or elected (owner, insurer, AHJ), and which edition? Default ASSUMED not elected for a hyperscale hall.
@@ -53,7 +53,7 @@ Full port, return and head layout: `fa-asd-vewfd-data-hall-sampling-layout`. Rel
  - Fire 1 when Action is the map: alarm-level, building NAC yes, SOC notify, not a separate leg (leg 1 is already set by Action in a rising sequence) [OWNER]. If the owner wants Fire 1 OR'd into leg 1 as a backup, label it [OWNER] and show it in the truth table. Vent slow-down already started on Action.
  - Fire 2: alarm, not the leg on FM jobs [OWNER].
 5. Check: no row lets a supervisory signal sound NACs or arm a release. Fix before handoff.
-6. FM flags: s2.4.1.1 (standing DI flag, above). s2.4.3.2.1.3 no cross-zone: company FM default is single leg (Fire 1 or Action) AND low air, which complies. Flag only where the owner standard forces two-leg cross-zone [OWNER]. Two-leg is [PRACTICE] on non-FM jobs only.
+6. FM flags: s2.4.1.1 (standing DI flag, above). s2.4.3.2.1.3 no cross-zone: company FM default is single leg (Fire 1 or Action) AND P, which complies. Flag only where the owner standard forces two-leg cross-zone [OWNER]. Two-leg is [PRACTICE] on non-FM jobs only.
 7. Non-FM jobs: map is [OWNER]; the Alert-is-supervisory rule still holds where 76 is in the basis.
 
 ## Output

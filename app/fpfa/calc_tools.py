@@ -12,6 +12,7 @@ from fpfa.corpus_search import search_corpus
 from fpfa.fa_calc import run_fa_calc
 from fpfa.modes_loader import list_modes, read_mode
 from fpfa.record import CALC_TOOLS, LABELS, Record, RecordError
+from fpfa.releasing import reader_view
 from fpfa.roles_loader import list_roles, read_role
 from fpfa.skills_loader import list_skills, read_skill
 
@@ -185,7 +186,12 @@ SCHEMAS = [
     },
     {
         "name": "releasing_truth_table",
-        "description": "Build the double-interlock solenoid truth table in code. solenoid = (detection OR manual) AND low air AND NOT isolated. A second smoke zone must not change the result.",
+        "description": (
+            "Build the double-interlock solenoid truth table in code (electric/electric trim). "
+            "solenoid = (detection OR manual) AND P AND NOT isolated. P is the second leg, the pressure "
+            "drop from sprinkler operation (p_second_leg). Low air is supervisory only and is not a "
+            "release input. Quote boolean_p. A second smoke zone must not change the result."
+        ),
         "input_schema": _obj(
             {"manual_station": {"type": "boolean"}, "insurer": {"type": "string"}},
             [],
@@ -422,24 +428,31 @@ class ToolSession:
                     self.project_id, tool=name, inputs=args, outputs=found["outputs"],
                     agent=self.agent, calc_identity=self.calc_identity,
                 )
-                return self._with_record_id(found["outputs"], row["id"])
+                return self._with_record_id(name, found["outputs"], row["id"])
             output = self._run(name, args)
             row = self.record.record_calc(
                 self.project_id, tool=name, inputs=args, outputs=output,
                 agent=self.agent, pack_version=self.pack_version, calc_identity=self.calc_identity,
             )
-            return self._with_record_id(output, row["id"])
-        return self._run(name, args)
+            return self._with_record_id(name, output, row["id"])
+        output = self._run(name, args)
+        # A model never reads the kernel's deprecated names, with a record or without one.
+        return reader_view(name, output) if self.model_facing else output
 
-    def _with_record_id(self, output: dict, record_id: str) -> dict:
+    @property
+    def model_facing(self) -> bool:
+        """True when a model reads this session's results. The fixed tool plan and a bare session do not."""
+        return self.agent not in ("", "tool-plan")
+
+    def _with_record_id(self, name: str, output: dict, record_id: str) -> dict:
         """A model-facing result carries the calc record id so a finding can cite it.
 
         The fixed tool plan (agent tool-plan) gets the bare output, so its
         tables and export stay byte-identical to a run with no record.
         """
-        if self.agent in ("", "tool-plan") or not isinstance(output, dict):
+        if not self.model_facing or not isinstance(output, dict):
             return output
-        shown = dict(output)
+        shown = dict(reader_view(name, output))
         shown["record_id"] = record_id
         return shown
 

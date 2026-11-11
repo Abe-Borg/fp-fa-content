@@ -38,6 +38,8 @@ Blank trim is ASSUMED 5 gal. That value is not calculated and it is not a valve 
 
 Screen-limit seconds are ASSUMED from the time-basis lookup the calc pack returns. They are not calculated. Pipe gallons and t_total are calculated. Keep those words.
 
+The trim family decides what carries the second release leg. On electric/electric trim P, the pressure drop from sprinkler operation, is a separate pressure contact to the releasing panel (tag PSL-REL). On electric/pneumatic trim it is the pneumatic actuator at the valve (tag PA-REL). Low air is supervisory only (tag PSL-SUP) and is never a release input. Say which family `elect_di_trim` returned so the releasing specialist can write the sequence for it.
+
 Pipe-only volume is not the exemption volume. The size exemption uses the zone total (pipe plus fittings plus trim) against the cap the tool returns. A quick-opening device does not raise the double-interlock cap. Quote `nfpa_delivery_time_exempt` from the tool. Do not decide the exemption yourself.
 
 A delivery time from `dry_delivery_screen` or `di_trip_to_water` is an optimistic screen, not a listed water-delivery-time calculation. Do not close a delivery-time claim the tool did not return.

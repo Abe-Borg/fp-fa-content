@@ -18,6 +18,7 @@ from docx import Document
 from fpfa.workflow import (
     fmt1,
     judgment_label_line,
+    releasing_logic,
     screen_limit_assumption_text,
     trim_assumption_text,
 )
@@ -113,8 +114,10 @@ def key_figures(tool: str, inputs: Any, outputs: Any) -> str:
                 "No catalog number is elected."
             )
         if tool == "releasing_truth_table":
+            logic = releasing_logic(out)
             return (
-                f"{out['boolean']}. Manual station {'on' if out.get('manual_station') else 'off'}. "
+                f"{logic['expression']}. {logic['second_leg']} {logic['supervisory']} "
+                f"Manual station {'on' if out.get('manual_station') else 'off'}. "
                 f"{out['solenoid_true_count']} true rows of {out['row_count']}; a second smoke zone changes nothing. "
                 f"{'FM basis: no cross-zone.' if out.get('fm_no_cross_zone') else ''}"
             ).strip()
@@ -158,7 +161,7 @@ def elections_from_calcs(calcs: list[dict]) -> list[list[str]]:
             if out.get("medium") and out.get("medium") != "unelected":
                 rows.append(["Supervisory medium", str(out["medium"]), "zone form", row.get("id", "")])
         elif tool == "releasing_truth_table":
-            rows.append(["Releasing logic", str(out.get("boolean", "")), "tool plan: releasing_truth_table", row.get("id", "")])
+            rows.append(["Releasing logic", releasing_logic(out)["expression"], "tool plan: releasing_truth_table", row.get("id", "")])
         elif tool == "nitrogen_gate":
             rows.append(["Design Hazen-Williams C", str(out.get("design_c", "")), "tool plan: nitrogen_gate", row.get("id", "")])
     return rows
