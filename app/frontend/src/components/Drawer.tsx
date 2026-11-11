@@ -6,6 +6,7 @@
 import { useState } from "react";
 import type { Form, FormValues, Team } from "../types";
 import { Close } from "./icons";
+import { TeamPanel } from "./TeamPanel";
 
 export type Tab = "basis" | "zone" | "results" | "team";
 const TABS: { id: Tab; label: string }[] = [
@@ -106,6 +107,7 @@ export function Drawer({
   values,
   set,
   results,
+  resultsNote,
   team,
   running,
   onClose,
@@ -115,6 +117,8 @@ export function Drawer({
   onCancel,
   onCheck,
   onExportBasis,
+  onStatus,
+  onAnswer,
 }: {
   tab: Tab;
   setTab: (tab: Tab) => void;
@@ -122,6 +126,7 @@ export function Drawer({
   values: FormValues;
   set: SetField;
   results: string;
+  resultsNote: string;
   team: Team;
   running: boolean;
   onClose: () => void;
@@ -131,10 +136,10 @@ export function Drawer({
   onCancel: () => void;
   onCheck: () => void;
   onExportBasis: () => void;
+  onStatus: () => void;
+  onAnswer: (id: string, answer: string) => Promise<boolean>;
 }) {
-  const [handoff, setHandoff] = useState<string | null>(null);
   const choices = form.choices;
-  const selected = team.handoffs.find((row) => row.id === handoff);
 
   const onTabKey = (event: React.KeyboardEvent, index: number) => {
     const step = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
@@ -168,6 +173,12 @@ export function Drawer({
             onKeyDown={(event) => onTabKey(event, index)}
           >
             {item.label}
+            {item.id === "team" && team.attention ? (
+              <span className="count" title={`${team.attention} waiting on someone`}>
+                {team.attention}
+                <span className="visually-hidden"> waiting</span>
+              </span>
+            ) : null}
           </button>
         ))}
       </div>
@@ -282,6 +293,16 @@ export function Drawer({
         ) : null}
         {tab === "results" ? (
           <div className="results">
+            {resultsNote ? (
+              <div className="card callout warn" role="status">
+                <p>{resultsNote}</p>
+                <div className="right">
+                  <button type="button" className="button on-card" onClick={onRun}>
+                    Run zone again
+                  </button>
+                </div>
+              </div>
+            ) : null}
             <p className="small dim">
               Tool-plan figures for export. Pipe gallons and t_total are calculated. Blank trim and the screen-limit seconds are marked
               ASSUMED. A delivery time here is an optimistic screen, not a listed water-delivery-time calculation.
@@ -292,74 +313,15 @@ export function Drawer({
           </div>
         ) : null}
         {tab === "team" ? (
-          <div className="team">
-            <p className="small dim">
-              The lead delegates to specialists. Each exchange is a row below. Select a row for its brief, payload, and result. Findings
-              and questions live on the record, not in the thread.
-            </p>
-            <div className="row-buttons">
-              <button type="button" className="button danger-ghost" disabled={!running} onClick={onCancel}>
-                Cancel running job
-              </button>
-              <button type="button" className="button side" onClick={onCheck}>
-                Run blind check
-              </button>
-              <button type="button" className="button side" onClick={onExportBasis}>
-                Export basis…
-              </button>
-            </div>
-            <div className="section-label">TEAM</div>
-            <pre className="card text-card">{team.roster_text}</pre>
-            <div className="section-label">BLOCKERS AND OPEN QUESTIONS</div>
-            <pre className="card text-card">{team.blockers_text}</pre>
-            <div className="section-label">HANDOFFS</div>
-            <div className="card">
-              <table className="grid-table selectable">
-                <thead>
-                  <tr>
-                    <th>WHEN</th>
-                    <th>FROM</th>
-                    <th>TO</th>
-                    <th>STATUS</th>
-                    <th>BRIEF</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {team.handoffs.length ? (
-                    team.handoffs.map((row) => (
-                      <tr
-                        key={row.id}
-                        tabIndex={0}
-                        aria-selected={row.id === handoff}
-                        className={row.id === handoff ? "on" : ""}
-                        onClick={() => setHandoff(row.id)}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter" || event.key === " ") {
-                            event.preventDefault();
-                            setHandoff(row.id);
-                          }
-                        }}
-                      >
-                        <td>{row.when}</td>
-                        <td>{row.from}</td>
-                        <td>{row.to}</td>
-                        <td>{row.status}</td>
-                        <td className="brief">{row.brief}</td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={5} className="faint">
-                        No handoffs yet.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-            <div className="section-label">DETAIL</div>
-            <pre className="card text-card detail">{selected ? selected.detail : "Select a handoff to read it."}</pre>
-          </div>
+          <TeamPanel
+            team={team}
+            running={running}
+            onCancel={onCancel}
+            onCheck={onCheck}
+            onExportBasis={onExportBasis}
+            onStatus={onStatus}
+            onAnswer={onAnswer}
+          />
         ) : null}
       </div>
     </aside>

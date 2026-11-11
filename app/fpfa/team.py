@@ -1022,16 +1022,27 @@ def team_summary(out: dict | None, audit: dict | None = None) -> str:
     for item in changed:
         lines.append(f"- input {item.get('name')}: {item.get('was')} → {item.get('now')} (from the chat)")
     exchanges: list[str] = []
+    # One line per specialist, however many times the lead went back to it.
+    totals: dict[str, dict] = {}
     for item in delegations:
+        row = totals.setdefault(str(item.get("specialist")), {"passes": 0, "unfinished": False})
+        row["passes"] += 1
+        row["unfinished"] = item.get("complete") is False
+        for key in ("findings", "questions", "handoffs", "calc_records"):
+            row[key] = row.get(key, 0) + len(item.get(key) or [])
+    for who, row in totals.items():
         counts = []
         for key, word in (("findings", "finding"), ("questions", "question"), ("handoffs", "handoff"), ("calc_records", "calc record")):
-            number = len(item.get(key) or [])
+            number = row.get(key, 0)
             if number:
                 counts.append(f"{number} {word}{'s' if number != 1 else ''}")
         detail = ", ".join(counts) if counts else "no rows written"
-        if item.get("complete") is False:
+        if row["passes"] > 1:
+            detail += f", in {row['passes']} passes"
+        if row["unfinished"]:
             detail += " (did not finish)"
-        lines.append(f"- {item.get('specialist')}: {detail}")
+        lines.append(f"- {who}: {detail}")
+    for item in delegations:
         who = item.get("specialist")
         for consult_row in item.get("consults") or []:
             exchanges.append(f"- {who} asked {consult_row.get('asked')}: {_clip(consult_row.get('question'), 140)}")

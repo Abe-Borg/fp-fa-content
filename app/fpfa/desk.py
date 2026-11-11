@@ -3393,6 +3393,7 @@ class Desk:
         open_job = None
         if project is not None:
             open_job = {"id": project.get("id"), "name": project.get("name") or UNTITLED_JOB}
+        changed = self.run_changes()
         state = {
             "revision": self.revision,
             "app": {
@@ -3427,7 +3428,8 @@ class Desk:
             },
             "results": self.results_text,
             # Inputs that changed after the run the Results tab and the Section export are showing.
-            "run_changes": self.run_changes(),
+            "run_changes": changed,
+            "results_note": RESULTS_STALE_LINE.format(names=", ".join(changed)) if changed else "",
             "notices": list(self.notices),
             "settings": self.settings_view(),
             "live_rev": self.live_rev,

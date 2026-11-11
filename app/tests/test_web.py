@@ -390,7 +390,8 @@ class BuiltPageTests(unittest.TestCase):
                          for name in re.findall(r'src="/(assets/[^"]+\.js)"', index))
         for label in ("Sample DI zone", "Sample BESS room", "Run zone from Zone details", "Team panel",
                       "Usage and cost", "Narrate zone runs with Claude", "Rename job…", "Settings…", "Commands",
-                      "About and versions", "Cancel running job", "Run blind check", "Export basis…"):
+                      "About and versions", "Cancel running job", "Run trace check", "Export basis…",
+                      "Where this job stands", "Status to thread", "NEEDS YOUR ANSWER", "NOT YET RECONCILED"):
             self.assertIn(label, bundle)
 
 
@@ -504,6 +505,47 @@ class BrowserTests(unittest.TestCase):
         report = json.loads(lines[-1])
         self.assertTrue(report["ok"], json.dumps(report, indent=2))
         self.assertGreater(report["checks"], 30)
+
+    def test_the_team_panel_in_a_browser(self):
+        """A job with a team's work on its record: the strip, the panel, an answer, and a run left behind."""
+        problem = _playwright_problem()
+        if problem:
+            self.skipTest(problem)
+        _isolate()
+        from fpfa.desk import Desk
+        from fpfa.keystore import save_api_key
+        from fpfa.web.server import WindowServer
+        from team_fixture import seed_team_state
+
+        save_api_key("sk-ant-local-test")
+        desk = Desk()
+        with desk.lock:
+            desk.ask_claude.set(False)
+            desk.start_sample_di()
+            desk.pump()
+            seeded = seed_team_state(desk)
+            desk.pump()
+        server = WindowServer(desk).start()
+        try:
+            run = subprocess.run(
+                [shutil.which("node"), str(FRONTEND / "tools" / "e2e_team.mjs"), server.page_url()],
+                capture_output=True, text=True, timeout=240,
+            )
+            lines = [line for line in run.stdout.splitlines() if line.startswith("{")]
+            self.assertTrue(lines, run.stdout + run.stderr)
+            report = json.loads(lines[-1])
+            self.assertTrue(report["ok"], json.dumps(report, indent=2))
+            self.assertGreater(report["checks"], 30)
+            # What the page did is on the record: the answer, under the designer's name, and the saved field.
+            with desk.lock:
+                row = next(item for item in desk.record.questions(seeded["project"]) if item["id"] == seeded["ask"])
+                given = desk.record.givens(seeded["project"])["q_fill_gpm"]
+            self.assertEqual((row["status"], row["answer"], row["answered_by"]),
+                             ("answered", "6.5 gallons, from the submittal.", "designer"))
+            self.assertEqual(given["value"], "750.0")
+        finally:
+            server.stop()
+            desk.close()
 
 
 if __name__ == "__main__":

@@ -206,12 +206,8 @@ def strip_text(digest: dict | None, check_line: str = "") -> str:
     """One calm line for the window: who contributed, what is waiting. Empty before any team work."""
     if not digest or (not digest["people"] and not digest["findings"]):
         return ""
+    # What is waiting on someone comes first: the line is cut short when the window is narrow.
     bits = []
-    done = [row for row in digest["people"] if row["slug"] not in ("tool-plan", "narrator", LEAD)]
-    if done:
-        bits.append(", ".join(f"{row['slug']} {row['status']}" for row in done))
-    if digest["findings"]:
-        bits.append(f"{digest['findings']} finding{'s' if digest['findings'] != 1 else ''}")
     if digest["asks"]:
         bits.append(f"{len(digest['asks'])} need{'s' if len(digest['asks']) == 1 else ''} your answer")
     if digest["stale"]:
@@ -219,6 +215,11 @@ def strip_text(digest: dict | None, check_line: str = "") -> str:
     waiting = len(digest["objections"]) + len(digest["conflicts"])
     if waiting:
         bits.append(f"{waiting} disagreement{'s' if waiting != 1 else ''} open")
+    if digest["findings"]:
+        bits.append(f"{digest['findings']} finding{'s' if digest['findings'] != 1 else ''}")
+    done = [row for row in digest["people"] if row["slug"] not in ("tool-plan", "narrator", LEAD)]
+    if done:
+        bits.append(", ".join(f"{row['slug']} {row['status']}" for row in done))
     return " · ".join(bits)
 
 

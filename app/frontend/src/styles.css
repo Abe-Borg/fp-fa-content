@@ -1199,6 +1199,324 @@ p {
   margin: 8px 0 0;
 }
 
+/* The Team tab ---------------------------------------------------------------
+   Where the job stands, what the team needs, and what each specialist found.
+   A tier's dot is never the only signal: the tier is written beside it. */
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.window.with-drawer.team-open .body {
+  grid-template-columns: 268px minmax(420px, 1fr) minmax(460px, 640px);
+}
+.tab .count {
+  display: inline-block;
+  min-width: 18px;
+  margin-left: 7px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 11px;
+  line-height: 18px;
+  text-align: center;
+}
+.team .card {
+  margin-bottom: 6px;
+}
+.team .card p {
+  margin: 0 0 6px;
+}
+.team .card p:last-child {
+  margin-bottom: 0;
+}
+.stand-objective {
+  font-family: var(--font-display);
+  font-size: 15.5px;
+}
+.steps,
+.people,
+.evidence {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+}
+.steps li,
+.people li {
+  display: flex;
+  gap: 8px;
+  padding: 2px 0;
+}
+.people {
+  border-top: 1px solid color-mix(in srgb, var(--edge) 60%, transparent);
+  padding-top: 8px;
+}
+.step-mark {
+  width: 14px;
+  flex: none;
+  text-align: center;
+  color: var(--ink-faint);
+}
+.step.done .step-mark {
+  color: var(--ok);
+}
+.step.doing .step-mark {
+  color: var(--accent);
+}
+.step.blocked .step-mark {
+  color: var(--err);
+}
+.stand-line {
+  overflow-wrap: anywhere;
+}
+.warn-ink {
+  color: var(--warn);
+}
+.ask-text {
+  display: block;
+  font-weight: 600;
+}
+.answer {
+  margin: 6px 0 8px;
+  padding: 7px 10px;
+  min-height: 54px;
+  resize: vertical;
+  line-height: 1.4;
+}
+.callout {
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--edge));
+  background: color-mix(in srgb, var(--accent) 7%, var(--raised));
+}
+.callout.warn {
+  border-color: color-mix(in srgb, var(--warn) 55%, var(--edge));
+  background: color-mix(in srgb, var(--warn) 9%, var(--raised));
+}
+.results .callout {
+  margin-bottom: 10px;
+}
+.change {
+  font-weight: 600;
+}
+.evidence li {
+  position: relative;
+  padding: 2px 0 2px 14px;
+  overflow-wrap: anywhere;
+}
+.evidence li::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 0.74em;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--ink-faint);
+}
+.rfis {
+  margin: 0;
+  padding-left: 20px;
+}
+.rfis li {
+  padding: 2px 0;
+}
+.dispute {
+  padding: 9px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--edge) 60%, transparent);
+}
+.dispute:first-child {
+  padding-top: 0;
+}
+.dispute:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+.quote {
+  border-left: 2px solid var(--edge);
+  padding-left: 9px;
+  color: var(--ink-dim);
+}
+.tag {
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 9px;
+  font-size: 11px;
+  background: color-mix(in srgb, var(--warn) 24%, var(--raised));
+}
+.dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--ink-faint);
+}
+.dot.tier-source {
+  background: var(--ok);
+}
+.dot.tier-reviewed {
+  background: var(--warn);
+}
+.dot.tier-stated {
+  background: transparent;
+  box-shadow: inset 0 0 0 2px var(--ink-faint);
+}
+.dot.tier-open {
+  background: var(--err);
+}
+.tier {
+  padding: 3px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--edge) 60%, transparent);
+}
+.tier > summary,
+.finding > summary {
+  cursor: pointer;
+  border-radius: 7px;
+  list-style: none;
+}
+.tier > summary::-webkit-details-marker,
+.finding > summary::-webkit-details-marker {
+  display: none;
+}
+.tier > summary:hover,
+.finding > summary:hover {
+  background: var(--raised-hover);
+}
+/* The mark that says a row opens: a corner that turns down when it has. */
+.tier > summary::after,
+.finding > summary::after {
+  content: "";
+  width: 6px;
+  height: 6px;
+  flex: none;
+  margin: 0 6px 0 4px;
+  border-right: 1.5px solid var(--ink-faint);
+  border-bottom: 1.5px solid var(--ink-faint);
+  transform: rotate(-45deg);
+  transition: transform 120ms ease;
+}
+.tier[open] > summary::after,
+.finding[open] > summary::after {
+  transform: rotate(45deg);
+}
+.tier > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 4px;
+  font-weight: 600;
+}
+.tier-title {
+  flex: 1;
+}
+.tier-count {
+  color: var(--ink-dim);
+  font-weight: 400;
+}
+.team .card p.tier-note {
+  margin: 0 4px 6px 21px;
+}
+.finding {
+  margin: 0 0 2px 8px;
+  border-left: 1px solid var(--edge);
+}
+.finding > summary {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 1px 8px;
+  align-items: baseline;
+  padding: 6px 2px 6px 10px;
+}
+.finding > summary .dot {
+  align-self: center;
+}
+.finding-text {
+  overflow-wrap: anywhere;
+}
+.finding-meta {
+  grid-column: 2;
+  font-size: 12px;
+  color: var(--ink-dim);
+}
+.finding-why {
+  grid-column: 2;
+  font-size: 12px;
+  color: var(--ink);
+}
+.finding[open] > summary {
+  background: color-mix(in srgb, var(--accent) 9%, var(--raised));
+}
+.finding-body {
+  padding: 2px 8px 10px 27px;
+  font-size: 13px;
+}
+.team .card p.evidence-head {
+  margin: 9px 0 2px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.team .card p.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin-top: 10px;
+}
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* One line on the team under the top bar. It opens the Team tab. */
+.team-strip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid var(--edge);
+  background: var(--surface);
+  color: var(--ink-dim);
+  padding: 6px 16px 6px 26px;
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.team-strip:hover {
+  background: var(--side-hover);
+  color: var(--ink);
+}
+.team-strip:focus-visible {
+  outline-offset: -3px;
+}
+.strip-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.team-strip.waiting .strip-label {
+  color: var(--accent);
+}
+.strip-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.strip-open {
+  color: var(--ink-faint);
+}
+
 /* Menus and dialogs ---------------------------------------------------------- */
 
 .menu {
