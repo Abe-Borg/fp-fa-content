@@ -370,7 +370,7 @@ class ReplyAuditTests(unittest.TestCase):
         self.assertIn("- fp-sprinkler: 1 finding", both)
         self.assertIn("only on out-of-date calculations: 38.1 s.", both)
         self.assertIn("could not find on the record or in anything the lead read: 42 s.", both)
-        self.assertTrue(both.endswith("Details are on the Team tab under Zone details."))
+        self.assertTrue(both.endswith("Details are on the Team tab."))
 
 
 class ReplyAuditWindowTests(DeskCase):

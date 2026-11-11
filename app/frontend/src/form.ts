@@ -1,5 +1,5 @@
 /**
- * The Zone details form travels to the app as the designer types: each change
+ * The Inputs form travels to the app as the designer types: each change
  * joins a patch that is sent after a short pause, and every action flushes the
  * patch first, so a run, a send, or a switch to another job always reads the
  * form as it is on screen. Pure (the sender and the clock are passed in), so

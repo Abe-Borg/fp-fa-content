@@ -90,6 +90,7 @@ ACTIONS: dict[str, Callable[[Desk, dict], Any]] = {
     "notice-dismiss": lambda d, b: d.dismiss_notice(int(b.get("id", 0))),
     "banner-dismiss": lambda d, b: d.dismiss_banner(),
     "scheme": lambda d, b: d.set_scheme(_text(b.get("id"), 40)),
+    "layout": lambda d, b: d.set_layout(b.get("values") if isinstance(b.get("values"), dict) else {}),
     "motion": lambda d, b: d.set_reduce_motion(_flag(b.get("reduce"))),
     "key-save": lambda d, b: d.save_key(_text(b.get("key"), 1000)),
     "key-clear": lambda d, b: d.clear_key(),

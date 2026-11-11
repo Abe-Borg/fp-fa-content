@@ -113,7 +113,7 @@ def recovery_text(item: dict | None) -> str:
             f"- The handoff from {row.get('from_agent')} to {row.get('to_agent')} ({brief}) was re-queued. "
             f"It is delivered again at the next delegation to {row.get('to_agent')}."
         )
-    lines.append("Nothing on the record was lost. The Team tab under Zone details shows the state.")
+    lines.append("Nothing on the record was lost. The Team tab shows the state.")
     return "\n".join(lines)
 
 

@@ -12,7 +12,7 @@ import type { Live, Turn, Welcome } from "../types";
 import { plainText } from "../markdown";
 import { ReplyText } from "./Reply";
 import { Menu, type Anchor, type MenuItem } from "./Menu";
-import { ArrowDown, Star } from "./icons";
+import { ArrowDown, ArrowRight, Star } from "./icons";
 
 const AT_END_PX = 24;
 const MOVE_KEYS = new Set(["PageUp", "PageDown", "ArrowUp", "ArrowDown", "Home", "End", " "]);
@@ -49,23 +49,44 @@ function WorkingLine({ pending, motion }: { pending: { label: string; detail: st
   );
 }
 
+/**
+ * The empty thread: what the app is for, and the ways to start as cards. A link the app sends
+ * that a card already offers is not drawn twice.
+ */
 function WelcomeView({ welcome, onLink }: { welcome: Welcome; onLink: (action: string) => void }) {
+  const cards = welcome.cards || [];
+  const offered = new Set(cards.map((card) => card.action));
+  const links = welcome.links.filter((link) => !offered.has(link.action));
   return (
     <div className="welcome">
-      <Star size={46} className="star welcome-star" />
+      <Star size={40} className="star welcome-star" />
       <h1 className="display">{welcome.title}</h1>
       {welcome.lines.map((line) => (
         <p key={line} className="dim">
           {line}
         </p>
       ))}
-      <div className="welcome-links">
-        {welcome.links.map((link) => (
-          <button key={link.action} type="button" className="link" onClick={() => onLink(link.action)}>
-            {link.text}
-          </button>
-        ))}
-      </div>
+      {links.length ? (
+        <div className="welcome-links">
+          {links.map((link) => (
+            <button key={link.action} type="button" className="welcome-link" onClick={() => onLink(link.action)}>
+              {link.text}
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {cards.length ? (
+        <div className="welcome-cards">
+          {cards.map((card) => (
+            <button key={card.action} type="button" className="welcome-card" onClick={() => onLink(card.action)}>
+              <span className="card-title">
+                {card.title} <ArrowRight />
+              </span>
+              <span className="card-text">{card.text}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
       {welcome.footnote.split("\n").map((line) => (
         <p key={line} className="faint small">
           {line}
@@ -132,19 +153,18 @@ export function Thread({
     toEnd();
   }, [project, toEnd]);
 
-  // Whatever makes the thread taller (a turn, a word, a bubble taking its size) keeps the end in view while following.
+  // Whatever makes the thread taller (a turn, a word, a bubble taking its size) or its room smaller (the
+  // composer growing, the panel opening beside it) keeps the end in view while following.
   useEffect(() => {
     const node = content.current;
-    if (!node) return;
+    const box = scroller.current;
+    if (!node || !box) return;
     const observer = new ResizeObserver(() => {
-      if (follow.current) {
-        const box = scroller.current;
-        if (box) box.scrollTop = box.scrollHeight;
-      } else {
-        setBehind(true);
-      }
+      if (follow.current) box.scrollTop = box.scrollHeight;
+      else if (!atEnd()) setBehind(true);
     });
     observer.observe(node);
+    observer.observe(box);
     return () => observer.disconnect();
   }, []);
 
@@ -244,7 +264,7 @@ export function Thread({
         onKeyDown={onKeyDown}
         onContextMenu={(event) => openMenu(event)}
       >
-        <div ref={content} className="thread-column">
+        <div ref={content} className={`thread-column${welcome && !items.length ? " empty" : ""}`}>
           {welcome && !items.length ? <WelcomeView welcome={welcome} onLink={onLink} /> : null}
           {items.map((item) =>
             item.role === "user" ? (

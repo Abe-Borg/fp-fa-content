@@ -34,11 +34,13 @@ export async function getText(name: "about" | "license" | "notices"): Promise<st
   return (await readJson(response)).text as string;
 }
 
-export async function post(action: string, body: Record<string, unknown> = {}): Promise<any> {
+/** One action. keepalive lets a request made as the window closes finish after the page is gone. */
+export async function post(action: string, body: Record<string, unknown> = {}, keepalive = false): Promise<any> {
   const response = await fetch(`/api/${action}`, {
     method: "POST",
     headers: { [HEADER]: TOKEN, "Content-Type": "application/json" },
     body: JSON.stringify(body),
+    keepalive,
   });
   return readJson(response);
 }

@@ -45,9 +45,9 @@ Then, on a second job, ask for the same thing in your own words. The milestone f
 
 ### 2. The dependency between the two specialists (outcome B)
 
-Open the Team panel (the line under the top bar, or Zone details, Team).
+Open the Team tab (its button at the top right, or the line beside the job name).
 
-- EXCHANGES BETWEEN AGENTS: is there a `question` row from one specialist to the other, with a real answer? Select it and read both.
+- EXCHANGES BETWEEN AGENTS: is there a `question` row from one specialist to the other, with a real answer? Open it and read both.
 - FINDINGS: open a releasing finding. Does it rest on the sprinkler specialist's trim finding or calc? Open the delivery-screen finding. Did the releasing specialist review it?
 - NOT YET RECONCILED and HOW DISAGREEMENTS ENDED: was anything contested? Was the objection about something real, and did the revision answer it?
 
@@ -59,7 +59,7 @@ The sample's 8 s detection and 2 s release times have no stated basis. A special
 
 Under NEEDS YOUR ANSWER, type an answer (for the trim volume, `6.5 gallons, from the submittal`) and press Answer. It goes on the record and into the thread. Nothing runs yet. Press **Continue with my answers** above the composer.
 
-Look for: the lead acts on the answer, the trim volume appears on the Zone tab, and the volume finding is replaced with one that says where the 6.5 came from.
+Look for: the lead acts on the answer, the trim volume appears on the Inputs tab (Trim, under Pipe), and the volume finding is replaced with one that says where the 6.5 came from.
 
 ### 4. A changed input (outcome C)
 
@@ -69,18 +69,18 @@ Send this:
 
 Look for:
 
-- Fill gpm on the Zone tab becomes 750 without your touching it.
+- Fill flow on the Inputs tab becomes 750 without your touching it.
 - The findings that used 600 are replaced, not left standing. FINDINGS shows the new ones; the export's section 11 keeps the old ones as history.
 - The reply quotes no figure from the old run. If it does, the app says so under the reply in its own words ("only on out-of-date calculations").
 - The Results tab says its figures are from a run before the form changed.
 
-Then change a field yourself: on the Zone tab set `t release s` to 5 and press Ctrl+S. The Team panel should show OUT OF DATE, and **Bring it up to date** should appear above the composer. Press it.
+Then change a field yourself: on the Inputs tab set Releasing time to 5 and press Ctrl+S. The Team panel should show OUT OF DATE, and **Bring it up to date** should appear above the composer. Press it.
 
 ### 5. Close and reopen (outcome C)
 
 Close the window. Open it again and open the job.
 
-Look for: the line under the top bar, **Where things stand** above the composer, and `/status`. Could you tell where the job stood without reading the whole thread? Is anything missing that was there before?
+Look for: the line beside the job name, the count on the Team tab's button, **Where things stand** above the composer, and `/status`. Could you tell where the job stood without reading the whole thread? Is anything missing that was there before?
 
 ### 6. An interruption (outcome F)
 

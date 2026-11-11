@@ -1672,7 +1672,7 @@ class UiSmokeTests(unittest.TestCase):
     def test_chat_is_the_primary_pane(self):
         """The window opens on the thread. What the page draws comes from this state.
 
-        The buttons, the menus, and the drawer are the page's; tests/test_web.py
+        The buttons, the menus, and the job panel are the page's; tests/test_web.py
         drives them in a browser.
         """
         _isolate_data()

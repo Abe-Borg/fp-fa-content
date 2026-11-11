@@ -241,6 +241,32 @@ class ActionTests(ServerCase):
         self.request("POST", "/api/key-save", {"key": "sk-ant-local-test"})
         self.assertNotIn("sk-ant-local-test", json.dumps(self.request("GET", "/api/state")[1]))
 
+    def test_the_page_tells_the_app_how_the_window_was_left(self):
+        from fpfa.paths import read_config
+
+        status, state = self.request("GET", "/api/state")
+        self.assertEqual(state["settings"]["layout"], {"sidebar": True, "panel": "", "panel_width": 0})
+        status, _reply = self.request("POST", "/api/layout", {"values": {"panel": "results", "panel_width": 640, "sidebar": False}})
+        self.assertEqual(status, 200)
+        self.assertEqual(read_config()["layout"], {"sidebar": False, "panel": "results", "panel_width": 640})
+        self.assertEqual(self.request("GET", "/api/state")[1]["settings"]["layout"]["panel"], "results")
+        # Anything that is not a layout changes nothing.
+        for body in ({"values": "team"}, {"values": {"panel": "drawer"}}, {}):
+            self.request("POST", "/api/layout", body)
+        self.assertEqual(read_config()["layout"]["panel_width"], 640)
+        self.assertEqual(read_config()["layout"]["panel"], "")
+
+    def test_the_state_carries_the_run_as_figures(self):
+        self.request("POST", "/api/narrate", {"on": False})
+        self.request("POST", "/api/sample-di", {})
+        self.wait(lambda: self.desk.run_rev == 1)
+        state = self.request("GET", "/api/state")[1]
+        self.assertEqual(state["run_rev"], 1)
+        figures = {figure["key"]: figure for figure in state["results_view"]["figures"]}
+        self.assertEqual((figures["zone_total"]["value"], figures["zone_total"]["unit"]), ("281.3", "gal"))
+        self.assertEqual(figures["t_total"]["verdict"], "The zone-total screen does not pass.")
+        self.assertNotIn("low" + "_air", json.dumps(state["results_view"]))
+
 
 def read_events(port: int, token: str, stop, out: list, *, deadline: float = 30.0) -> None:
     """Read the event stream into out as (event, data) until stop() says so or the deadline passes."""
@@ -388,7 +414,7 @@ class BuiltPageTests(unittest.TestCase):
         index = (STATIC / "index.html").read_text(encoding="utf-8")
         bundle = "".join((STATIC / name).read_text(encoding="utf-8")
                          for name in re.findall(r'src="/(assets/[^"]+\.js)"', index))
-        for label in ("Sample DI zone", "Sample BESS room", "Run zone from Zone details", "Team panel",
+        for label in ("Sample DI zone", "Sample BESS room", "Run zone", "Team panel",
                       "Usage and cost", "Narrate zone runs with Claude", "Rename job…", "Settings…", "Commands",
                       "About and versions", "Cancel running job", "Run trace check", "Export basis…",
                       "Where this job stands", "Status to thread", "NEEDS YOUR ANSWER", "NOT YET RECONCILED"):

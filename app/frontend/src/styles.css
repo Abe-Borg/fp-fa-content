@@ -127,6 +127,7 @@
   --err-tint: #fbeceb;
 }
 
+
 :root {
   /* Shades worked out from the tokens, as theme.Colors works them out. */
   --accent-soft: color-mix(in srgb, var(--accent) 16%, var(--bg));
@@ -142,11 +143,14 @@
   --disabled-ink: color-mix(in srgb, var(--ink) 36%, var(--bg));
   --shade: color-mix(in srgb, var(--bg) 35%, transparent);
   --overlay: color-mix(in srgb, var(--bg) 78%, transparent);
+  --hairline: color-mix(in srgb, var(--edge) 60%, transparent);
 
   --font-body: "Segoe UI", ui-sans-serif, system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
   --font-display: Georgia, Cambria, "Times New Roman", serif;
   --font-mono: "Cascadia Code", "Cascadia Mono", Consolas, ui-monospace, "SF Mono", Menlo, monospace;
-  --column: 780px;
+  --column: 800px;
+  --side-width: 248px;
+  --bar-height: 48px;
   --ease-glide: cubic-bezier(0.22, 1, 0.36, 1);
   --fade-ms: 520ms;
 }
@@ -223,6 +227,9 @@ textarea {
 .err {
   color: var(--err);
 }
+.warn-ink {
+  color: var(--warn);
+}
 .pre-line {
   white-space: pre-line;
 }
@@ -230,12 +237,23 @@ textarea {
   display: flex;
   justify-content: flex-end;
 }
+.grow {
+  flex: 1;
+}
 .display {
   font-family: var(--font-display);
   font-weight: 600;
 }
 p {
   margin: 0.3em 0;
+}
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .loading {
@@ -245,7 +263,9 @@ p {
   color: var(--ink-dim);
 }
 
-/* Layout ------------------------------------------------------------------ */
+/* Layout ------------------------------------------------------------------
+   The job list, then the work: one bar across the top, and under it the
+   stage, which the thread and the job panel share. */
 
 .window {
   display: flex;
@@ -257,15 +277,42 @@ p {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 268px minmax(420px, 1fr);
+  grid-template-columns: var(--side-width) minmax(0, 1fr);
+}
+.body.no-side {
+  grid-template-columns: minmax(0, 1fr);
 }
 
-.window.with-drawer .body {
-  grid-template-columns: 268px minmax(420px, 1fr) minmax(420px, 560px);
+.work {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.stage {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+/* --panel-want is the width the page worked out; --panel-w follows the pointer while the edge is dragged. */
+.stage.with-panel {
+  grid-template-columns: minmax(0, 1fr) var(--panel-w, var(--panel-want, 480px));
+}
+.stage.panel-wide {
+  grid-template-columns: minmax(0, 1fr);
+}
+.stage.panel-wide .chat {
+  display: none;
+}
+body.resizing {
+  cursor: col-resize;
+  user-select: none;
 }
 
 .banner-row {
-  padding: 14px 14px 0;
+  padding: 12px 12px 0;
 }
 .banner {
   display: flex;
@@ -275,7 +322,7 @@ p {
   text-align: left;
   background: var(--banner);
   border: 1px solid var(--banner-edge);
-  border-radius: 13px;
+  border-radius: 12px;
   padding: 10px 16px;
   cursor: pointer;
 }
@@ -293,8 +340,8 @@ p {
   border: 1px solid var(--edge);
   background: var(--raised);
   color: var(--ink);
-  border-radius: 9px;
-  padding: 6px 14px;
+  border-radius: 8px;
+  padding: 5px 13px;
   min-height: 32px;
   cursor: pointer;
   white-space: nowrap;
@@ -335,17 +382,35 @@ p {
   outline: 2px solid var(--on-accent);
   outline-offset: -5px;
 }
-.button.ghost {
+.button.ghost,
+.button.side {
   background: transparent;
 }
 .button.ghost:hover {
   background: var(--raised);
 }
-.button.side {
-  background: transparent;
-}
 .button.side:hover {
   background: var(--side-hover);
+}
+/* A button on a card: the card's own colour is behind it. */
+.button.on-card {
+  background: transparent;
+}
+.button.on-card:hover {
+  background: var(--raised-hover);
+}
+/* A button that is only its words until the pointer is on it. */
+.button.quiet {
+  border-color: transparent;
+  background: transparent;
+  color: var(--ink-dim);
+  min-height: 28px;
+  padding: 3px 9px;
+  font-size: 12.5px;
+}
+.button.quiet:hover {
+  background: var(--raised-hover);
+  color: var(--ink);
 }
 .button.danger {
   background: var(--err);
@@ -353,34 +418,20 @@ p {
   color: var(--on-accent);
   font-weight: 600;
 }
-.button.danger-ghost {
+.button.danger-ghost,
+.button.stop {
   background: transparent;
   color: var(--err);
   border-color: color-mix(in srgb, var(--err) 55%, var(--edge));
 }
-.button.danger-ghost:hover {
+.button.danger-ghost:hover,
+.button.stop:hover {
   background: color-mix(in srgb, var(--err) 12%, var(--surface));
 }
 .button.danger-ghost:disabled {
   color: var(--disabled-ink);
   border-color: var(--edge);
   background: transparent;
-}
-.button.toolbar {
-  min-height: 30px;
-  padding: 4px 11px;
-  font-size: 13px;
-  background: transparent;
-  color: var(--ink-dim);
-}
-.button.toolbar:hover {
-  background: var(--raised);
-  color: var(--ink);
-}
-.button.toolbar.on {
-  color: var(--accent);
-  border-color: var(--focus-edge);
-  background: var(--accent-soft);
 }
 
 .icon-button {
@@ -397,6 +448,9 @@ p {
 }
 .icon-button:hover {
   background: var(--raised);
+  color: var(--ink);
+}
+.icon-button.on {
   color: var(--ink);
 }
 
@@ -425,10 +479,6 @@ p {
   background: var(--raised);
   color: var(--ink);
 }
-.chip.stop {
-  color: var(--err);
-  border-color: color-mix(in srgb, var(--err) 50%, var(--edge));
-}
 
 /* Fields ---------------------------------------------------------------- */
 
@@ -437,28 +487,35 @@ p {
   min-width: 0;
   background: var(--raised);
   border: 1px solid var(--edge);
-  border-radius: 9px;
+  border-radius: 8px;
   padding: 5px 10px;
   min-height: 32px;
   color: var(--ink);
+}
+.input:hover {
+  border-color: color-mix(in srgb, var(--ink-faint) 55%, var(--edge));
 }
 .input:focus,
 .input:focus-visible {
   border-color: var(--accent);
   outline: none;
 }
+.input::placeholder {
+  color: var(--ink-faint);
+}
 .input.well {
   background: var(--bg);
 }
 .input.notes {
   resize: vertical;
-  min-height: 140px;
+  min-height: 72px;
   line-height: 1.45;
+  padding: 7px 10px;
 }
 .select {
   appearance: none;
   padding-left: 8px;
-  padding-right: 22px;
+  padding-right: 24px;
   text-overflow: ellipsis;
   background-image: linear-gradient(45deg, transparent 50%, var(--ink-dim) 50%),
     linear-gradient(135deg, var(--ink-dim) 50%, transparent 50%);
@@ -466,14 +523,34 @@ p {
   background-size: 5px 5px;
   background-repeat: no-repeat;
 }
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
 .field-label {
   color: var(--ink-dim);
-  font-size: 13px;
+  font-size: 12px;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.field-label.top {
-  align-self: start;
-  padding-top: 7px;
+/* A unit sits inside its field, at the end. */
+.control {
+  position: relative;
+}
+.control.with-unit .input {
+  padding-right: 56px;
+}
+.unit {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 11.5px;
+  color: var(--ink-faint);
+  pointer-events: none;
 }
 .check {
   display: inline-flex;
@@ -489,12 +566,12 @@ p {
   margin: 0;
 }
 
-/* Sidebar --------------------------------------------------------------- */
+/* The job list ------------------------------------------------------------- */
 
 .sidebar {
   background: var(--surface);
   border-right: 1px solid var(--edge);
-  padding: 16px 12px 12px;
+  padding: 12px 10px 10px;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -504,7 +581,7 @@ p {
   display: flex;
   align-items: center;
   gap: 9px;
-  margin: 0 2px 16px;
+  margin: 2px 6px 14px;
 }
 .star {
   color: var(--accent);
@@ -513,11 +590,20 @@ p {
 .wordmark {
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 20px;
+  font-size: 19px;
   line-height: 1.1;
   color: var(--ink);
 }
 .wordmark .plus {
+  color: var(--accent);
+}
+.new-chat {
+  justify-content: flex-start;
+  gap: 9px;
+  padding-left: 11px;
+  font-weight: 600;
+}
+.new-chat svg {
   color: var(--accent);
 }
 .section-label {
@@ -535,21 +621,27 @@ p {
   flex: 1;
   min-height: 60px;
 }
+.jobs.none {
+  padding: 2px 8px;
+  line-height: 1.5;
+}
 .job {
   display: flex;
   align-items: center;
   gap: 4px;
   padding: 6px 6px 6px 10px;
-  border-radius: 9px;
+  border-radius: 8px;
   cursor: pointer;
-  color: var(--ink);
+  color: var(--ink-dim);
   min-height: 34px;
 }
 .job:hover {
   background: var(--side-hover);
+  color: var(--ink);
 }
 .job.open {
   background: var(--raised);
+  color: var(--ink);
 }
 .job-name {
   flex: 1;
@@ -585,29 +677,20 @@ p {
   gap: 2px;
   padding-top: 6px;
 }
+.side-section {
+  margin-bottom: 6px;
+}
 .side-section .section-label {
-  margin-top: 10px;
+  margin-top: 8px;
 }
 .lines {
   list-style: none;
   margin: 0;
   padding: 0 4px;
-  max-height: 128px;
+  max-height: 112px;
   overflow-y: auto;
   font-size: 12.5px;
   color: var(--ink-dim);
-}
-.lines.clickable {
-  display: block;
-  width: 100%;
-  text-align: left;
-  border: 0;
-  background: transparent;
-  cursor: pointer;
-  border-radius: 8px;
-}
-.lines.clickable:hover {
-  background: var(--side-hover);
 }
 .line-row {
   display: flex;
@@ -641,35 +724,154 @@ p {
 .line-row .sep {
   color: var(--ink-faint);
 }
-.side-bottom > .button.side {
-  justify-content: flex-start;
-  border-color: transparent;
-  margin-top: 8px;
+.side-link {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  border: 0;
+  border-top: 1px solid var(--hairline);
+  background: transparent;
+  color: var(--ink);
+  padding: 9px 8px 7px;
+  margin-top: 2px;
+  cursor: pointer;
+  text-align: left;
+  border-radius: 0 0 8px 8px;
+}
+.side-link:hover {
+  background: var(--side-hover);
+}
+.side-link svg {
+  color: var(--ink-dim);
+  flex: none;
+}
+.side-flag {
+  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--warn) 26%, var(--surface));
+}
+.sidebar .content-status {
+  margin: 0 8px 2px;
+  font-size: 11.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-/* The chat column ------------------------------------------------------- */
+/* The top bar -------------------------------------------------------------
+   The job's name, one line on the team, and the three tabs of the job panel. */
+
+.topbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: var(--bar-height);
+  padding: 0 10px;
+  border-bottom: 1px solid var(--edge);
+}
+/* The name gives way last: the line on the team beside it shortens first. */
+.job-title {
+  flex: 0 0 auto;
+  max-width: 46%;
+  margin: 0 4px 0 6px;
+  font-size: 17px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* One line on the team beside the job's name. It opens the Team tab. */
+.team-strip {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin-right: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-dim);
+  padding: 5px 9px;
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.team-strip:hover {
+  background: var(--raised);
+  color: var(--ink);
+}
+.strip-dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--ink-faint);
+}
+.team-strip.waiting .strip-dot {
+  background: var(--accent);
+}
+.strip-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.views {
+  flex: none;
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  margin: 0 2px;
+  background: var(--surface);
+  border: 1px solid var(--edge);
+  border-radius: 10px;
+}
+.view {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 26px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink-dim);
+  padding: 3px 13px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.view:hover {
+  color: var(--ink);
+  background: var(--side-hover);
+}
+.view.on {
+  background: var(--accent-soft);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--focus-edge);
+}
+.count {
+  display: inline-block;
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 11px;
+  line-height: 18px;
+  text-align: center;
+}
+
+/* The thread ------------------------------------------------------------- */
 
 .chat {
   display: flex;
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-}
-.topbar {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 10px 12px 10px 26px;
-  border-bottom: 1px solid var(--edge);
-}
-.job-title {
-  flex: 1;
-  min-width: 0;
-  margin: 0;
-  font-size: 19px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  container: chat / inline-size;
 }
 .thread-wrap {
   flex: 1;
@@ -683,19 +885,24 @@ p {
   scrollbar-gutter: stable both-edges;
 }
 .thread-column {
-  max-width: calc(var(--column) + 52px);
+  max-width: calc(var(--column) + 48px);
   margin: 0 auto;
-  padding: 16px 26px 20px;
+  padding: 18px 24px 20px;
   font-size: 15px;
   line-height: 1.55;
 }
-.composer-row,
-.footer {
+/* An empty thread: the welcome sits in the middle of the room it has. */
+.thread-column.empty {
+  max-width: 960px;
+  min-height: 100%;
+  display: flex;
+  align-items: center;
+}
+.composer-row {
   width: 100%;
-  max-width: calc(var(--column) + 74px);
+  max-width: calc(var(--column) + 70px);
   margin: 0 auto;
-  padding-left: 37px;
-  padding-right: 37px;
+  padding: 4px 35px 8px;
 }
 
 .turn {
@@ -927,12 +1134,14 @@ p {
   }
 }
 
+/* The empty thread: what the app is for, and three ways to start. */
 .welcome {
-  padding: 9vh 0 2vh;
+  width: 100%;
+  padding: 12px 0 20px;
   text-align: center;
 }
 .welcome h1 {
-  font-size: 26px;
+  font-size: 28px;
   margin: 12px 0 8px;
 }
 .welcome .dim {
@@ -943,8 +1152,73 @@ p {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
-  margin: 16px 0 14px;
+  gap: 6px;
+  margin: 18px 0 0;
+}
+.welcome-link {
+  border: 1px solid var(--banner-edge);
+  background: var(--banner);
+  color: var(--ink);
+  border-radius: 10px;
+  padding: 7px 15px;
+  cursor: pointer;
+}
+.welcome-link:hover {
+  border-color: var(--accent);
+}
+.welcome-cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  max-width: 880px;
+  margin: 26px auto 18px;
+  text-align: left;
+}
+.welcome-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 1px solid var(--edge);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--ink);
+  padding: 14px 16px 16px;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+.welcome-card:hover {
+  background: var(--raised);
+  border-color: var(--focus-edge);
+}
+.card-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 14.5px;
+  font-weight: 650;
+}
+.card-title svg {
+  color: var(--ink-faint);
+  flex: none;
+}
+.welcome-card:hover .card-title svg {
+  color: var(--accent);
+}
+.card-text {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ink-dim);
+}
+@container chat (max-width: 660px) {
+  .welcome-cards {
+    grid-template-columns: minmax(0, 1fr);
+    max-width: 420px;
+  }
+  .composer-foot .hint {
+    display: none;
+  }
 }
 
 .jump {
@@ -968,10 +1242,7 @@ p {
   background: var(--raised-hover);
 }
 
-.composer-row {
-  padding-top: 4px;
-  padding-bottom: 2px;
-}
+/* The composer: the words, then one row inside the box for Mode and Send. */
 .chips {
   display: flex;
   flex-wrap: wrap;
@@ -980,74 +1251,87 @@ p {
 }
 .composer {
   display: flex;
-  align-items: flex-end;
-  gap: 6px;
+  flex-direction: column;
+  gap: 2px;
   background: var(--raised);
   border: 1px solid var(--edge);
   border-radius: 14px;
-  padding: 6px 8px 7px 6px;
+  padding: 8px 8px 7px;
+  cursor: text;
   transition: border-color 120ms ease;
 }
 .composer:focus-within {
-  border-color: var(--accent);
+  border-color: var(--focus-edge);
 }
 .composer textarea {
-  flex: 1;
+  width: 100%;
+  min-width: 0;
   border: 0;
   background: transparent;
   resize: none;
-  padding: 7px 10px;
+  padding: 4px 8px 6px;
   font-size: 15px;
   line-height: 22px;
-  min-width: 0;
 }
+/* The placeholder stays on one line: the box is sized by what is typed, not by the hint. */
 .composer textarea::placeholder {
   color: var(--ink-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .composer textarea:focus-visible {
   outline: none;
 }
-.composer .send {
-  margin: 0 0 1px;
+.composer-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: default;
+}
+.composer .send,
+.composer .stop {
+  min-height: 30px;
+  padding: 4px 13px 4px 10px;
 }
 .composer-foot {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 5px;
-  min-height: 26px;
-}
-.footer {
-  display: flex;
   justify-content: space-between;
   gap: 16px;
-  padding-top: 2px;
-  padding-bottom: 8px;
+  padding: 6px 6px 0;
   font-size: 12px;
   color: var(--ink-faint);
+  min-height: 24px;
 }
-.footer .status {
+.composer-foot .status {
   flex: 1;
   min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.footer .content-status {
+.composer-foot .hint {
   white-space: nowrap;
 }
 
-/* Zone details ----------------------------------------------------------- */
+/* The job panel -------------------------------------------------------------
+   Inputs, Results, or Team, beside the thread or in its place. What is in it
+   lays itself out by the panel's own width, not the window's. */
 
-.drawer {
-  background: var(--surface);
-  border-left: 1px solid var(--edge);
-  padding: 14px 12px 10px 18px;
+.job-panel {
+  position: relative;
   display: flex;
   flex-direction: column;
-  min-height: 0;
   min-width: 0;
+  min-height: 0;
+  background: var(--surface);
+  border-left: 1px solid var(--edge);
+  container: panel / inline-size;
   animation: slide-in 180ms var(--ease-glide) both;
+}
+.stage.panel-wide .job-panel {
+  border-left: 0;
+  animation: none;
 }
 @keyframes slide-in {
   from {
@@ -1055,70 +1339,135 @@ p {
     transform: translateX(12px);
   }
 }
-.drawer-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+/* The panel's edge: dragged, or moved with the arrow keys. A line shows where it is. */
+.panel-edge {
+  position: absolute;
+  left: -5px;
+  top: 0;
+  bottom: 0;
+  width: 9px;
+  z-index: 5;
+  cursor: col-resize;
+  touch-action: none;
 }
-.drawer-head h2 {
-  margin: 0;
-  font-size: 19px;
-}
-.tabs {
-  display: flex;
-  gap: 4px;
-  margin: 12px 0 10px;
-}
-.tab {
-  border: 0;
+.panel-edge::after {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
   background: transparent;
-  color: var(--ink-dim);
-  border-radius: 9px;
-  padding: 6px 13px;
-  cursor: pointer;
-  font-weight: 600;
-  font-size: 13px;
+  transition: background-color 120ms ease;
 }
-.tab:hover {
-  color: var(--ink);
-  background: var(--side-hover);
+.panel-edge:hover::after,
+.panel-edge:focus-visible::after,
+body.resizing .panel-edge::after {
+  background: var(--accent);
 }
-.tab.on {
-  background: var(--raised);
-  color: var(--ink);
+.panel-edge:focus-visible {
+  outline: none;
 }
-.drawer-body {
-  font-size: 13.5px;
+.pane {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.pane-scroll {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 4px 8px 12px 2px;
+  padding: 16px 18px 20px;
+  font-size: 13.5px;
 }
-.form-grid {
-  display: grid;
-  gap: 8px 10px;
+/* What a tab is for stays in reach under whatever scrolls above it. */
+.action-bar {
+  flex: none;
+  display: flex;
   align-items: center;
+  gap: 14px;
+  padding: 10px 18px;
+  border-top: 1px solid var(--edge);
 }
-.form-grid.basis {
-  grid-template-columns: auto 1fr;
-}
-.form-grid.four {
-  grid-template-columns: auto minmax(80px, 1fr) auto minmax(80px, 1fr);
-  margin-top: 10px;
-}
-.span2 {
-  grid-column: 1 / -1;
-}
-.checks {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 2px 18px;
-  margin: 12px 0 4px;
+.action-note {
+  flex: 1;
+  min-width: 0;
 }
 .card {
   background: var(--raised);
-  border-radius: 13px;
-  padding: 10px 12px 12px;
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+.row,
+.row-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.group {
+  margin: 0 0 20px;
+}
+.group-title {
+  margin: 0 0 10px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--ink);
+}
+.group-note {
+  margin: 10px 0 0;
+  line-height: 1.5;
+}
+.empty {
+  max-width: 460px;
+  margin: 12vh auto 0;
+  text-align: center;
+}
+.empty h2 {
+  margin: 0 0 8px;
+  font-size: 19px;
+}
+.empty-actions {
+  justify-content: center;
+  margin-top: 16px;
+}
+
+/* Inputs */
+.inputs-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0 32px;
+  align-items: start;
+}
+.inputs .group + .group {
+  border-top: 1px solid var(--hairline);
+  padding-top: 16px;
+}
+.inputs-column + .inputs-column .group:first-child {
+  border-top: 1px solid var(--hairline);
+  padding-top: 16px;
+}
+/* Two fields to a row in a narrow panel and four once there is room, so every group lines up with the next. */
+.fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 12px;
+  align-items: start;
+}
+.field.span-all {
+  grid-column: 1 / -1;
+}
+.flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 22px;
+  margin-top: 10px;
+}
+.segments {
+  margin-top: 12px;
+  padding: 6px 10px 12px;
 }
 .grid-table {
   width: 100%;
@@ -1127,31 +1476,25 @@ p {
 }
 .grid-table th {
   text-align: left;
-  font-size: 11px;
-  letter-spacing: 0.06em;
+  font-size: 11.5px;
   color: var(--ink-faint);
-  font-weight: 700;
-  padding: 4px 6px;
+  font-weight: 600;
+  padding: 5px 6px;
   border-bottom: 1px solid var(--edge);
+  white-space: nowrap;
 }
 .grid-table td {
   padding: 4px 6px;
-  border-bottom: 1px solid color-mix(in srgb, var(--edge) 60%, transparent);
+  border-bottom: 1px solid var(--hairline);
 }
-.grid-table.selectable tbody tr {
-  cursor: pointer;
+.grid-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
-.grid-table.selectable tbody tr:hover {
-  background: var(--raised-hover);
-}
-.grid-table.selectable tbody tr.on {
-  background: var(--accent-soft);
-}
-.grid-table .brief {
-  max-width: 200px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.grid-table .end {
+  width: 30px;
+  text-align: right;
+  padding-right: 0;
 }
 .small-x {
   width: 24px;
@@ -1159,35 +1502,192 @@ p {
 }
 .segment-add {
   display: grid;
-  grid-template-columns: 1.3fr 0.8fr 1fr 1fr auto;
-  gap: 2px 6px;
-  align-items: center;
+  grid-template-columns: 1.2fr 0.8fr 1fr 1fr auto;
+  gap: 8px;
+  align-items: end;
   margin-top: 10px;
 }
-.text-card {
-  white-space: pre-wrap;
-  font-family: var(--font-body);
-  font-size: 12.5px;
+.assumptions {
+  line-height: 1.55;
+}
+@container panel (min-width: 900px) {
+  .inputs-columns {
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  }
+  .inputs-column + .inputs-column .group:first-child {
+    border-top: 0;
+    padding-top: 0;
+  }
+}
+@container panel (min-width: 520px) {
+  .fields {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+@container panel (max-width: 460px) {
+  .segment-add {
+    grid-template-columns: 1fr 1fr;
+  }
+  .segment-add .button {
+    grid-column: 1 / -1;
+  }
+}
+
+/* Results */
+.results-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.results-head h2 {
   margin: 0;
-  max-height: 160px;
-  overflow: auto;
+  font-size: 18px;
 }
-.text-card.detail {
-  max-height: none;
-  min-height: 120px;
+.results-head p {
+  margin: 2px 0 0;
 }
-.row-buttons,
-.row {
+/* Two figures to a row beside the thread; more once the panel has the room. */
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 20px;
+}
+@container panel (max-width: 400px) {
+  .tiles {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@container panel (min-width: 820px) {
+  .tiles {
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  }
+}
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  background: var(--raised);
+  border: 1px solid transparent;
+  border-radius: 12px;
+  padding: 12px 14px 13px;
+}
+.tile.span-all {
+  grid-column: 1 / -1;
+}
+.tile-head {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: space-between;
+  gap: 4px 8px;
+  min-height: 20px;
+}
+.tile-title {
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--ink-dim);
+}
+/* The label a figure carries: calculated, ASSUMED, or the tool's own status word. */
+.label-chip {
+  flex: none;
+  padding: 1px 8px;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--ink) 9%, var(--raised));
+  color: var(--ink-dim);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.label-chip.assumed {
+  background: color-mix(in srgb, var(--warn) 26%, var(--raised));
+  color: var(--ink);
+}
+.tile-value {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.tile-value .display {
+  font-size: 28px;
+  line-height: 1.15;
+}
+.tile-unit {
+  font-size: 13px;
+  color: var(--ink-dim);
+}
+.tile-code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  background: var(--bg);
+  border-radius: 7px;
+  padding: 7px 9px;
+  overflow-wrap: anywhere;
+}
+.tile p {
+  margin: 0;
+}
+.tile-verdict {
+  font-size: 12.5px;
+  font-weight: 650;
+}
+.tile-line {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink-dim);
+}
+/* A screen that does not pass: the edge and the words say so, never the colour alone. */
+.tile.tone-warn {
+  border-color: color-mix(in srgb, var(--warn) 55%, var(--edge));
+  background: color-mix(in srgb, var(--warn) 8%, var(--raised));
+}
+.tile.tone-ok {
+  border-color: color-mix(in srgb, var(--ok) 45%, var(--edge));
+}
+.results-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0 32px;
+  align-items: start;
+}
+@container panel (min-width: 900px) {
+  .results-columns {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.narrative {
+  max-width: 78ch;
+  line-height: 1.55;
+  color: var(--ink-dim);
+}
+.run-heading {
+  margin-top: 14px;
+}
+.results .callout {
+  margin-bottom: 14px;
+}
+.disclosure {
+  border-top: 1px solid var(--hairline);
+  padding-top: 8px;
+}
+.disclosure > summary {
+  display: flex;
+  align-items: center;
   gap: 8px;
+  padding: 5px 4px;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+  list-style: none;
 }
-.row-buttons {
-  margin: 8px 0 4px;
+.disclosure > summary::-webkit-details-marker {
+  display: none;
 }
-.grow {
-  flex: 1;
+.disclosure > summary:hover {
+  background: var(--raised);
 }
 .sheet {
   font-family: var(--font-mono);
@@ -1200,34 +1700,26 @@ p {
 }
 
 /* The Team tab ---------------------------------------------------------------
-   Where the job stands, what the team needs, and what each specialist found.
-   A tier's dot is never the only signal: the tier is written beside it. */
+   What is waiting on someone, where the job stands, and what each specialist
+   found. A tier's dot is never the only signal: the tier is written beside it. */
 
-.visually-hidden {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
+.team-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0 28px;
+  align-items: start;
 }
-.window.with-drawer.team-open .body {
-  grid-template-columns: 268px minmax(420px, 1fr) minmax(460px, 640px);
+.team-block {
+  margin-bottom: 20px;
 }
-.tab .count {
-  display: inline-block;
-  min-width: 18px;
-  margin-left: 7px;
-  padding: 0 5px;
-  border-radius: 9px;
-  background: var(--accent);
-  color: var(--on-accent);
-  font-size: 11px;
-  line-height: 18px;
-  text-align: center;
+.team-block > .section-label {
+  margin: 0 2px 8px;
 }
-.team .card {
-  margin-bottom: 6px;
+.section-label.attention {
+  color: var(--accent);
+}
+.team .card + .card {
+  margin-top: 8px;
 }
 .team .card p {
   margin: 0 0 6px;
@@ -1235,9 +1727,44 @@ p {
 .team .card p:last-child {
   margin-bottom: 0;
 }
+.block-note {
+  margin: 8px 2px 0;
+  line-height: 1.5;
+}
+@container panel (min-width: 940px) {
+  .team-grid {
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  }
+  /* What is waiting runs across the top, side by side where there is more than one kind. */
+  .team-area.waiting {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+    gap: 0 28px;
+    align-items: start;
+  }
+}
 .stand-objective {
   font-family: var(--font-display);
   font-size: 15.5px;
+}
+.stand-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0 24px;
+}
+/* The plan beside the people once the card itself has the room, wherever the card sits. */
+.stand {
+  container: stand / inline-size;
+}
+@container stand (min-width: 700px) {
+  .stand-columns {
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  }
+  .stand-columns .people {
+    border-top: 0;
+    padding-top: 0;
+  }
 }
 .steps,
 .people,
@@ -1253,7 +1780,7 @@ p {
   padding: 2px 0;
 }
 .people {
-  border-top: 1px solid color-mix(in srgb, var(--edge) 60%, transparent);
+  border-top: 1px solid var(--hairline);
   padding-top: 8px;
 }
 .step-mark {
@@ -1274,8 +1801,13 @@ p {
 .stand-line {
   overflow-wrap: anywhere;
 }
-.warn-ink {
-  color: var(--warn);
+.stand .row-buttons {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--hairline);
+}
+.ask {
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--edge));
 }
 .ask-text {
   display: block;
@@ -1288,6 +1820,12 @@ p {
   resize: vertical;
   line-height: 1.4;
 }
+.ask-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
 .callout {
   border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--edge));
   background: color-mix(in srgb, var(--accent) 7%, var(--raised));
@@ -1295,9 +1833,6 @@ p {
 .callout.warn {
   border-color: color-mix(in srgb, var(--warn) 55%, var(--edge));
   background: color-mix(in srgb, var(--warn) 9%, var(--raised));
-}
-.results .callout {
-  margin-bottom: 10px;
 }
 .change {
   font-weight: 600;
@@ -1317,6 +1852,13 @@ p {
   border-radius: 50%;
   background: var(--ink-faint);
 }
+.group .evidence {
+  color: var(--ink-dim);
+  line-height: 1.5;
+}
+.warnings .evidence {
+  color: var(--warn);
+}
 .rfis {
   margin: 0;
   padding-left: 20px;
@@ -1326,7 +1868,7 @@ p {
 }
 .dispute {
   padding: 9px 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--edge) 60%, transparent);
+  border-bottom: 1px solid var(--hairline);
 }
 .dispute:first-child {
   padding-top: 0;
@@ -1368,27 +1910,34 @@ p {
 .dot.tier-open {
   background: var(--err);
 }
+.tiers {
+  padding-top: 6px;
+}
 .tier {
   padding: 3px 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--edge) 60%, transparent);
+  border-bottom: 1px solid var(--hairline);
 }
 .tier > summary,
-.finding > summary {
+.finding > summary,
+.exchange > summary {
   cursor: pointer;
   border-radius: 7px;
   list-style: none;
 }
 .tier > summary::-webkit-details-marker,
-.finding > summary::-webkit-details-marker {
+.finding > summary::-webkit-details-marker,
+.exchange > summary::-webkit-details-marker {
   display: none;
 }
 .tier > summary:hover,
-.finding > summary:hover {
+.finding > summary:hover,
+.exchange > summary:hover {
   background: var(--raised-hover);
 }
 /* The mark that says a row opens: a corner that turns down when it has. */
 .tier > summary::after,
-.finding > summary::after {
+.finding > summary::after,
+.disclosure > summary::before {
   content: "";
   width: 6px;
   height: 6px;
@@ -1400,7 +1949,8 @@ p {
   transition: transform 120ms ease;
 }
 .tier[open] > summary::after,
-.finding[open] > summary::after {
+.finding[open] > summary::after,
+.disclosure[open] > summary::before {
   transform: rotate(45deg);
 }
 .tier > summary {
@@ -1473,57 +2023,83 @@ p {
   align-items: center;
   gap: 6px;
 }
-
-/* One line on the team under the top bar. It opens the Team tab. */
-.team-strip {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  border: 0;
-  border-bottom: 1px solid var(--edge);
-  background: var(--surface);
-  color: var(--ink-dim);
-  padding: 6px 16px 6px 26px;
-  font-size: 12.5px;
-  text-align: left;
-  cursor: pointer;
+/* What passed between agents: one row each, opened to the brief and what came back. */
+.exchanges {
+  padding: 4px 6px;
 }
-.team-strip:hover {
-  background: var(--side-hover);
-  color: var(--ink);
+.exchange-none {
+  margin: 0;
+  padding: 8px;
 }
-.team-strip:focus-visible {
-  outline-offset: -3px;
+[hidden] {
+  display: none !important;
 }
-.strip-label {
+.exchange + .exchange {
+  border-top: 1px solid var(--hairline);
+}
+.exchange > summary {
+  display: grid;
+  grid-template-columns: 66px minmax(0, 1fr) auto auto;
+  gap: 1px 10px;
+  align-items: baseline;
+  padding: 7px 8px;
+}
+.exchange-kind {
   font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--ink-faint);
 }
-.team-strip.waiting .strip-label {
-  color: var(--accent);
-}
-.strip-text {
-  flex: 1;
-  min-width: 0;
+.exchange-who {
+  font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.strip-open {
-  color: var(--ink-faint);
+.exchange-status,
+.exchange-when {
+  font-size: 12px;
+  color: var(--ink-dim);
+  white-space: nowrap;
+}
+.exchange-brief {
+  grid-column: 2 / -1;
+  font-size: 12.5px;
+  color: var(--ink-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.exchange[open] > summary {
+  background: color-mix(in srgb, var(--accent) 9%, var(--raised));
+}
+.exchange[open] .exchange-brief {
+  white-space: normal;
+}
+.text-card {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  margin: 0;
+}
+.text-card.detail {
+  margin: 6px 4px 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--bg);
 }
 
 /* Menus and dialogs ---------------------------------------------------------- */
 
+/* A menu is as wide as its longest row, whatever room is left of the place it opens at. */
 .menu {
   position: fixed;
   z-index: 60;
+  width: max-content;
   min-width: 230px;
-  max-width: 380px;
+  max-width: min(380px, calc(100vw - 16px));
   background: var(--raised);
   border: 1px solid var(--edge);
   border-radius: 10px;
@@ -1628,6 +2204,9 @@ p {
 .dialog form .input {
   margin-top: 6px;
 }
+.dialog .field-label {
+  font-size: 13px;
+}
 .text-dialog h3 {
   margin: 4px 0 2px;
   font-size: 17px;
@@ -1650,6 +2229,9 @@ p {
 .settings .panel > .row,
 .settings .panel > form.row {
   margin-top: 10px;
+}
+.settings .section-label {
+  margin-left: 0;
 }
 .schemes {
   display: grid;
