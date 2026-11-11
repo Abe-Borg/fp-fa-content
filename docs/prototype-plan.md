@@ -181,6 +181,7 @@ Shared hosting. Managed Agents. Real-time peer chat (a consult is one question a
 - This file is the plan. A change to scope, a decision, or a status moves here first, in the same pull request as the work.
 - The coding agent on this repository owns Phases 1 through 5 and keeps `CLAUDE.md` and the README current.
 - The content team keeps the content pack (skills, corpus, specs) and reviews the known answer.
+- Owner direction, 2026-11-11: the coding agents own the application implementation, and the content team owns the engineering substance wherever it sits, the formulas, assumptions, thresholds, and expected values in `calcs/` included. Neither silently changes the other's work, and neither collection is copied over the other while they remain unreconciled. The full division, and what to do when a change crosses it, is the "Ownership and division of responsibilities" section of `CLAUDE.md`.
 - The reviewing agent reviews each phase pull request against this file and against the acceptance tests.
 - One pull request per phase where practical. Each pull request body states the tests run and their counts.
 - No release tags from a phase pull request. Content stays on `content-v*` tags and the app on `app-v*` tags.
