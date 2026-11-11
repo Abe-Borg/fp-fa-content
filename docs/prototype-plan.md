@@ -4,18 +4,22 @@ The app was named FP/FA Design Assistant until 2026-11-09. It is +Cynosure from 
 
 This file is the single source of truth for the v0 prototype. Every agent working on this repository reads it before starting and updates the status columns when a phase or a gate changes. Email threads, chat transcripts, and earlier planning notes are history, not the plan.
 
-Updated: 2026-11-10. Phases 1 through 5 complete. Phase 6 in progress: everything that runs without a Windows machine or a key is done; the Windows runs wait for the owner. The window was restyled, the app renamed, and a license added on 2026-11-09, and on 2026-11-10 the window moved from tkinter to a web page in WebView2 (section 2); none of that changes a phase or a gate, though the Windows runs now also check the new window. Implementation of v0 is authorized as of 2026-11-09 along the path in this file.
+Updated: 2026-11-11. Phase 7, the team milestone, is built and tested with scripted stand-ins for the model; it has not been run against the live model (section 3, and `docs/live-evaluation.md`). `__version__` is 0.2.0.
+
+Earlier, 2026-11-10: Phases 1 through 5 complete. Phase 6 in progress: everything that runs without a Windows machine or a key is done; the Windows runs wait for the owner. The window was restyled, the app renamed, and a license added on 2026-11-09, and on 2026-11-10 the window moved from tkinter to a web page in WebView2 (section 2); none of that changes a phase or a gate, though the Windows runs now also check the new window. Implementation of v0 is authorized as of 2026-11-09 along the path in this file.
 
 ## 1. Definition of done for v0
 
-A coworker installs `Cynosure-Setup-<version>.exe` on their own Windows machine, accepts the license it shows, saves their own Anthropic API key, opens the sample double-interlock data hall, and asks: "Give me the design basis for zone DH-1."
+A coworker installs `Cynosure-Setup-<version>.exe` on their own Windows machine, accepts the license it shows, saves their own Anthropic API key, opens the sample double-interlock data hall, and asks for a design basis in their own words. Since Phase 7 the request names no specialist and no sequence; "Give me the design basis for zone DH-1." is one such request and must not be the only one that works.
 
 Within a few minutes they get all four of these:
 
-1. A lead reply with the design-basis summary and the open questions.
-2. A team panel showing the FP specialist, the FA specialist, and the checker as separate contributors, with every handoff inspectable: who sent what to whom, when, and what came back.
-3. An exported Design Basis and Open Questions document whose numbers came from the calc tools, whose claims passed the independent checker, and whose unresolved items are listed as RFIs for the engineer of record.
-4. The cost of that task, measured and shown on the status line and recorded on the job.
+1. A lead reply with the design-basis summary, what the specialists contested and how it ended, what the team needs from them, and the open questions.
+2. A team panel showing the plan, the FP specialist, the FA specialist, and the checker as separate contributors, with every exchange inspectable (who sent what to whom, when, and what came back), each finding with what it rests on, and each disagreement with how it ended.
+3. An exported Design Basis and Open Questions document whose numbers came from the calc tools, which says for each finding how far it was taken (checked against an identified source, reviewed against its author's own cite, not reviewed, or needing further evidence or engineering review), which never says a standard was checked, and whose unresolved items are listed as RFIs for the engineer of record.
+4. The cost and the time of that task, measured, shown on the status line, and recorded on the job.
+
+And when they come back to the job, change an input, or lose the window part-way, the job is where they left it and nothing that rested on a changed value is still shown as current.
 
 The known answer for that task is `docs/known-answer-dh1.md`. The exported document and the lead reply are judged against it.
 
@@ -34,6 +38,15 @@ The known answer for that task is `docs/known-answer-dh1.md`. The exported docum
 | 2026-11-09 | The app is named +Cynosure. The exe is `Cynosure.exe` and the installer `Cynosure-Setup-<version>.exe`. The installer's AppId, the `fpfa` package, the `FPFA_*` variables, the data directory, and the keyring service name do not change. | The owner's name for it. Keeping the identifiers means an existing install upgrades in place and keeps its jobs, record, and saved key. |
 | 2026-11-09 | The app is licensed under the PolyForm Shield License 1.0.0, copyright Abraham Borg. The installer shows the license and installs only after it is accepted; LICENSE.txt and THIRD-PARTY-NOTICES.txt are installed beside the exe. | The repository had no license. This is the license Build-a-Spec carries: use for any purpose except a competing product, with the software provided as is. The publisher field of the installer was left as it was; the owner decides whether it should match the copyright holder. |
 | 2026-11-09 | Model stays `claude-opus-5-5` for the lead, the specialists, and the checker. Cost is measured before any model split is considered. | Engineering judgment first. A cheaper specialist model is a measured decision, not a default. |
+| 2026-11-11 | The second release leg is P, the pressure drop from sprinkler operation, everywhere a reader or a model sees it. Low air is supervisory only and is never a release input. The kernel keeps its deprecated `boolean` and `low_air` aliases for older installed apps; only `app/fpfa/releasing.py` reads them. | The reply, the Results tab, both exports, the tool description, and twelve skills named low air as the second leg. The engineering basis and what in it still needs a qualified engineer is `docs/releasing-basis.md`. The fix is to the statement, with tests that read the truth table row by row and the prose sentence by sentence; no document was edited to match another. |
+| 2026-11-11 | The lead runs from `roles/lead/ROLE.md` in the content pack and is not handed a specialist's role to wear. A pack with no lead role falls back to the everyday shell with a team paragraph. | The lead used to be the everyday shell plus one paragraph, with `read_role`, so it could answer in a specialist's place and a designer had to name the specialists to get them. How a team is run is method, and method is content. |
+| 2026-11-11 | A specialist may put a question to another specialist and get the answer inside its own turn (`consult`). The app runs the asked specialist in its own context and keeps the exchange as a record row. One level deep, three per task. This supersedes "peer messaging is lead-routed" above for a question; work left for later is still a handoff the lead delivers. It is not real-time chat. | A handoff delivered at the receiver's next delegation cannot answer a question the asker needs now. The releasing sequence needs the trim family and the delivery screen needs a releasing time: each specialist's work depends on a fact the other owns. |
+| 2026-11-11 | One agent records where it stands on another's finding (`review_finding`: agree, or object with a note). An objection ends when the author revises or withdraws the finding, the objector changes its position, or the lead settles it with a recorded decision or escalates it as a question. The app makes no agent exchange anything. | Reconciliation has to be on the record to be inspected, and an exchange the app manufactured would be the role labels the milestone says not to mistake for teamwork. |
+| 2026-11-11 | The project inputs are record facts, labeled GIVEN with who supplied each. The form and the lead's `set_input` write them; a specialist never does. Each calc records the inputs it used and the calc it took a figure from. A changed input puts what used it out of date, with the reason, until it is run again, replaced, or withdrawn. A run of the tool plan on inputs that have since changed governs nothing: the lead is told so, and Section 21 13 19 is not written from it. | Inputs lived on the form, and every agent was handed its own copy in its message. A calc and the statements built on it stayed authoritative after the designer changed the value under them, and the chat request went on telling the lead the old run's figures governed. |
+| 2026-11-11 | The record check is a trace check and is called one. A cite to a standard is read in the content pack's own notes when the pack holds that section; a figure with a unit in a claim has to be in the rows the claim cites; an out-of-date finding is not judged. Each finding earns one of four tiers, derived by the app. The Design Basis export prints the tiers and waits for a current trace check and for nothing out of date; it no longer waits for every finding to be Supported. The Section 21 13 19 export keeps its gate. | The check judged a claim against a note its own author wrote, and its name and the gate implied more than that. Holding the export until every finding is Supported pushes a team to drop the findings it cannot support, which are the ones an engineer most needs to see. |
+| 2026-11-11 | The app looks up every figure in the lead's reply and names under the reply any it cannot find on the record or in what the lead read, or finds only on an out-of-date calculation. | "The lead does not compute" was a sentence in a prompt. This makes a broken one visible to the designer. |
+| 2026-11-11 | A transient API failure is retried up to five attempts, waiting the API's `retry-after` up to 30 s. `FPFA_EFFORT` may set `output_config.effort`; it is unset by default. | A team turn is dozens of requests; three attempts two seconds apart lost a turn to one busy minute. Effort is a lever for the live evaluation, not a default this plan sets. |
+| 2026-11-11 | Evidence from a scripted model is reported as simulated. `docs/acceptance-tests.md` keeps the table of tested, simulated, and unrun; `docs/live-evaluation.md` is the path to run with the live model. Test B asks for a design basis in a plain sentence. | The earlier Test B named each specialist and the order, and a pass on a scripted team was reported as collaboration demonstrated. |
 | 2026-11-09 | Numbers come from `calcs/`. The three labels stay: calculated, ASSUMED, use best judgment. Delivery times are an optimistic screen, not a listed water-delivery-time calculation. | Unchanged from the current app. The team does not loosen this. |
 
 ## 3. Roadmap and status
@@ -50,12 +63,14 @@ Sizes are focused work sessions. No dates are promised.
 | 5. Recovery | Pending handoffs re-queued on launch. Calc idempotency by input hash. In-flight jobs marked interrupted on relaunch. Forced-kill and sleep tests. | Tests C and D protocol written and passed. | 2 | Done: jobs persist as record rows, `Record.recover()` runs once at launch, the lead sees waiting handoffs at the top of its turn, a wake detector in the window. `docs/recovery-protocol.md` is the protocol; its automated part, including a real process kill, is `app/tests/test_recovery.py`. The manual Windows runs wait for the Phase 6 machine |
 | 6. Package and measure | Installer from the existing scripts. Clean Windows VM. Run tests A through E. Record versions, cost per task, failures, and limits. | A, B, E pass. C and D at least documented. | 1 to 2 | In progress. Done from Linux: the Windows workflow gained a build-only mode (`publish` off uploads the installer and zip as artifacts, no tag), `__version__` is 0.1.4 for the next release, every model context writes its usage on the record (`turn`, `narration`, `record_check`, `delegation` events), `app/fpfa/usage_report.py` prices a job (`/usage`, the ⋯ menu, `python -m fpfa.usage_report`), `app/fpfa/about.py` records versions (`About and versions`, `--versions`), and `docs/acceptance-tests.md` is the A through E protocol with result tables. Waiting on the owner: the clean Windows machine, a key, and the known-answer confirmation, then the manual runs and the result tables |
 
+| 7. Team milestone | A lead that owns an objective (`roles/lead`), status read from the record, inputs as record facts with staleness, questions between specialists, reviews and reconciliation, the trace check with pack-traced cites and tiers, the reply audit, the stale-run guard, the Team panel, `/status`, panel answers, retries, the Design Basis restructured, the live evaluation guide and runner. | The scripted scenario passes end to end and the live evaluation path is written. The live run itself is the owner's. | 6 | Built. Tested with scripted stand-ins for the model: `app/tests/test_releasing_basis.py`, `test_coherence.py`, `test_team_protocol.py`, `test_checker.py`, `test_desk_team.py`, `test_scenario.py`, `test_live_eval.py`, and the Team panel in Chromium (`test_web.py`). **Not run against the live model.** `docs/milestone-team-handback.md` is the account; `docs/live-evaluation.md` is the path |
+
 ## 4. Acceptance tests
 
 | Test | What passes | Status |
 | --- | --- | --- |
 | A. Clean Windows install | Install on a clean machine, open the sample, load the skills, run the DH-1 tool plan, export. Figures match `docs/known-answer-dh1.md`. Runtime and dependency versions recorded. | Protocol in `docs/acceptance-tests.md`. Figures locked by tests; versions come from About and versions. Manual run: not run |
-| B. Specialist collaboration | Distinct FP, FA, and checker contributions on DH-1. Every substantive handoff is a record row with sender, receiver, time, and payload, visible in the window. | Automated half passed (`app/tests/test_team.py`). Manual run with a key per `docs/acceptance-tests.md`: not run |
+| B. Specialist collaboration | Distinct FP, FA, and checker contributions on DH-1 from a request that names no specialist, **and** a record that shows the two specialists worked on a shared problem: a fact carried from one to the other, a position taken on the other's finding, and every objection ended. Every exchange is a record row with sender, receiver, time, and content, visible in the window. | Simulated half passed (`app/tests/test_team.py`, `test_team_protocol.py`, `test_scenario.py`). Manual run with a key per `docs/acceptance-tests.md`: not run |
 | C. Continuity | Relaunch the app and the roster, the pending handoffs, and the record are back. A completed specialist can be asked a follow-up with its prior contribution in front of it. | Automated half passed (`app/tests/test_recovery.py`, a second window on the same data directory). Manual Windows run per `docs/recovery-protocol.md`: not run |
 | D. Recovery | Forced process kill and sleep/wake, tested separately. No duplicate calc records. No repeated handoff. In-flight jobs are marked interrupted and can be re-run. | Automated half passed: a child process killed between calc records, recovery, re-run with replays only, and the wake detector as a clock gap. Manual Windows runs per `docs/recovery-protocol.md`: not run |
 | E. Usability and cost | Activity collapsed by default, handoffs inspectable, cancel works, blockers visible, export reviewable. Cost per DH-1 task measured from the usage totals. | Automated half passed (`app/tests/test_usage.py`, `test_team_ui.py`, `test_prototype.py`); the cost report exists. Manual run and the cost table per `docs/acceptance-tests.md`: not run |
@@ -66,13 +81,14 @@ One SQLite database at `<data_dir>/fpfa.db`. Every table has `project_id`. The J
 
 | Table | Holds | Written by |
 | --- | --- | --- |
-| `facts` | Basis of design: AHJ, adopted code and editions, insurer, owner standard, assumptions. `kind`, `key`, `value`, `source`, `label` (calculated, ASSUMED, use best judgment, CODE, OWNER, PRACTICE). | `record_fact` tool, the zone form |
+| `facts` | Basis of design: AHJ, adopted code and editions, insurer, owner standard, assumptions. `kind`, `key`, `value`, `source`, `label` (calculated, ASSUMED, use best judgment, GIVEN, CODE, OWNER, PRACTICE). Kind `input` holds every field of the zone form, with who supplied it. A replaced row is kept (`superseded_by`). | `record_fact` tool, the zone form, the lead's `set_input` |
 | `evidence` | Cites: document, edition, section, short paraphrase, applicability, status (held, NOT PULLED, NEEDS HOLD). | `record_evidence` tool |
-| `calc_records` | Tool name, input hash, inputs, outputs, pack version, time, caller. | Every calc tool, automatically |
-| `findings` | A specialist's statement with its label and its supporting calc or evidence ids. | `record_finding` tool |
-| `questions` | Open questions and RFIs: text, raised by, status, answer. | `open_question` tool, the owner |
-| `decisions` | Elections and judgments: text, basis, decided by. | `record_decision` tool |
-| `handoffs` | From agent, to agent, brief, payload, status (pending, delivered, returned), result, times. | `handoff` and `delegate` tools |
+| `calc_records` | Tool name, input hash, inputs, outputs, pack version, time, caller. `depends`: the input facts it used and the calc it took a figure from. `varies`: where it left the project inputs. | Every calc tool, automatically |
+| `findings` | A specialist's statement with its label and its supporting calc, evidence, input, or finding ids. Replaced or withdrawn rows are kept (`superseded_by`, `retire_note`). | `record_finding`, `withdraw_finding` tools |
+| `reviews` | One agent's position on another's finding: agree or object, a note, a status (open, resolved, escalated), and how it ended. | `review_finding` tool, the lead's `resolve_disagreement` |
+| `questions` | Open questions and RFIs: text, raised by, who it is for (designer or engineer), status, answer, who answered. | `open_question` tool, the designer on the Team panel, the lead's `answer_question` |
+| `decisions` | Elections and judgments: text, basis, decided by, the ids it rests on. Replaced or withdrawn rows are kept. A ruling on an objection names its review and closes when the finding it ruled on is revised. | `record_decision` tool, the lead's `resolve_disagreement` |
+| `handoffs` | From agent, to agent, brief, payload, kind (delegation, consult, handoff), status (pending, delivered, returned, cancelled), result, times. | `delegate`, `consult`, and `handoff` tools |
 | `tasks` | Title, owner agent, status. | The lead |
 | `agents` | Name, role slug, status, last active. | The app |
 | `jobs` | Window jobs: id, kind, title, status (queued, running, done, error, cancelled, interrupted), error, start and update times. Written once per status change; a job never moves back. | The app, from the inbox refresh |
@@ -82,41 +98,49 @@ Rules:
 
 - An agent never opens the database. It calls a tool. The tool validates, writes one transaction, and appends an event.
 - A calc tool computes a hash of the tool, its inputs, and the identity of the calc code in the running pack (a hash of the kernel files). If a record with that hash exists for the project, the tool returns the recorded output and marks the call as a replay. This is the duplicate prevention for Phase 5. A pack update that changes a kernel file changes the identity, so old results are never replayed by new code; the old rows stay as history.
-- Form-owned basis facts follow the form. A changed value writes a new row and supersedes the old one. Import from a JSON job happens once; the sync runs on every open, save, run, and turn.
+- The inputs follow the form and the form follows the record. A field the designer changed writes a new row and supersedes the old one; an input the lead recorded from the chat is put on the form. Import from a JSON job happens once; the sync runs on every open, save, run, and turn.
+- A row whose basis changed is out of date, with the reason. `coherence.analyze` derives it from what each calc followed; nothing is stored about it and nothing is recomputed on its own. Only a row that something current rests on waits on anyone.
+- A finding or a decision is never edited. It is replaced or withdrawn by its author or the lead, and the old row stays.
 - A fact or finding carries exactly one of the three labels from the current app, or a cite class. The tool rejects a row with none.
 - Documents are exports. Nothing in a document is typed into the record by hand.
 - Recovery marks, it does not run. `Record.recover()` runs once at launch in one transaction: queued or running jobs and working agents become `interrupted`, delivered handoffs go back to `pending` with a re-queued note. The same rows are updated, so nothing is duplicated, and a second pass finds nothing. The designer re-runs; calc replay makes that cheap.
-- Implemented in `app/fpfa/record.py`. The database is `fpfa.db` in the data directory. `Record.snapshot(project_id)` is what an export reads. Rows written by a model context carry its agent name: `lead`, `narrator`, `tool-plan`, or a specialist slug.
+- Implemented in `app/fpfa/record.py`. The database is `fpfa.db` in the data directory. `Record.snapshot(project_id)` is what an export reads. Rows written by a model context carry its agent name: `lead`, `narrator`, `tool-plan`, or a specialist slug. The schema version is 4; an older database gains the new columns and the `reviews` table when it is opened.
 
 ## 6. The team on the existing loop
 
-- **Lead.** The everyday path, with `roles/everyday/ROLE.md` as the shell and the active mode file, plus four new tools: `list_specialists`, `delegate(specialist, brief, inputs)`, `handoff(to, payload)`, `request_check()`. The lead owns the objective, picks specialists from the request, reconciles their findings, surfaces blockers, and writes the summary. It does not compute.
-- **Specialists.** `fp-sprinkler` and `fa-releasing` to start. `delegate` runs `run_tool_loop` with that role's `ROLE.md` as the system text, the skill index, and that role's tool subset. The user message is the brief plus the record slices the lead grants. The specialist returns a structured contribution: findings, calc record ids, questions, and handoffs. The tool writes the contribution and a `returned` handoff row. Each specialist is a fresh context per delegation; a follow-up to a finished specialist re-sends its prior contribution as context.
-- **Checker.** `roles/qa-specialist/ROLE.md`, blind. `request_check` builds the claim list from the record's findings and the cites from `evidence` and `calc_records`, and runs the one-call check that exists today in `app/fpfa/claim_check.py`. Verdicts are written to the record. Export waits for Supported, as today.
-- **Routing.** A specialist that needs another specialist writes a handoff with `to`. The lead sees pending handoffs on its next round and delivers them when it activates that specialist. No specialist talks to another directly in v0.
-- **Activation.** Dynamic. The lead is told which specialists exist and chooses. A fixed sequence is not imposed.
-- **Cost.** Every context sums its usage. The lead's status line shows the task total. The total goes on the `events` row that closes the task: a `turn` event per lead turn (lead rounds plus every delegation and check inside it, also written when the turn is cancelled), a `narration` event per narrated zone run or starter, usage on each `record_check` event, and a `delegation` event per specialist, including one marked cancelled for a specialist a cancel interrupted. `app/fpfa/usage_report.py` reads every usage event on the job back and prices them at a dated rate snapshot; `/usage` posts the report into the thread.
-- **Cancel.** A cancel flag per job is checked by the tool loop before each model round and by the lead before each team tool. The round or tool in flight finishes. A cancelled specialist is marked interrupted and its handoff cancelled; the job shows `cancelled` in Activity.
-- **Relaunch.** The lead's user message starts with the handoffs waiting on the record, re-queued or not, so a delivery that a kill interrupted is in front of the lead on its next turn without a tool call. Interrupted jobs show in Activity under their original ids, the thread gets one app-written note when the job opens, and the Team tab shows the interrupted agents and the re-queued handoffs. A clock gap over 90 s between polls is reported as a resume with a `wake` event; nothing is restarted. The note is owed across launches until the job is opened (`recovered` and `recovery_noted` events). One window per data directory: an OS file lock on `fpfa.lock` (`app/fpfa/instance_lock.py`) refuses a second window, so it cannot recover the first one's live work; a kill releases the lock.
+As built for the team milestone (Phase 7). The bullets marked "since Phase 3" are unchanged.
 
-Implemented in `app/fpfa/team.py`. `TeamSession` is the lead's tool executor; `delegate` runs `run_tool_loop` with the specialist's role file as the system text and `SPECIALIST_SCHEMAS` (every tool but the three team tools); `check_record` builds the claim packet from findings and their supports and reuses the QA role's one-call blind turn; `export_gate` is what the Design Basis export asks before writing. Each delegation and each check is an `events` row with its usage.
+- **Lead.** Its system text is `roles/lead/ROLE.md`, the active mode file, the specialists by slug, the skill index, and the spec files. Its tools are the calc, content, and record tools without `read_role`, plus `list_specialists`, `set_plan`, `set_input`, `answer_question`, `delegate`, `resolve_disagreement`, and `request_check`. Each turn's message opens with a status block the app reads from the record (`status.lead_text`). The lead owns the objective, records what the designer said, picks specialists from the request, makes them reconcile, runs the check, and writes the summary. It does not compute, and the app looks up the figures in its reply.
+- **Specialists.** `fp-sprinkler`, `fa-releasing`, and `spec-draft`. `delegate` runs `run_tool_loop` with that role's `ROLE.md` as the system text, the skill index, a paragraph on working in a team, and `SPECIALIST_SCHEMAS` (every calc, content, and record tool plus `consult`; none of the lead's). The message is the brief, the project inputs with their ids, what on the record needs it, its earlier contribution, waiting handoffs, and the record. The contribution returned to the lead lists what it wrote, what it replaced, the questions it asked, and what is still unsettled. Each specialist is a fresh context per delegation.
+- **Between specialists.** `consult` runs the asked specialist in its own context and returns its answer inside the asker's turn; the exchange is a handoff row of kind consult. `review_finding` records agree or object. `handoff` leaves work for later. Each role file says what it owns, what it needs from the other, and what it reviews.
+- **Checker.** `roles/qa-specialist/ROLE.md`, blind, one call. `request_check` builds the claim list from the record's findings and each cite from the rows the finding names, with a cite to a standard read in the content pack's notes where the pack holds it. The app then applies its own rules (section 2, 2026-11-11) and writes a verdict on each finding. `checker.assurance` derives the tier. The Section 21 13 19 check in `claim_check.py` is unchanged.
+- **Routing.** A question goes straight to the other specialist. Work for later is a handoff with `to`; the lead sees pending handoffs in its status block and delivers them when it delegates to the receiver.
+- **Activation.** Dynamic. The lead is told which specialists exist and chooses. A fixed sequence is not imposed, and no exchange is forced.
+- **Cost.** Since Phase 3, with two additions: each consult writes a `consult` event whose usage is inside its delegation's, and a turn, a delegation, a consult, and a check each record their wall-clock seconds. `app/fpfa/usage_report.py` prints both.
+- **Cancel.** Since Phase 4. A cancel that lands while a specialist is answering another's question closes both.
+- **Relaunch.** Since Phase 5. The waiting handoffs and who was interrupted are in the lead's status block.
+
+Implemented in `app/fpfa/team.py` (the lead's tools, `delegate`, `consult`, the Team block), `checker.py` (the trace check, the tiers, `export_reason`), `status.py` (the digest behind the status block, `/status`, and a specialist's "needs you"), `coherence.py`, `inputs.py`, and `reply_audit.py`.
 
 ## 7. Design Basis and Open Questions export
 
-Word document from the record, section order:
+Word document from the record. It opens with how far each statement was taken: that it is a draft and not cleared for issue, the trace check's line, a table of the four tiers with how many findings sit in each, and that the standards were not opened. Then:
 
-1. Basis of design: AHJ, adopted code and editions, delta edition, insurer, owner standard. Each with its label.
-2. Elections: system family, trim family, releasing logic, supervisory medium, with status tokens.
-3. Calculation records: for each calc, the tool, inputs, outputs, time, and whether it was a replay.
-4. Findings by contributor: FP, FA, and any later specialist, each with label and supporting ids.
-5. Checker verdicts, with the claim list and the cites.
-6. Assumptions: every ASSUMED row.
-7. Open questions and RFIs for the engineer of record.
-8. Handoff log.
+1. Project inputs and basis of design: each input with its value, its label, and who supplied it; other facts the team recorded.
+2. Elections and decisions: system family, trim family, releasing logic, supervisory medium, from the current calculation records only; recorded decisions.
+3. Calculation records: for each current calc, the tool, the caller, the time, the replay count, the figures with their labels, and whether it follows the project inputs or is an alternative; the inputs as passed.
+4. Findings, by how far each was taken: under each tier, the finding, its label, its author, what it rests on, what the check read, and who agreed.
+5. Reviews and disagreements: each position, and how each objection ended.
+6. Assumptions: every ASSUMED row and flag, and starting values the designer has not confirmed.
+7. Open questions: what the team needs from the designer, then RFIs for the engineer of record, the owner, or the authority; answered ones after.
+8. Exchanges between agents, by kind, with what came back.
+9. Cites on the record.
+10. The trace check, claim by claim.
+11. History: changed inputs, and rows that were replaced, withdrawn, or are out of date.
 
 The Section 21 13 19 export stays as it is. This is a second document.
 
-Implemented in `app/fpfa/design_basis_docx.py`. Elections are read from the trim, releasing, and nitrogen calc records and from recorded decisions. Until the record-fed checker lands in Phase 3, section 5 prints a line saying no blind claim check has run, and the export does not wait for one.
+Implemented in `app/fpfa/design_basis_docx.py`. The gate is `checker.export_reason`: a current trace check when there are findings, and nothing out of date.
 
 ## 8. Reuse map
 
@@ -145,7 +169,7 @@ If the SDK is revisited, the spike runs after Phase 1 on a Windows machine with 
 
 ## 10. Out of v0
 
-Shared hosting. Managed Agents. Real-time peer chat. Wet and dry verticals beyond what the form already does. Factory or batch content automation. Source-runner automation. Canadian standards text. Autonomous issue of engineering deliverables. A model split by role.
+Shared hosting. Managed Agents. Real-time peer chat (a consult is one question and one answer inside the asker's turn, not a conversation). Wet and dry verticals beyond what the form already does. Factory or batch content automation. Source-runner automation. Canadian standards text. Autonomous issue of engineering deliverables. A model split by role.
 
 ## 11. How the agents coordinate
 
@@ -161,6 +185,8 @@ Shared hosting. Managed Agents. Real-time peer chat. Wet and dry verticals beyon
 1. Confirm or edit `docs/known-answer-dh1.md`, especially the open questions and the judgment items marked OWNER TO CONFIRM.
 2. Provide a clean Windows machine or VM for test A at Phase 6, with an API key for tests B and E.
 3. Run the manual halves of tests A through E per `docs/acceptance-tests.md` and `docs/recovery-protocol.md`, and fill their result tables.
-4. Release authorized on 2026-11-09: publish `app-v0.1.4` and `content-v0.4.3` from the latest merged tree. The manual acceptance runs above remain open.
+3a. Run the team milestone with the live model per `docs/live-evaluation.md`, by hand first, and fill its scoring sheet. Nothing from Phase 7 has been run live. The cost of one design-basis request is not known.
+3b. Read `docs/releasing-basis.md`. The releasing statement was corrected from the content pack's own reviewed notes; the page lists what in it still needs a qualified engineer.
+4. Release authorized on 2026-11-09: publish `app-v0.1.4` and `content-v0.4.3` from the latest merged tree. The manual acceptance runs above remain open. Version 0.2.0 (Phase 7) is not covered by that authorization: it needs the owner's word after the live evaluation, and its content pack asks for app 0.2.0 or newer.
 5. On the Windows machine, look at the window once in each colour scheme (Settings, Appearance) and say whether the title bar, the menus, and the fonts read as intended. The look was built and checked under Linux in Chromium; Windows draws the title bar and WebView2 draws the fonts.
 6. On the Windows machine, confirm the WebView2 window itself: it opens maximized in the app's own window (not a browser tab), the Save dialog of both exports is the Windows one, Ctrl+N and Ctrl+S do what the app says and not what Edge would, closing the window saves the open job, and a second launch is refused with a message. Test E step 2 is the responsiveness check. The packaged window (pywebview's Windows backend through pythonnet, bundled by `build_app.py`) has not run on Windows yet.
