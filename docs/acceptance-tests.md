@@ -6,6 +6,8 @@ The plan of record (`docs/prototype-plan.md`, section 4) names five acceptance t
 
 Everything that can run without a Windows machine or an API key has run and is marked below. Everything else needs the project owner on a Windows machine with a saved key, and is marked **Not run** until then.
 
+The team milestone (a plain objective, a real dependency between the specialists, a job that stays coherent as it changes, an output that says how far it can be trusted) has its own path in `docs/live-evaluation.md`. That path is the one to run with the live model. The section "What was tested, what was simulated, and what is unrun" below is the plain account of where it stands. Nothing in this repository has been run against the live model.
+
 ## Before you start
 
 1. **Get the installer.** Two ways:
@@ -26,23 +28,29 @@ What passes: install on a clean machine, open the sample, load the skills, run t
 5. Compare the figures with `docs/known-answer-dh1.md` section 2: pipe volume, fittings allowance, trim, zone total, delivery time, screen limit, releasing rows, density and area, hose, duration, nitrogen. Every figure and every label must match.
 6. ⋯ menu, **Export draft Section 21 13 19…**. Expected: after the claim check, the Windows Save dialog asks where; a .docx is written there and opens in Word. Then **Export Design Basis and Open Questions…**. Expected: with no findings yet the export is allowed and section 3 lists the eight calculation records with the same figures.
 7. Settings, paste the key, save. Expected: the status line says the key is saved. Note which key store the Settings dialog reports (Credential Manager on Windows).
-8. Ask: "Give me the design basis for zone DH-1." (the **Design basis** chip above the composer sends the same question). Expected: three pulsing dots and a line that says what the app is doing while it works, then the reply arriving in the thread as it is written, with a **Team** block under it, the Team tab roster showing the lead and at least one specialist, and findings on the record. Compare the reply's content against sections 3 and later of the known answer. Note what differs.
-9. ⋯ menu, **Usage and cost**. Copy the job total and the estimated cost into the cost table below.
+8. Ask for a design basis in a plain sentence that names no specialist and no order. `docs/live-evaluation.md`, step 1, has one to use as written; then ask again in your own words on a second job. Expected: three pulsing dots and a line that says what the app is doing while it works, then the reply arriving in the thread as it is written, with a **Team** block under it written by the app, a line on the team under the top bar, and on the Team panel a plan, both specialists, and findings on the record. Compare the reply's content against sections 3 and later of the known answer, and the Team panel against section 7. Note what differs.
+9. ⋯ menu, **Usage and cost**. Copy the job total, the time on the model, and the estimated cost into the cost table below.
 
 Pass: steps 2, 4, 5, 6, and 8 as expected, and the versions table filled.
 
 ## Test B. Specialist collaboration
 
-What passes: distinct FP, FA, and checker contributions on DH-1. Every substantive handoff is a record row with sender, receiver, time, and payload, visible in the window.
+What passes: distinct FP, FA, and checker contributions on DH-1, **and evidence that the two specialists worked on a shared problem**. Every substantive exchange is a record row with sender, receiver, time, and content, visible in the window.
 
-1. On the Test A job, ask: "Have the sprinkler specialist confirm the trim election and the releasing specialist write the cause-and-effect for DH-1, then run the blind check."
-2. Expected: the Team block names `fp-sprinkler`, `fa-releasing`, and the checker's count. The Team tab roster shows both specialists `✓ done` and the lead `✓ done`. HANDOFFS shows a row from the lead to each specialist with the time, status `returned`, and the brief; selecting a row shows the payload and the result. Findings written by each specialist carry its slug and a calc record id in supports.
-3. If a specialist hands work to the other, expected: a row from the first specialist to the second, `pending` until the lead delegates to the receiver, then `delivered` and `returned`, with the same row id throughout.
-4. Export the Design Basis. Expected: section 4 groups findings by contributor, section 5 shows the checker's verdicts, section 8 lists the handoffs.
+The request does not name a specialist, an order, or the check. An earlier version of this test told the lead which specialist to use for what and when to run the check. A pass on that showed only that the lead follows instructions.
 
-Pass: steps 2 and 4 as expected.
+1. On the Test A job, or a new one with a zone on the form, send the plain request in `docs/live-evaluation.md`, step 1.
+2. Expected, on the Team panel:
+   - WHERE THINGS STAND: an objective and steps the lead set, both specialists listed with what each did.
+   - EXCHANGES BETWEEN AGENTS: a `brief` row from the lead to each specialist with what came back, and at least one row or finding that carries a fact from one specialist to the other: a `question` row with its answer, or a finding by one that rests on the other's finding or calc (open the finding and read "Rests on").
+   - FINDINGS: each finding names its author and the rows it rests on. At least one finding has a review by the specialist who did not write it (open it and read "Reviewed by").
+   - NOT YET RECONCILED is empty, or the lead's reply says what is open and why. HOW DISAGREEMENTS ENDED lists any objection with how it ended.
+   - The check line says a trace check ran, and how many findings were consistent with a calculation record, a content-pack note, or a project input, and how many only with their author's own cite.
+3. Export the Design Basis. Expected: the table "How far each statement was taken", section 4 with findings under the tier each earned, section 5 with the reviews and how each objection ended, section 8 with the exchanges by kind, section 10 with the trace check claim by claim.
 
-Automated half, already passed: `app/tests/test_team.py` runs the same shape with stand-in model calls (three distinct contributors, a complete handoff log, the checker's verdicts applied).
+Pass: step 2's first three bullets and step 3. A run with two contributions and no row that connects them does not pass, however good each contribution is. Write down which it was.
+
+Automated half, already passed with stand-in model calls: `app/tests/test_team.py`, `test_team_protocol.py` (what each agent is told and what its tools do), and `test_scenario.py` (the whole job, scripted). These show the application's side. They do not show what the live model chooses to do.
 
 ## Test C. Continuity
 
@@ -58,17 +66,19 @@ What passes: Activity collapsed by default, handoffs inspectable, cancel works, 
 
 1. On a fresh launch, expected: Activity is not shown until a job runs; Zone details starts closed; the top bar holds Mode, Zone details, and ⋯, and the only other buttons are New chat, Settings, and Send.
 2. Responsiveness, the reason the window moved to WebView2. With the Test A job open and a long reply in the thread: drag the window's edge to resize it, open and close Zone details, switch to another job and back, scroll the thread with the wheel while a reply is arriving, and change the colour scheme in Settings. Expected: each responds without a visible pause, the thread stays where you scrolled it while words arrive, and Latest brings it back to the end. Note anything that stutters under failures, with the machine's display scale.
-3. After Test B, expected: every handoff row opens its detail on the Team tab; blockers list the open questions and any finding not Supported; the Design Basis export can be read in Word and traced to the record.
-3. Cancel: ask a long question with **Ask Claude** on, press **Cancel running job** on the Team tab while Activity shows `running`. Expected: the turn stops at its next round, the thread shows a "Cancelled" line, Activity shows `cancelled`, and **Usage and cost** still lists the cancelled turn with what it spent.
-4. Cost: ⋯ menu, **Usage and cost**, or from a source checkout `py -m fpfa.usage_report --db "%APPDATA%\fpfa-assistant\fpfa.db"`. The report lists each model context (lead turns with their delegations and checks inside, narrations, blind checks), the job total, and the estimated dollars at the rates printed on the second line. Fill the cost table below with the Test A question alone and with the full Test B task.
+3. After Test B, expected: every exchange row opens its detail on the Team panel; a question for the designer can be answered in place; every finding opens to what it rests on and how far the check took it; the Design Basis export can be read in Word and traced to the record. With the keyboard alone: Tab reaches the line under the top bar, the Team tab, each group of findings, each finding, each exchange row, and the answer box; Enter or Space opens them.
+4. Cancel: ask a long question, press **Stop** under the composer (or **Cancel running job** on the Team panel) while Activity shows `running`. Expected: the turn stops at its next round, the thread shows a "Cancelled" line, Activity shows `cancelled`, and **Usage and cost** still lists the cancelled turn with what it spent.
+5. Cost and time: ⋯ menu, **Usage and cost**, or from a source checkout `py -m fpfa.usage_report --db "%APPDATA%\fpfa-assistant\fpfa.db"`. The report lists each model context (lead turns with their delegations and the questions between specialists inside, narrations, trace checks) with how long each took, the job total, the time on the model, and the estimated dollars at the rates printed on the second line. Fill the cost table below with one plain design-basis request and with the full path in `docs/live-evaluation.md`.
 
-Pass: steps 1, 2, and 3 as expected, and the cost table filled.
+Pass: steps 1 through 4 as expected, and the cost table filled.
 
 Automated half, already passed: `app/tests/test_usage.py` proves the events, the totals, and the report; `app/tests/test_team_ui.py` proves cancel end to end; `app/tests/test_prototype.py` proves the launch layout.
 
 ## How the figures are judged
 
-- Numbers come from the calc tools. A figure in a reply that is not a tool-plan figure is a defect, however plausible.
+- Numbers come from the calc tools. A figure in a reply that is not on a calculation record is a defect, however plausible. The app looks every figure in the lead's reply up and names under the reply any it cannot find, or finds only on an out-of-date calculation. A reply with that note under it fails this line.
+- The check is a trace check. It says whether a finding is consistent with the rows it cites. It does not open a standard, and a reply or an export that says a standard was checked or verified fails.
+- Release is the detection leg AND P, the pressure drop from sprinkler operation. Low air is supervisory only and is never a release input; a reply or an export that says otherwise fails (`docs/releasing-basis.md`).
 - Labels stay distinct: calculated, ASSUMED, use best judgment. A delivery time is an optimistic screen, not a listed water-delivery-time calculation, and the reply must say so.
 - The double-interlock draft section is 21 13 19. A reply or export that says 21 13 16 for the sample zone fails.
 - NFPA 13-2025 is the delta baseline. A cite without an edition fails.
@@ -80,10 +90,37 @@ Automated half, already passed: `app/tests/test_usage.py` proves the events, the
 | Test | Automated half | Manual half (Windows) | Date | Notes |
 | --- | --- | --- | --- | --- |
 | A. Clean Windows install | Figures locked by `calcs/fp` and `app/tests/test_prototype.py`; versions by `app/tests/test_usage.py`; packaging config checked | Not run | | Needs the installer and the clean machine |
-| B. Specialist collaboration | Passed, `app/tests/test_team.py` | Not run | | Needs a key |
+| B. Specialist collaboration | Passed with stand-in model calls: `app/tests/test_team.py`, `test_team_protocol.py`, `test_scenario.py` | Not run | | Needs a key. The plain request, not the old one that named the specialists |
 | C. Continuity | Passed, `app/tests/test_recovery.py` | Not run | | Protocol in `docs/recovery-protocol.md` |
 | D. Recovery | Passed, including a real process kill | Not run | | Protocol in `docs/recovery-protocol.md` |
-| E. Usability and cost | Passed, `app/tests/test_usage.py`, `test_team_ui.py`, `test_prototype.py` | Not run | | Needs a key for the cost figures |
+| E. Usability and cost | Passed, `app/tests/test_usage.py`, `test_team_ui.py`, `test_desk_team.py`, `test_prototype.py`; the Team panel in Chromium, `test_web.py` | Not run | | Needs a key for the cost figures |
+| Team milestone path (`docs/live-evaluation.md`) | Simulated end to end, `app/tests/test_scenario.py`; the unattended runner with a scripted model, `test_live_eval.py` | Not run | | The live model has not been called once |
+
+### What was tested, what was simulated, and what is unrun
+
+**Tested** means the real code ran and the result was checked, with no model involved. **Simulated** means the real application ran with every model call replaced by a script written in advance. **Unrun** means nobody has done it.
+
+| What | Standing | Where |
+| --- | --- | --- |
+| Calc kernels, the DH-1 figures, the pack lint (no low-air release wording, no standards text) | Tested | `calcs/fp`, `calcs/fa` |
+| The releasing truth table row by row: low air alone never releases; release needs the detection leg and P | Tested | `app/tests/test_releasing_basis.py` |
+| Inputs on the record with who supplied each; a changed input marks exactly what used it; a re-run clears it | Tested | `test_coherence.py` |
+| A cite looked up in the content pack; a wrong figure beside a matching author's note is caught; an out-of-date finding is not judged; tiers | Tested, with a checker stand-in that says Supported to everything | `test_checker.py` |
+| The export gate, the Design Basis layout, the Section 21 13 19 guard against a run the form moved past | Tested | `test_checker.py`, `test_design_basis.py`, `test_desk_team.py` |
+| The figures in a reply looked up on the record | Tested on written replies | `test_desk_team.py` |
+| Retries with the API's retry-after, the effort field off by default | Tested against a fake transport | `test_desk_team.py`, `test_streaming.py` |
+| Kill and relaunch, the instance lock, sleep and wake as a clock gap | Tested, with a real process kill | `test_recovery.py` |
+| The window's page: menus, thread, form, and the Team panel with an answer typed into it | Tested in Chromium on Linux | `test_web.py` (`e2e.mjs`, `e2e_team.mjs`) |
+| A lead that plans, records what the designer said, delegates, reconciles, and checks | **Simulated** | `test_team_protocol.py`, `test_scenario.py` |
+| One specialist asking the other, objecting, and the author revising | **Simulated** | `test_team_protocol.py`, `test_scenario.py` |
+| A job closed, reopened, changed, interrupted, and exported | **Simulated** | `test_scenario.py` |
+| The unattended evaluation runner and its report | **Simulated** | `test_live_eval.py` |
+| Any request to the live model: whether it plans, delegates without being told, asks, objects, revises | **Unrun** | `docs/live-evaluation.md` |
+| Time and cost of a real design-basis request | **Unrun** | `/usage` on a live job |
+| The lead and specialist role files as prompts: whether the model follows them | **Unrun** | live only |
+| The trace check's own judgment (the checker stand-in never disagrees) | **Unrun** | live only |
+| The Windows installer, WebView2 window, Credential Manager, sleep and hibernate on real hardware | **Unrun** | Tests A, C, D, E above |
+| The pictures in the README | Taken from the simulated scenario | `docs/screenshots/` |
 
 ### Versions (from About and versions on the test machine)
 
@@ -110,8 +147,8 @@ Rates are the dated snapshot printed by the report. Record the date it prints.
 
 | Task | Model contexts | Input tokens (fresh / cache write / cache read) | Output tokens | Estimated cost | Wall time |
 | --- | --- | --- | --- | --- | --- |
-| Test A, "Give me the design basis for zone DH-1." | | | | | |
-| Test B, specialists plus blind check | | | | | |
+| One plain design-basis request (`docs/live-evaluation.md`, step 1) | | | | | |
+| The whole path in `docs/live-evaluation.md` | | | | | |
 | Narrated zone run (`/run` with Ask Claude on) | | | | | |
 
 ### Failures and limits found
