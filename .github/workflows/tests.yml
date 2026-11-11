@@ -1,0 +1,56 @@
+# Run the four suites on every pull request and on every push to main.
+#
+# Before this workflow nothing ran the tests anywhere but a developer's machine: the Windows workflow
+# only builds, and the content workflow only packs. A correction to the content pack that a later sync
+# overwrote would have shipped. The calc suite includes the pack lint (no low-air release wording, the
+# manual station in the C&E Boolean, the isolation qualifier), so it guards those corrections by name.
+#
+# No step here calls a model. Every agent in these tests is a script; a pass shows what the application
+# does, never what the live model does. Nothing is tagged, built, or released.
+
+name: Tests
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  suites:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install the app's dependencies
+        run: python -m pip install -r app/requirements.txt
+
+      - name: calcs/fp (kernel tests and the pack lint)
+        working-directory: calcs/fp
+        run: python -m unittest discover -s . -p 'test_*.py'
+
+      - name: calcs/fa
+        working-directory: calcs/fa
+        run: python -m unittest discover -s tests
+
+      - name: The page's tests
+        working-directory: app/frontend
+        run: |
+          npm ci
+          npm test
+
+      - name: app
+        working-directory: app
+        # The two browser tests in test_web.py need Playwright and are skipped where it is not installed.
+        run: python -m unittest discover -s tests

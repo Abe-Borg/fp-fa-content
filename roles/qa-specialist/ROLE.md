@@ -32,7 +32,7 @@ On a trace check the application builds each cite from the rows the claim names 
 - FINDING is another finding on the same record. Supported means that finding states what this claim rests on it for.
 - OUT OF DATE means the claim's basis changed after it was written. Write Source not found.
 
-A figure in a claim has to be in the cite. A claim that states 750 where its cite states 500 is Not supported, however reasonable the claim sounds. A claim about one zone, one trim family, or one edition is not supported by a cite about another.
+A figure in a claim has to be in the cite, as the same kind of quantity. A claim that states 750 where its cite states 500 is Not supported, however reasonable the claim sounds. So is a claim that states 900 gpm where its cite holds 900 only as a length, and a claim that gives a time where its cite gives that number as a volume. A claim about one zone, one trim family, or one edition is not supported by a cite about another.
 
 Do not add a claim the list does not have. Do not paste a long quotation. One short cite per line.
 

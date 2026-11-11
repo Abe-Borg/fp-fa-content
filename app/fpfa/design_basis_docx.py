@@ -7,12 +7,20 @@ questions, and the exchanges between agents are read from Record.snapshot().
 A figure is shown with the label the record holds for it.
 
 The document is built so an engineer can tell four kinds of statement apart
-without reading the code: what was checked against an identified source,
-what the checker only reviewed against its author's own cite, what a
-specialist stated and nothing judged, and what still needs evidence or an
-engineer's review. fpfa.checker derives the tier of each finding; no model
-types one. Rows whose basis changed, and rows that were replaced or
-withdrawn, are shown as history and never as current.
+without reading the code: what the trace check found consistent with a row
+the application identified, what it found consistent only with its author's
+own cite, what a specialist stated and nothing judged, and what still needs
+evidence or an engineer's review. fpfa.checker derives the tier of each
+finding; no model types one. Rows whose basis changed, and rows that were
+replaced or withdrawn, are shown as history and never as current.
+
+Two things are said at the head, before any finding, so the document
+cannot be read as more than it is. Coverage: what a design basis written
+from this record is still missing (checker.coverage); a document with a gap
+opens with INCOMPLETE DRAFT and the list. And the kinds of assurance: every
+kind a reader might assume, with the two this application never performs
+(verification against the primary standard, and a qualified engineer's
+review) named as not performed (checker.LADDER).
 """
 
 from __future__ import annotations
@@ -23,8 +31,9 @@ from typing import Any
 
 from docx import Document
 
-from fpfa import checker, coherence, inputs, status
+from fpfa import checker, coherence, content_use, inputs, status
 from fpfa.workflow import (
+    exemption_answer,
     fmt1,
     judgment_label_line,
     releasing_logic,
@@ -86,11 +95,20 @@ def key_figures(tool: str, inputs: Any, outputs: Any) -> str:
                 f"{trim_assumption_text(out)}. Zone total {fmt1(out['zone_gal'])} gal (calculated)."
             )
         if tool == "dry_delivery_screen":
-            exempt = out.get("nfpa_delivery_time_exempt")
+            answer = exemption_answer(out)
+            if "exemption_volume_gal" in out:
+                size = (f"size exemption on the zone total of {fmt1(out['exemption_volume_gal'])} gal: {answer} "
+                        f"(judged on {out.get('exemption_volume_basis') or 'the zone total'}; what in that total "
+                        "is ASSUMED is on the zone_trapped_volume record)")
+            else:
+                # A pipe-only screen, or a row recorded before the screen was handed the zone total.
+                size = (f"size exemption: {answer}. This record is a pipe-only screen of "
+                        f"{fmt1(out['volume_gal'])} gal; fittings and trim are not in it, and the exemption is "
+                        "judged on the zone total")
             return (
                 f"Pipe-only t_total {fmt1(out['t_total_s'])} s against the {fmt1(out['limit_s'])} s "
                 f"{out.get('limit_basis', '')} limit: {'passes' if out.get('passes_screen') else 'does not pass'}. "
-                f"NFPA size cap {float(out['nfpa_size_cap_gal']):.0f} gal; zone-total exemption {_yn(exempt)}. "
+                f"NFPA size cap {float(out['nfpa_size_cap_gal']):.0f} gal; {size}. "
                 f"{out.get('nfpa_basis', '')}"
             )
         if tool == "di_trip_to_water":
@@ -281,11 +299,13 @@ def write_design_basis(
     snapshot: dict,
     *,
     claim_check: dict | None = None,
+    content_root: Path | str | None = None,
 ) -> Path:
     """Write the document from a Record.snapshot(). Returns the path written.
 
     claim_check is the trace check to print. None reads the newest one the
-    snapshot carries.
+    snapshot carries. content_root is the content pack, read only to say
+    whether a cite a specialist recorded is one the skill it read holds.
     """
     path = Path(path)
     facts = list(snapshot.get("facts") or [])
@@ -330,8 +350,26 @@ def write_design_basis(
     if plan and plan["objective"]:
         doc.add_paragraph(f"Objective the team worked to: {plan['objective']}")
 
+    covered = checker.coverage(snapshot)
+    doc.add_heading("What this document covers", level=2)
+    if covered["complete"]:
+        doc.add_paragraph(checker.COMPLETE_LINE)
+    else:
+        doc.add_paragraph(checker.INCOMPLETE_HEAD)
+        for gap in covered["gaps"]:
+            doc.add_paragraph(gap, style="List Bullet")
+        doc.add_paragraph(
+            "It is exported so the engineer of record can see where the work stands. Do not issue it or rely on "
+            "it as a complete design basis."
+        )
+
     doc.add_heading("How far each statement was taken", level=2)
     doc.add_paragraph(DRAFT_LINE)
+    doc.add_paragraph(
+        "Kinds of assurance, in order. The last two were not performed on anything in this document."
+    )
+    _table(doc, ["Kind of assurance", "What it is", "Where it applies here"],
+           [[name, what, where] for name, what, where in checker.LADDER])
     if check and check.get("rows"):
         doc.add_paragraph(str(check.get("status_line") or "A trace check ran."))
         if check.get("token") and check.get("token") != checker.check_token(findings):
@@ -413,7 +451,14 @@ def write_design_basis(
             item = analysis["calcs"][row["id"]]
             if item["state"] == coherence.ALTERNATIVE:
                 return f"ALTERNATIVE: ran on {item['note']}. Not the design case."
-            return "follows the project inputs" if item.get("tracked") else "current"
+            if item.get("tracked"):
+                return "follows the project inputs"
+            if item.get("unchecked"):
+                return "NOT RECONCILED. " + item["unchecked"]
+            if row.get("tool") in coherence.TRACKED_TOOLS:
+                # Recorded with no project inputs on the record to follow.
+                return "current; no project inputs were on the record when it ran"
+            return "not tied to the project inputs: a change to an input will not mark it out of date"
 
         _table(
             doc,
@@ -595,6 +640,38 @@ def write_design_basis(
             doc.add_paragraph(line, style="List Bullet")
     else:
         doc.add_paragraph("Nothing on this record was changed, replaced, or withdrawn.")
+
+    doc.add_heading("12. Content the team worked from", level=2)
+    context = snapshot.get("context") or {}
+    doc.add_paragraph(
+        f"Content pack version: {context.get('content_version') or 'unknown'}. "
+        f"Content fingerprint: {context.get('content_fingerprint') or 'unknown'}. "
+        f"Calc code: {context.get('calc_identity') or 'unknown'}. "
+        "The fingerprint is a hash of every method, role, note, and calc file the team could read; two documents "
+        "with the same fingerprint were written from the same content."
+    )
+    used = content_use.skill_use(snapshot, content_root)
+    if used:
+        doc.add_paragraph(
+            "Methods (skills) each contributor read on this job. A read shows the method was in front of the "
+            "contributor. It does not show the method was followed; the last column is the only trace of that a "
+            "program can see, and it is a weak one."
+        )
+        _table(
+            doc,
+            ["Contributor", "Skill", "Read", "Text read (hash)", "Findings recorded after", "Cites it recorded that the skill holds"],
+            [[row["agent"], row["slug"],
+              ("before its findings" if row["before_findings"] else "AFTER its first finding")
+              + (f", {row['reads']} times" if row["reads"] > 1 else ""),
+              row["sha256"] + (" (the pack's copy has changed since)" if row["changed"] else ""),
+              row["findings_after"],
+              "; ".join(" ".join(part for part in (item["document"], item["edition"], item["section"]) if part)
+                        for item in row["carried"]) or "none"] for row in used],
+        )
+    else:
+        doc.add_paragraph("No contributor read a skill on this job. Its findings rest on the role files and the tools alone.")
+    for agent in content_use.unread(snapshot):
+        doc.add_paragraph(f"{agent} recorded findings on this job and read no skill.", style="List Bullet")
 
     path.parent.mkdir(parents=True, exist_ok=True)
     doc.save(path)

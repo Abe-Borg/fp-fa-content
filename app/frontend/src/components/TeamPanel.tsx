@@ -284,15 +284,24 @@ export function TeamPanel({
                 <p className="small dim stand-line">{team.check_line}</p>
                 {team.export ? (
                   <p className="small dim stand-line">
-                    {team.export.ready ? "Design Basis export: ready." : `Design Basis export waits: ${team.export.reason}`}
+                    {team.export.ready
+                      ? team.findings.length && team.coverage.gaps.length
+                        ? "Design Basis export: ready, as an incomplete draft. It opens with what is missing."
+                        : "Design Basis export: ready."
+                      : `Design Basis export waits: ${team.export.reason}`}
                   </p>
                 ) : null}
-                {team.interrupted.length ? (
-                  <p className="small warn-ink stand-line">
-                    Interrupted before it finished: {team.interrupted.join(", ")}. What it recorded is kept. Ask again to finish; calcs
-                    replay.
+                {team.partial.map((line) => (
+                  <p key={line} className="small warn-ink stand-line">
+                    {line}
                   </p>
-                ) : null}
+                ))}
+                {team.retry_line ? <p className="small dim stand-line">{team.retry_line}</p> : null}
+                {team.unchecked.map((line) => (
+                  <p key={line} className="small warn-ink stand-line">
+                    Not reconciled by the app: {line}
+                  </p>
+                ))}
                 <div className="row-buttons" hidden={untouched}>
                   <button type="button" className="button on-card" onClick={onCheck} title="Check each finding against the rows it cites. It does not open the standards.">
                     Run trace check
@@ -311,6 +320,20 @@ export function TeamPanel({
                 </div>
               </div>
             </section>
+
+            {team.findings.length && team.coverage.gaps.length ? (
+              <section className="team-block" id="team-coverage">
+                <h3 className="section-label attention">A DESIGN BASIS WOULD BE INCOMPLETE ({team.coverage.gaps.length})</h3>
+                <div className="card callout">
+                  <ul className="evidence">
+                    {team.coverage.gaps.map((gap) => (
+                      <li key={gap}>{gap}</li>
+                    ))}
+                  </ul>
+                  <p className="small dim">The export is still allowed. It opens with this list and says it is incomplete.</p>
+                </div>
+              </section>
+            ) : null}
 
             <section className="team-block" hidden={untouched}>
               <h3 className="section-label">FINDINGS ({team.findings.length})</h3>
@@ -359,6 +382,50 @@ export function TeamPanel({
           </div>
 
           <div className="team-area history" hidden={untouched}>
+            {team.ladder.length ? (
+              <section className="team-block" id="team-assurance">
+                <h3 className="section-label">WHAT KIND OF CHECKING THIS IS</h3>
+                <div className="card">
+                  <details className="exchange">
+                    <summary>
+                      <span className="exchange-brief">
+                        The trace check is a consistency check on the team's own record. Two kinds of assurance were not
+                        performed.
+                      </span>
+                    </summary>
+                    <ul className="evidence">
+                      {team.ladder.map((row) => (
+                        <li key={row.name}>
+                          <strong>{row.name}.</strong> {row.what} <span className="dim">{row.where}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                </div>
+              </section>
+            ) : null}
+
+            <section className="team-block" id="team-methods">
+              <h3 className="section-label">METHODS READ ({team.skills_used.length})</h3>
+              <div className="card">
+                {team.skills_used.length ? (
+                  <ul className="evidence">
+                    {team.skills_used.map((row) => (
+                      <li key={`${row.agent}-${row.slug}`}>{row.line}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="faint">No contributor has read a skill on this job.</p>
+                )}
+                <p className="small dim">
+                  A read shows the method was in front of the contributor, not that it was followed.
+                  {team.content.content_fingerprint
+                    ? ` Content ${team.content.content_version || "unlabeled"}, fingerprint ${team.content.content_fingerprint}.`
+                    : ""}
+                </p>
+              </div>
+            </section>
+
             <section className="team-block">
               <h3 className="section-label">EXCHANGES BETWEEN AGENTS</h3>
               <div className="card exchanges">

@@ -187,13 +187,59 @@ def build(snapshot: dict | None, *, export_reason: str | None = None) -> dict:
         "pending": [{"id": row["id"], "from": row.get("from_agent"), "to": row.get("to_agent"),
                      "brief": _short(row.get("brief")), "kind": row.get("kind") or "handoff",
                      "requeued": str(row.get("result") or "").startswith("Re-queued")} for row in pending],
-        "interrupted": [{"name": row.get("name"), "slug": row.get("role_slug"), "status": row.get("status")}
-                        for row in interrupted],
+        "interrupted": [dict({"name": row.get("name"), "slug": row.get("role_slug"), "status": row.get("status")},
+                             **_partial(snap, row.get("role_slug") or "")) for row in interrupted],
+        # Like an out-of-date row: one nothing current rests on is history. It is still marked where it is listed.
+        "unchecked": [{"id": ident, "tool": calcs[ident]["tool"], "by": calcs[ident].get("agent") or "",
+                       "note": analysis["calcs"][ident]["unchecked"]}
+                      for ident in analysis.get("unchecked") or [] if ident in cited],
         "interrupted_jobs": [{"id": row["id"], "kind": row.get("kind"), "title": _short(row.get("title"), 80)}
                              for row in interrupted_jobs],
         "export": {"ready": export_reason == "", "reason": export_reason or ""} if export_reason is not None else None,
         "analysis": analysis,
     }
+
+
+RETRY_LINE = (
+    "Asking again sends the unfinished task to the model again, and that is billed again. Calculations already "
+    "on the record are replayed, not recomputed. Findings already written stay; the specialist is shown them."
+)
+
+
+def _partial(snapshot: dict, slug: str) -> dict:
+    """What an agent that did not finish had put on the record in its last task, and how that task ended.
+
+    Counted from the task's own brief onward: the rows it wrote after the
+    lead's last delegation to it. The work is partial by definition; the
+    counts say how much of it there is to read.
+    """
+    briefs = [row for row in snapshot.get("handoffs") or []
+              if row.get("to_agent") == slug and (row.get("kind") or "") in ("delegation", "consult")]
+    last = briefs[-1] if briefs else None
+    since = str((last or {}).get("created") or "")
+    findings = [row for row in snapshot.get("findings") or []
+                if row.get("agent") == slug and str(row.get("created") or "") >= since]
+    calcs = [row for row in snapshot.get("calcs") or []
+             if row.get("agent") == slug and str(row.get("created") or "") >= since]
+    return {"findings_kept": len(findings), "calcs_kept": len(calcs),
+            "ended": str((last or {}).get("result") or ""), "task": _short((last or {}).get("brief"), 120)}
+
+
+def partial_text(row: dict) -> str:
+    """One line on an agent that did not finish: what happened, what is kept, that it is partial."""
+    how = "stopped on an error" if row.get("status") == "error" else "was interrupted"
+    kept = []
+    if row.get("findings_kept"):
+        kept.append(f"{row['findings_kept']} finding{'s' if row['findings_kept'] != 1 else ''}")
+    if row.get("calcs_kept"):
+        kept.append(f"{row['calcs_kept']} calculation{'s' if row['calcs_kept'] != 1 else ''}")
+    text = f"{row.get('name')} {how} before it finished"
+    if row.get("task"):
+        text += f" (\"{row['task']}\")"
+    text += ". Kept from that task: " + (" and ".join(kept) if kept else "nothing") + "."
+    if kept:
+        text += " Treat them as partial: it had not reviewed or summarized its work."
+    return text
 
 
 def needs_attention(digest: dict) -> int:
@@ -291,10 +337,18 @@ def lead_text(digest: dict, check_line: str = "") -> str:
         for row in digest["pending"]:
             note = " (re-queued after a relaunch)" if row["requeued"] else ""
             lines.append(f"- [{row['id']}] from {row['from']} to {row['to']}{note}: {row['brief']}")
+    if digest["unchecked"]:
+        lines.append("Calculations the application cannot reconcile after an input change (the tool is not tied to "
+                     "the project inputs). Have the author run each again or say it still holds:")
+        for row in digest["unchecked"]:
+            lines.append(f"- calc [{row['id']}] {row['tool']} by {row['by'] or 'the app'}")
     if digest["interrupted"] or digest["interrupted_jobs"]:
-        names = ", ".join(str(row["name"]) for row in digest["interrupted"]) or "a job"
-        lines.append(f"Interrupted before it finished: {names}. Its rows so far are on the record. "
-                     "Delegate again to finish; recorded calcs replay.")
+        lines.append("Interrupted or failed before it finished. What each had recorded is on the record and may be "
+                     "partial. Tell the designer which, then delegate again to finish; recorded calcs replay:")
+        for row in digest["interrupted"]:
+            lines.append("- " + partial_text(row))
+        if digest["interrupted_jobs"] and not digest["interrupted"]:
+            lines.append("- a request was cut off before it finished")
     if digest["asks"]:
         lines.append("Waiting on the designer:")
         for row in digest["asks"]:
@@ -315,8 +369,12 @@ def lead_text(digest: dict, check_line: str = "") -> str:
     return "\n".join(lines)
 
 
-def designer_text(digest: dict, check_line: str = "", name: str = "") -> str:
-    """What /status posts into the thread: where the job stands, in the designer's words. Markdown."""
+def designer_text(digest: dict, check_line: str = "", name: str = "", *, coverage: list[str] | None = None) -> str:
+    """What /status posts into the thread: where the job stands, in the designer's words. Markdown.
+
+    coverage is checker.coverage()'s gaps when the caller has them: what a
+    design basis exported now would be missing.
+    """
     lines = [f"**Where {name or 'this job'} stands**"]
     plan = digest.get("plan")
     if plan and plan["objective"]:
@@ -368,11 +426,24 @@ def designer_text(digest: dict, check_line: str = "", name: str = "") -> str:
         lines.append("")
         lines.append("**Starting values you have not confirmed**")
         lines.append("; ".join(f"{row['name']} {row['text']}" for row in digest["unconfirmed"]) + ".")
+    if digest["unchecked"]:
+        lines.append("")
+        lines.append("**The application cannot reconcile these**")
+        for row in digest["unchecked"]:
+            lines.append(f"- {row['tool']} by {row['by'] or 'the app'}: {row['note']}")
     if digest["interrupted"] or digest["interrupted_jobs"]:
         lines.append("")
-        lines.append("**Interrupted**")
+        lines.append("**Interrupted or failed**")
         for row in digest["interrupted"]:
-            lines.append(f"- {row['name']} did not finish. What it had recorded is kept. Ask again to finish; calcs replay.")
+            lines.append("- " + partial_text(row))
+        if digest["interrupted_jobs"] and not digest["interrupted"]:
+            lines.append("- A request was cut off before it finished. What had been recorded is kept.")
+        lines.append(RETRY_LINE)
+    if coverage:
+        lines.append("")
+        lines.append("**A design basis exported now would be incomplete**")
+        for gap in coverage:
+            lines.append(f"- {gap}")
     if digest["rfis"]:
         lines.append("")
         lines.append(f"**Open for the engineer of record** ({len(digest['rfis'])})")
@@ -386,7 +457,12 @@ def designer_text(digest: dict, check_line: str = "", name: str = "") -> str:
     lines.append(summary + (" " + check_line if check_line else ""))
     export = digest.get("export")
     if export is not None:
-        lines.append("Design Basis export: ready." if export["ready"] else f"Design Basis export waits: {export['reason']}")
+        if not export["ready"]:
+            lines.append(f"Design Basis export waits: {export['reason']}")
+        elif coverage:
+            lines.append("Design Basis export: ready, as an incomplete draft. It opens with what is missing.")
+        else:
+            lines.append("Design Basis export: ready.")
     return "\n".join(lines)
 
 

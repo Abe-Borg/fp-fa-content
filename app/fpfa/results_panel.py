@@ -23,6 +23,8 @@ from typing import Any
 from fpfa.claude_client import MODEL_ID
 from fpfa.releasing import TRUTH_TABLE_TOOL, releasing_logic
 from fpfa.workflow import (
+    exemption_answer,
+    exemption_qualifier,
     fmt1,
     format_transcript,
     judgment_label_line,
@@ -96,13 +98,21 @@ def zone_figures(tools: dict[str, Any]) -> list[dict]:
         ))
 
     if "nfpa_delivery_time_exempt" in screen and "nfpa_size_cap_gal" in screen and "zone_gal" in volume:
-        exempt = bool(screen["nfpa_delivery_time_exempt"])
+        # The tool's own answer. A saved run from before the screen was handed the zone total was governed
+        # on it in memory and carries the same keys; a pipe-only result has no answer to print.
+        answer = exemption_answer(screen)
+        judged_on = screen.get("exemption_volume_gal")
+        lines = [
+            f"Zone total of {fmt1(judged_on)} gal against the {screen['nfpa_size_cap_gal']:.0f} gal cap."
+            if judged_on is not None else "Pipe-only screen. Fittings and trim are not in it.",
+        ]
+        qualifier = exemption_qualifier(volume, screen) if judged_on is not None else ""
+        if qualifier:
+            lines.append(qualifier)
+        lines.append("A quick-opening device does not raise the double-interlock cap.")
         figures.append(_figure(
-            "size_exemption", "NFPA size exemption", "yes" if exempt else "no", "",
-            lines=[
-                f"Zone total of {fmt1(volume['zone_gal'])} gal against the {screen['nfpa_size_cap_gal']:.0f} gal cap.",
-                "A quick-opening device does not raise the double-interlock cap.",
-            ],
+            "size_exemption", "NFPA size exemption", answer, "",
+            tone="warn" if answer == "not determined" else "", lines=lines,
         ))
 
     if "qd_gpm" in density:

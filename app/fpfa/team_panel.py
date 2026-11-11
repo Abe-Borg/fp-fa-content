@@ -19,7 +19,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from fpfa import checker, inputs, status
+from fpfa import checker, content_use, inputs, status
 from fpfa.checker import check_line, check_token  # noqa: F401  (check_line is read from here by older callers)
 
 STATUS_GLYPH = {
@@ -250,7 +250,8 @@ def _settled(snapshot: dict) -> list[dict]:
     return rows
 
 
-def team_view(snapshot: dict | None, *, export_reason: str | None = None) -> dict:
+def team_view(snapshot: dict | None, *, export_reason: str | None = None,
+              content_root: Any = None) -> dict:
     """What the Team tab, the status strip, and the sidebar roster draw for one job's record."""
     snap = snapshot or {}
     roster = roster_lines(snapshot)
@@ -283,7 +284,8 @@ def team_view(snapshot: dict | None, *, export_reason: str | None = None) -> dic
             "strip": "", "attention": 0, "plan": None, "people": [], "asks": [], "rfis": [], "answered": [],
             "stale": [], "changes": [], "disagreements": [], "conflicts": [], "alternatives": [], "settled": [],
             "tiers": [], "findings": [], "inputs": [], "interrupted": [], "export": None,
-            "not_standard": checker.NOT_STANDARD,
+            "not_standard": checker.NOT_STANDARD, "partial": [], "retry_line": "", "unchecked": [],
+            "coverage": {"complete": False, "gaps": [], "uncovered": []}, "ladder": [], "skills_used": [], "content": {},
         })
         return view
     digest = status.build(snap, export_reason=export_reason)
@@ -321,7 +323,16 @@ def team_view(snapshot: dict | None, *, export_reason: str | None = None) -> dic
         "inputs": [{"id": row["id"], "name": row["name"], "text": row["text"], "source": row["source"] or row["by"],
                     "unconfirmed": row["unconfirmed"], "blank": row["blank"]} for row in digest["inputs"]],
         "interrupted": [str(row["name"]) for row in digest["interrupted"]],
+        # The same agents with what each had recorded when it stopped, and what asking again repeats.
+        "partial": [status.partial_text(row) for row in digest["interrupted"]],
+        "retry_line": status.RETRY_LINE if digest["interrupted"] or digest["interrupted_jobs"] else "",
+        "unchecked": [f"{row['tool']} by {row['by'] or 'the app'}: {row['note']}" for row in digest["unchecked"]],
         "export": digest["export"],
         "not_standard": checker.NOT_STANDARD,
+        # What a design basis exported now would be missing, and the kinds of assurance with the two never performed.
+        "coverage": checker.coverage(snap) if (snap.get("findings") or snap.get("calcs")) else {"complete": False, "gaps": [], "uncovered": []},
+        "ladder": [{"name": name, "what": what, "where": where} for name, what, where in checker.LADDER],
+        "skills_used": [dict(row, line=content_use.use_line(row)) for row in content_use.skill_use(snap, content_root)],
+        "content": dict(snap.get("context") or {}),
     })
     return view

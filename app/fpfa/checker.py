@@ -13,27 +13,41 @@ What makes it more than a self-check:
   section, the checker judges the claim against the pack's words, not the
   words the claim's author wrote beside the cite. A specialist cannot
   support a wrong claim by writing a matching note.
-- Every figure with a unit in a claim has to appear in the rows it cites: a
-  calc record's figures, the pack note, or a project input. This is
-  arithmetic on text and does not depend on the model.
+- Every figure with a unit in a claim has to appear in the rows it cites,
+  with that kind of unit: a calc record's figures, the pack note, or a
+  project input (fpfa.quantities). This is matching on text and does not
+  depend on the model. A 900 ft pipe does not back a 900 gpm claim.
+- Low air is never a release input. A claim that says otherwise is not
+  supported, whatever it cites and whatever the checker said
+  (fpfa.releasing.release_wording_hits). The releasing calc record says
+  what the release is.
 - A finding whose basis changed is not judged at all. It is out of date.
 
 What it is not. No standard is opened. The pack's notes are paraphrases
 the content team reviewed, and the checker is a second pass by the same
-model on a blind packet. checked_against_standard is always False. The
-tiers below say exactly how far each finding was taken, and the export
-prints them.
+model on a blind packet. checked_against_standard is always False. Whether
+a claim's meaning, conditions, and applicability follow from what it cites
+is the checker's judgment alone; the application's own rules look at
+figures, units, and one known wrong statement. The tiers below say how far
+each finding was taken, LADDER says which kinds of assurance exist and
+which this application never performs, and the export prints both.
 
 Tiers, derived from the record and never typed by a model:
 
-- source     checked against an identified source: a calc record whose
-             figures match, a content-pack note, or a project input.
-- reviewed   the checker found it consistent with a cite its author wrote,
-             which the app did not find in the pack.
+- source     the trace check found it consistent with rows the application
+             identified itself: a calc record whose figures match, a
+             content-pack note, or a project input.
+- reviewed   the trace check found it consistent with a cite its author
+             wrote, which the app did not find in the pack.
 - stated     produced by a specialist; no check has judged it.
 - open       needs further evidence or engineering review: not supported,
              no source, objected to, out of date, or by its label an
              assumption or a judgment for the engineer of record.
+
+Coverage (coverage()) is a separate question from the tiers: whether the
+record holds a specialist's statement for each calculation that was run,
+and whether anything is still waiting on the team. An export with a gap is
+allowed, and says at its head that it is incomplete.
 """
 
 from __future__ import annotations
@@ -45,13 +59,15 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
-from fpfa import coherence, inputs, status
+from fpfa import coherence, inputs, quantities, status
 from fpfa.corpus_search import trace_cite
 from fpfa.record import Record
-from fpfa.releasing import reader_view
+from fpfa.releasing import LOW_AIR_SUPERVISORY, reader_view, release_wording_hits
 
 CHECKER_ROLE = "qa-specialist"
 CHECK_EVENT = "record_check"
+# A trace check whose request failed. Kept apart from CHECK_EVENT so the last good check stays the latest one.
+CHECK_FAILED_EVENT = "check_failed"
 
 TIER_SOURCE = "source"
 TIER_REVIEWED = "reviewed"
@@ -59,15 +75,17 @@ TIER_STATED = "stated"
 TIER_OPEN = "open"
 TIERS = (TIER_SOURCE, TIER_REVIEWED, TIER_STATED, TIER_OPEN)
 TIER_TITLE = {
-    TIER_SOURCE: "Checked against an identified source",
-    TIER_REVIEWED: "Reviewed by the checker",
-    TIER_STATED: "Produced by a specialist, not reviewed",
+    TIER_SOURCE: "Trace-consistent with a row the application identified",
+    TIER_REVIEWED: "Trace-consistent with its author's own cite only",
+    TIER_STATED: "Stated by a specialist, not checked",
     TIER_OPEN: "Needs further evidence or engineering review",
 }
 TIER_NOTE = {
     TIER_SOURCE: (
-        "The trace check found each of these consistent with a calculation record, a content-pack note the "
-        "application looked up, or a project input. The source is named beside each. The standard itself was not opened."
+        "The trace check (a second pass by the same AI model) found each of these consistent with a calculation "
+        "record, a content-pack note the application looked up, or a project input, and every figure in it is in "
+        "those rows with its unit. The row is named beside each. This is consistency with the team's own record. "
+        "It is not verification: the standard was not opened, and no engineer has reviewed it."
     ),
     TIER_REVIEWED: (
         "The trace check found each of these consistent with a cite its own author wrote. The application did "
@@ -79,6 +97,25 @@ TIER_NOTE = {
         "or by their label an assumption or a judgment. These are for the engineer of record."
     ),
 }
+# Every kind of assurance a reader might assume, in order, and whether this application performs it.
+# The last two are never performed here, on any finding, and the export says so in a table.
+LADDER = (
+    ("Specialist output", "A specialist (an AI model in a role) wrote the statement and named the rows it rests on.",
+     "Every finding."),
+    ("Model review", "Another specialist (the same AI model in another role) agreed or objected.",
+     "Where the Agreed-by column or section 5 names a reviewer."),
+    ("Trace consistency", "A second pass by the same AI model judged the statement against the rows it cites. "
+     "The application also holds each figure, with its unit, to those rows.",
+     "Findings in the first two groups of section 4."),
+    ("Support from an identified row", "The rows are ones the application found itself: a calculation record, a "
+     "content-pack note, or a project input. A content-pack note is the content team's paraphrase.",
+     "Findings in the first group of section 4."),
+    ("Verification against the primary standard", "The adopted standard, the insurer data sheet, or the "
+     "manufacturer's listing was opened and the statement checked against its text.",
+     "NOT PERFORMED by this application, for any finding."),
+    ("Qualified engineering review", "A licensed engineer reviewed the basis and accepted it.",
+     "NOT PERFORMED by this application. None is recorded on this job."),
+)
 PACK_MARK = "CONTENT-PACK NOTE"
 AUTHOR_MARK = "AUTHOR'S NOTE (written by the claim's author; not found in the content pack)"
 INPUT_MARK = "PROJECT INPUT"
@@ -86,13 +123,13 @@ STALE_MARK = "OUT OF DATE"
 NOT_STANDARD = "The standards were not opened. Engineer-of-record review still applies."
 _JUDGMENT_LABELS = ("ASSUMED", "use best judgment")
 
-# A figure the check can verify: a number followed by an engineering unit.
-_FIGURE = re.compile(
-    r"(?<![\w.§-])(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)\s*"
-    r"(gallons?|gal|gpm|psig|psi|scfm|seconds?|sec|s|minutes?|min|ft2|ft²|sq\s*ft|percent|%)(?![\w²])",
-    re.IGNORECASE,
-)
+# A figure the check can verify: a number followed by an engineering unit (fpfa.quantities).
+_FIGURE = quantities.FIGURE
 _ANY_NUMBER = re.compile(r"(?<![\w.])(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)(?![\d])")
+RELEASE_WORDING_REASON = (
+    "the releasing calculation record says the release is the detection leg AND P, and "
+    + LOW_AIR_SUPERVISORY[0].lower() + LOW_AIR_SUPERVISORY[1:] + " This finding says otherwise."
+)
 
 
 def _claim_check():
@@ -106,12 +143,7 @@ def _claim_check():
 
 def _normal(number: str) -> str:
     """A number as text, so 38,400 and 38400.0 and 38400 compare equal."""
-    text = number.replace(",", "")
-    try:
-        value = float(text)
-    except ValueError:
-        return text
-    return f"{value:.10g}"
+    return quantities.normal(number)
 
 
 def figures(text: str) -> list[str]:
@@ -143,6 +175,20 @@ def _calc_numbers(tool: str, outputs: Any, calc_inputs: Any) -> set[str]:
     claim_check = _claim_check()
     tokens = claim_check._package_number_tokens({tool: outputs, "inputs": calc_inputs})
     return {_normal(token) for token in tokens}
+
+
+def _calc_quantities(outputs: Any, calc_inputs: Any) -> set:
+    """A calc record's figures, each with the unit its field names. Its notes and formulas are not figures."""
+    return quantities.in_value(outputs, strings=False) | quantities.in_value(calc_inputs, strings=False)
+
+
+def _text_quantities(text: Any) -> set:
+    return quantities.in_text(_strip_cites(str(text or "")))
+
+
+def _pairs(have: set) -> list[list]:
+    """A set of quantities as JSON keeps it: sorted [number, class] pairs."""
+    return sorted(([number, cls] for number, cls in have), key=lambda item: (item[0], item[1] or ""))
 
 
 # -- the packet --------------------------------------------------------------------------
@@ -177,6 +223,7 @@ def _cite_for(content_root: Path | None, rows: dict[str, dict], finding: dict, a
     pieces: list[str] = []
     sources: list[dict] = []
     numbers: set[str] = set()
+    held: set = set()
     author_notes: list[str] = []
     open_cite = False
     author_only = False
@@ -192,10 +239,13 @@ def _cite_for(content_root: Path | None, rows: dict[str, dict], finding: dict, a
             stated = _calc_text(row["tool"], row["outputs"])
             pieces.append(f"{claim_check.PACKAGE_MARK}. {row['tool']}: {stated + '. ' if stated else ''}{shown}")
             numbers |= _calc_numbers(row["tool"], row["outputs"], row.get("inputs"))
+            held |= _calc_quantities(row["outputs"], row.get("inputs"))
             state = analysis["calcs"].get(ident, {})
             label = "calculation record"
             if state.get("state") == coherence.ALTERNATIVE:
                 label = "calculation record on another value than the project input"
+            elif not state.get("tracked"):
+                label = "calculation record, not tied to the project inputs"
             sources.append({"id": ident, "kind": "calc", "text": f"{row['tool']} ({label})"})
         elif kind == "evidence":
             where = cite_name(row)
@@ -212,12 +262,14 @@ def _cite_for(content_root: Path | None, rows: dict[str, dict], finding: dict, a
                     # The figures this cite can carry are the ones the pack gives for this section,
                     # not every figure in the paragraph around it.
                     numbers |= _numbers_in(_strip_cites(item.get("scope") or item["text"]))
+                    held |= _text_quantities(item.get("scope") or item["text"])
                 sources.append({"id": ident, "kind": "pack", "text": where,
                                 "where": [f"{item['path']}:{item['line']}" for item in passages]})
             else:
                 note = str(row.get("note") or "").strip()
                 pieces.append(f"{where}. {AUTHOR_MARK}: {note or '(no note)'} [{row['status']}]")
                 numbers |= _numbers_in(_strip_cites(note))
+                held |= _text_quantities(note)
                 author_only = True
                 author_notes.append(note)
                 sources.append({"id": ident, "kind": "author", "text": where})
@@ -229,20 +281,25 @@ def _cite_for(content_root: Path | None, rows: dict[str, dict], finding: dict, a
             source = row.get("source") or row.get("agent") or ""
             pieces.append(f"{INPUT_MARK} {row['key']}: {value} ({row['label']}; {source})")
             numbers |= _numbers_in(value)
+            if row.get("kind") == inputs.INPUT_KIND:
+                held |= quantities.in_value(inputs.decode(row["value"]), row["key"], strings=False)
+            # As the input is shown, with the unit the form gives it.
+            held |= quantities.in_text(value)
             sources.append({"id": ident, "kind": "input", "text": f"{row['key']}: {value}"})
         elif kind == "finding":
             pieces.append(f"FINDING by {row['agent']}: {row['text']} [{row['status']}]")
             numbers |= _numbers_in(_strip_cites(row["text"]))
+            held |= _text_quantities(row["text"])
             # A finding is the team's own statement. Resting on one adds no independent source.
             author_only = True
             author_notes.append(str(row["text"]))
             sources.append({"id": ident, "kind": "finding", "text": f"finding by {row['agent']}"})
     if not pieces:
-        return {"cite": claim_check.OPEN_MARK, "open": True, "basis": "none", "numbers": set(), "sources": sources,
-                "author_notes": []}
+        return {"cite": claim_check.OPEN_MARK, "open": True, "basis": "none", "numbers": set(), "held": set(),
+                "sources": sources, "author_notes": []}
     return {
         "cite": " | ".join(pieces), "open": open_cite, "basis": "author" if author_only else "source",
-        "numbers": numbers, "sources": sources, "author_notes": author_notes,
+        "numbers": numbers, "held": held, "sources": sources, "author_notes": author_notes,
     }
 
 
@@ -268,7 +325,7 @@ def build_record_packet(record: Record, project_id: str, content_root: Path | No
         stale = standing.get("state") == coherence.STALE
         if stale:
             cite = {"cite": f"{STALE_MARK}: " + "; ".join(standing.get("reasons") or [])[:400], "open": True,
-                    "basis": "none", "numbers": set(), "sources": [], "author_notes": []}
+                    "basis": "none", "numbers": set(), "held": set(), "sources": [], "author_notes": []}
         else:
             cite = _cite_for(content_root, rows, finding, analysis)
         claims.append(f"{index}. {finding['text'].rstrip('.')}.")
@@ -276,7 +333,8 @@ def build_record_packet(record: Record, project_id: str, content_root: Path | No
         meta.append({
             "n": index, "finding_id": finding["id"], "open": cite["open"], "stale": stale,
             "calc_only": cite["basis"] == "source" and all(item["kind"] == "calc" for item in cite["sources"]),
-            "basis": cite["basis"], "numbers": sorted(cite["numbers"]), "sources": cite["sources"],
+            "basis": cite["basis"], "numbers": sorted(cite["numbers"]), "held": _pairs(cite["held"]),
+            "sources": cite["sources"],
             "author_notes": cite["author_notes"], "requirement": finding["text"], "cite": cite["cite"],
         })
     return {
@@ -288,22 +346,38 @@ def build_record_packet(record: Record, project_id: str, content_root: Path | No
     }
 
 
-def _missing_figures(requirement: str, numbers: list[str]) -> list[str]:
-    """Figures in the claim that none of its cited rows hold."""
-    have = set(numbers)
+def _missing_figures(requirement: str, numbers: list[str], held: list | None = None) -> list[str]:
+    """Figures in the claim that none of its cited rows hold.
+
+    numbers are the cited rows' numbers alone. held, when given, are the same
+    rows' numbers with the unit each is kept in ([number, class] pairs): a
+    figure then has to be held as that kind of quantity, so a length does
+    not back a flow. Without held the lookup is by number alone.
+    """
+    if held is not None:
+        have = {(str(number), cls) for number, cls in held}
+        return [f"{number} {unit}" for number, unit in _figures_with_units(requirement)
+                if not quantities.has(number, unit, have)]
+    have_numbers = set(numbers)
     missing = []
     for number, unit in _figures_with_units(requirement):
-        if number in have:
+        if number in have_numbers:
             continue
         if unit in ("%", "percent"):
             # A row may hold the same share as a fraction: 30 percent is 0.3.
             try:
-                if _normal(str(float(number) / 100.0)) in have:
+                if _normal(str(float(number) / 100.0)) in have_numbers:
                     continue
             except ValueError:
                 pass
         missing.append(f"{number} {unit}")
     return missing
+
+
+def _wrong_unit(requirement: str, numbers: list[str], held: list) -> list[str]:
+    """Of the figures the cited rows do not hold as that quantity, the ones they hold as something else."""
+    have_numbers = set(numbers) | {str(number) for number, _cls in held}
+    return [item for item in _missing_figures(requirement, numbers, held) if item.split()[0] in have_numbers]
 
 
 def _calc_text(tool: str, outputs: Any) -> str:
@@ -348,11 +422,27 @@ def check_record(content_root: Path, record: Record, project_id: str, create: Ca
         record.log_event(project_id, CHECK_EVENT, outcome, agent=CHECKER_ROLE)
         return outcome
     system = claim_check.checker_system(content_root)
-    model_text, usage = claim_check._ask_usage(
-        create, system, claim_check.checker_request(packet["claims"], packet["sources"])
-    )
+    try:
+        model_text, usage = claim_check._ask_usage(
+            create, system, claim_check.checker_request(packet["claims"], packet["sources"])
+        )
+    except Exception as exc:
+        if type(exc).__name__ == "TurnCancelled":
+            raise
+        from fpfa.claude_client import safe_error
+
+        # One request, and it failed. It returned no usage, so none is known. The failure is still a fact
+        # about the job: nothing was judged, and the last good check stands as it was.
+        record.log_event(project_id, CHECK_FAILED_EVENT, {
+            "failed": True, "error": safe_error(exc)[:400], "usage": dict(getattr(exc, "usage", None) or {}),
+            "claim_count": packet["claim_count"], "seconds": round(time.time() - started, 1),
+        }, agent=CHECKER_ROLE)
+        raise
     words = claim_check._verdict_words(model_text)
     rows: list[dict] = []
+    # Where the application's own rules set aside what the checker said. A checker that approves a claim
+    # the rules catch is a checker to distrust on the claims no rule covers.
+    overruled: list[dict] = []
     for item in packet["meta"]:
         reason = ""
         if item["stale"]:
@@ -370,11 +460,21 @@ def check_record(content_root: Path, record: Record, project_id: str, create: Ca
             verdict = words.get(item["n"], claim_check.VERDICT_NOT)
             if verdict not in (claim_check.VERDICT_SUPPORTED, claim_check.VERDICT_NOT, claim_check.VERDICT_OPEN):
                 verdict = claim_check.VERDICT_NOT
-            missing = _missing_figures(item["requirement"], item["numbers"])
-            if verdict == claim_check.VERDICT_SUPPORTED and missing:
+            said = verdict
+            missing = _missing_figures(item["requirement"], item["numbers"], item["held"])
+            if release_wording_hits(item["requirement"]):
+                # A known wrong statement about the release. No cite and no verdict stands against the rule.
+                verdict = claim_check.VERDICT_NOT
+                reason = RELEASE_WORDING_REASON
+            elif verdict == claim_check.VERDICT_SUPPORTED and missing:
                 # No verdict stands against the arithmetic: a figure in the claim is not in what it cites.
                 verdict = claim_check.VERDICT_NOT
+                other = _wrong_unit(item["requirement"], item["numbers"], item["held"])
                 reason = "figure not in the rows it cites: " + ", ".join(missing)
+                if other:
+                    reason += ". The rows hold " + ", ".join(text.split()[0] for text in other) + " only as another quantity"
+            if verdict != said:
+                overruled.append({"n": item["n"], "finding_id": item["finding_id"], "checker_said": said})
         rows.append({
             "n": item["n"], "finding_id": item["finding_id"], "verdict": verdict,
             "cite": item["cite"].replace('"', "'"), "basis": item["basis"] if verdict == claim_check.VERDICT_SUPPORTED else "",
@@ -388,6 +488,9 @@ def check_record(content_root: Path, record: Record, project_id: str, create: Ca
     all_supported = bool(rows) and not not_ok
     split = (f"{on_source} against a calculation record, a content-pack note, or a project input, "
              f"{on_author} against a cite their author wrote")
+    if overruled:
+        split += (f"; the application's own rules set aside the checker's verdict on "
+                  f"{len(overruled)} finding{'s' if len(overruled) != 1 else ''}")
     if all_supported:
         status_line = (
             f"Trace check: all {len(rows)} findings are consistent with the rows they cite ({split}). "
@@ -414,6 +517,8 @@ def check_record(content_root: Path, record: Record, project_id: str, create: Ca
         "status_line": status_line,
         "block_reason": block_reason,
         "checked_against_standard": False,
+        "overruled": overruled,
+        "content": dict(snapshot_context(record, project_id)),
         "verdict": "\n".join(
             f'{row["n"]}. {row["verdict"]}. Cite: "{_clip(row["cite"], 320)}"' + (f" ({row['reason']})" if row["reason"] else "")
             for row in rows
@@ -421,6 +526,11 @@ def check_record(content_root: Path, record: Record, project_id: str, create: Ca
     }
     record.log_event(project_id, CHECK_EVENT, outcome, agent=CHECKER_ROLE)
     return outcome
+
+
+def snapshot_context(record: Record, project_id: str | None = None) -> dict:
+    """What was installed when a check ran: the pack's version and fingerprint and the calc code's identity."""
+    return dict(getattr(record, "context", None) or {})
 
 
 def latest_check(record: Record, project_id: str) -> dict | None:
@@ -439,7 +549,11 @@ def _latest_check_in(snapshot: dict | None) -> dict | None:
 
 def check_is_current(snapshot: dict | None) -> bool:
     payload = _latest_check_in(snapshot)
-    return bool(payload) and payload.get("token") == check_token(list((snapshot or {}).get("findings") or []))
+    if not payload or payload.get("token") != check_token(list((snapshot or {}).get("findings") or [])):
+        return False
+    was = str((payload.get("content") or {}).get("content_fingerprint") or "")
+    now = str(((snapshot or {}).get("context") or {}).get("content_fingerprint") or "")
+    return not (was and now and was != now)
 
 
 def check_line(snapshot: dict | None) -> str:
@@ -453,6 +567,10 @@ def check_line(snapshot: dict | None) -> str:
     # A check speaks for the findings it saw. New or changed findings need a new one.
     if payload.get("token") and payload.get("token") != check_token(list(snap.get("findings") or [])):
         return "Trace check: findings changed since the last check. Run it again."
+    was = str((payload.get("content") or {}).get("content_fingerprint") or "")
+    now = str((snap.get("context") or {}).get("content_fingerprint") or "")
+    if was and now and was != now:
+        return "Trace check: the content pack changed since the last check. Run it again."
     return str(payload.get("status_line") or "Trace check ran.")
 
 
@@ -529,6 +647,11 @@ def assurance(snapshot: dict | None, check: dict | None = None) -> dict[str, dic
                 reasons.append(f"It is {kind}, and no trace check has judged it.")
         for note in standing.get("notes") or []:
             reasons.append("Alternative: " + note)
+        for note in standing.get("unchecked") or []:
+            reasons.append("Not reconciled by the application: " + note)
+        if standing.get("unchecked") and tier in (TIER_SOURCE, TIER_REVIEWED):
+            # Consistent with a row the record cannot vouch for any more. It goes to the engineer.
+            tier = TIER_OPEN
         out[ident] = {
             "tier": tier, "reasons": reasons, "verdict": verdict,
             "sources": seen.get("sources") or [], "checked": verdict != "open",
@@ -542,6 +665,125 @@ def tier_counts(snapshot: dict | None) -> dict[str, int]:
     for item in assurance(snapshot).values():
         counts[item["tier"]] += 1
     return counts
+
+
+# -- coverage ------------------------------------------------------------------------------
+
+# A calc tool in a reader's words, for the line that says no finding speaks for it.
+_TOOL_WORDS = {
+    "zone_trapped_volume": "the trapped volume",
+    "dry_delivery_screen": "the pipe timing and the size exemption",
+    "di_trip_to_water": "the delivery-time screen",
+    "density_area": "the sprinkler demand",
+    "hose_duration": "the hose stream and duration",
+    "nitrogen_gate": "the supervisory gas fill and design C",
+    "elect_di_trim": "the trim family",
+    "releasing_truth_table": "the releasing logic",
+    "lfl_setpoints": "the gas detection setpoints",
+}
+# Lookups a finding is not expected to speak for by themselves.
+_HELPER_TOOLS = frozenset({"resolve_pipe_id"})
+# A handoff addressed to the lead is a note the lead reads in its status block. Nothing delivers it, so it
+# never leaves pending, and it is not work waiting on a specialist.
+LEAD_AGENT = "lead"
+COMPLETE_LINE = (
+    "Coverage: every calculation on this record has a specialist's finding, the plan's steps are done, no "
+    "handoff is waiting for a specialist, and nothing else is waiting on the team. That is a statement about the record, not about the design. The table "
+    "below says what kind of checking each statement had, and what kind it did not."
+)
+INCOMPLETE_HEAD = "INCOMPLETE DRAFT. This document does not yet cover the whole design basis:"
+
+
+def coverage(snapshot: dict | None) -> dict:
+    """What a design basis written from this record would be missing. Derived; no model is asked.
+
+    Returns {"complete", "gaps", "uncovered"}. gaps are sentences for the
+    reader. uncovered are the calc tools whose current result no current
+    finding or decision rests on, directly or through a calculation that took
+    a figure from it: the work was computed and no specialist has said what
+    it means. A record with nothing on it is not complete either.
+
+    This does not know what a design basis ought to contain. It knows what
+    was computed, what the lead planned, and what is still open, and it
+    reports the distance between those and what was stated. A team that
+    computes less is not caught here; the plan the lead set is the only
+    statement of intent the record holds.
+    """
+    snap = snapshot or {}
+    analysis = coherence.analyze(snap)
+    digest = status.build(snap)
+    calcs = {row["id"]: row for row in snap.get("calcs") or []}
+    findings = [row for row in snap.get("findings") or []
+                if analysis["findings"].get(row["id"], {}).get("state") != coherence.STALE]
+    decisions = [row for row in snap.get("decisions") or []
+                 if analysis["decisions"].get(row["id"], {}).get("state") != coherence.STALE]
+    spoken: set[str] = set()
+    queue = [ident for row in findings + decisions for ident in row.get("supports") or [] if ident in calcs]
+    while queue:
+        ident = queue.pop()
+        if ident in spoken:
+            continue
+        spoken.add(ident)
+        queue.extend(dep for dep in calcs[ident].get("depends") or [] if dep in calcs)
+    by_tool: dict[str, list[str]] = {}
+    for ident, row in calcs.items():
+        if analysis["calcs"][ident]["state"] == coherence.CURRENT and row.get("tool") not in _HELPER_TOOLS:
+            by_tool.setdefault(row["tool"], []).append(ident)
+    # A calculation that only feeds another one is spoken for, or not, with the one it feeds.
+    feeds = {dep for row in calcs.values() if analysis["calcs"][row["id"]]["state"] == coherence.CURRENT
+             for dep in row.get("depends") or [] if dep in calcs}
+    uncovered = [tool for tool, ids in by_tool.items()
+                 if not any(ident in spoken for ident in ids) and not all(ident in feeds for ident in ids)]
+    gaps: list[str] = []
+    if not calcs and not findings:
+        gaps.append("Nothing has been calculated or stated on this job yet.")
+    elif not findings:
+        gaps.append("No specialist has stated a finding. The figures below are the tool plan's alone, with "
+                    "nobody's reading of what they mean.")
+    for tool in uncovered:
+        if not findings:
+            break
+        gaps.append(f"No finding rests on {_TOOL_WORDS.get(tool, tool)} ({tool}). It was calculated and no "
+                    "specialist has stated what follows from it.")
+    plan = digest.get("plan")
+    for step in (plan or {}).get("steps") or []:
+        if step["status"] != "done":
+            owner = f", {step['owner']}" if step["owner"] else ""
+            gaps.append(f"Plan step not finished: {step['title']} ({step['status']}{owner}).")
+    for row in digest["interrupted"]:
+        how = "stopped on an error" if row.get("status") == "error" else "was interrupted"
+        gaps.append(f"{row['name']} {how} before it finished. What it had recorded is kept and may be partial.")
+    if digest["objections"] or digest["conflicts"]:
+        count = len(digest["objections"]) + len(digest["conflicts"])
+        gaps.append(f"{count} disagreement{'s' if count != 1 else ''} between contributors "
+                    f"{'are' if count != 1 else 'is'} not settled.")
+    if digest["asks"]:
+        count = len(digest["asks"])
+        gaps.append(f"{count} question{'s' if count != 1 else ''} the team put to the designer "
+                    f"{'are' if count != 1 else 'is'} not answered.")
+    waiting = [row for row in digest["pending"] if row.get("to") != LEAD_AGENT]
+    if waiting:
+        count = len(waiting)
+        who = ", ".join(sorted({str(row.get("to") or "") for row in waiting}))
+        gaps.append(f"{count} handoff{'s' if count != 1 else ''} {'are' if count != 1 else 'is'} waiting for {who}: "
+                    "work one contributor left for another has not been picked up.")
+    if digest["unchecked"]:
+        count = len(digest["unchecked"])
+        gaps.append(f"{count} calculation{'s' if count != 1 else ''} the application cannot reconcile after an "
+                    "input change: the tool is not tied to the project inputs. Check by hand or run again.")
+    if digest["stale"]:
+        count = len(digest["stale"])
+        gaps.append(f"{count} row{'s' if count != 1 else ''} on the record {'are' if count != 1 else 'is'} out of date.")
+    return {"complete": not gaps, "gaps": gaps, "uncovered": uncovered}
+
+
+def coverage_lines(snapshot: dict | None) -> list[str]:
+    """The coverage gaps as the lead's status block and /status carry them. Empty when there are none."""
+    found = coverage(snapshot)
+    if found["complete"] or not ((snapshot or {}).get("findings") or (snapshot or {}).get("calcs")):
+        return []
+    return ["Not yet covered. A design basis written now would be incomplete, and must say so:"] + [
+        f"- {gap}" for gap in found["gaps"]]
 
 
 # -- the export gate -----------------------------------------------------------------------
@@ -580,4 +822,9 @@ def export_reason(snapshot: dict | None) -> str:
         return "The record has findings that no trace check has judged. Ask the lead to run it, or press Run trace check."
     if check.get("token") != check_token(findings):
         return "Findings changed after the last trace check. Run it again."
+    was = str((check.get("content") or {}).get("content_fingerprint") or "")
+    now = str((snapshot.get("context") or {}).get("content_fingerprint") or "")
+    if was and now and was != now:
+        # A cite is read in the content pack. A check made against other content speaks for that content.
+        return "The content pack changed after the last trace check. Run it again."
     return ""

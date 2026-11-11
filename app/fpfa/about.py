@@ -71,6 +71,14 @@ def version_lines(content_root: Path | None = None, data_dir: Path | None = None
     try:
         root = content_root or resolve_root()
         lines.append(f"Content pack {content_version_text()} at {root}")
+        try:
+            from fpfa.calc_tools import calc_identity, content_fingerprint
+
+            # What the pack actually holds, whatever its label says. An evaluation report and an export print
+            # the same two values, so a result can be tied to the content that produced it.
+            lines.append(f"Content fingerprint {content_fingerprint(root)}, calc code {calc_identity(root)}")
+        except Exception:
+            lines.append("Content fingerprint: could not be read")
     except FileNotFoundError:
         lines.append("Content pack: not found")
     lines.append(f"Data directory {data_dir or resolve_data()}")

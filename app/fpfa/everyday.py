@@ -237,8 +237,19 @@ def run_everyday(
                 "cancelled": True, "stop_reason": "cancelled", "seconds": round(time.time() - started, 1),
             }, agent=agent)
             raise
-        except Exception:
+        except Exception as exc:
             record.set_agent(project_id, name="Lead", role_slug=agent, status="error")
+            # The turn failed. Its rounds up to the failure, and every delegation it had run, were billed, and
+            # the record closes the task with them. The request that failed returned no usage.
+            from fpfa.claude_client import safe_error
+
+            known = _task_total(getattr(exc, "usage", None), team.usage)
+            record.log_event(project_id, "turn", {
+                "usage": known, "lead_usage": dict(getattr(exc, "usage", None) or {}),
+                "delegations": len(team.delegations), "checks": len(team.checks),
+                "cancelled": False, "failed": True, "error": safe_error(exc)[:400], "stop_reason": "error",
+                "failed_inside": len(team.failed), "seconds": round(time.time() - started, 1),
+            }, agent=agent)
             raise
         record.set_agent(project_id, name="Lead", role_slug=agent, status="done")
         lead_usage = dict(out.get("usage") or {})
@@ -250,12 +261,14 @@ def run_everyday(
         out["inputs_set"] = team.inputs_set
         out["answered"] = team.answered
         out["resolved"] = team.resolved
+        out["failed"] = team.failed
         out["seconds"] = round(time.time() - started, 1)
         # The events row that closes the task carries the whole task's usage.
         record.log_event(project_id, "turn", {
             "usage": total, "lead_usage": lead_usage,
             "delegations": len(team.delegations), "checks": len(team.checks),
             "cancelled": False, "stop_reason": out.get("stop_reason") or "", "seconds": out["seconds"],
+            "failed_inside": len(team.failed),
         }, agent=agent)
         return out
     session = ToolSession(content_root, record=record, project_id=project_id, agent=agent)

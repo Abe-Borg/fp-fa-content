@@ -1,5 +1,7 @@
 # Team milestone: what was found, what changed, and what is not yet known
 
+> This is the hand-back for version 0.2.0. It is kept as written, with one dated correction in section 2D and this note. Two independent reviews of that version found defects it did not report; `docs/milestone-hardening-handback.md` reconciles each finding and says what version 0.3.0 changed. Where the two disagree, the later one is current.
+
 Version 0.2.0. Written 2026-11-11 for the project owner, against the brief "take this application to its next meaningful version": a coherent, bounded agent-team workflow that a coworker can start with an ordinary project request, continue across sessions, and use to produce an inspectable engineering draft.
 
 The short version. The application now has the machinery for that workflow, and every part of it is tested with scripted stand-ins for the model. **No request has been sent to the live model.** Whether the model, handed a plain objective, behaves like a coordinated team is the question this milestone was for, and it is still open. `docs/live-evaluation.md` is the hour it takes to answer it.
@@ -56,7 +58,7 @@ One thing was right and is kept: the decision to run the team on the existing Me
 
 ### D. The output earns appropriate trust
 
-- The releasing statement is corrected end to end: release is the detection leg AND P; low air is supervisory only. `docs/releasing-basis.md` gives the basis and what in it still needs a qualified engineer. The fix is to the statement, held by tests that read the truth table row by row and the prose sentence by sentence. No document was edited to match another.
+- The releasing statement is corrected end to end: release is the detection leg AND P; low air is supervisory only. `docs/releasing-basis.md` gives the basis and what in it still needs a qualified engineer. The fix is to the statement, held by tests that read the truth table row by row and the prose sentence by sentence. *Corrected 2026-11-11: this line used to end "No document was edited to match another." That was wrong. The exports, the roles, twelve skills, and the known answer were edited to agree with the pack's reviewed corpus and specs, and no primary source was opened. `docs/releasing-basis.md`, section 5, says what kind of change it was.*
 - The check is a trace check and is called one. A cite to a standard is read in the content pack's own reviewed note on that section when the pack holds one, not in the author's note. A figure with a unit in a claim has to be in the rows it cites. An out-of-date finding is not judged.
 - Each finding earns one of four tiers, derived by the application: checked against an identified source; reviewed against its author's own cite; produced by a specialist and not reviewed; needs further evidence or engineering review. The Design Basis opens with the counts and lists every finding under its tier with what it rests on.
 - The Design Basis waits for a current check and for nothing out of date. It no longer waits for every finding to be supported, because that rule pushes a team to drop exactly the findings an engineer most needs to see.

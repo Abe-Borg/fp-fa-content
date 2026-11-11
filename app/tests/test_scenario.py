@@ -265,7 +265,11 @@ class ScenarioTests(unittest.TestCase):
         for line in ("Objective: Delivery time and releasing sequence for the data hall 1 preaction zone",
                      "Sprinkler specialist (fp-sprinkler): done, 3 findings, reviewed 1 of the others' findings",
                      "The team needs from you", "1. What is the trim volume on the elected valve's data sheet?",
-                     "Design Basis export: ready."):
+                     # The scripted team states the volume, the screen, the trim, and the releasing logic. The tool
+                     # plan also calculated the size exemption, the demand, and the gas fill, and nobody states those.
+                     "A design basis exported now would be incomplete",
+                     "No finding rests on the sprinkler demand (density_area).",
+                     "Design Basis export: ready, as an incomplete draft. It opens with what is missing."):
             self.assertIn(line, status, line)
 
     def test_6_a_failure_part_way_keeps_what_was_done_and_the_retry_replays_it(self):
@@ -274,7 +278,7 @@ class ScenarioTests(unittest.TestCase):
         self.assertEqual(rows, [("delegation", "fp-sprinkler", "cancelled"), ("delegation", "fp-sprinkler", "returned"),
                                 ("delegation", "fa-releasing", "returned")])
         failed = [row for row in snap["handoffs"] if row["status"] == "cancelled"][0]
-        self.assertEqual(failed["result"], "The specialist did not finish.")
+        self.assertEqual(failed["result"], "The specialist did not finish: ConnectionError: the connection dropped")
         # The volume the failed attempt computed was not computed again.
         volume = self.s.at.calc("zone_trapped_volume", trim_gal=6.5)
         self.assertEqual(volume["replay_count"], 1)
@@ -332,7 +336,18 @@ class ScenarioTests(unittest.TestCase):
         self.assertEqual(kinds.count("turn"), 2)
         self.assertEqual(kinds.count("record_check"), 2)
         self.assertEqual(kinds.count("consult"), 1)
-        self.assertEqual(kinds.count("delegation"), 5, "the failed attempt wrote no usage row; the five that ran did")
+        # The attempt that failed part-way writes its row too, marked failed, with the round it had finished.
+        # It used to write none, so a failure was exactly when the totals ran low.
+        self.assertEqual(kinds.count("delegation"), 6)
+        failed = [row for row in rows if row.get("failed")]
+        self.assertEqual([(row["kind"], row["specialist"], row["usage"]["rounds"]) for row in failed],
+                         [("delegation", "fp-sprinkler", 1)])
+        self.assertIn("ConnectionError: the connection dropped", failed[0]["error"])
+        self.assertIn("within the turn: fp-sprinkler, FAILED", text)
+        self.assertIn("1 failed inside", text)
+        self.assertIn("Failures: 1 model context ended on an error (marked FAILED above)", text)
+        self.assertIn("A request that fails returns no usage. If the API billed any part of one, it is not in this total.", text)
+        self.assertIn("a floor, not a ceiling", text)
         total = job_totals(rows)
         self.assertGreater(total["rounds"], 25)
         self.assertIn("lead turn, 3 delegations, 1 check", text)

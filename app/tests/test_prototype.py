@@ -516,8 +516,19 @@ class WorkflowTests(unittest.TestCase):
             "system_type": "di",
             "qod": True,
         })
-        self.assertTrue(pipe_only["nfpa_delivery_time_exempt"])
+        # A pipe-only screen never says the exemption is met: 495 gal of pipe is under the cap and the zone
+        # total is not. The kernel's own flag is kept under its true name.
+        self.assertIsNone(pipe_only["nfpa_delivery_time_exempt"])
+        self.assertTrue(pipe_only["pipe_only_nfpa_delivery_time_exempt"])
+        self.assertEqual(pipe_only["exemption_status"], "not determined")
+        self.assertIn("pipe-only screen", pipe_only["exemption_note"])
         self.assertNotIn("exemption_volume_gal", pipe_only)
+        # Handed the takeoff's zone total, the same screen answers, and the answer is no.
+        on_zone = session.execute("dry_delivery_screen", {
+            "segments": segments, "q_fill_gpm": 500, "system_type": "di", "qod": True, "zone_gal": volume["zone_gal"],
+        })
+        self.assertIs(on_zone["nfpa_delivery_time_exempt"], False)
+        self.assertAlmostEqual(on_zone["exemption_volume_gal"], volume["zone_gal"], places=6)
 
         chat = session.execute("dry_delivery_screen", {
             "segments": segments,

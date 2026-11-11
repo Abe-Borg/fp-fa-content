@@ -12,6 +12,15 @@ long they took on the wall clock (seconds). The report prints it beside
 the tokens and sums the counted kinds, so a run can be judged on time as
 well as cost. A delegation's time is inside its turn's, like its tokens.
 
+Failures. A delegation, a consult, a lead turn, or a trace check that
+ended on an error still writes its event, marked failed, with the usage of
+the rounds that had finished. The request that failed returned no usage,
+so nothing here can say whether any part of it was billed; the report says
+that in words and does not guess a figure. A request the client sent again
+after a failure (an api_retry event) is counted the same way: the count is
+known, the cost of the failed attempts is not. So the total is the usage
+the API reported, which is a floor on what was spent, not a ceiling.
+
 Prices are a dated snapshot, not a feed. RATES_PER_MILLION holds the Claude
 Opus 5.5 list prices in dollars per million tokens as published on RATES_DATE.
 Pass other rates on the command line when they change; the report always
@@ -34,8 +43,12 @@ RATES_PER_MILLION = {"input": 4.00, "output": 20.00, "cache_write": 5.00, "cache
 # Event kinds that carry usage, and whether the kind counts toward a job's total.
 # A delegation's usage is already inside its turn's total, and a consult's is inside its
 # delegation's, so both are shown but not added.
-USAGE_KINDS = ("turn", "narration", "record_check", "delegation", "consult")
-COUNTED_KINDS = ("turn", "narration", "record_check")
+USAGE_KINDS = ("turn", "narration", "record_check", "check_failed", "delegation", "consult")
+COUNTED_KINDS = ("turn", "narration", "record_check", "check_failed")
+RETRY_EVENT = "api_retry"
+UNKNOWN_LINE = (
+    "A request that fails returns no usage. If the API billed any part of one, it is not in this total."
+)
 
 
 def _int(value: Any) -> int:
@@ -94,11 +107,31 @@ def usage_events(record: Any, project_id: str) -> list[dict]:
             "usage": normalize(usage),
             "counted": event["kind"] in COUNTED_KINDS,
         }
-        for key in ("specialist", "delegations", "checks", "cancelled", "source", "stop_reason", "seconds", "from", "to"):
+        for key in ("specialist", "delegations", "checks", "cancelled", "source", "stop_reason", "seconds", "from", "to",
+                    "failed", "error", "failed_inside"):
             if key in payload:
                 row[key] = payload[key]
         rows.append(row)
     return rows
+
+
+def failures(rows: list[dict]) -> dict:
+    """How many model contexts on the job ended on an error, counted once each.
+
+    A failed delegation is inside its turn and a failed consult inside its
+    delegation; each is still its own failed context. Their known usage is in
+    the turn that closed over them.
+    """
+    failed = [row for row in rows if row.get("failed")]
+    return {"count": len(failed), "kinds": sorted({row["kind"] for row in failed})}
+
+
+def retries(record: Any, project_id: str) -> int:
+    """Requests the client sent again after a failure on this job. Each failed attempt reported no usage."""
+    total = 0
+    for event in record.events_by_kind(project_id, (RETRY_EVENT,)):
+        total += _int((event.get("payload") or {}).get("retries"))
+    return total
 
 
 def job_totals(rows: list[dict]) -> dict:
@@ -144,18 +177,24 @@ def _label(row: dict) -> str:
             bits.append(f"{row['checks']} check{'s' if row['checks'] != 1 else ''}")
         if row.get("cancelled"):
             bits.append("cancelled")
+        if row.get("failed"):
+            bits.append("FAILED")
+        elif row.get("failed_inside"):
+            bits.append(f"{row['failed_inside']} failed inside")
         return ", ".join(bits)
     if kind == "delegation":
-        note = ", cancelled" if row.get("cancelled") else ""
+        note = ", cancelled" if row.get("cancelled") else (", FAILED" if row.get("failed") else "")
         return f"  within the turn: {row.get('specialist') or 'specialist'}{note}"
     if kind == "narration":
         note = "cancelled" if row.get("cancelled") else (row.get("source") or "")
         return f"narration ({row.get('agent') or 'narrator'}{', ' + note if note else ''})"
     if kind == "consult":
-        note = ", cancelled" if row.get("cancelled") else ""
+        note = ", cancelled" if row.get("cancelled") else (", FAILED" if row.get("failed") else "")
         return f"    within that: {row.get('from') or 'a specialist'} asked {row.get('to') or 'another'}{note}"
     if kind == "record_check":
         return "trace check"
+    if kind == "check_failed":
+        return "trace check, FAILED"
     return kind
 
 
@@ -199,6 +238,17 @@ def report_text(record: Any, project_id: str, rates: dict | None = None, *, name
     in_all = total["input_tokens"] + total["cache_creation_input_tokens"] + total["cache_read_input_tokens"]
     if in_all:
         lines.append(f"Cache: {total['cache_read_input_tokens'] * 100 // in_all}% of input tokens were read from the cache.")
+    failed = failures(rows)
+    again = retries(record, project_id)
+    if failed["count"] or again:
+        parts = []
+        if failed["count"]:
+            parts.append(f"{failed['count']} model context{'s' if failed['count'] != 1 else ''} ended on an error "
+                         "(marked FAILED above); the usage shown for each is what had finished before the failure")
+        if again:
+            parts.append(f"{again} request{'s were' if again != 1 else ' was'} sent again after a failed attempt")
+        lines.append("Failures: " + "; ".join(parts) + ". " + UNKNOWN_LINE
+                     + " Read the total as the usage the API reported: a floor, not a ceiling.")
     lines.append("An estimate from list prices, not a bill. Thinking tokens are inside the output count.")
     return "\n".join(lines)
 

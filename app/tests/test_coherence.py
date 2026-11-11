@@ -381,7 +381,7 @@ class CallBasisTests(unittest.TestCase):
         analysis = analyze(snapshot)
         self.assertEqual(analysis["calcs"][takeoff["record_id"]]["state"], "alternative")
         self.assertEqual(analysis["calcs"][trip["record_id"]],
-                         {"state": "alternative", "reasons": [], "note": carried, "tracked": True})
+                         {"state": "alternative", "reasons": [], "note": carried, "tracked": True, "unchecked": ""})
         self.assertEqual(analysis["calcs"][nitrogen["record_id"]]["state"], "alternative")
         # The finding on the derived trip time is named as resting on another case, to the lead and on the panel.
         self.assertEqual(analysis["findings"][finding["id"]]["state"], "current")
@@ -670,7 +670,7 @@ class StalenessTests(unittest.TestCase):
         snapshot = record.snapshot("job1")
         analysis = analyze(snapshot)
         self.assertEqual(analysis["findings"][on_ahj["id"]],
-                         {"state": "stale", "notes": [],
+                         {"state": "stale", "notes": [], "unchecked": [],
                           "reasons": [f"basis/ahj was emptied on the form; it was {basis['ahj']}"]})
         self.assertEqual(analysis["evidence"][cite["id"]]["reasons"],
                          ["basis/nfpa_13 was emptied on the form; it was 2025; the job states no edition for this cite now"])

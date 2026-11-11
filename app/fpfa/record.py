@@ -60,6 +60,8 @@ HANDOFF_KINDS = ("delegation", "handoff", "consult")
 LATEST_KINDS = ("plan", "record_check")
 # Written when a lead turn has read the job's status, so the next one can tell what is new since.
 TURN_START = "turn_start"
+# One event each time an agent reads a skill body on a job: who, which skill, and a hash of the text it got.
+SKILL_READ = "skill_read"
 # Who closed a question: the designer on the panel, or the lead passing on what the designer said in chat.
 ANSWERED_ON_PANEL = "designer"
 ANSWERED_IN_CHAT = "designer, in chat"
@@ -348,6 +350,10 @@ class Record:
     def __init__(self, path: Path | str | None = None):
         self.path = Path(path) if path is not None else default_path()
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        # What is installed now, as whoever opened the content pack told the record (set_context):
+        # the identity of the calc code, and the pack's version and fingerprint. It is not stored.
+        # A snapshot carries it so the record can be read against the code that would run today.
+        self.context: dict = {}
         with _WRITE_LOCK:
             with self._connect() as conn:
                 conn.executescript(_SCHEMA)
@@ -356,6 +362,12 @@ class Record:
                     "INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', ?)",
                     (str(SCHEMA_VERSION),),
                 )
+
+    def set_context(self, **values: Any) -> None:
+        """Say what is installed now: calc_identity, content_version, content_fingerprint. Empty values are ignored."""
+        for key, value in values.items():
+            if value:
+                self.context[str(key)] = str(value)
 
     # -- connections -----------------------------------------------------
 
@@ -1517,6 +1529,12 @@ class Record:
             # could miss one on a long job.
             "latest": {kind: self.latest_event(project_id, kind) for kind in LATEST_KINDS},
             "unseen_answers": self.unseen_answers(project_id),
+            # Which skills each agent read, oldest first (calc_tools logs one per read_skill), and the order
+            # in which findings and cites were written, so a read can be placed before or after them.
+            "skill_reads": self.events_by_kind(project_id, (SKILL_READ,)),
+            "row_seq": {str((event.get("payload") or {}).get("id")): int(event.get("seq") or 0)
+                        for event in self.events_by_kind(project_id, ("finding", "evidence"))},
+            "context": dict(self.context),
         }
 
     def summary_text(self, project_id: str, *, max_rows: int = 40) -> str:

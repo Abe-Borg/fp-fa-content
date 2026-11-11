@@ -45,7 +45,7 @@ from fpfa.about import (
 )
 from fpfa import __version__
 from fpfa.bess import bess_chat_summary, bess_govern_note, run_bess_plan
-from fpfa.calc_tools import ToolSession
+from fpfa.calc_tools import ToolSession, calc_identity, content_fingerprint
 from fpfa.chat_render import CARET, is_job_heading, plain_text, settle_inline
 from fpfa.claim_check import (
     PACKAGE_STATUS,
@@ -80,7 +80,7 @@ from fpfa.managed import anthropic_request, reply_with_delete_status, run_heavy_
 from fpfa.modes_loader import DEFAULT_MODE, MODE_SLUGS, list_modes, normalize_mode
 from fpfa.paths import content_root, data_dir, is_content_pack, read_config, write_config
 from fpfa.projects import delete_project, list_projects, load_project, new_project, save_project
-from fpfa.checker import check_line, export_reason
+from fpfa.checker import check_line, coverage, export_reason
 from fpfa.record import ANSWERED_ON_PANEL, BASIS_LABELS, INTERRUPTED_NOTE, Record, RecordError
 from fpfa.spec_docx import DRAFT_SECTION, write_docx
 from fpfa.team import check_record, latest_check, team_summary
@@ -171,6 +171,9 @@ def chat_request_text(
 _SLASH_ALIASES = {
     "sample_di": "sample-di",
     "sampledi": "sample-di",
+    "sample_di2": "sample-di2",
+    "sampledi2": "sample-di2",
+    "sample-di-2": "sample-di2",
     "sample_bess": "sample-bess",
     "samplebess": "sample-bess",
 }
@@ -206,6 +209,15 @@ WELCOME_CARDS = (
 WELCOME_FOOTNOTE = (
     "The sample is optional. It opens its own job and runs the zone tool plan on this machine.\n"
     "Type /help for commands."
+)
+# What the thread says when a lead turn ends on an error. The record already holds what happened.
+TURN_FAILED_TEXT = (
+    "The request failed before the lead could answer: {error}\n\n"
+    "What the team had put on the record before the failure is kept, and it may be partial: a specialist that was "
+    "part-way through had not reviewed or summarized its work. The Team tab and /status show who was cut off and "
+    "what each had recorded. Asking again sends the unfinished work to the model again, which is billed again; "
+    "calculations already on the record are replayed, not recomputed. /usage shows what was used up to the "
+    "failure. The request that failed reported no usage, so if any part of it was billed, that is not shown."
 )
 STALE_RUN_NOTE = (
     "A tool plan ran for this zone before these inputs changed: {names}. Its figures are out of date. "
@@ -293,9 +305,9 @@ def chat_title(text: str, limit: int = 48) -> str:
     return cut.rstrip(" ,;:.-") + "…"
 
 
-def sample_di_seed() -> str:
+def sample_di_seed(variant: str = "dh1") -> str:
     """First lines of the Sample DI reply, so the thread says what was loaded."""
-    di = sample_data.EXAMPLE_DI
+    _name, _basis, di = sample_data.SAMPLE_ZONES.get(variant, sample_data.SAMPLE_ZONES["dh1"])
     segments = len(di.get("segments") or [])
     return (
         f"Sample loaded: data-hall double-interlock zone {di.get('zone_id') or 'DH-1'} "
@@ -337,6 +349,7 @@ def slash_help_text() -> str:
         "Just type a question. These commands are optional.\n\n"
         "## Commands\n"
         "- /sample-di — load the sample data-hall double-interlock zone into its own job and run the tool plan\n"
+        "- /sample-di2 — load a second sample zone, on the size-exemption boundary, the same way\n"
         "- /sample-bess — load the sample Li-ion BESS room and run the explosion-control starter\n"
         "- /run — run the zone on the Inputs tab\n"
         "- /mode — show the active mode. /mode brainstorm switches (also calculator, synthesis, mixed)\n"
@@ -1261,12 +1274,30 @@ class Desk:
         """
         if not project or not project.get("id"):
             return
+        self._note_content()
         try:
             self.record.import_project(project)
         except Exception as exc:
             self.status.set("Project record is not available. " + safe_error(exc))
             return
         self._pull_inputs_onto_form(project)
+
+    def _note_content(self) -> None:
+        """Tell the record which content pack and calc code are installed now.
+
+        The record is read against them: a calculation computed by other calc
+        code is out of date, a trace check made against other content has to
+        be run again, and an export prints what it was written from.
+        """
+        try:
+            pack = content_root()
+            self.record.set_context(
+                calc_identity=calc_identity(pack), content_version=content_version_text(),
+                content_fingerprint=content_fingerprint(pack),
+            )
+        except Exception:
+            # Bookkeeping. A pack that cannot be read is reported where it is used.
+            pass
 
     def _sync_inputs(self, project: dict) -> list[str]:
         """Sync one job's basis and zone inputs with the record. Returns the inputs the record put on the form."""
@@ -1484,7 +1515,11 @@ class Desk:
                 reason = self._basis_reason(snapshot)
             except Exception:
                 reason = None
-        self.team = team_view(snapshot, export_reason=reason)
+        try:
+            pack = content_root()
+        except Exception:
+            pack = None
+        self.team = team_view(snapshot, export_reason=reason, content_root=pack)
         self.team["unseen_answers"] = len((snapshot or {}).get("unseen_answers") or [])
         self._touch()
 
@@ -1521,7 +1556,8 @@ class Desk:
         try:
             snapshot = self.record.snapshot(self.project["id"])
             digest = job_status.build(snapshot, export_reason=self._basis_reason(snapshot))
-            text = job_status.designer_text(digest, check_line(snapshot), self.project.get("name") or UNTITLED_JOB)
+            text = job_status.designer_text(digest, check_line(snapshot), self.project.get("name") or UNTITLED_JOB,
+                                            coverage=coverage(snapshot)["gaps"] if snapshot.get("findings") else None)
             changed = self.run_changes()
             if changed:
                 text += "\n\n" + RESULTS_STALE_LINE.format(names=", ".join(changed))
@@ -1826,12 +1862,13 @@ class Desk:
 
     # Samples, runs, and slash commands ------------------------------------------------
 
-    def _open_sample_project(self) -> None:
+    def _open_sample_project(self, variant: str = "dh1") -> None:
         if self.project:
             self._capture_form(self.project)
             save_project(self.project)
-        project = new_project("Sample data hall DI zone", copy.deepcopy(sample_data.EXAMPLE_BASIS))
-        project["di"] = copy.deepcopy(sample_data.EXAMPLE_DI)
+        name, basis, di = sample_data.SAMPLE_ZONES.get(variant, sample_data.SAMPLE_ZONES["dh1"])
+        project = new_project(name, copy.deepcopy(basis))
+        project["di"] = copy.deepcopy(di)
         project["mode"] = self._selected_mode()
         inputs.note_given(project, list(inputs.ZONE_FIELDS) + list(inputs.BASIS_FIELDS), inputs.SOURCE_SAMPLE)
         save_project(project)
@@ -1842,12 +1879,13 @@ class Desk:
         """Load the sample job and run the DI zone path. Same as the Sample DI chip."""
         self.start_sample_di()
 
-    def start_sample_di(self, typed: str | None = None) -> None:
-        """Load the sample job and run the existing DI zone path."""
-        raw = (typed or "/sample-di").strip() or "/sample-di"
-        self._open_sample_project()
+    def start_sample_di(self, typed: str | None = None, variant: str = "dh1") -> None:
+        """Load a sample job and run the existing DI zone path. variant names the zone (sample_data.SAMPLE_ZONES)."""
+        default = "/sample-di2" if variant == "dh2" else "/sample-di"
+        raw = (typed or default).strip() or default
+        self._open_sample_project(variant)
         self._append_chat("user", raw)
-        self.run_zone(announce=True, seed=sample_di_seed())
+        self.run_zone(announce=True, seed=sample_di_seed(variant))
 
     def _open_bess_project(self) -> None:
         if self.project:
@@ -1997,6 +2035,8 @@ class Desk:
     def _dispatch_slash(self, command: str, argument: str, raw: str) -> None:
         if command == "sample-di":
             self.start_sample_di(raw)
+        elif command == "sample-di2":
+            self.start_sample_di(raw, "dh2")
         elif command == "sample-bess":
             self.start_sample_bess(raw)
         elif command == "run":
@@ -2651,7 +2691,8 @@ class Desk:
             raise RuntimeError(reason)
         snapshot = self.record.snapshot(self.project["id"])
         return write_design_basis(
-            Path(path), self.project, snapshot, claim_check=latest_check(self.record, self.project["id"])
+            Path(path), self.project, snapshot, claim_check=latest_check(self.record, self.project["id"]),
+            content_root=content_root(),
         )
 
     def export_design_basis(self) -> None:
@@ -3104,6 +3145,7 @@ class Desk:
 
         def work(job_id: str) -> None:
             cancel = self._cancel_event(job_id)
+            made = None
             try:
                 pack = content_root()
                 client = AnthropicMessages(key)
@@ -3115,6 +3157,7 @@ class Desk:
                     client.on_retry = observe
                 except Exception:
                     pass
+                made = client
                 streaming = getattr(client, "streaming", None)
                 create = streaming(on_event) if callable(streaming) else client.create
                 out = run_everyday(
@@ -3132,11 +3175,12 @@ class Desk:
                 used = ""
                 self.jobs.mark(job_id, "cancelled", str(exc))
             except Exception as exc:
-                reply = safe_error(exc)
+                reply = TURN_FAILED_TEXT.format(error=safe_error(exc))
                 used = ""
-                self.jobs.mark(job_id, "error", reply)
+                self.jobs.mark(job_id, "error", safe_error(exc))
             finally:
                 self._cancel_events.pop(job_id, None)
+                self._note_retries(origin_id, made)
             self.queue.put(
                 lambda oid=origin_id, answer=reply, jid=job_id, tokens=used: self._finish_chat(
                     oid, answer, job_id=jid, usage=tokens
@@ -3151,6 +3195,19 @@ class Desk:
             work=work,
         )
         self.status.set(f"Asking {MODEL_ID}… {job.heading()}")
+
+    def _note_retries(self, project_id: str, client: Any) -> None:
+        """Put on the record how many requests a turn had to send again. Runs on the worker.
+
+        A failed attempt reports no usage, so its cost cannot be recorded. The
+        count can, and the usage report says what it means.
+        """
+        try:
+            count = int(getattr(client, "retries", 0) or 0)
+            if count:
+                self.record.log_event(project_id, "api_retry", {"retries": count}, agent="app")
+        except Exception:
+            pass
 
     def _audit_reply(self, project_id: str, pack: Path, mode: str, out: dict, said: list[str],
                      earlier: list[str]) -> dict | None:
@@ -3169,7 +3226,7 @@ class Desk:
                 pack_text=assemble_system(pack, mode, team=True),
                 earlier_replies=earlier, flagged_before=reply_audit.flagged_before(self.record, project_id),
             )
-            if result["figures"]:
+            if result["figures"] or result.get("wording"):
                 self.record.log_event(project_id, reply_audit.AUDIT_EVENT, result, agent="app")
             return result
         except Exception:

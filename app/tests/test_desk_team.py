@@ -316,12 +316,14 @@ class ReplyAuditTests(unittest.TestCase):
         self.assertEqual(lines(bad), [
             "- figures in this reply the application could not find on the record or in anything the lead read: "
             "925 gpm, 18.2 s, 28.2 s. Treat them as unverified."])
-        # The lookup is by number, not by quantity: 900 is on the record as a pipe length, so 900 gpm is not
-        # flagged. A figure that is found is only known to match a number the designer can go and look at.
-        self.assertEqual(audit("At 900 gpm it would pass.", snapshot)["unfound"], [])
+        # The lookup is by number and kind of unit: 900 is on the record as a pipe length, and a length does
+        # not back a flow. A figure that is found is only known to match a number the designer can go and look at.
+        self.assertEqual(audit("At 900 gpm it would pass.", snapshot)["unfound"], ["900 gpm"])
+        self.assertEqual(audit("The fill flow is 600 gpm.", snapshot)["unfound"], [])
+        self.assertEqual(audit("The zone holds 600 gal.", snapshot)["unfound"], ["600 gal"], "600 is a flow on this record")
         # Section numbers, counts, and ids are not figures.
         self.assertEqual(audit("NFPA 13-2025 §8.3.2.3.1.1 and Table 19.2.3.1.2; 6 true rows of 32.", snapshot)["figures"], 0)
-        self.assertEqual(audit("", snapshot), {"figures": 0, "unfound": [], "stale": []})
+        self.assertEqual(audit("", snapshot), {"figures": 0, "unfound": [], "stale": [], "wording": []})
 
     def test_what_the_lead_read_this_turn_and_what_the_designer_said_are_sources(self):
         from fpfa.reply_audit import audit
@@ -354,8 +356,9 @@ class ReplyAuditTests(unittest.TestCase):
         self.assertEqual(result["stale"], ["38.1 s", "28.1 s"])
         self.assertEqual(result["unfound"], [], "the volume did not use the fill flow and is still current")
         self.assertEqual(lines(result), [
-            "- figures in this reply that are only on out-of-date calculations: 38.1 s, 28.1 s. "
-            "An input changed after they ran. Do not use them."])
+            "- figures in this reply that the record now holds only on out-of-date rows: 38.1 s, 28.1 s. "
+            "An input changed after they were written, or the finding that carried them was replaced or withdrawn. "
+            "They are not the current basis. Do not use them as current."])
         _run_plan(record, dict(di, q_fill_gpm=750), basis)
         self.assertEqual(audit("t_total is 32.5 s.", record.snapshot("job1"))["stale"], [])
 
@@ -368,7 +371,7 @@ class ReplyAuditTests(unittest.TestCase):
         both = team_summary({"delegations": [{"specialist": "fp-sprinkler", "findings": [1]}]},
                             {"figures": 2, "unfound": ["42 s"], "stale": ["38.1 s"]})
         self.assertIn("- fp-sprinkler: 1 finding", both)
-        self.assertIn("only on out-of-date calculations: 38.1 s.", both)
+        self.assertIn("holds only on out-of-date rows: 38.1 s.", both)
         self.assertIn("could not find on the record or in anything the lead read: 42 s.", both)
         self.assertTrue(both.endswith("Details are on the Team tab."))
 

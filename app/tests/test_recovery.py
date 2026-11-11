@@ -208,7 +208,9 @@ class RecoverTests(unittest.TestCase):
         self.assertTrue(user.endswith("What is left on DH-1?"))
         block = user[: -len("What is left on DH-1?")]
         self.assertIn(note, block)
-        self.assertIn("Interrupted before it finished: Lead, Sprinkler specialist.", block)
+        self.assertIn("Interrupted or failed before it finished.", block)
+        self.assertIn("- Lead was interrupted before it finished", block)
+        self.assertIn("- Sprinkler specialist was interrupted before it finished", block)
         self.assertEqual(pending_handoff_note(_record(), "none"), "")
         clean = Recorder()
         record.set_handoff("p1", delivered["id"], status="returned", by="fp-sprinkler")

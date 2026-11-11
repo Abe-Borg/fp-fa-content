@@ -728,7 +728,11 @@ class BriefAndStatusTests(unittest.TestCase):
         self.assertIn("Delegate to it again to finish; recorded calcs replay.", out["note"])
         self.assertEqual([row["tool"] for row in out["calc_records"]], ["zone_trapped_volume"], "what it recorded is kept")
         self.assertEqual(record.agents("job1")[0]["status"], "interrupted")
-        self.assertIn("Interrupted before it finished: Sprinkler specialist.", lead_status(record, "job1"))
+        block = lead_status(record, "job1")
+        self.assertIn("Interrupted or failed before it finished.", block)
+        # What it had recorded is named, and named as partial.
+        self.assertIn('- Sprinkler specialist was interrupted before it finished ("Screen DH-1."). '
+                      "Kept from that task: 1 calculation. Treat them as partial", block)
 
     def test_the_lead_role_is_content_and_says_how_the_team_is_run(self):
         from fpfa.everyday import assemble_system

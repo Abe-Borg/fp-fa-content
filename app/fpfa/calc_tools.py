@@ -13,7 +13,7 @@ from fpfa.corpus_search import search_corpus
 from fpfa.fa_calc import run_fa_calc
 from fpfa.modes_loader import list_modes, read_mode
 from fpfa.inputs import BASIS_FIELDS, BASIS_KIND, GIVEN, INPUT_KIND
-from fpfa.record import CALC_TOOLS, LABELS, Record, RecordError
+from fpfa.record import CALC_TOOLS, LABELS, SKILL_READ, Record, RecordError
 from fpfa.releasing import reader_view
 from fpfa.roles_loader import list_roles, read_role
 from fpfa.skills_loader import list_skills, read_skill
@@ -105,10 +105,12 @@ SCHEMAS = [
         "name": "dry_delivery_screen",
         "description": (
             "Pipe timing, NFPA size cap, and optimistic trip-to-water screen from formulas.dry_delivery_screen. "
-            "Not a listed water-delivery calculation. Timing stays on pipe volume. "
-            "Pass trim_gal and fittings_percent when the zone has them. "
-            "nfpa_delivery_time_exempt then uses the zone total (pipe + fittings + trim) "
-            "through the same rule as /run. Omitted fittings_percent counts as 0 when trim_gal is passed. "
+            "Not a listed water-delivery calculation. Timing stays on pipe volume. Each segment has length_ft and "
+            "either d_in or nps with an optional schedule, as zone_trapped_volume takes them. The size exemption is judged on the zone total (pipe + fittings + trim), never on pipe "
+            "alone: pass zone_gal, the zone total from zone_trapped_volume, and nfpa_delivery_time_exempt is then "
+            "the zone-total answer. Without zone_gal (or trim_gal and fittings_percent) the result is a pipe-only "
+            "screen: nfpa_delivery_time_exempt is null, exemption_status says it was not determined, and you must "
+            "not state the exemption from it. "
             "Double-interlock has a 500 gal cap; a quick-opening device does not raise it."
         ),
         "input_schema": _obj(
@@ -121,8 +123,9 @@ SCHEMAS = [
                 "t_exhaust_s": {"type": "number"},
                 "basis": {"type": "string", "description": "FM or NFPA-OH"},
                 "system_type": {"type": "string", "description": "dry or di"},
-                "trim_gal": {"type": "number", "description": "Trim gallons to include in the size exemption. Omit for a pipe-only screen."},
-                "fittings_percent": {"type": "number", "description": "Fittings allowance percent. Used with trim_gal for the zone-total exemption."},
+                "zone_gal": {"type": "number", "description": "Zone total gallons from zone_trapped_volume (zone_gal). The size exemption is judged on it."},
+                "trim_gal": {"type": "number", "description": "Trim gallons, when zone_gal is not passed. Omit both for a pipe-only screen."},
+                "fittings_percent": {"type": "number", "description": "Fittings allowance percent. Used with trim_gal when zone_gal is not passed."},
             },
             ["segments", "q_fill_gpm", "system_type"],
         ),
@@ -466,6 +469,11 @@ class ToolSession:
         # Identity of the calc code in this pack. A changed kernel file changes it,
         # so a recorded result is never replayed by different code.
         self.calc_identity = calc_identity(self.root) if self.record is not None else ""
+        if self.record is not None:
+            # The record is read against what is installed now: a calc computed by other code is out of date,
+            # and a check or an export says which content it was written from.
+            self.record.set_context(calc_identity=self.calc_identity, content_version=self.pack_version,
+                                    content_fingerprint=content_fingerprint(self.root))
 
     @property
     def recording(self) -> bool:
@@ -476,6 +484,7 @@ class ToolSession:
         if name in RECORD_TOOLS:
             return self._record_tool(name, args)
         if name in CALC_TOOLS and self.recording:
+            args, taken = self._exact_from_record(name, args)
             found = self.record.find_calc(self.project_id, name, args, self.calc_identity)
             if found is not None:
                 # Same tool, inputs, calc code, and project: count the replay and return the recorded output.
@@ -485,7 +494,7 @@ class ToolSession:
                     self.project_id, tool=name, inputs=args, outputs=found["outputs"],
                     agent=self.agent, calc_identity=self.calc_identity, depends=depends, varies=varies,
                 )
-                return self._with_record_id(name, found["outputs"], row["id"], departs)
+                return self._with_record_id(name, found["outputs"], row["id"], departs, taken)
             output = self._run(name, args)
             depends, varies, departs = self._basis(name, args)
             row = self.record.record_calc(
@@ -493,7 +502,7 @@ class ToolSession:
                 agent=self.agent, pack_version=self.pack_version, calc_identity=self.calc_identity,
                 depends=depends, varies=varies,
             )
-            return self._with_record_id(name, output, row["id"], departs)
+            return self._with_record_id(name, output, row["id"], departs, taken)
         output = self._run(name, args)
         # A model never reads the kernel's deprecated names, with a record or without one.
         return reader_view(name, output) if self.model_facing else output
@@ -503,7 +512,51 @@ class ToolSession:
         """True when a model reads this session's results. The fixed tool plan and a bare session do not."""
         return self.agent not in ("", "tool-plan")
 
-    def _with_record_id(self, name: str, output: dict, record_id: str, departs: str = "") -> dict:
+    def _exact_from_record(self, name: str, args: dict) -> tuple[dict, list[str]]:
+        """Hand a threshold-deciding argument the recorded figure it was taken from, not the caller's rounding.
+
+        A model often passes a figure rounded, and the record ties it to the
+        calculation it came from within a tolerance. That tolerance must not
+        decide an answer: a takeoff of 500.4 gal passed as 500 would be judged
+        exempt. For the arguments in coherence.EXACT_FROM_SOURCE the call runs,
+        and is recorded, on the matched record's own figure. Returns the
+        arguments to use and a sentence for each figure that was replaced. A
+        figure that matches no record is left as passed; the record then marks
+        the call as an alternative, as it always did.
+        """
+        names = coherence.EXACT_FROM_SOURCE.get(name) or ()
+        if not names or not any(_number_was_passed(args, arg) for arg in names):
+            return args, []
+        notes: list[str] = []
+        try:
+            calcs = self.record.calcs(self.project_id)
+            standing = coherence.analyze({
+                "fact_history": self.record.facts(self.project_id, include_superseded=True), "calcs": calcs,
+            })["calcs"]
+            stale = {ident for ident, item in standing.items() if item["state"] == coherence.STALE}
+            alternative = {ident for ident, item in standing.items() if item["state"] == coherence.ALTERNATIVE}
+            used = dict(args)
+            for arg in names:
+                if not _number_was_passed(args, arg):
+                    continue
+                row = coherence.matched_source(name, arg, args[arg], calcs, stale=stale, alternative=alternative)
+                if row is None:
+                    continue
+                source_tool, key = coherence.DERIVED[name][arg]
+                exact = row["outputs"].get(key)
+                if isinstance(exact, bool) or not isinstance(exact, (int, float)) or float(exact) == float(args[arg]):
+                    continue
+                used[arg] = exact
+                notes.append(f"{arg} was passed as {args[arg]}. The calculation used the figure on the "
+                             f"{source_tool} record [{row['id']}] itself, {exact:.4g}, so that rounding cannot "
+                             "decide the answer.")
+            return used, notes
+        except Exception:
+            # Bookkeeping. A failure here never fails the calculation; the figure is used as passed.
+            return args, []
+
+    def _with_record_id(self, name: str, output: dict, record_id: str, departs: str = "",
+                        taken: list[str] | None = None) -> dict:
         """A model-facing result carries the calc record id so a finding can cite it.
 
         It also says, in one sentence, where the call departed from the project
@@ -517,6 +570,13 @@ class ToolSession:
             return output
         shown = dict(reader_view(name, output))
         shown["record_id"] = record_id
+        if taken:
+            shown["figure_taken_from_the_record"] = " ".join(taken)
+        if name not in coherence.TRACKED_TOOLS:
+            shown["not_tied_to_project_inputs"] = (
+                coherence.UNTRACKED_NOTE + " If a project input it used changes, run it again and replace the "
+                "finding that cites it; nothing will prompt you."
+            )
         if departs:
             shown["differs_from_project_inputs"] = (
                 f"This call used {departs}. It is recorded as an alternative, not the design case. "
@@ -706,7 +766,15 @@ class ToolSession:
         if name == "list_skills":
             return {"skills": list_skills(self.root)}
         if name == "read_skill":
-            text = read_skill(self.root, str(args.get("slug", "")))
+            slug = str(args.get("slug", ""))
+            text = read_skill(self.root, slug)
+            if self.recording:
+                # Which agent read which method, and exactly which text: the record of content actually used.
+                # A read shows the method was in front of the agent. It does not show the agent applied it.
+                self.record.log_event(self.project_id, SKILL_READ, {
+                    "slug": slug, "sha256": hashlib.sha256(text.encode("utf-8")).hexdigest()[:16],
+                    "chars": len(text), "content_version": self.pack_version,
+                }, agent=self.agent)
             if len(text) > 100_000:
                 text = text[:100_000] + "\n\n[truncated]"
             return {"slug": args.get("slug"), "text": text}
@@ -734,8 +802,15 @@ class ToolSession:
                 args.get("trim_gal"),
             )
         if name == "dry_delivery_screen":
+            segments = args.get("segments")
+            if isinstance(segments, list) and any(
+                    isinstance(row, dict) and row.get("d_in") in (None, "") for row in segments):
+                # A takeoff written by nominal size, as zone_trapped_volume takes it. The shop inside
+                # diameters are the kernel's (pipe_ids), not a figure worked out here.
+                rows, _flags = self.di._segments(segments)
+                segments = [{"d_in": row["d_in"], "length_ft": row["length_ft"]} for row in rows]
             screen = self.formulas.dry_delivery_screen(
-                args.get("segments"),
+                segments,
                 args.get("q_fill_gpm"),
                 qod=args.get("qod", False),
                 t_detect_s=args.get("t_detect_s", 0),
@@ -841,15 +916,32 @@ def _number_was_passed(args: dict, key: str) -> bool:
 
 
 def _govern_delivery_exemption(formulas, screen: dict, args: dict) -> dict:
-    """Size exemption follows the zone total when trim or fittings were passed.
+    """The size exemption on the screen's result follows the zone total, or it is not stated at all.
 
-    Timing on the pipe-only screen stays. ``govern_nfpa_exemption`` is the same
-    helper ``/run`` uses. A call with neither trim nor fittings stays pipe-only.
+    The kernel screen compares pipe volume with the cap. That is a
+    lower-bound screen, and the kernel says it does not by itself claim the
+    exemption: the comparison that counts uses the full system size.
+
+    - zone_gal passed: the exemption is that zone total against the cap
+      (the tool plan passes the takeoff's own zone_gal).
+    - trim_gal or fittings_percent passed: the zone total is pipe plus those
+      allowances, as before. An omitted one counts as 0.
+    - neither: the result is a pipe-only screen. It says "no" only when the
+      pipe alone is already over the cap, which settles it. Otherwise
+      nfpa_delivery_time_exempt is None and exemption_status says why.
+
+    Timing on the pipe-only screen stays in every case.
     """
+    # Local import: workflow imports this module at load time.
+    from fpfa.workflow import govern_nfpa_exemption, pipe_only_screen
+
+    if _number_was_passed(args, "zone_gal"):
+        zone_gal = formulas._require_non_negative("zone_gal", args["zone_gal"])
+        return govern_nfpa_exemption(screen, zone_gal, "the zone total passed as zone_gal (pipe + fittings + trim)")
     trim_passed = _number_was_passed(args, "trim_gal")
     fittings_passed = _number_was_passed(args, "fittings_percent")
     if not trim_passed and not fittings_passed:
-        return screen
+        return pipe_only_screen(screen)
     trim = formulas._require_non_negative("trim_gal", args["trim_gal"]) if trim_passed else 0.0
     fittings = (
         formulas._require_non_negative("fittings_percent", args["fittings_percent"])
@@ -857,10 +949,10 @@ def _govern_delivery_exemption(formulas, screen: dict, args: dict) -> dict:
     )
     pipe = float(screen["volume_gal"])
     zone_gal = pipe * (1.0 + fittings / 100.0) + trim
-    # Local import: workflow imports this module at load time.
-    from fpfa.workflow import govern_nfpa_exemption
-
-    return govern_nfpa_exemption(screen, zone_gal)
+    parts = []
+    parts.append(f"fittings {fittings:g}%" if fittings_passed else "no fittings allowance passed (counted as 0)")
+    parts.append(f"trim {trim:g} gal" if trim_passed else "no trim passed (counted as 0)")
+    return govern_nfpa_exemption(screen, zone_gal, "pipe plus the allowances passed to this call: " + ", ".join(parts))
 
 
 _IDENTITY_CACHE: dict[str, str] = {}
@@ -890,6 +982,41 @@ def calc_identity(content_root: Path) -> str:
             continue
     value = digest.hexdigest()[:16]
     _IDENTITY_CACHE[key] = value
+    return value
+
+
+_FINGERPRINT_CACHE: dict[str, str] = {}
+_CONTENT_FOLDERS = ("skills", "roles", "modes", "corpus", "specs", "calcs")
+
+
+def content_fingerprint(content_root: Path) -> str:
+    """Short hash of everything a model or a calc reads from the content pack.
+
+    Every file under skills, roles, modes, corpus, specs, and calcs, by path
+    and bytes. Two installs with the same fingerprint are working from the
+    same content, whatever version label either carries. It is the identity
+    an evaluation report and an export print, so a result can be tied to the
+    exact content that produced it.
+    """
+    root = Path(content_root).resolve()
+    key = str(root)
+    if key in _FINGERPRINT_CACHE:
+        return _FINGERPRINT_CACHE[key]
+    digest = hashlib.sha256()
+    for folder in _CONTENT_FOLDERS:
+        base = root / folder
+        if not base.is_dir():
+            continue
+        for path in sorted(item for item in base.rglob("*") if item.is_file()):
+            if "__pycache__" in path.parts or path.suffix in (".pyc", ".pyo"):
+                continue
+            try:
+                digest.update(path.relative_to(root).as_posix().encode("utf-8"))
+                digest.update(path.read_bytes())
+            except OSError:
+                continue
+    value = digest.hexdigest()[:16]
+    _FINGERPRINT_CACHE[key] = value
     return value
 
 
