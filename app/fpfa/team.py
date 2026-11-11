@@ -883,7 +883,7 @@ class TeamSession:
         if kind == inputs.BASIS_KIND:
             text = str(cooked)
             if not text:
-                raise RecordError(f"{name} cannot be set to blank here. The designer clears it on the Basis tab.")
+                raise RecordError(f"{name} cannot be set to blank here. The designer clears it on the Inputs tab.")
             label = dict(BASIS_LABELS).get(name, GIVEN)
         else:
             text = inputs.encode(name, cooked)
@@ -1076,7 +1076,7 @@ def team_summary(out: dict | None, audit: dict | None = None) -> str:
 
         lines.append("- " + summary_line(checks[-1]))
     lines.extend(figure_lines)
-    lines.append("Details are on the Team tab under Zone details.")
+    lines.append("Details are on the Team tab.")
     return "\n".join(lines)
 
 

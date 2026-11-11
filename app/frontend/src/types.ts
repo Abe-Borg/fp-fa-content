@@ -1,4 +1,5 @@
 /** The shape of Desk.snapshot() (app/fpfa/desk.py). The page draws only this. */
+import type { Layout } from "./layout";
 
 export interface Turn {
   role: "user" | "assistant";
@@ -129,6 +130,38 @@ export interface Segment {
 
 export type FormValues = Record<string, string | boolean>;
 
+/** One figure of a run as the Results tab draws it. Every number is a calc tool's (app/fpfa/results_panel.py). */
+export interface Figure {
+  key: string;
+  title: string;
+  /** Empty when the tool returns the figure on two bases and elects neither. */
+  value: string;
+  unit: string;
+  /** calculated, ASSUMED, or the tool's own status word. */
+  label: string;
+  tone: string;
+  verdict: string;
+  code: string;
+  lines: string[];
+}
+
+/** The Results tab. kind "" is a job with no run yet: a title and what to do next. */
+export interface ResultsView {
+  kind: "" | "zone" | "bess";
+  run: string;
+  title: string;
+  lines?: string[];
+  heading?: string;
+  source?: string;
+  figures?: Figure[];
+  governing?: string[];
+  notes?: string[];
+  narrative?: string;
+  flags?: string[];
+  warnings?: string[];
+  transcript?: string;
+}
+
 export interface Form {
   rev: number;
   values: FormValues;
@@ -148,6 +181,8 @@ export interface SchemeInfo {
 
 export interface Settings {
   scheme: string;
+  /** How the window was left: the app remembers it, the page owns it (src/layout.ts). */
+  layout: Layout;
   schemes: SchemeInfo[];
   reduce_motion: boolean;
   reduce_motion_forced: boolean;
@@ -174,6 +209,8 @@ export interface Welcome {
   title: string;
   lines: string[];
   links: { text: string; action: string }[];
+  /** Ways to start, drawn as cards. "ask" and "inputs" are the page's own; any other action is the server's. */
+  cards: { title: string; text: string; action: string }[];
   footnote: string;
 }
 
@@ -218,7 +255,11 @@ export interface State {
   welcome: Welcome | null;
   team: Team;
   form: Form;
+  /** The run as plain text, for copying. */
   results: string;
+  results_view: ResultsView;
+  /** Moves when a run lands on the open job. */
+  run_rev: number;
   /** Said above the Results tab when the form changed after the run it shows. Empty when the run is current. */
   results_note: string;
   run_changes: string[];

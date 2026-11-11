@@ -136,7 +136,7 @@ def _show_error(text: str) -> None:
 
 
 def take_screenshots(url: str, folder: Path) -> list[Path]:
-    """The demo's pictures: the thread and the Zone details drawer, through the frontend's Playwright tool."""
+    """The demo's pictures: the thread, the Inputs tab, and the Results tab, through the frontend's Playwright tool."""
     tool = FRONTEND / "tools" / "shoot.mjs"
     node = shutil.which("node")
     if node is None or not tool.is_file():

@@ -1,27 +1,35 @@
 /**
  * Where the designer types. Enter sends, Shift+Enter starts a new line, and the
  * box grows with what is typed. One-tap suggestions sit above it while there
- * are any, and Stop sits under it while a job on this job is running. A running
- * job never locks the composer.
+ * are any. Under the words, inside the box: how the assistant answers (Mode)
+ * on the left, and Send on the right, with Stop beside it while a job on this
+ * job is running. A running job never locks the composer. One line under the
+ * box says what the app last did.
  */
 import { forwardRef, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
+import { MenuButton, type MenuItem } from "./Menu";
+import { ArrowUp, Chevron, Square } from "./icons";
 
 export interface ComposerHandle {
   focus: () => void;
   type: (text: string) => void;
 }
 
-const MIN_ROWS = 2;
+const MIN_ROWS = 1;
 const MAX_ROWS = 8;
 
 export const Composer = forwardRef<ComposerHandle, {
   placeholder: string;
   hint: string;
+  status: string;
+  statusTitle: string;
+  mode: string;
+  modeItems: () => MenuItem[];
   chips: { label: string; action: string }[];
   running: boolean;
   onSend: (text: string) => void;
   onStop: () => void;
-}>(function Composer({ placeholder, hint, chips, running, onSend, onStop }, handle) {
+}>(function Composer({ placeholder, hint, status, statusTitle, mode, modeItems, chips, running, onSend, onStop }, handle) {
   const [text, setText] = useState("");
   const box = useRef<HTMLTextAreaElement>(null);
 
@@ -39,7 +47,7 @@ export const Composer = forwardRef<ComposerHandle, {
     },
   }), [text]);
 
-  // The box grows with its text, from two lines to eight, then scrolls.
+  // The box grows with its text, from one line to eight, then scrolls.
   useLayoutEffect(() => {
     const node = box.current;
     if (!node) return;
@@ -70,7 +78,7 @@ export const Composer = forwardRef<ComposerHandle, {
           ))}
         </div>
       ) : null}
-      <div className="composer">
+      <div className="composer" onClick={(event) => event.target === event.currentTarget && box.current?.focus()}>
         <textarea
           ref={box}
           rows={MIN_ROWS}
@@ -86,17 +94,31 @@ export const Composer = forwardRef<ComposerHandle, {
             }
           }}
         />
-        <button type="button" className="button accent send" onClick={send} disabled={!text.trim()}>
-          Send
-        </button>
+        <div className="composer-bar">
+          <MenuButton
+            items={modeItems}
+            className="button quiet mode"
+            label="Mode"
+            title="How the assistant answers: brainstorm, calculator, synthesis, or mixed"
+          >
+            Mode: {mode} <Chevron />
+          </MenuButton>
+          <span className="grow" />
+          {running ? (
+            <button type="button" className="button stop" title="Stop the running job before its next model round" onClick={onStop}>
+              <Square /> Stop
+            </button>
+          ) : null}
+          <button type="button" className="button accent send" onClick={send} disabled={!text.trim()} title="Send (Enter)">
+            <ArrowUp /> Send
+          </button>
+        </div>
       </div>
       <div className="composer-foot">
-        <span className="faint small">{hint}</span>
-        {running ? (
-          <button type="button" className="chip stop" title="Stop the running job before its next model round" onClick={onStop}>
-            Stop
-          </button>
-        ) : null}
+        <span className="status" role="status" title={statusTitle}>
+          {status}
+        </span>
+        <span className="hint">{hint}</span>
       </div>
     </div>
   );

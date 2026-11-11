@@ -28,11 +28,13 @@ await page.waitForSelector(".topbar");
 await page.waitForTimeout(1500);
 const suffix = scheme ? `-${scheme}` : "";
 await page.screenshot({ path: join(folder, `thread${suffix}.png`) });
-await page.getByRole("button", { name: "Zone details" }).click();
-await page.getByRole("tab", { name: "Zone" }).click();
+// The job panel's tabs are in the top bar. The demo's run may already have opened Results.
+await page.locator("#tab-inputs").click();
+await page.waitForSelector(".job-panel .inputs");
 await page.waitForTimeout(400);
 await page.screenshot({ path: join(folder, `di_zone_inputs${suffix}.png`) });
-await page.getByRole("tab", { name: "Results" }).click();
+await page.locator("#tab-results").click();
+await page.waitForSelector(".job-panel .results");
 await page.waitForTimeout(300);
 await page.screenshot({ path: join(folder, `di_zone_results${suffix}.png`) });
 await browser.close();

@@ -31,7 +31,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
-from fpfa import coherence, inputs, reply_audit, sample_data
+from fpfa import coherence, inputs, reply_audit, results_panel, sample_data
 from fpfa import status as job_status
 from fpfa import theme as palette
 from fpfa.about import (
@@ -188,6 +188,21 @@ THREAD_HINT = (
 )
 WELCOME_KEY_LINK = "Add your Anthropic API key in Settings to start chatting →"
 WELCOME_SAMPLE_LINK = "Try the sample double-interlock zone (/sample-di) →"
+# Three ways to start, drawn as cards on the empty thread: (title, what it does, the action it runs).
+# "ask" puts the cursor in the composer and "inputs" opens the Inputs tab; both are the page's own.
+# Any other action is one the server runs.
+WELCOME_CARDS = (
+    ("Ask a question",
+     "Type it below in plain words. The lead reads the method from your content pack and brings in "
+     "the specialists it needs.",
+     "ask"),
+    ("Size a zone",
+     "Enter the zone and its pipe on the Inputs tab and press Run zone. The calc tools do the arithmetic.",
+     "inputs"),
+    ("Try the sample",
+     "A double-interlock data hall zone, run on this machine. It needs no API key.",
+     "sample-di"),
+)
 WELCOME_FOOTNOTE = (
     "The sample is optional. It opens its own job and runs the zone tool plan on this machine.\n"
     "Type /help for commands."
@@ -205,7 +220,7 @@ EXPORT_STALE_RUN = (
 RESULTS_STALE_LINE = "These figures are from a run before the form changed ({names}). Run the zone again."
 EXPORT_NEEDS_RUN = (
     f"Export of draft Section {DRAFT_SECTION} needs a zone run on this job first. "
-    "Fill in Zone details and press Run zone (or type /run). /sample-di loads a sample zone to try it."
+    "Fill in the Inputs tab and press Run zone (or type /run). /sample-di loads a sample zone to try it."
 )
 COMPOSER_PLACEHOLDER = "Ask about a zone, a releasing sequence, a spec section, or a calc…"
 # A gap between two ticks longer than this means the machine slept or the process was
@@ -219,9 +234,40 @@ COMPOSER_HINT = "Enter to send  ·  Shift+Enter for a new line  ·  /help for co
 PENDING_LABEL = "Working on it…"
 NO_RUN_TEXT = (
     "No zone run on this job yet.\n\n"
-    "Fill in the Zone tab and press Run zone (or type /run). "
+    "Fill in the Inputs tab and press Run zone (or type /run). "
     "The run is posted in the thread, and the tool-plan figures stay here for export."
 )
+# How the designer left the window: the sidebar shown or hidden, which tab of the job panel is open
+# ("" is closed), and how wide the panel is in CSS pixels (0 is the page's own width). The page owns
+# these; the app only remembers them between runs.
+PANEL_TABS = ("inputs", "results", "team")
+LAYOUT_DEFAULT = {"sidebar": True, "panel": "", "panel_width": 0}
+PANEL_WIDTH_RANGE = (320, 2400)
+
+
+def clean_layout(values: Any, base: dict | None = None) -> dict:
+    """base with the layout values that can be read from values. Anything else is left as base has it."""
+    layout = dict(LAYOUT_DEFAULT if base is None else base)
+    if not isinstance(values, dict):
+        return layout
+    if "sidebar" in values:
+        layout["sidebar"] = bool(values["sidebar"])
+    if "panel" in values:
+        tab = str(values["panel"] or "")
+        layout["panel"] = tab if tab in PANEL_TABS else ""
+    if "panel_width" in values:
+        try:
+            width = int(float(values["panel_width"]))
+        except (TypeError, ValueError, OverflowError):
+            width = 0
+        layout["panel_width"] = 0 if width <= 0 else max(PANEL_WIDTH_RANGE[0], min(PANEL_WIDTH_RANGE[1], width))
+    return layout
+
+
+def saved_layout() -> dict:
+    return clean_layout(read_config().get("layout"))
+
+
 # Status glyph and tone for a job in the Activity list.
 ACTIVITY_MARKS = {
     "queued": ("○", ""),
@@ -255,7 +301,8 @@ def sample_di_seed() -> str:
         f"Sample loaded: data-hall double-interlock zone {di.get('zone_id') or 'DH-1'} "
         f"({segments} pipe segments, {di.get('delivery_basis') or 'FM'} time basis). "
         "This is sample data, not a real building. "
-        "The inputs are under Zone details. Ask follow-up questions here and they use these figures."
+        "The inputs are on the Inputs tab and the figures on the Results tab. "
+        "Ask follow-up questions here and they use these figures."
     )
 
 
@@ -291,7 +338,7 @@ def slash_help_text() -> str:
         "## Commands\n"
         "- /sample-di — load the sample data-hall double-interlock zone into its own job and run the tool plan\n"
         "- /sample-bess — load the sample Li-ion BESS room and run the explosion-control starter\n"
-        "- /run — run the zone in Zone details\n"
+        "- /run — run the zone on the Inputs tab\n"
         "- /mode — show the active mode. /mode brainstorm switches (also calculator, synthesis, mixed)\n"
         "- /new Job name — start a named job\n"
         "- /heavy task — text-only hosted reasoning on the zone packet already in the message. "
@@ -634,6 +681,10 @@ class Desk:
         self.activity_rows: list[dict] = []
         self.team: dict = team_view(None)
         self.results_text = NO_RUN_TEXT
+        # The same run as the Results tab draws it: figures, labels, flags (fpfa.results_panel).
+        self.results_view: dict = results_panel.empty_view()
+        # Counts the runs that landed on the open job while it was open. The page shows Results when it moves.
+        self.run_rev = 0
         self.notices: list[dict] = []
         self._notice_seq = 0
         # One entry per submitted zone job. Two /run commands on one project
@@ -677,6 +728,7 @@ class Desk:
         self.segments: list[dict] = []
 
         self.scheme = palette.saved_scheme()
+        self.layout = saved_layout()
         self._load_key()
         self.status.set(self._key_status)
         self.ask_claude.set(self._key_saved)
@@ -1227,7 +1279,7 @@ class Desk:
         zone = inputs.zone_values(project)
         zone_now = {name: inputs.encode(name, value) for name, value in zone.items()}
         sources = {name: inputs.source_text(inputs.provenance(project, name, zone[name])) for name in zone}
-        # A basis field has no starting value, so one the job holds no note on was typed on the Basis tab.
+        # A basis field has no starting value, so one the job holds no note on was typed on the Inputs tab.
         noted = project.get("given") if isinstance(project.get("given"), dict) else {}
         basis_sources = {key: (inputs.source_text(noted[key]) if noted.get(key) in inputs.SOURCE_TEXT else "job form")
                          for key in basis_now}
@@ -1911,7 +1963,7 @@ class Desk:
         self._append_chat("user", raw)
         self._append_chat(
             "assistant",
-            f"Started {self.project['name']}. Ask away. Zone details is optional.",
+            f"Started {self.project['name']}. Ask away. The Inputs tab is optional.",
         )
         self._capture_form(self.project)
         save_project(self.project)
@@ -2287,6 +2339,7 @@ class Desk:
             self._save_form_or_chat(self.project)
             save_project(self.project)
             self._show_bess_result(result)
+            self.run_rev += 1
             self._refresh_team()
         else:
             try:
@@ -2416,6 +2469,7 @@ class Desk:
             form_error = self._save_form_or_chat(self.project)
             save_project(self.project)
             self._show_result(result)
+            self.run_rev += 1
             self._refresh_team()
         else:
             try:
@@ -2455,8 +2509,9 @@ class Desk:
 
     # Results ------------------------------------------------------------------------------
 
-    def _set_results(self, text: str) -> None:
+    def _set_results(self, text: str, result: dict | None = None) -> None:
         self.results_text = text
+        self.results_view = results_panel.results_view(result)
         self._touch()
 
     def _show_saved_run(self, result: dict | None) -> None:
@@ -2506,7 +2561,7 @@ class Desk:
         lines.append("")
         lines.append("Transcript")
         lines.append(format_transcript(result.get("transcript") or []))
-        self._set_results("\n".join(lines))
+        self._set_results("\n".join(lines), result)
 
     def _show_bess_result(self, result: dict) -> None:
         source = result.get("source") or "tool-plan"
@@ -2537,7 +2592,7 @@ class Desk:
         lines.append("")
         lines.append("Transcript")
         lines.append(format_transcript(result.get("transcript") or []))
-        self._set_results("\n".join(lines))
+        self._set_results("\n".join(lines), result)
 
     # Exports ---------------------------------------------------------------------------
 
@@ -3310,6 +3365,15 @@ class Desk:
         self._settings_changed()
         return chosen
 
+    def set_layout(self, values: dict) -> dict:
+        """Remember how the page is laid out. Nothing about a job changes."""
+        layout = clean_layout(values, self.layout)
+        if layout != self.layout:
+            self.layout = layout
+            write_config({"layout": layout})
+            self._settings_changed()
+        return layout
+
     def set_reduce_motion(self, on: bool) -> None:
         write_config({"reduce_motion": bool(on)})
         self._settings_changed()
@@ -3389,6 +3453,7 @@ class Desk:
             current_root = read_config().get("content_root") or ""
         return {
             "scheme": self.scheme,
+            "layout": dict(self.layout),
             "schemes": [
                 {"id": scheme.id, "name": scheme.name, "blurb": scheme.blurb, "dark": scheme.dark,
                  "colors": dict(scheme.colors)}
@@ -3416,7 +3481,8 @@ class Desk:
         if not self._key_saved:
             links.append({"text": WELCOME_KEY_LINK, "action": "settings"})
         links.append({"text": WELCOME_SAMPLE_LINK, "action": "sample-di"})
-        return {"title": lines[0], "lines": lines[1:], "links": links, "footnote": WELCOME_FOOTNOTE}
+        cards = [{"title": title, "text": text, "action": action} for title, text, action in WELCOME_CARDS]
+        return {"title": lines[0], "lines": lines[1:], "links": links, "cards": cards, "footnote": WELCOME_FOOTNOTE}
 
     def snapshot(self, *, thread: bool = True) -> dict:
         """Everything the page draws. thread=False leaves the conversation out when the page has it."""
@@ -3458,6 +3524,8 @@ class Desk:
                 "roles": list(SEGMENT_ROLES),
             },
             "results": self.results_text,
+            "results_view": self.results_view,
+            "run_rev": self.run_rev,
             # Inputs that changed after the run the Results tab and the Section export are showing.
             "run_changes": changed,
             "results_note": RESULTS_STALE_LINE.format(names=", ".join(changed)) if changed else "",

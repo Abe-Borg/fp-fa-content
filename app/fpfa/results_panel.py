@@ -1,0 +1,192 @@
+"""The Results tab. A saved run laid out as the figures a designer looks for first.
+
+results_view() turns a run's result into what the page draws: the headline
+figures with the label each one carries, the lines that say what is ASSUMED,
+the narrative, the flags, and the tool transcript.
+
+Nothing here is computed. Every number is a field of a calc tool's output,
+printed with the same rounding and the same words the narrative uses
+(fpfa.workflow), so the tiles, the thread, and the exports cannot disagree.
+The three labels stay distinct: pipe gallons and t_total are calculated, a
+blank trim and the screen-limit lookup are ASSUMED, and what the tools did
+not return is use best judgment. A delivery time is an optimistic screen,
+not a listed water-delivery-time calculation, and the view says so.
+
+The view holds no state. Desk keeps the plain text of a run (results_text)
+beside it for the thread and the tests that read it.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from fpfa.claude_client import MODEL_ID
+from fpfa.releasing import TRUTH_TABLE_TOOL, releasing_logic
+from fpfa.workflow import (
+    fmt1,
+    format_transcript,
+    judgment_label_line,
+    screen_limit_assumption_text,
+    trim_assumption_text,
+)
+
+CALCULATED = "calculated"
+ASSUMED = "ASSUMED"
+SCREEN_NOTE = "Delivery times are an optimistic screen, not a listed water-delivery-time calculation."
+NO_RUN_TITLE = "No zone run on this job yet"
+NO_RUN_LINES = (
+    "Fill in the Inputs tab and press Run zone, or type /run.",
+    "The run is posted in the thread, and its figures stay here for the exports.",
+)
+
+
+def empty_view() -> dict:
+    """What the tab shows before any run: a title and what to do next."""
+    return {"kind": "", "run": "", "title": NO_RUN_TITLE, "lines": list(NO_RUN_LINES)}
+
+
+def _figure(key: str, title: str, value: str, unit: str = "", *, label: str = "", tone: str = "",
+            verdict: str = "", code: str = "", lines: list[str] | None = None) -> dict:
+    """One tile. value may be empty: a figure the kernel returns on two bases has no one headline number."""
+    return {"key": key, "title": title, "value": value, "unit": unit, "label": label, "tone": tone,
+            "verdict": verdict, "code": code, "lines": [line for line in (lines or []) if line]}
+
+
+def _source_line(result: dict, with_model: str, alone: str) -> str:
+    """Who wrote the narrative, in the words the plain text of the run uses."""
+    if (result.get("source") or "tool-plan") == "claude":
+        return f"Narrative from {result.get('model') or MODEL_ID}. {with_model}"
+    return alone
+
+
+def zone_figures(tools: dict[str, Any]) -> list[dict]:
+    """The zone run's headline figures, each printed the way template_narrative prints it."""
+    volume = tools.get("zone_trapped_volume") or {}
+    screen = tools.get("dry_delivery_screen") or {}
+    trip = tools.get("di_trip_to_water") or {}
+    density = tools.get("density_area") or {}
+    hose = tools.get("hose_duration") or {}
+    trim = tools.get("elect_di_trim") or {}
+    nitrogen = tools.get("nitrogen_gate") or {}
+    truth = tools.get(TRUTH_TABLE_TOOL) or {}
+    figures: list[dict] = []
+
+    if "zone_gal" in volume:
+        lines = []
+        if "pipe_gal" in volume:
+            lines.append(f"{fmt1(volume['pipe_gal'])} gal of pipe ({CALCULATED})")
+        if "fittings_gal" in volume:
+            percent = volume.get("fittings_percent")
+            allowance = f" ({percent:g}%)" if isinstance(percent, (int, float)) else ""
+            lines.append(f"{fmt1(volume['fittings_gal'])} gal fittings allowance{allowance}")
+        lines.append(trim_assumption_text(volume))
+        figures.append(_figure(
+            "zone_total", "Zone total", fmt1(volume["zone_gal"]), "gal",
+            label=f"{CALCULATED}, trim {ASSUMED}" if volume.get("trim_assumed") else CALCULATED, lines=lines,
+        ))
+
+    if "t_total_s" in trip:
+        passes = bool(trip.get("passes_screen"))
+        lines = [screen_limit_assumption_text(trip), SCREEN_NOTE]
+        figures.append(_figure(
+            "t_total", "Delivery screen, t_total", fmt1(trip["t_total_s"]), "s", label=CALCULATED,
+            tone="ok" if passes else "warn",
+            verdict="The zone-total screen passes." if passes else "The zone-total screen does not pass.",
+            lines=lines,
+        ))
+
+    if "nfpa_delivery_time_exempt" in screen and "nfpa_size_cap_gal" in screen and "zone_gal" in volume:
+        exempt = bool(screen["nfpa_delivery_time_exempt"])
+        figures.append(_figure(
+            "size_exemption", "NFPA size exemption", "yes" if exempt else "no", "",
+            lines=[
+                f"Zone total of {fmt1(volume['zone_gal'])} gal against the {screen['nfpa_size_cap_gal']:.0f} gal cap.",
+                "A quick-opening device does not raise the double-interlock cap.",
+            ],
+        ))
+
+    if "qd_gpm" in density:
+        lines = []
+        if "design_area_ft2" in density:
+            lines.append(f"Design area {density['design_area_ft2']:.0f} ft2")
+        if "q_spr_gpm" in density and "hose_gpm" in density:
+            lines.append(f"Sprinklers {fmt1(density['q_spr_gpm'])} gpm, hose {fmt1(density['hose_gpm'])} gpm")
+        span = hose.get("duration_range_min")
+        if "duration_min" in hose:
+            around = f" (range {span[0]:g}–{span[1]:g})" if isinstance(span, (list, tuple)) and len(span) == 2 else ""
+            lines.append(f"Table duration {hose['duration_min']:g} min{around}")
+        figures.append(_figure("demand", "Demand screen", fmt1(density["qd_gpm"]), "gpm", label=CALCULATED, lines=lines))
+
+    if trim:
+        family = str(trim.get("family") or "unresolved")
+        figures.append(_figure(
+            "trim", "Trim family", family, "", label=str(trim.get("status") or ""),
+            lines=[str(trim.get("power_loss_behavior") or "Prime holder is unresolved, so no family is elected.")],
+        ))
+
+    if nitrogen.get("fill_bases"):
+        # The kernel returns a gauge-basis and an absolute-basis rate and elects neither, so no one
+        # number is the headline here.
+        lines = [str(nitrogen["fill_bases"])]
+        if "design_c" in nitrogen:
+            lines.append(f"Design Hazen-Williams C is {nitrogen['design_c']}.")
+        figures.append(_figure("gas_fill", "Supervisory gas fill", "", "", label=CALCULATED, lines=lines))
+
+    if truth:
+        logic = releasing_logic(truth)
+        lines = []
+        family = str(trim.get("family") or "").strip()
+        if family and family != "El/El":
+            lines.append(
+                f"The elected trim family is {family}. The truth table is the electric/electric reference, "
+                "not this valve's logic."
+            )
+        lines += [logic["second_leg"], logic["supervisory"]]
+        if "solenoid_true_count" in truth and "row_count" in truth:
+            lines.append(
+                f"A second smoke zone does not change the solenoid "
+                f"({truth['solenoid_true_count']} true rows of {truth['row_count']})."
+            )
+        figures.append(_figure("releasing", "Releasing logic", "", "", code=logic["expression"], lines=lines))
+    return figures
+
+
+def results_view(result: dict | None) -> dict:
+    """What the Results tab draws for one saved run. The empty view when there is none."""
+    if not isinstance(result, dict) or not isinstance(result.get("tools"), dict):
+        return empty_view()
+    tools = result["tools"]
+    kind = "bess" if result.get("kind") == "bess" else "zone"
+    view: dict[str, Any] = {
+        "kind": kind,
+        # Which run this is. The page shows the tab when a new one lands on the open job.
+        "run": str(result.get("job_id") or ""),
+        "heading": str(result.get("job_heading") or ""),
+        "narrative": str(result.get("narrative") or ""),
+        "flags": [str(flag) for flag in result.get("flags") or []],
+        "warnings": [str(item) for item in result.get("warnings") or []],
+        "transcript": format_transcript(result.get("transcript") or []),
+    }
+    if kind == "bess":
+        view.update({
+            "title": "Explosion-control starter",
+            "source": _source_line(result, "The LFL tool plan governs.", "Narrative from the LFL tool plan."),
+            "figures": [],
+            "governing": [str(text) for text in (result.get("governing") or {}).get("texts") or []],
+            "notes": [
+                "vol% and ppm come from the LFL tool.",
+                f"An election or a duration the tool did not return is {ASSUMED}.",
+                "Zone gallons and seconds stay on the zone tool plan when one has run.",
+            ],
+        })
+        return view
+    volume = tools.get("zone_trapped_volume") or {}
+    trip = tools.get("di_trip_to_water") or {}
+    view.update({
+        "title": "Zone tool plan",
+        "source": _source_line(result, "Tables use the tool plan.", "Narrative from the tool plan."),
+        "figures": zone_figures(tools),
+        "governing": [],
+        "notes": [trim_assumption_text(volume), screen_limit_assumption_text(trip), judgment_label_line()],
+    })
+    return view

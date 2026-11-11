@@ -31,15 +31,18 @@ try {
   await page.goto(url);
   await page.waitForSelector(".composer textarea");
 
-  // One line on the team sits under the top bar, with what is waiting first. The keyboard opens the panel from it.
+  // One line on the team sits beside the job's name, with what is waiting first. The keyboard opens the panel from it.
   await page.waitForSelector(".team-strip");
   const strip = await page.textContent(".team-strip .strip-text");
   check("the strip leads with what is waiting", strip.startsWith("1 needs your answer · 1 disagreement open · 7 findings"), strip);
-  check("the drawer is closed until it is wanted", (await page.$(".drawer")) === null);
+  check("the job panel is closed until it is wanted", (await page.$(".job-panel")) === null);
+  check("the Team tab counts what is waiting before it is opened", (await page.textContent("#tab-team .count")).startsWith("2"));
   await page.focus(".team-strip");
   await page.keyboard.press("Enter");
   await page.waitForSelector(".team");
-  check("the strip opens the Team tab", (await page.getAttribute("#tab-team", "aria-selected")) === "true");
+  check("the strip opens the Team tab", (await page.getAttribute("#tab-team", "aria-pressed")) === "true");
+  const first = await page.$eval(".team .section-label", (node) => node.textContent);
+  check("what is waiting on the designer comes first", first === "NEEDS YOUR ANSWER (1)", first);
   check("the tab counts what is waiting", (await page.textContent("#tab-team .count")).startsWith("2"));
 
   // Where things stand: the plan the lead set, and who did what.
@@ -73,12 +76,12 @@ try {
   check("how an earlier disagreement ended is kept", team.includes("HOW DISAGREEMENTS ENDED (1)") && team.includes("The finding was revised by fp-sprinkler"));
   check("questions for the engineer are apart from the designer's", team.includes("OPEN FOR THE ENGINEER OF RECORD (2)") && team.includes("NEEDS YOUR ANSWER (1)"));
 
-  // Exchanges: a row is chosen from the keyboard and shows the brief and what came back.
-  const kinds = await page.$$eval(".team .grid-table tbody tr td:nth-child(2)", (nodes) => nodes.map((node) => node.textContent));
+  // Exchanges: a row is opened from the keyboard and shows the brief and what came back.
+  const kinds = await page.$$eval(".exchange .exchange-kind", (nodes) => nodes.map((node) => node.textContent));
   check("exchanges are listed by kind", JSON.stringify(kinds) === '["brief","question","brief"]', JSON.stringify(kinds));
-  await page.focus(".team .grid-table tbody tr:nth-child(2)");
+  await page.focus(".exchange:nth-of-type(2) > summary");
   await page.keyboard.press("Enter");
-  const detail = await page.textContent(".text-card.detail");
+  const detail = await page.textContent(".exchange[open] .detail");
   check("a consult shows its question and its answer", detail.includes("What releasing time does the sequence carry") && detail.includes("Carry it as ASSUMED"), detail);
 
   // The designer answers the team's question on the panel. Nothing runs; the answer goes on the record.
@@ -113,8 +116,10 @@ try {
   // A field changed after the run: the Results tab and the panel both say the run is behind.
   await page.click("#tab-results");
   check("a current run carries no warning", (await page.$(".results .callout")) === null);
-  await page.click("#tab-zone");
+  await page.click("#tab-inputs");
   await page.fill("#f-q_fill", "750");
+  await page.waitForFunction(() => document.querySelector(".action-note")?.textContent?.includes("q_fill_gpm"));
+  check("Inputs says the run is behind beside Run zone", true);
   await page.click("#tab-results");
   await page.waitForSelector(".results .callout");
   const note = await page.textContent(".results .callout");
@@ -128,6 +133,14 @@ try {
   const waiting = await page.textContent(".team-strip .strip-text");
   check("the strip counts it", /\d+ out of date/.test(waiting), waiting);
   check("bringing it up to date is offered", await page.isVisible(".chip:has-text('Bring it up to date')"));
+
+  // Given the thread's place, the panel lays the team's work out side by side. The thread comes back as it was.
+  await page.click("button[aria-label='Panel across the window']");
+  check("the panel can take the thread's place", !(await page.isVisible(".thread-scroll")));
+  const columns = await page.$eval(".team-grid", (node) => getComputedStyle(node).gridTemplateColumns.split(" ").length);
+  check("a wide panel sets the findings beside the history", columns === 2, String(columns));
+  await page.click("button[aria-label='Panel across the window']");
+  check("and gives it back", await page.isVisible(".thread-scroll"));
 } catch (error) {
   failures.push(`stopped: ${error && error.message ? error.message.split("\n")[0] : error}`);
 }

@@ -31,7 +31,10 @@ try {
   await page.waitForSelector(".composer textarea");
   check("the welcome is on an empty thread", await page.isVisible("text=What are we working on?"));
   check("the composer has the focus at launch", await page.evaluate(() => document.activeElement?.tagName === "TEXTAREA"));
-  check("the drawer is closed at launch", (await page.$(".drawer")) === null);
+  check("the job panel is closed at launch", (await page.$(".job-panel")) === null);
+  const cards = await page.$$eval(".welcome-card .card-title", (nodes) => nodes.map((node) => node.textContent.trim()));
+  check("the welcome offers three ways to start", JSON.stringify(cards) === '["Ask a question","Size a zone","Try the sample"]', JSON.stringify(cards));
+  check("the job list says how a job starts", (await page.textContent(".sidebar")).includes("No jobs yet"));
 
   // A chip sends exactly the message it stands for.
   await page.click(".chip:has-text('Load the sample zone')");
@@ -42,12 +45,23 @@ try {
   check("the sample run is posted with its labels", thread.includes("5.0 gal trim ASSUMED") && thread.includes("/sample-di"));
   check("the job caption is drawn", (await page.$$(".caption")).length >= 1);
 
+  // The run landed on the open job: the panel opens on its figures, each with the label it carries.
+  await page.waitForSelector(".job-panel .tiles");
+  check("a run that lands shows the Results tab", (await page.getAttribute("#tab-results", "aria-pressed")) === "true");
+  check("Results carries the tool-plan figures", (await page.textContent("[data-figure=zone_total] .tile-value")).includes("281.3"));
+  check("a figure says what in it is ASSUMED", (await page.textContent("[data-figure=zone_total]")).includes("5.0 gal trim ASSUMED"));
+  const screen = await page.textContent("[data-figure=t_total]");
+  check("the delivery screen is a figure with its verdict in words", screen.includes("38.1") && screen.includes("The zone-total screen does not pass.")
+    && screen.includes("not a listed water-delivery-time calculation"), screen);
+  check("the releasing logic names P and not low air", (await page.textContent("[data-figure=releasing] .tile-code")).includes("AND p_second_leg AND NOT isolated"));
+  check("the tool transcript waits to be opened", !(await page.$eval(".disclosure", (node) => node.open)));
+
   // The ⋯ menu, from the keyboard.
   await page.focus("button[aria-label=More]");
   await page.keyboard.press("Enter");
   await page.waitForSelector(".menu");
   const labels = await page.$$eval(".menu .menu-label", (nodes) => nodes.map((node) => node.textContent));
-  for (const label of ["Sample DI zone", "Sample BESS room", "Run zone from Zone details", "Export draft Section 21 13 19…",
+  for (const label of ["Sample DI zone", "Sample BESS room", "Run zone", "Export draft Section 21 13 19…",
     "Team panel", "Usage and cost", "Narrate zone runs with Claude", "Rename job…", "Settings…", "Commands", "About and versions"]) {
     check(`the ⋯ menu has ${label}`, labels.includes(label), JSON.stringify(labels));
   }
@@ -68,21 +82,39 @@ try {
   await page.waitForFunction(() => document.querySelector("button[aria-label=Mode]")?.textContent?.includes("calculator"));
   check("choosing a mode shows it on the button", true);
 
-  // Zone details: the drawer, its tabs, and the figures on the Results tab.
-  await page.click("button:has-text('Zone details')");
-  await page.waitForSelector(".drawer");
-  check("the Zone tab is open first", (await page.getAttribute("#tab-zone", "aria-selected")) === "true");
-  check("the sample's four segments are listed", (await page.$$(".zone .grid-table tbody tr")).length === 4);
-  await page.focus("#tab-zone");
-  await page.keyboard.press("ArrowRight");
-  await page.waitForSelector(".sheet");
-  check("the arrow keys move between tabs", (await page.getAttribute("#tab-results", "aria-selected")) === "true");
-  check("Results carries the tool-plan figures", (await page.textContent(".sheet")).includes("281.3"));
-  await page.click("#tab-zone");
+  // The job panel: its three tabs sit in the top bar and work from the keyboard.
+  await page.focus("#tab-results");
+  await page.keyboard.press("ArrowLeft");
+  check("the arrow keys walk the tabs", await page.evaluate(() => document.activeElement?.id === "tab-inputs"));
+  await page.keyboard.press("Enter");
+  await page.waitForSelector(".job-panel .inputs");
+  check("Enter opens the tab it is on", (await page.getAttribute("#tab-inputs", "aria-pressed")) === "true");
+  const groups = await page.$$eval(".inputs .group-title", (nodes) => nodes.map((node) => node.textContent));
+  check("the inputs are grouped the way a zone is described", ["Project basis", "Zone", "Sprinkler demand", "Water delivery",
+    "Trim and supervisory gas", "Pipe"].every((title) => groups.includes(title)), JSON.stringify(groups));
+  check("the sample's four segments are listed", (await page.$$(".segments tbody tr")).length === 4);
+  const run = await page.$eval(".action-bar .button.accent", (node) => node.getBoundingClientRect().bottom);
+  check("Run zone is in reach without scrolling", run > 0 && run <= 820, String(run));
+  check("a choice reads in words", (await page.$eval("#f-prime", (node) => node.selectedOptions[0].textContent)) === "NC solenoid");
   await page.fill("#f-zone_id", "DH-9");
-  await page.click("#tab-basis");
-  await page.click("#tab-zone");
+  await page.click("#tab-results");
+  await page.click("#tab-inputs");
   check("a typed field keeps its value across tabs", (await page.inputValue("#f-zone_id")) === "DH-9");
+
+  // The panel's edge sizes it from the keyboard, the open tab closes it, and Ctrl+B hides the job list.
+  const narrow = await page.$eval(".job-panel", (node) => node.getBoundingClientRect().width);
+  await page.focus(".panel-edge");
+  await page.keyboard.press("ArrowLeft");
+  await page.waitForFunction((was) => document.querySelector(".job-panel").getBoundingClientRect().width > was, narrow);
+  check("the arrow keys size the panel", true);
+  await page.click("#tab-inputs");
+  check("pressing the open tab closes the panel", (await page.$(".job-panel")) === null);
+  await page.click("#tab-inputs");
+  check("the form keeps its values while the panel is closed", (await page.inputValue("#f-zone_id")) === "DH-9");
+  await page.keyboard.press("Control+b");
+  check("Ctrl+B hides the job list", (await page.$(".sidebar")) === null);
+  await page.click("button[aria-label='Job list']");
+  check("the top bar brings the job list back", (await page.$(".sidebar")) !== null);
 
   // Settings: a scheme card recolours the window at once.
   await page.click(".side-bottom >> text=Settings");
@@ -108,13 +140,14 @@ try {
   await page.keyboard.press("Enter");
   await page.waitForSelector(".working");
   check("the working line names what the app is doing", (await page.textContent(".working")).includes("Working on it"));
-  check("Stop sits under the composer while the job runs", await page.isVisible(".chip.stop"));
+  check("Stop sits beside Send while the job runs", await page.isVisible(".composer .stop"));
   await page.waitForSelector(".turn.assistant .caret", { timeout: 15000 });
   await page.waitForFunction(() => document.querySelector(".thread-column")?.textContent?.includes("Design basis for zone DH-1"), null, { timeout: 15000 });
   const midway = await page.textContent(".thread-column");
   check("a half-written bold span shows no markers", !midway.includes("**"));
   // The reader scrolls up: the thread stays where they put it while words keep arriving.
-  await page.mouse.move(640, 300);
+  const box = await page.$eval(".thread-scroll", (node) => node.getBoundingClientRect().toJSON());
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.wheel(0, -2000);
   await page.waitForTimeout(400);
   const before = await page.$eval(".thread-scroll", (node) => node.scrollTop);

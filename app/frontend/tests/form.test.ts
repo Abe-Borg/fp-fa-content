@@ -1,4 +1,4 @@
-// The Zone details form on its way to the app (src/form.ts).
+// The Inputs form on its way to the app (src/form.ts).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { PatchQueue, mergeForm } from "../src/form.ts";
