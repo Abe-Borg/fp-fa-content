@@ -31,7 +31,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
-from fpfa import sample_data
+from fpfa import coherence, inputs, sample_data
 from fpfa import theme as palette
 from fpfa.about import (
     APP_NAME,
@@ -79,7 +79,7 @@ from fpfa.managed import anthropic_request, reply_with_delete_status, run_heavy_
 from fpfa.modes_loader import DEFAULT_MODE, MODE_SLUGS, list_modes, normalize_mode
 from fpfa.paths import content_root, data_dir, is_content_pack, read_config, write_config
 from fpfa.projects import delete_project, list_projects, load_project, new_project, save_project
-from fpfa.record import INTERRUPTED_NOTE, Record
+from fpfa.record import BASIS_LABELS, INTERRUPTED_NOTE, Record
 from fpfa.spec_docx import DRAFT_SECTION, write_docx
 from fpfa.team import check_record, export_gate, latest_check, team_summary
 from fpfa.team_panel import recovery_text, team_view
@@ -349,12 +349,23 @@ SYSTEM_CHOICES = (
     ("Dry", "dry"),
     ("Wet", "wet"),
 )
-HAZARDS = ("ordinary", "light", "extra")
-BASES = ("FM", "NFPA-OH", "NFPA-LH", "NFPA-EH", "NFPA-HP", "NFPA-DU")
-MEDIA = ("nitrogen", "air", "unelected")
-PRIMES = ("nc_solenoid", "pneumatic_actuator", "unknown")
+HAZARDS = inputs.HAZARDS
+BASES = inputs.BASES
+MEDIA = inputs.MEDIA
+PRIMES = inputs.PRIMES
 LENGTHS = (("Center to center", "center_to_center"), ("Cut lengths", "cut"))
-SEGMENT_ROLES = ("branch", "drop", "cross", "main", "feed", "riser")
+SEGMENT_ROLES = inputs.SEGMENT_ROLES
+# The page's field names beside the project inputs they edit (fpfa.inputs).
+FORM_TO_INPUT = {
+    "ahj": "ahj", "nfpa_13": "nfpa_13", "nfpa_72": "nfpa_72", "insurer": "insurer", "hazard_notes": "hazard_notes",
+    "zone_id": "zone_id", "system_label": "system_type", "hazard": "hazard", "delivery_basis": "delivery_basis",
+    "density": "density_gpm_ft2", "base_area": "base_area_ft2", "area_increase": "area_increase", "hose": "hose_gpm",
+    "q_fill": "q_fill_gpm", "t_detect": "t_detect_s", "t_release": "t_release_s", "t_exhaust": "t_exhaust_s",
+    "supervisory_psi": "supervisory_psi", "fittings": "fittings_percent", "trim_gal": "trim_gal",
+    "supervisory_psig": "supervisory_psig", "fill_minutes": "fill_minutes", "medium": "medium",
+    "prime": "prime_held_by", "length_label": "length_basis", "supervised": "supervised", "qod": "qod",
+    "failsafe": "failsafe_on_total_power_loss", "manual_station": "manual_station",
+}
 
 _INLINE_HEADING = re.compile(r"\s*Job [0-9a-f]{6,} \| .*$")
 # What the working line says for a job that is not a chat turn.
@@ -586,6 +597,8 @@ class Desk:
         self._stream_closed: set[str] = set()
         self._lives: dict[str, dict] = {}
         self._activity: dict[str, str] = {}
+        # Inputs the designer typed since the form was last written to a job. Their source is the designer.
+        self._typed: set[str] = set()
 
         touch = self._touch
         self.status = Var("", touch)
@@ -816,6 +829,10 @@ class Desk:
                     getattr(self, name).set(value)
             elif name in _TEXT_FIELDS:
                 getattr(self, name).set("" if value is None else str(value))
+            else:
+                continue
+            # The designer supplied this input. The record says so beside its value.
+            self._typed.add(FORM_TO_INPUT.get(name, name))
         self._refresh_assumptions()
 
     def _form_loaded(self) -> None:
@@ -974,6 +991,7 @@ class Desk:
             "d_in": "" if d_in in (None, "") else f"{float(d_in):.3f}",
         })
         if loaded:
+            self._typed.add("segments")
             self._form_loaded()
 
     def add_segment(self, role: str, nps: str, schedule: str, length: str) -> bool:
@@ -1013,6 +1031,7 @@ class Desk:
     def remove_segment(self, index: int) -> None:
         if 0 <= int(index) < len(self.segments):
             del self.segments[int(index)]
+            self._typed.add("segments")
             self._form_loaded()
 
     def _selected_mode(self) -> str:
@@ -1024,6 +1043,9 @@ class Desk:
         project["basis"] = self.collect_basis()
         project["di"] = self.collect_di()
         project["chat"] = self.chat_log
+        if self._typed:
+            inputs.note_given(project, self._typed, inputs.SOURCE_DESIGNER)
+            self._typed = set()
 
     def _capture_form(self, project: dict) -> str | None:
         """Copy the form onto project. A bad number does not drop the chat or the mode."""
@@ -1103,6 +1125,8 @@ class Desk:
         self.status.set(f"Opened {self.project.get('name')}. {self._key_status}")
 
     def _apply_project(self, project: dict) -> None:
+        # What was typed on the last job's form does not follow the designer to this one.
+        self._typed = set()
         self._apply_basis(project.get("basis") or {})
         self._apply_di(project.get("di") or {})
         self.chat_log = list(project.get("chat") or [])
@@ -1114,15 +1138,73 @@ class Desk:
         self._refresh_team()
 
     def _open_record(self, project: dict | None) -> None:
-        """Make sure the job is in the project record. An older JSON job is imported once."""
+        """Make sure the job is in the project record. An older JSON job is imported once.
+
+        The job's inputs and the record are then brought into step, both ways:
+        a field the designer changed supersedes the record's row, and an input
+        the lead recorded from the chat is put on the form.
+        """
         if not project or not project.get("id"):
             return
         try:
             self.record.import_project(project)
-            # Form-owned basis fields follow the form. A changed value supersedes the old row.
-            self.record.sync_basis(project["id"], project.get("basis"))
+            self._sync_inputs(project)
         except Exception as exc:
             self.status.set("Project record is not available. " + safe_error(exc))
+
+    def _sync_inputs(self, project: dict) -> list[str]:
+        """Sync one job's basis and zone inputs with the record. Returns the inputs the record put on the form."""
+        project_id = project["id"]
+        shown = project.get("synced") if isinstance(project.get("synced"), dict) else {}
+        basis = project.get("basis") if isinstance(project.get("basis"), dict) else {}
+        basis_now = {key: str(basis.get(key) or "").strip() for key, _label in BASIS_LABELS
+                     if str(basis.get(key) or "").strip()}
+        zone = inputs.zone_values(project)
+        zone_now = {name: inputs.encode(name, value) for name, value in zone.items()}
+        sources = {name: inputs.source_text(inputs.provenance(project, name, zone[name])) for name in zone}
+        from_basis = self.record.sync_form(
+            project_id, inputs.BASIS_KIND, basis_now, labels=dict(BASIS_LABELS),
+            sources={key: "job form" for key in basis_now}, shown_before=shown.get("basis"),
+        )
+        from_zone = self.record.sync_form(
+            project_id, inputs.INPUT_KIND, zone_now, labels=inputs.GIVEN, sources=sources,
+            shown_before=shown.get("zone"),
+        )
+        pulled: list[str] = []
+        for key, text in from_basis["pulled"].items():
+            project.setdefault("basis", {})[key] = text
+            basis_now[key] = text
+            pulled.append(key)
+        for key, text in from_zone["pulled"].items():
+            project.setdefault("di", {})[key] = inputs.decode(text)
+            zone_now[key] = text
+            pulled.append(key)
+        if pulled:
+            # The lead recorded these on the designer's word, in chat.
+            inputs.note_given(project, pulled, inputs.SOURCE_CHAT)
+        project["synced"] = {"basis": basis_now, "zone": zone_now}
+        if from_zone["written"] or from_basis["written"] or pulled:
+            # Calcs recorded before the record kept a basis get one from the inputs as they are now.
+            try:
+                session = ToolSession(content_root())
+                coherence.backfill(self.record, project_id, resolve_id=session._resolve_id)
+            except Exception:
+                pass
+        return pulled
+
+    def _pull_inputs_onto_form(self, project: dict) -> list[str]:
+        """After a turn: put what the lead recorded on the form, save the job, and redraw the form if it is open."""
+        try:
+            pulled = self._sync_inputs(project)
+        except Exception as exc:
+            self.status.set("Project record is not available. " + safe_error(exc))
+            return []
+        if pulled and self.project is not None and self.project.get("id") == project.get("id"):
+            self._apply_basis(project.get("basis") or {})
+            self._apply_di(project.get("di") or {})
+            # Putting the record's values on the form is not the designer typing them.
+            self._typed = set()
+        return pulled
 
     def save_current(self) -> None:
         self._ensure_project()
@@ -1513,6 +1595,7 @@ class Desk:
         project = new_project("Sample data hall DI zone", copy.deepcopy(sample_data.EXAMPLE_BASIS))
         project["di"] = copy.deepcopy(sample_data.EXAMPLE_DI)
         project["mode"] = self._selected_mode()
+        inputs.note_given(project, list(inputs.ZONE_FIELDS) + list(inputs.BASIS_FIELDS), inputs.SOURCE_SAMPLE)
         save_project(project)
         self.refresh_projects(project["id"])
         self.open_project(project["id"])
@@ -2829,11 +2912,15 @@ class Desk:
             self.chat_log.append(self._assistant_turn(reply, job_id))
             self._render_chat()
             form_error = self._save_form_or_chat(self.project)
+            # An input the lead recorded from the chat goes onto the form before anything reads the form again.
+            pulled = self._pull_inputs_onto_form(self.project)
             save_project(self.project)
             if self.project.get("last_run"):
                 note = f"Chat updated. Tables and Section {DRAFT_SECTION} stay on the tool plan."
             else:
                 note = "Chat updated."
+            if pulled:
+                note += " Inputs updated from the chat: " + ", ".join(pulled) + "."
             if usage:
                 note = f"{note} {usage}"
             self.status.set(form_error or self._with_job_label(job_id, note))
@@ -2847,6 +2934,10 @@ class Desk:
         chat = list(project.get("chat") or [])
         chat.append(self._assistant_turn(reply, job_id))
         project["chat"] = chat
+        try:
+            self._sync_inputs(project)
+        except Exception:
+            pass
         save_project(project)
         job = self._job_record(job_id)
         heading = job.heading() if job is not None else ""

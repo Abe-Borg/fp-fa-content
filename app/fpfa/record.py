@@ -25,10 +25,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from fpfa.inputs import BASIS_KIND, GIVEN, INPUT_KIND
 from fpfa.paths import data_dir
 
 DB_NAME = "fpfa.db"
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 # The three figure labels the app already uses, plus the cite classes the
 # content pack uses on a sentence that quotes a source.
@@ -41,10 +42,26 @@ LABELS = (
     "PRACTICE",
     "PARA",
     "HB",
+    # Where a value came from, not what kind of figure it is: the designer supplied it,
+    # on the form or to the lead in chat. Only the form and the lead may write it.
+    GIVEN,
 )
 EVIDENCE_STATUSES = ("held", "NOT PULLED", "NEEDS HOLD", "PACKAGE ASSERTION")
 QUESTION_STATUSES = ("open", "answered", "withdrawn")
+# Who a question is for. "designer": the team needs the answer from the person using the app.
+# "engineer": an RFI for the engineer of record, the owner, or the authority; it goes in the document.
+QUESTION_AUDIENCES = ("designer", "engineer")
 HANDOFF_STATUSES = ("pending", "delivered", "returned", "cancelled")
+# delegation: the lead's brief to a specialist. handoff: work one agent leaves for another,
+# delivered at the receiver's next delegation. consult: one specialist's question to another,
+# answered inside the asker's turn.
+HANDOFF_KINDS = ("delegation", "handoff", "consult")
+# Agents that write an input because the form held it. Any other agent set it on the designer's word.
+FORM_AGENTS = ("job form", "migration")
+REVIEW_POSITIONS = ("agree", "object")
+REVIEW_STATUSES = ("open", "resolved", "escalated", "withdrawn")
+# How a finding leaves the current set: a newer finding replaced it, or its author withdrew it.
+WITHDRAWN = "withdrawn"
 FINDING_STATUSES = ("open", "Supported", "Not supported", "Source not found")
 TASK_STATUSES = ("open", "working", "done", "blocked", "cancelled")
 AGENT_STATUSES = ("idle", "working", "done", "error", "interrupted")
@@ -108,7 +125,8 @@ CREATE TABLE IF NOT EXISTS evidence (
     applicability TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL,
     agent TEXT NOT NULL DEFAULT '',
-    created TEXT NOT NULL
+    created TEXT NOT NULL,
+    depends TEXT NOT NULL DEFAULT '[]'
 );
 CREATE INDEX IF NOT EXISTS evidence_project ON evidence(project_id);
 CREATE TABLE IF NOT EXISTS calc_records (
@@ -124,6 +142,8 @@ CREATE TABLE IF NOT EXISTS calc_records (
     replay_count INTEGER NOT NULL DEFAULT 0,
     created TEXT NOT NULL,
     last_used TEXT NOT NULL,
+    depends TEXT NOT NULL DEFAULT '[]',
+    varies TEXT NOT NULL DEFAULT '{}',
     UNIQUE (project_id, input_hash)
 );
 CREATE TABLE IF NOT EXISTS findings (
@@ -134,7 +154,9 @@ CREATE TABLE IF NOT EXISTS findings (
     label TEXT NOT NULL,
     supports TEXT NOT NULL DEFAULT '[]',
     status TEXT NOT NULL DEFAULT 'open',
-    created TEXT NOT NULL
+    created TEXT NOT NULL,
+    superseded_by TEXT,
+    retire_note TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS findings_project ON findings(project_id);
 CREATE TABLE IF NOT EXISTS questions (
@@ -145,7 +167,9 @@ CREATE TABLE IF NOT EXISTS questions (
     status TEXT NOT NULL,
     answer TEXT NOT NULL DEFAULT '',
     created TEXT NOT NULL,
-    answered TEXT
+    answered TEXT,
+    audience TEXT NOT NULL DEFAULT 'engineer',
+    answered_by TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS questions_project ON questions(project_id, status);
 CREATE TABLE IF NOT EXISTS decisions (
@@ -155,7 +179,9 @@ CREATE TABLE IF NOT EXISTS decisions (
     basis TEXT NOT NULL DEFAULT '',
     decided_by TEXT NOT NULL,
     label TEXT NOT NULL,
-    created TEXT NOT NULL
+    created TEXT NOT NULL,
+    supports TEXT NOT NULL DEFAULT '[]',
+    superseded_by TEXT
 );
 CREATE INDEX IF NOT EXISTS decisions_project ON decisions(project_id);
 CREATE TABLE IF NOT EXISTS handoffs (
@@ -169,9 +195,25 @@ CREATE TABLE IF NOT EXISTS handoffs (
     result TEXT NOT NULL DEFAULT '',
     created TEXT NOT NULL,
     delivered TEXT,
-    returned TEXT
+    returned TEXT,
+    kind TEXT NOT NULL DEFAULT 'handoff'
 );
 CREATE INDEX IF NOT EXISTS handoffs_project ON handoffs(project_id, status);
+CREATE TABLE IF NOT EXISTS reviews (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    finding_id TEXT NOT NULL,
+    agent TEXT NOT NULL,
+    position TEXT NOT NULL,
+    note TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL,
+    resolution TEXT NOT NULL DEFAULT '',
+    resolved_by TEXT NOT NULL DEFAULT '',
+    created TEXT NOT NULL,
+    updated TEXT NOT NULL,
+    UNIQUE (project_id, finding_id, agent)
+);
+CREATE INDEX IF NOT EXISTS reviews_project ON reviews(project_id, status);
 CREATE TABLE IF NOT EXISTS tasks (
     id TEXT PRIMARY KEY,
     project_id TEXT NOT NULL,
@@ -359,7 +401,7 @@ class Record:
         def work(conn):
             for table in (
                 "facts", "evidence", "calc_records", "findings", "questions",
-                "decisions", "handoffs", "tasks", "agents", "jobs", "events",
+                "decisions", "handoffs", "tasks", "agents", "jobs", "events", "reviews",
             ):
                 conn.execute(f"DELETE FROM {table} WHERE project_id = ?", (project_id,))
             conn.execute("DELETE FROM projects WHERE id = ?", (project_id,))
@@ -369,8 +411,12 @@ class Record:
     # -- facts, evidence, findings, questions, decisions -----------------
 
     def record_fact(self, project_id: str, *, kind: str, key: str, value: Any, label: str,
-                    source: str = "", agent: str = "", supersede: bool = False) -> dict:
-        """Write one fact. supersede=True marks earlier rows with the same kind and key as replaced."""
+                    source: str = "", agent: str = "", supersede: bool | str = False) -> dict:
+        """Write one fact. supersede=True marks earlier rows with the same kind and key as replaced.
+
+        supersede="own" replaces only the rows this agent wrote, so two agents that
+        disagree on a key both stay current and the disagreement shows.
+        """
         row = {
             "id": new_id(),
             "project_id": _text(project_id, "project_id", limit=64),
@@ -389,7 +435,13 @@ class Record:
                 "VALUES (:id, :project_id, :kind, :key, :value, :label, :source, :agent, :created)",
                 row,
             )
-            if supersede:
+            if supersede == "own":
+                conn.execute(
+                    "UPDATE facts SET superseded_by = ? WHERE project_id = ? AND kind = ? AND key = ? "
+                    "AND id != ? AND superseded_by IS NULL AND agent = ?",
+                    (row["id"], row["project_id"], row["kind"], row["key"], row["id"], row["agent"]),
+                )
+            elif supersede:
                 conn.execute(
                     "UPDATE facts SET superseded_by = ? WHERE project_id = ? AND kind = ? AND key = ? "
                     "AND id != ? AND superseded_by IS NULL",
@@ -423,8 +475,93 @@ class Record:
             ))
         return written
 
+    def sync_form(self, project_id: str, kind: str, values: dict | None, *, labels: Any = GIVEN,
+                  sources: dict | None = None, shown_before: dict | None = None,
+                  agent: str = "job form") -> dict:
+        """Bring one group of form fields and the record into step, in both directions.
+
+        The form is one editor of the job's inputs and the lead is the other
+        (set_input, when the designer states a value in chat). values is what
+        the form holds now, by input name, as the text the fact stores.
+        shown_before is what the form held the last time it was synced.
+
+        For each input: with no row yet, the form's value is written. When the
+        designer changed the field since the last sync, the form's value is
+        written and replaces whatever was current. When the field did not
+        change and an agent has set the input since, the record's value stands
+        and is returned in "pulled" for the caller to put on the form. A
+        form-owned row is rewritten when its value or its source changed.
+
+        Returns {"written": rows, "pulled": {name: value text}}. Each written
+        row carries "previous", the value it replaced or None. An
+        input_changed event is logged for every value that actually changed.
+        """
+        project_id = _text(project_id, "project_id", limit=64)
+        kind = _text(kind, "kind", limit=80)
+        values = values if isinstance(values, dict) else {}
+        sources = sources if isinstance(sources, dict) else {}
+        before = shown_before if isinstance(shown_before, dict) else {}
+        current = {row["key"]: row for row in self.facts(project_id, kind)}
+        written: list[dict] = []
+        pulled: dict[str, str] = {}
+        for key, value in values.items():
+            text = str(value)
+            source = str(sources.get(key) or agent)
+            label = labels.get(key, GIVEN) if isinstance(labels, dict) else labels
+            row = current.get(key)
+            if row is not None:
+                agent_set = (row.get("agent") or "") not in FORM_AGENTS
+                form_changed = key in before and before[key] != text
+                if agent_set and not form_changed:
+                    if row["value"] != text:
+                        pulled[key] = row["value"]
+                    continue
+                if not agent_set and row["value"] == text and row["source"] == source and row["label"] == label:
+                    continue
+                if agent_set and row["value"] == text:
+                    # The designer typed the value the lead had already recorded. Nothing changed.
+                    continue
+            new = self.record_fact(
+                project_id, kind=kind, key=key, value=text, label=label,
+                source=source, agent=agent, supersede=True,
+            )
+            new["previous"] = row["value"] if row is not None else None
+            if row is not None and row["value"] != text:
+                self.log_event(project_id, "input_changed", {
+                    "kind": kind, "key": key, "old": row["value"], "new": text, "by": agent,
+                    "source": source, "id": new["id"],
+                }, agent=agent)
+            written.append(new)
+        return {"written": written, "pulled": pulled}
+
+    def set_given(self, project_id: str, *, kind: str, key: str, value: str, label: str,
+                  source: str, agent: str) -> dict:
+        """An agent records an input the designer stated. Returns the row with "previous" and "changed"."""
+        current = next((row for row in self.facts(project_id, kind) if row["key"] == key), None)
+        row = self.record_fact(
+            project_id, kind=kind, key=key, value=value, label=label, source=source, agent=agent, supersede=True,
+        )
+        row["previous"] = current["value"] if current is not None else None
+        row["changed"] = current is None or current["value"] != row["value"]
+        if current is not None and row["changed"]:
+            self.log_event(project_id, "input_changed", {
+                "kind": kind, "key": key, "old": current["value"], "new": row["value"], "by": agent,
+                "source": source, "id": row["id"],
+            }, agent=agent)
+        return row
+
+    def givens(self, project_id: str) -> dict[str, dict]:
+        """The current project inputs by name: zone inputs and the basis fields."""
+        found: dict[str, dict] = {}
+        for row in self.facts(project_id, BASIS_KIND):
+            found[row["key"]] = row
+        for row in self.facts(project_id, INPUT_KIND):
+            found[row["key"]] = row
+        return found
+
     def record_evidence(self, project_id: str, *, document: str, edition: str = "", section: str = "",
-                        note: str = "", applicability: str = "", status: str = "held", agent: str = "") -> dict:
+                        note: str = "", applicability: str = "", status: str = "held", agent: str = "",
+                        depends: Any = None) -> dict:
         row = {
             "id": new_id(),
             "project_id": _text(project_id, "project_id", limit=64),
@@ -436,12 +573,13 @@ class Record:
             "status": _choice(status, "status", EVIDENCE_STATUSES),
             "agent": _text(agent, "agent", required=False, limit=80),
             "created": now_text(),
+            "depends": canonical_json(_ids(depends, "depends")),
         }
 
         def work(conn):
             conn.execute(
-                "INSERT INTO evidence (id, project_id, document, edition, section, note, applicability, status, agent, created) "
-                "VALUES (:id, :project_id, :document, :edition, :section, :note, :applicability, :status, :agent, :created)",
+                "INSERT INTO evidence (id, project_id, document, edition, section, note, applicability, status, agent, created, depends) "
+                "VALUES (:id, :project_id, :document, :edition, :section, :note, :applicability, :status, :agent, :created, :depends)",
                 row,
             )
             self._event(conn, row["project_id"], "evidence", row["agent"], {"id": row["id"], "document": row["document"], "section": row["section"]})
@@ -450,7 +588,13 @@ class Record:
         return self._write(work)
 
     def record_finding(self, project_id: str, *, agent: str, text: str, label: str,
-                       supports: Any = None) -> dict:
+                       supports: Any = None, replaces: Any = None, may_replace_any: bool = False) -> dict:
+        """Write one finding. replaces names an earlier finding this one takes the place of.
+
+        The earlier row stays as history with superseded_by set, and an objection
+        still open on it is closed as answered by the revision. Only the author of
+        a finding, or the lead (may_replace_any), may replace it.
+        """
         row = {
             "id": new_id(),
             "project_id": _text(project_id, "project_id", limit=64),
@@ -461,17 +605,155 @@ class Record:
             "status": "open",
             "created": now_text(),
         }
+        old_id = _text(replaces, "replaces", required=False, limit=64)
 
         def work(conn):
+            if old_id:
+                old = conn.execute(
+                    "SELECT * FROM findings WHERE id = ? AND project_id = ?", (old_id, row["project_id"])
+                ).fetchone()
+                if old is None:
+                    raise RecordError(f"no finding {old_id} on this project to replace")
+                if old["superseded_by"]:
+                    raise RecordError(f"finding {old_id} was already replaced or withdrawn")
+                if old["agent"] != row["agent"] and not may_replace_any:
+                    raise RecordError(
+                        f"finding {old_id} was written by {old['agent']}. Only its author or the lead replaces it; "
+                        "review_finding records an objection."
+                    )
             conn.execute(
                 "INSERT INTO findings (id, project_id, agent, text, label, supports, status, created) "
                 "VALUES (:id, :project_id, :agent, :text, :label, :supports, :status, :created)",
                 row,
             )
             self._event(conn, row["project_id"], "finding", row["agent"], {"id": row["id"], "label": row["label"]})
+            if old_id:
+                conn.execute("UPDATE findings SET superseded_by = ? WHERE id = ?", (row["id"], old_id))
+                self._event(conn, row["project_id"], "finding_replaced", row["agent"], {"id": old_id, "by": row["id"]})
+                self._close_objections(conn, row["project_id"], old_id,
+                                       f"The finding was revised by {row['agent']}: see [{row['id']}].", row["agent"])
+                row["replaces"] = old_id
             return row
 
         return self._write(work)
+
+    def retire_finding(self, project_id: str, finding_id: str, *, by: str, reason: str,
+                       may_retire_any: bool = False) -> dict:
+        """Withdraw a finding. It stays on the record as history and leaves the current set."""
+        finding_id = _text(finding_id, "finding_id", limit=64)
+        by = _text(by, "by", limit=80)
+        note = _text(reason, "reason", limit=2000)
+
+        def work(conn):
+            old = conn.execute(
+                "SELECT * FROM findings WHERE id = ? AND project_id = ?", (finding_id, project_id)
+            ).fetchone()
+            if old is None:
+                raise RecordError(f"no finding {finding_id} on this project")
+            if old["superseded_by"]:
+                raise RecordError(f"finding {finding_id} was already replaced or withdrawn")
+            if old["agent"] != by and not may_retire_any:
+                raise RecordError(f"finding {finding_id} was written by {old['agent']}. Only its author or the lead withdraws it.")
+            conn.execute(
+                "UPDATE findings SET superseded_by = ?, retire_note = ? WHERE id = ?", (WITHDRAWN, note, finding_id)
+            )
+            self._event(conn, project_id, "finding_withdrawn", by, {"id": finding_id})
+            self._close_objections(conn, project_id, finding_id, f"The finding was withdrawn by {by}: {note}", by)
+            row = dict(conn.execute("SELECT * FROM findings WHERE id = ?", (finding_id,)).fetchone())
+            row["supports"] = json.loads(row["supports"] or "[]")
+            return row
+
+        return self._write(work)
+
+    def _close_objections(self, conn: sqlite3.Connection, project_id: str, finding_id: str,
+                          resolution: str, by: str) -> None:
+        rows = conn.execute(
+            "SELECT id FROM reviews WHERE project_id = ? AND finding_id = ? AND position = 'object' "
+            "AND status IN ('open', 'escalated')",
+            (project_id, finding_id),
+        ).fetchall()
+        for item in rows:
+            conn.execute(
+                "UPDATE reviews SET status = 'resolved', resolution = ?, resolved_by = ?, updated = ? WHERE id = ?",
+                (resolution, by, now_text(), item["id"]),
+            )
+            self._event(conn, project_id, "review_resolved", by, {"id": item["id"], "finding": finding_id})
+
+    # -- reviews: one agent's position on another agent's finding ------------------------
+
+    def put_review(self, project_id: str, *, finding_id: str, agent: str, position: str, note: str = "") -> dict:
+        """Record agent's position on a finding it did not write. A later call replaces the earlier position.
+
+        An objection is open until its finding is revised or withdrawn, the
+        lead resolves it, or the objector changes its position to agree.
+        """
+        finding_id = _text(finding_id, "finding_id", limit=64)
+        agent = _text(agent, "agent", limit=80)
+        position = _choice(position, "position", REVIEW_POSITIONS)
+        note = _text(note, "note", required=(position == "object"), limit=4000)
+        stamp = now_text()
+
+        def work(conn):
+            finding = conn.execute(
+                "SELECT * FROM findings WHERE id = ? AND project_id = ?", (finding_id, project_id)
+            ).fetchone()
+            if finding is None:
+                raise RecordError(f"no finding {finding_id} on this project")
+            if finding["superseded_by"]:
+                raise RecordError(f"finding {finding_id} was replaced or withdrawn. Review the current finding.")
+            if finding["agent"] == agent:
+                raise RecordError("an agent does not review its own finding. Replace it or withdraw it instead.")
+            status = "open" if position == "object" else "resolved"
+            found = conn.execute(
+                "SELECT id FROM reviews WHERE project_id = ? AND finding_id = ? AND agent = ?",
+                (project_id, finding_id, agent),
+            ).fetchone()
+            if found is not None:
+                review_id = found["id"]
+                conn.execute(
+                    "UPDATE reviews SET position = ?, note = ?, status = ?, resolution = '', resolved_by = '', updated = ? "
+                    "WHERE id = ?",
+                    (position, note, status, stamp, review_id),
+                )
+            else:
+                review_id = new_id()
+                conn.execute(
+                    "INSERT INTO reviews (id, project_id, finding_id, agent, position, note, status, created, updated) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (review_id, project_id, finding_id, agent, position, note, status, stamp, stamp),
+                )
+            self._event(conn, project_id, "review_" + position, agent,
+                        {"id": review_id, "finding": finding_id, "author": finding["agent"]})
+            return dict(conn.execute("SELECT * FROM reviews WHERE id = ?", (review_id,)).fetchone())
+
+        return self._write(work)
+
+    def close_review(self, project_id: str, review_id: str, *, status: str, resolution: str, by: str) -> dict:
+        """The lead settles an objection (resolved) or sends it to the designer or the engineer (escalated)."""
+        review_id = _text(review_id, "review_id", limit=64)
+        status = _choice(status, "status", ("resolved", "escalated"))
+        resolution = _text(resolution, "resolution", limit=4000)
+        by = _text(by, "by", limit=80)
+
+        def work(conn):
+            row = conn.execute(
+                "SELECT * FROM reviews WHERE id = ? AND project_id = ?", (review_id, project_id)
+            ).fetchone()
+            if row is None:
+                raise RecordError(f"no review {review_id} on this project")
+            if row["position"] != "object":
+                raise RecordError(f"review {review_id} is not an objection")
+            conn.execute(
+                "UPDATE reviews SET status = ?, resolution = ?, resolved_by = ?, updated = ? WHERE id = ?",
+                (status, resolution, by, now_text(), review_id),
+            )
+            self._event(conn, project_id, "review_" + status, by, {"id": review_id, "finding": row["finding_id"]})
+            return dict(conn.execute("SELECT * FROM reviews WHERE id = ?", (review_id,)).fetchone())
+
+        return self._write(work)
+
+    def reviews(self, project_id: str) -> list[dict]:
+        return self._read("SELECT * FROM reviews WHERE project_id = ? ORDER BY created, rowid", (project_id,))
 
     def set_finding_status(self, project_id: str, finding_id: str, *, status: str, by: str = "") -> dict:
         """Mark a finding after a check: open, Supported, Not supported, or Source not found."""
@@ -492,7 +774,8 @@ class Record:
 
         return self._write(work)
 
-    def open_question(self, project_id: str, *, raised_by: str, text: str) -> dict:
+    def open_question(self, project_id: str, *, raised_by: str, text: str, audience: str = "engineer") -> dict:
+        """Write a question. audience "designer" is one the team needs answered by the person using the app."""
         row = {
             "id": new_id(),
             "project_id": _text(project_id, "project_id", limit=64),
@@ -502,12 +785,13 @@ class Record:
             "answer": "",
             "created": now_text(),
             "answered": None,
+            "audience": _choice(audience or "engineer", "audience", QUESTION_AUDIENCES),
         }
 
         def work(conn):
             conn.execute(
-                "INSERT INTO questions (id, project_id, raised_by, text, status, answer, created, answered) "
-                "VALUES (:id, :project_id, :raised_by, :text, :status, :answer, :created, :answered)",
+                "INSERT INTO questions (id, project_id, raised_by, text, status, answer, created, answered, audience) "
+                "VALUES (:id, :project_id, :raised_by, :text, :status, :answer, :created, :answered, :audience)",
                 row,
             )
             self._event(conn, row["project_id"], "question", row["raised_by"], {"id": row["id"]})
@@ -522,9 +806,9 @@ class Record:
 
         def work(conn):
             cur = conn.execute(
-                "UPDATE questions SET status = 'answered', answer = ?, answered = ? "
+                "UPDATE questions SET status = 'answered', answer = ?, answered = ?, answered_by = ? "
                 "WHERE id = ? AND project_id = ?",
-                (answer_text, now_text(), question_id, project_id),
+                (answer_text, now_text(), by, question_id, project_id),
             )
             if cur.rowcount != 1:
                 raise RecordError(f"no question {question_id} on this project")
@@ -534,7 +818,7 @@ class Record:
         return self._write(work)
 
     def record_decision(self, project_id: str, *, text: str, decided_by: str, label: str,
-                        basis: str = "") -> dict:
+                        basis: str = "", supports: Any = None) -> dict:
         row = {
             "id": new_id(),
             "project_id": _text(project_id, "project_id", limit=64),
@@ -543,12 +827,13 @@ class Record:
             "decided_by": _text(decided_by, "decided_by", limit=80),
             "label": _label(label),
             "created": now_text(),
+            "supports": canonical_json(_ids(supports, "supports")),
         }
 
         def work(conn):
             conn.execute(
-                "INSERT INTO decisions (id, project_id, text, basis, decided_by, label, created) "
-                "VALUES (:id, :project_id, :text, :basis, :decided_by, :label, :created)",
+                "INSERT INTO decisions (id, project_id, text, basis, decided_by, label, created, supports) "
+                "VALUES (:id, :project_id, :text, :basis, :decided_by, :label, :created, :supports)",
                 row,
             )
             self._event(conn, row["project_id"], "decision", row["decided_by"], {"id": row["id"], "label": row["label"]})
@@ -559,11 +844,18 @@ class Record:
     # -- calculation records --------------------------------------------
 
     def record_calc(self, project_id: str, *, tool: str, inputs: Any, outputs: Any,
-                    agent: str = "", pack_version: str = "", calc_identity: str = "") -> dict:
+                    agent: str = "", pack_version: str = "", calc_identity: str = "",
+                    depends: Any = None, varies: dict | None = None) -> dict:
         """Store one calc. The same tool, inputs, and calc identity on the project counts a replay.
 
         calc_identity names the calc code that produced the output. A different
         identity is a different row, so a pack update never replays old results.
+
+        depends lists the record rows this call followed: the input facts whose
+        values it used and the earlier calcs whose results it took. varies names
+        the arguments where it departed from the project inputs. Both are
+        written again on a replay, because a replay is the same call checked
+        against the inputs as they are now. None leaves them as they are.
         """
         project_id = _text(project_id, "project_id", limit=64)
         tool = _text(tool, "tool", limit=80)
@@ -581,8 +873,15 @@ class Record:
                     "UPDATE calc_records SET replay_count = replay_count + 1, last_used = ? WHERE id = ?",
                     (stamp, found["id"]),
                 )
-                self._event(conn, project_id, "calc_replay", agent, {"id": found["id"], "tool": tool})
                 row = dict(found)
+                if depends is not None or varies is not None:
+                    row["depends"] = canonical_json(_ids(depends, "depends"))
+                    row["varies"] = canonical_json(varies if isinstance(varies, dict) else {})
+                    conn.execute(
+                        "UPDATE calc_records SET depends = ?, varies = ? WHERE id = ?",
+                        (row["depends"], row["varies"], found["id"]),
+                    )
+                self._event(conn, project_id, "calc_replay", agent, {"id": found["id"], "tool": tool})
                 row["replay_count"] = int(found["replay_count"]) + 1
                 row["last_used"] = stamp
                 row["replayed"] = True
@@ -600,10 +899,12 @@ class Record:
                 "replay_count": 0,
                 "created": stamp,
                 "last_used": stamp,
+                "depends": canonical_json(_ids(depends, "depends")),
+                "varies": canonical_json(varies if isinstance(varies, dict) else {}),
             }
             conn.execute(
-                "INSERT INTO calc_records (id, project_id, tool, input_hash, inputs, outputs, pack_version, calc_identity, agent, replay_count, created, last_used) "
-                "VALUES (:id, :project_id, :tool, :input_hash, :inputs, :outputs, :pack_version, :calc_identity, :agent, :replay_count, :created, :last_used)",
+                "INSERT INTO calc_records (id, project_id, tool, input_hash, inputs, outputs, pack_version, calc_identity, agent, replay_count, created, last_used, depends, varies) "
+                "VALUES (:id, :project_id, :tool, :input_hash, :inputs, :outputs, :pack_version, :calc_identity, :agent, :replay_count, :created, :last_used, :depends, :varies)",
                 row,
             )
             self._event(conn, project_id, "calc", row["agent"], {"id": row["id"], "tool": tool})
@@ -611,6 +912,15 @@ class Record:
             return row
 
         return self._write(work)
+
+    def set_calc_basis(self, project_id: str, calc_id: str, *, depends: Any, varies: dict | None) -> None:
+        """Write what a calc followed onto a row recorded before the record kept it. No event; nothing ran."""
+        calc_id = _text(calc_id, "calc_id", limit=64)
+        self._write(lambda conn: conn.execute(
+            "UPDATE calc_records SET depends = ?, varies = ? WHERE id = ? AND project_id = ?",
+            (canonical_json(_ids(depends, "depends")), canonical_json(varies if isinstance(varies, dict) else {}),
+             calc_id, project_id),
+        ))
 
     def find_calc(self, project_id: str, tool: str, inputs: Any, calc_identity: str = "") -> dict | None:
         """The row for this tool, these inputs, and this calc code, or None."""
@@ -639,6 +949,7 @@ class Record:
             "tasks": lambda: self.tasks(project_id),
             "agents": lambda: self.agents(project_id),
             "jobs": lambda: self.jobs(project_id),
+            "reviews": lambda: self.reviews(project_id),
         }
         if kind not in readers:
             raise RecordError("kind must be one of: " + ", ".join(sorted(readers)))
@@ -650,7 +961,7 @@ class Record:
     # -- handoffs, tasks, agents ------------------------------------------
 
     def create_handoff(self, project_id: str, *, from_agent: str, to_agent: str, brief: str,
-                       payload: Any = None) -> dict:
+                       payload: Any = None, kind: str = "handoff") -> dict:
         row = {
             "id": new_id(),
             "project_id": _text(project_id, "project_id", limit=64),
@@ -663,15 +974,17 @@ class Record:
             "created": now_text(),
             "delivered": None,
             "returned": None,
+            "kind": _choice(kind or "handoff", "kind", HANDOFF_KINDS),
         }
 
         def work(conn):
             conn.execute(
-                "INSERT INTO handoffs (id, project_id, from_agent, to_agent, brief, payload, status, result, created, delivered, returned) "
-                "VALUES (:id, :project_id, :from_agent, :to_agent, :brief, :payload, :status, :result, :created, :delivered, :returned)",
+                "INSERT INTO handoffs (id, project_id, from_agent, to_agent, brief, payload, status, result, created, delivered, returned, kind) "
+                "VALUES (:id, :project_id, :from_agent, :to_agent, :brief, :payload, :status, :result, :created, :delivered, :returned, :kind)",
                 row,
             )
-            self._event(conn, row["project_id"], "handoff", row["from_agent"], {"id": row["id"], "to": row["to_agent"]})
+            self._event(conn, row["project_id"], "handoff", row["from_agent"],
+                        {"id": row["id"], "to": row["to_agent"], "kind": row["kind"]})
             return row
 
         return self._write(work)
@@ -709,11 +1022,11 @@ class Record:
     def pending_handoffs(self, project_id: str, to_agent: str | None = None) -> list[dict]:
         if to_agent:
             return self._read(
-                "SELECT * FROM handoffs WHERE project_id = ? AND status = 'pending' AND to_agent = ? ORDER BY created",
+                "SELECT * FROM handoffs WHERE project_id = ? AND status = 'pending' AND to_agent = ? ORDER BY created, rowid",
                 (project_id, to_agent),
             )
         return self._read(
-            "SELECT * FROM handoffs WHERE project_id = ? AND status = 'pending' ORDER BY created",
+            "SELECT * FROM handoffs WHERE project_id = ? AND status = 'pending' ORDER BY created, rowid",
             (project_id,),
         )
 
@@ -939,18 +1252,26 @@ class Record:
         return self._read(f"SELECT * FROM facts WHERE {where} ORDER BY created, rowid", tuple(params))
 
     def evidence(self, project_id: str) -> list[dict]:
-        return self._read("SELECT * FROM evidence WHERE project_id = ? ORDER BY created, rowid", (project_id,))
+        rows = self._read("SELECT * FROM evidence WHERE project_id = ? ORDER BY created, rowid", (project_id,))
+        for row in rows:
+            row["depends"] = _json_list(row.get("depends"))
+        return rows
 
     def calcs(self, project_id: str) -> list[dict]:
         return [_calc_row(row) for row in self._read(
             "SELECT * FROM calc_records WHERE project_id = ? ORDER BY created, rowid", (project_id,)
         )]
 
-    def findings(self, project_id: str, agent: str | None = None) -> list[dict]:
+    def findings(self, project_id: str, agent: str | None = None, *, include_retired: bool = False) -> list[dict]:
+        """The current findings: those not replaced and not withdrawn. include_retired adds the history."""
+        where = "project_id = ?"
+        params: list[Any] = [project_id]
         if agent:
-            rows = self._read("SELECT * FROM findings WHERE project_id = ? AND agent = ? ORDER BY created, rowid", (project_id, agent))
-        else:
-            rows = self._read("SELECT * FROM findings WHERE project_id = ? ORDER BY created, rowid", (project_id,))
+            where += " AND agent = ?"
+            params.append(agent)
+        if not include_retired:
+            where += " AND superseded_by IS NULL"
+        rows = self._read(f"SELECT * FROM findings WHERE {where} ORDER BY created, rowid", tuple(params))
         for row in rows:
             row["supports"] = json.loads(row["supports"] or "[]")
         return rows
@@ -961,7 +1282,10 @@ class Record:
         return self._read("SELECT * FROM questions WHERE project_id = ? ORDER BY created, rowid", (project_id,))
 
     def decisions(self, project_id: str) -> list[dict]:
-        return self._read("SELECT * FROM decisions WHERE project_id = ? ORDER BY created, rowid", (project_id,))
+        rows = self._read("SELECT * FROM decisions WHERE project_id = ? ORDER BY created, rowid", (project_id,))
+        for row in rows:
+            row["supports"] = _json_list(row.get("supports"))
+        return rows
 
     def handoffs(self, project_id: str) -> list[dict]:
         rows = self._read("SELECT * FROM handoffs WHERE project_id = ? ORDER BY created, rowid", (project_id,))
@@ -1018,9 +1342,14 @@ class Record:
         return {
             "project": self.project_row(project_id),
             "facts": self.facts(project_id),
+            # Every fact row, replaced ones included: what a value was when a calc used it.
+            "fact_history": self.facts(project_id, include_superseded=True),
             "evidence": self.evidence(project_id),
             "calcs": self.calcs(project_id),
             "findings": self.findings(project_id),
+            # Findings that were replaced or withdrawn, kept as history.
+            "retired_findings": [row for row in self.findings(project_id, include_retired=True) if row.get("superseded_by")],
+            "reviews": self.reviews(project_id),
             "questions": self.questions(project_id),
             "decisions": self.decisions(project_id),
             "handoffs": self.handoffs(project_id),
@@ -1126,8 +1455,17 @@ BASIS_LABELS = (
 def _add_missing_columns(conn: sqlite3.Connection) -> None:
     """Columns added after the first schema. A fresh database already has them."""
     wanted = {
-        "calc_records": [("calc_identity", "TEXT NOT NULL DEFAULT ''")],
+        "calc_records": [
+            ("calc_identity", "TEXT NOT NULL DEFAULT ''"),
+            ("depends", "TEXT NOT NULL DEFAULT '[]'"),
+            ("varies", "TEXT NOT NULL DEFAULT '{}'"),
+        ],
         "facts": [("superseded_by", "TEXT")],
+        "evidence": [("depends", "TEXT NOT NULL DEFAULT '[]'")],
+        "findings": [("superseded_by", "TEXT"), ("retire_note", "TEXT NOT NULL DEFAULT ''")],
+        "questions": [("audience", "TEXT NOT NULL DEFAULT 'engineer'"), ("answered_by", "TEXT NOT NULL DEFAULT ''")],
+        "decisions": [("supports", "TEXT NOT NULL DEFAULT '[]'"), ("superseded_by", "TEXT")],
+        "handoffs": [("kind", "TEXT NOT NULL DEFAULT 'handoff'")],
     }
     for table, columns in wanted.items():
         present = {row[1] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
@@ -1151,4 +1489,24 @@ def _calc_row(row: dict) -> dict:
     out = dict(row)
     out["inputs"] = json.loads(row["inputs"]) if isinstance(row.get("inputs"), str) else row.get("inputs")
     out["outputs"] = json.loads(row["outputs"]) if isinstance(row.get("outputs"), str) else row.get("outputs")
+    out["depends"] = _json_list(row.get("depends"))
+    varies = row.get("varies")
+    if isinstance(varies, str):
+        try:
+            varies = json.loads(varies or "{}")
+        except json.JSONDecodeError:
+            varies = {}
+    out["varies"] = varies if isinstance(varies, dict) else {}
     return out
+
+
+def _json_list(value: Any) -> list:
+    if isinstance(value, list):
+        return value
+    if not isinstance(value, str) or not value:
+        return []
+    try:
+        found = json.loads(value)
+    except json.JSONDecodeError:
+        return []
+    return found if isinstance(found, list) else []

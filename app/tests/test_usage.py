@@ -295,7 +295,7 @@ class AboutTests(unittest.TestCase):
         self.assertTrue(any(line.startswith("keyring ") for line in lines))
         self.assertTrue(any(line.startswith("Content pack ") and str(REPO) in line for line in lines))
         self.assertIn("Data directory /data", lines)
-        self.assertEqual(lines[-1], "Record schema 3")
+        self.assertEqual(lines[-1], "Record schema 4")
 
     def test_the_versions_flag_prints_and_exits_without_a_window(self):
         from fpfa.web.shell import main
@@ -344,7 +344,7 @@ class UsageWindowTests(unittest.TestCase):
 
         about = TEXTS["about"]()
         self.assertIn("+Cynosure", about)
-        self.assertIn("Record schema 3", about)
+        self.assertIn("Record schema 4", about)
         # The About box says what the license allows and that the output is a draft.
         self.assertIn("PolyForm Shield License 1.0.0", about)
         self.assertIn("engineer of record", about)

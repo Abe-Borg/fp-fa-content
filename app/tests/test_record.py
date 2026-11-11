@@ -141,8 +141,9 @@ class RecordStoreTests(unittest.TestCase):
         record.record_fact("p1", kind="basis", key="insurer", value="FM", label="OWNER")
         record.open_question("p1", raised_by="lead", text="Enforced edition?")
         snap = record.snapshot("p1")
-        self.assertEqual(set(snap), {"project", "facts", "evidence", "calcs", "findings", "questions",
-                                     "decisions", "handoffs", "tasks", "agents", "jobs", "events"})
+        self.assertEqual(set(snap), {"project", "facts", "fact_history", "evidence", "calcs", "findings",
+                                     "retired_findings", "reviews", "questions", "decisions", "handoffs",
+                                     "tasks", "agents", "jobs", "events"})
         self.assertEqual(snap["project"]["name"], "Sample")
         text = record.summary_text("p1")
         self.assertIn("basis/insurer: FM (OWNER)", text)
@@ -343,8 +344,15 @@ class ReviewFollowUpTests(unittest.TestCase):
         record.set_job("p1", job_id="j1", kind="chat", title="t", status="running")
         self.assertEqual(record.jobs("p1")[0]["status"], "running")
         conn = sqlite3.connect(path)
-        self.assertEqual(conn.execute("SELECT value FROM meta WHERE key='schema_version'").fetchone()[0], "3")
+        self.assertEqual(conn.execute("SELECT value FROM meta WHERE key='schema_version'").fetchone()[0], "4")
+        # Version 4 columns: what a calc followed, a finding's replacement, who a question is for.
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(calc_records)").fetchall()}
+        self.assertTrue({"depends", "varies"} <= columns)
+        self.assertIn("reviews", {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")})
         conn.close()
+        self.assertEqual(row["depends"], "[]")
+        self.assertEqual(record.calcs("p1")[0]["depends"], [])
+        self.assertEqual(record.calcs("p1")[0]["varies"], {})
 
 
 class ToolSessionRecordingTests(unittest.TestCase):
@@ -386,7 +394,8 @@ class ToolSessionRecordingTests(unittest.TestCase):
         record = _record()
         record.ensure_project("p1")
         session = ToolSession(REPO, record=record, project_id="p1", agent="fp-sprinkler")
-        fact = session.execute("record_fact", {"kind": "basis", "key": "insurer", "value": "FM", "label": "OWNER"})
+        fact = session.execute("record_fact", {"kind": "owner", "key": "owner_standard", "value": "none stated",
+                                               "label": "OWNER"})
         cite = session.execute("record_evidence", {"document": "NFPA 13", "edition": "2025", "section": "8.3.2.3.1.1",
                                                     "note": "500 gal cap", "status": "held"})
         finding = session.execute("record_finding", {"text": "Zone total 281.3 gal", "label": "calculated",
