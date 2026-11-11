@@ -10,10 +10,12 @@ are derived from a kernel source tree, not hand-edited. The chain is:
 2. ``label_formulas`` / ``label_tests`` / ``relabel_*``: exact, count-checked
    string replacements for generic labels (design-practice wording, held-source
    paraphrases, neutral test names). Labels only; no calc logic.
-3. ``apply_pack_local``: re-applies the three pack-local behaviours of
-   ``formulas.py``: ``_as_float`` rejects inf and nan; ``fill_bases_text`` states
-   gauge-basis and absolute-basis fill rates; ``air_fill_scfm`` and the
-   nitrogen campus sizing return a ``fill_bases`` label.
+3. ``label_draft`` / ``label_draft_tests``: the same rules for the held El/Pn
+   draft files, which land in ``draft/`` when the kernel folder has them.
+
+The kernel source already has the finite-number guard in ``_as_float`` and the
+``fill_bases`` labels, so there is no pack-local step: the pack copy is the kernel
+source stripped, plus labels.
 
 Usage:
     python3 scripts/fp_kernel_stage.py --kernel-dir DIR --out OUT
@@ -129,10 +131,14 @@ _TOK = [
     'R' + '0',
     'R' + '1',
     'R' + '7',
+    'B' + '45',
+    'R' + 'L-',
 ]
 
 
 KERNEL_FILES = ("formulas.py", "run.py", "test_formulas.py")
+DRAFT_FILES = ("el_pn_release.py", "test_el_pn_release.py")
+DRAFT_DIR = "draft"
 
 
 def X(text: str) -> str:
@@ -153,6 +159,18 @@ def rule(pattern: str, repl, flags: int = 0) -> None:
 
 EOR = "Verify with engineer of record."
 
+# Tags the kernel source carries since the pack-local behaviours moved upstream.
+rule(r'[ \t]*\(@91@ R\d+\)', '')
+rule(r'share the @91@ R\d+ clause', 'share one clause')
+rule(r'@91@ @75@ \(G4; @57@47 @73@ @92@5\): the clause', 'The clause')
+rule(r'\s*\(@57@47(?: @73@)? @92@5\)', '')
+rule(r'\. @91@ @75@: the\b', '. The')
+rule(r'ASSUMED, NEEDS PE\); @91@ @75@: the', 'ASSUMED; verify with engineer of record); the')
+rule(r', ASSUMED, NEEDS PE\)\. @91@ @75@: ', ', ASSUMED; verify with engineer of record). ')
+rule(r'the @91@ @75@ lower-bound', 'the lower-bound')
+rule(r'"""@91@ @74@: finite-number guard \+ two-basis fill label \(adapted from pack [\w.]+\)\.', '"""Finite-number guard and two-basis fill label tests.')
+rule(r'"""@91@ @75@ \(G4\): default', '"""Default')
+rule(r'@57@47 @73@ @92@5 \(@22@ G4\): the <=500', 'The <=500')
 rule(r'"""@67@ @57@ REJECT narrow-correction harness \(2026-11-05; L3 artifact-@62@ strengthen\)\.', '"""Narrow-correction harness (2026-11-05).')
 rule(r' / 00_@18@', '')
 rule(r'\nSTATUS: bounded training ACCEPT WITH NOTES; follow-up repair PENDING independent affected-artifact recheck', '')
@@ -462,7 +480,7 @@ def label_formulas(f: str) -> str:
     f = rx(f, r'[ \t]*\(GAP-B\d+R\d+-\d+\)', '', f.count(X('(@14@-2)')), 'gap-par')
     f = rep(f, '(@70@ example: Rp 75 ft', '(example: Rp 75 ft', 1, '@85@-example-str')
     f = rep(f, 'do not invent @59@/clean credits (LOCKED)', 'do not invent other suppression-agent credits (LOCKED)', 1, '@59@-doc')
-    f = rep(f, '"(= pipe × 1.05 + 5 gal, ASSUMED, NEEDS PE)")', '"(= pipe × 1.05 + 5 gal, ASSUMED; verify with engineer of record)")', 1, 'v-clause')
+    f = rep(f, '"ASSUMED, NEEDS PE); the statutory size test', '"ASSUMED; verify with engineer of record); the statutory size test', 1, 'v-clause')
     return f
 
 
@@ -493,6 +511,8 @@ def label_tests(t: str) -> str:
     t = rep(t, '(@2@)', '(design practice ruling)', 1, 'lpr')
     t = rep(t, 'self.assertIn("13-@69@b-2019-velocity.txt L4", c)', 'self.assertIn("held clause", c)', 1, 'cite-test')
     t = rep(t, 'basis="@63@"', 'basis="UNKNOWN"', 1, 'client-token-basis')
+    t = rep(t, 'ASSUMED, NEEDS PE), not pipe-only trapped volume', 'ASSUMED; verify with engineer of record), not pipe-only trapped volume', 1, 'v-allow-test')
+    t = rep(t, '            self.assertNotIn("@57@47", n)  # @57@48 RL-1: provenance tag stays in docs/CHANGELOG/LOG only\n            self.assertNotIn("@92@5", n)\n', '', 1, 'tag-assert')
     t = rep(t, 'test_@33@_exact_case_n_max_30_and_consistent', 'test_exact_boundary_case_n_max_30_and_consistent', 1, '@33@-t1')
     t = rep(t, 'test_1_@33@_obscuration_regression_n_max_30', 'test_1_obscuration_boundary_regression_n_max_30', 1, '@33@-t2')
     dups = [name for name in set(re.findall(r"^class (\w+)", t, re.M)) if len(re.findall(r"^class %s\b" % name, t, re.M)) > 1]
@@ -503,7 +523,6 @@ def label_tests(t: str) -> str:
 
 def relabel_formulas(f: str) -> str:
     f = rep(f, '"(= pipe × 1.05 + 5 gal, ASSUMED, NEEDS PE), "', '"(= pipe × 1.05 + 5 gal, ASSUMED; verify with engineer of record), "') if X('"(= pipe × 1.05 + 5 gal, ASSUMED, NEEDS PE), "') in f else rep(f, 'ASSUMED, NEEDS PE), "', 'ASSUMED; verify with engineer of record), "')
-    f = rep(f, 'None and pipe-only keep the @75@ clause.', 'None and pipe-only keep the pipe-only clause.')
     f = rep(f, '@73@ @77@: optional v_basis (None / pipe-only', 'Optional v_basis (None / pipe-only')
     f = rep(f, "@73@ @77@: optional v_basis (None / 'pipe-only'", "Optional v_basis (None / 'pipe-only'")
     f = rep(f, '# @73@ @77@: additive key only;', '# Additive key only;')
@@ -521,91 +540,71 @@ def relabel_tests(t: str) -> str:
 
 
 # ---------------------------------------------------------------- step 3
-def _once(s: str, old: str, new: str) -> str:
-    if s.count(old) != 1:
-        raise StageError(f"pack-local edit: expected one match of {old[:60]!r}, found {s.count(old)}")
-    return s.replace(old, new)
+# Held draft files. They land in calcs/fp/draft/, are not imported by any pack module,
+# and are not part of the kernel. Same strip rules, plus exact label edits.
+_DRAFT_DOC = '''"""El/Pn solenoid and valve-release function. DRAFT: held, not wired, do not import.
+
+This file is a held draft. No pack module, tool plan, or app code imports it, and
+``calcs/fp/test_draft_held.py`` checks that. It stays held until a separate go-ahead.
+It is separate from the El/El table in ``di_zone.py``, which stays as it is.
+
+Two outputs, not one:
+    solenoid      = (D OR manual_in_D) AND NOT isolated
+    valve_release = solenoid AND PA-REL          (P = PA-REL, the listed actuator at the valve)
+psl_sup (the low-air supervisory input) is never in either Boolean. It is an inert proof
+column, accepted only so a test can show that it changes nothing. Solenoid energized is not
+valve release: with D present and PA-REL not tripped the solenoid is true and the valve
+stays shut.
+
+manual_in_D: a manual station typed as detection, inside D, still needs P. With no panel
+Manual Release station (preaction-releasing-c-and-e-soo footnote 9(a)) manual_in_D is FALSE,
+which is the default here. A zone typed Manual Release is an owner and fire-marshal election
+(footnote 9(c)), never the company default. Setpoints stay open and no numbers appear here.
+"""'''
+
+_DRAFT_TEST_DOC = '''"""Tests for the held El/Pn draft function. DRAFT: held, not wired.
+
+The draft stays held until a separate go-ahead. Nothing imports it.
+"""'''
+
+_LEADRULING = "LE" + "AD RULING"
 
 
-def apply_pack_local(s: str) -> str:
-    s = _once(s, '''def _as_float(name: str, value: Any) -> float:
-    if isinstance(value, bool) or value is None:
-        raise CalcError(f"{name} must be a number")
-    try:
-        return float(value)
-    except (TypeError, ValueError) as exc:
-        raise CalcError(f"{name} must be a number") from exc
-''', '''def _as_float(name: str, value: Any) -> float:
-    """Parse a real number. Reject bools, non-numbers, inf, and nan.
-
-    ``float("1e309")`` is inf on IEEE-754. A later ``<= 0`` check does not
-    catch it, and dividing by that fill flow collapses the trip time.
-    """
-    import math
-
-    if isinstance(value, bool) or value is None:
-        raise CalcError(f"{name} must be a number")
-    try:
-        number = float(value)
-    except (TypeError, ValueError) as exc:
-        raise CalcError(f"{name} must be a number") from exc
-    if not math.isfinite(number):
-        raise CalcError(f"{name} must be a finite number")
-    return number
-''')
-    s = _once(s, '''def air_fill_scfm(''', '''def fill_bases_text(gauge: float, absolute: float, subject: str = "") -> str:
-    """Label both fill rates. This does not elect gauge or absolute."""
-    if subject:
-        return (
-            f"{subject} gauge-basis fill rate is {gauge:.2f} scfm. "
-            f"{subject} absolute-basis fill rate is {absolute:.2f} scfm."
-        )
-    return (
-        f"Gauge-basis fill rate is {gauge:.2f} scfm. "
-        f"Absolute-basis fill rate is {absolute:.2f} scfm."
-    )
+def _swap_module_doc(text: str, must_have: str, new_doc: str, name: str) -> str:
+    m = re.match(r'(#![^\n]*\n)?("""(?:.|\n)*?"""\n)', text)
+    if not m or must_have not in m.group(2):
+        raise StageError(f"{name}: module docstring not recognised")
+    return text[: m.start(2)] + new_doc + "\n" + text[m.end(2):]
 
 
-def air_fill_scfm(''')
-    s = _once(s, '''    Restore rule: NFPA 13-2025 8.2.7.3 (30 min) -- cite in the package, not here.
-    """
-    v = _require_positive("v_gal", v_gal)
-    p = _require_positive("p_psig", p_psig)
-    t = _require_positive("t_min", t_min)
-    return {"formula": "air/N2 fill scfm = V*P/(7.48*14.7*T)",
-            "scfm_gauge_basis": v * p / (7.48 * 14.7 * t),
-            "scfm_abs_basis": v * (p + 14.7) / (7.48 * 14.7 * t),
-            "free_air_scf_gauge": v * p / (7.48 * 14.7)}''', '''    Restore rule: NFPA 13-2025 8.2.7.3 (30 min) -- cite in the package, not here.
-    ``fill_bases`` states both rates. It does not pick one.
-    """
-    v = _require_positive("v_gal", v_gal)
-    p = _require_positive("p_psig", p_psig)
-    t = _require_positive("t_min", t_min)
-    gauge = v * p / (7.48 * 14.7 * t)
-    absolute = v * (p + 14.7) / (7.48 * 14.7 * t)
-    return {"formula": "air/N2 fill scfm = V*P/(7.48*14.7*T)",
-            "scfm_gauge_basis": gauge,
-            "scfm_abs_basis": absolute,
-            "free_air_scf_gauge": v * p / (7.48 * 14.7),
-            "fill_bases": fill_bases_text(gauge, absolute)}''')
-    s = _once(s, '''    big = max(rows, key=lambda x: x["scfm_abs"])
-    return {"systems": rows, "largest_system_id": big["id"],
-            "compressor_scfm_gauge": big["scfm_gauge"], "compressor_scfm_abs": big["scfm_abs"],
-            "n2_campus_scfm_gauge": sum(x["scfm_gauge"] for x in rows),
-            "n2_campus_scfm_abs": sum(x["scfm_abs"] for x in rows),
-            "connected_v_gal": sum(x["v_gal"] for x in rows),''', '''    big = max(rows, key=lambda x: x["scfm_abs"])
-    campus_gauge = sum(x["scfm_gauge"] for x in rows)
-    campus_abs = sum(x["scfm_abs"] for x in rows)
-    return {"systems": rows, "largest_system_id": big["id"],
-            "compressor_scfm_gauge": big["scfm_gauge"], "compressor_scfm_abs": big["scfm_abs"],
-            "n2_campus_scfm_gauge": campus_gauge,
-            "n2_campus_scfm_abs": campus_abs,
-            "connected_v_gal": sum(x["v_gal"] for x in rows),
-            "fill_bases": " ".join((
-                fill_bases_text(big["scfm_gauge"], big["scfm_abs"], "Compressor"),
-                fill_bases_text(campus_gauge, campus_abs, "N2 campus"),
-            )),''')
-    return s
+def label_draft(t: str) -> str:
+    t = _swap_module_doc(t, "valve-release function", _DRAFT_DOC, "el_pn_release.py")
+    t = rep(t, 'STATUS = "DRAFT — PENDING FP ' + _LEADRULING + '"', 'STATUS = "DRAFT, HELD, NOT WIRED"', 1, 'draft-status')
+    t = rep(t, '"""DRAFT — PENDING FP ' + _LEADRULING + '. Returns {"solenoid", "valve_release"}. psl_sup is an inert proof column — NOT a release input."""',
+            '"""DRAFT, held. Returns {"solenoid", "valve_release"}. psl_sup is an inert proof column, not a release input."""', 1, 'draft-fn-doc')
+    t = rx(t, r' \(@57@47 @92@3\)', '', 1, 'draft-footnote-tag')
+    t = rx(t, r'Row order matches the (?:@73@ )?@76@ sidecar\. ', '', 1, 'draft-sidecar-note')
+    return t
+
+
+def label_draft_tests(t: str) -> str:
+    t = _swap_module_doc(t, "DRAFT", _DRAFT_TEST_DOC, "test_el_pn_release.py")
+    for line in ("import hashlib\n", "import importlib.util\n"):
+        t = rep(t, line, "", 1, "draft-test-import")
+    t = rx(t, r'ROOT = [^\n]*\nSIDECAR = [^\n]*\nAPP_DI_ZONE = [^\n]*\nDI_ZONE_SHA256 = [^\n]*\n\n\n', '\n', 1, 'draft-test-consts')
+    t = rx(t, r'class @54@\d+@88@\d+ElPnReleaseTests', 'class ElPnReleaseDraftTests', 1, 'draft-test-class')
+    t = rx(t, r'    def test_00_.*?\n(?=    def test_01_)',
+           '    def test_00_draft_status_marks_the_module_held(self):\n'
+           '        self.assertIn("DRAFT", ep.STATUS)\n'
+           '        self.assertIn("HELD", ep.STATUS)\n\n', 1, 'draft-test-00', re.S)
+    t = rx(t, r'        # @57@47 @92@3 / ', '        # ', 1, 'draft-test-04-tag')
+    t = rep(t, '  # noqa: E402  (fails before the module exists)', '  # noqa: E402', 1, 'draft-test-noqa')
+    t = rx(t, r'    def test_08_.*?\n(?=    def test_09_)', '', 1, 'draft-test-08', re.S)
+    t = rx(t, r'        """NEG: El/El Boolean.*?true rows differ\."""',
+           '        """NEG: a single-output Boolean that keys the release on the low-air supervisory input.\n\n'
+           '        That construction collapses solenoid energize with valve admission. It has 6 of 32 true rows,\n'
+           '        the same count as valve_release, but the true rows differ."""', 1, 'draft-test-09-doc', re.S)
+    return t
 
 
 # ---------------------------------------------------------------- driver
@@ -615,16 +614,24 @@ def stage_text(name: str, src: str) -> str:
     out = rewrite_source(src)
     assert_same_ast(src, out, name)
     if name == "formulas.py":
-        out = apply_pack_local(relabel_formulas(label_formulas(out)))
+        out = relabel_formulas(label_formulas(out))
     elif name == "test_formulas.py":
         out = relabel_tests(label_tests(out))
+    elif name == "el_pn_release.py":
+        out = label_draft(out)
+    elif name == "test_el_pn_release.py":
+        out = label_draft_tests(out)
     elif name != "run.py":
         raise StageError(f"unknown kernel file {name}")
     return out
 
 
 def stage_dir(kernel_dir: pathlib.Path, out_dir: pathlib.Path) -> list[str]:
-    """Stage the three kernel files from ``kernel_dir`` into ``out_dir``."""
+    """Stage the kernel files from ``kernel_dir`` into ``out_dir``.
+
+    The held draft files are staged into ``out_dir/draft`` when the source folder has them.
+    Names are returned relative to ``out_dir``.
+    """
     out_dir.mkdir(parents=True, exist_ok=True)
     written = []
     for name in KERNEL_FILES:
@@ -634,6 +641,14 @@ def stage_dir(kernel_dir: pathlib.Path, out_dir: pathlib.Path) -> list[str]:
         text = stage_text(name, path.read_text(encoding="utf-8"))
         (out_dir / name).write_bytes(text.encode("utf-8"))
         written.append(name)
+    present = [name for name in DRAFT_FILES if (kernel_dir / name).is_file()]
+    if present and len(present) != len(DRAFT_FILES):
+        raise StageError("held draft needs both " + " and ".join(DRAFT_FILES))
+    for name in present:
+        text = stage_text(name, (kernel_dir / name).read_text(encoding="utf-8"))
+        (out_dir / DRAFT_DIR).mkdir(parents=True, exist_ok=True)
+        (out_dir / DRAFT_DIR / name).write_bytes(text.encode("utf-8"))
+        written.append(f"{DRAFT_DIR}/{name}")
     return written
 
 

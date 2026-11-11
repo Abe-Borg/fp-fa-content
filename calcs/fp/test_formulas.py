@@ -2374,7 +2374,7 @@ class VBasisDecimalTests(unittest.TestCase):
         self.assertEqual(r["margin_s"], 35.0)
         self.assertTrue(r["passes_screen"])
         self.assertEqual(r["v_basis"], "pipe-only")
-        self.assertIn("V tested is pipe-only trapped volume, not V_allow", r["note_60s_option"])
+        self.assertIn("V passed is pipe-only trapped volume, a lower-bound screen", r["note_60s_option"])
         self.assertIn("§8.3.2.3.1.1", r["note_60s_option"])
         # existing keys on an omitted call stay equal (label only)
         base = di_trip_to_water(200, 800, 0, 0, 0, basis="NFPA-OH", edition=2025, system_type="di")
@@ -2424,7 +2424,7 @@ class VBasisDecimalTests(unittest.TestCase):
         # and keeps the pipe-only V wording on the non-FM threshold note.
         r = di_trip_to_water(200, 800, 0, 0, 0, basis="NFPA-OH", edition=2025, system_type="di")
         self.assertNotIn("v_basis", r)
-        self.assertIn("V tested is pipe-only trapped volume, not V_allow", r["note_60s_option"])
+        self.assertIn("V passed is pipe-only trapped volume, a lower-bound screen", r["note_60s_option"])
         self.assertEqual(r["t_total_s"], 15.0)
         self.assertEqual(r["limit_s"], 50.0)
         self.assertTrue(r["passes_screen"])
@@ -2459,6 +2459,105 @@ class VBasisDecimalTests(unittest.TestCase):
         self.assertEqual(old_eps, 3)  # retired residual; we do not restore it
         # typed 0.3 / 0.1 still 3 — contrast with the computed residue
         self.assertEqual(_decimal_floor_quotient(0.3, 0.1), 3)
+
+
+class PackLocalUpstreamTests(unittest.TestCase):
+    """Finite-number guard and two-basis fill label tests.
+
+    Label/guard only. No existing numeric key changes (hand-check: V=1000 gal, P=40 psig, T=30 min ->
+    gauge 40000/(7.48*14.7*30) = 12.126 scfm; absolute 54.7*1000/(7.48*14.7*30) = 16.582 scfm).
+    """
+    SYS = [{"id": "DI-1", "v_gal": 750, "p_psig": 40}, {"id": "DI-2", "v_gal": 500, "p_psig": 40},
+           {"id": "DRY-3", "v_gal": 300, "p_psig": 30}]
+
+    def test_air_fill_states_both_bases_hand_checked(self):
+        from formulas import air_fill_scfm
+        r = air_fill_scfm(1000, 40, 30)
+        self.assertAlmostEqual(r["scfm_gauge_basis"], 12.1262, places=3)
+        self.assertAlmostEqual(r["scfm_abs_basis"], 16.5824, places=3)
+        self.assertIn("fill_bases", r)
+        self.assertIn("Gauge-basis fill rate is 12.13 scfm", r["fill_bases"])
+        self.assertIn("Absolute-basis fill rate is 16.58 scfm", r["fill_bases"])
+        self.assertNotIn("elect", r["fill_bases"].lower())
+
+    def test_compressor_n2_states_both_bases(self):
+        from formulas import compressor_n2_sizing
+        r = compressor_n2_sizing(self.SYS, 30)
+        self.assertIn(f"Compressor gauge-basis fill rate is {r['compressor_scfm_gauge']:.2f} scfm", r["fill_bases"])
+        self.assertIn(f"Compressor absolute-basis fill rate is {r['compressor_scfm_abs']:.2f} scfm", r["fill_bases"])
+        self.assertIn(f"N2 campus gauge-basis fill rate is {r['n2_campus_scfm_gauge']:.2f} scfm", r["fill_bases"])
+        self.assertIn(f"N2 campus absolute-basis fill rate is {r['n2_campus_scfm_abs']:.2f} scfm", r["fill_bases"])
+        # existing keys unchanged
+        for k in ("systems", "largest_system_id", "compressor_scfm_gauge", "compressor_scfm_abs",
+                  "n2_campus_scfm_gauge", "n2_campus_scfm_abs", "connected_v_gal", "basis"):
+            self.assertIn(k, r)
+        self.assertIn("verify with engineer of record", r["basis"])
+
+    def test_non_finite_inputs_rejected(self):
+        import math
+        from formulas import _as_float, _require_positive, air_fill_scfm, di_trip_to_water
+        for bad in ("1e309", math.inf, math.nan, "-inf"):
+            with self.assertRaises(CalcError):
+                _as_float("q_fill_gpm", bad)
+            with self.assertRaises(CalcError):
+                _require_positive("q_fill_gpm", bad)
+            with self.assertRaises(CalcError):
+                di_trip_to_water(100, bad)
+            with self.assertRaises(CalcError):
+                air_fill_scfm(100, bad, 30)
+        for bad in (0, -1):
+            with self.assertRaises(CalcError):
+                _require_positive("q_fill_gpm", bad)
+        self.assertEqual(_as_float("x", "2.5"), 2.5)
+
+
+class PipeOnlyLabelTests(unittest.TestCase):
+    """Default / pipe-only note must not say pipe-only V is the statutory test.
+
+    The <=500 gal DI exemption uses system size (zone_gal),
+    NFPA 13-2019/2025 s8.3.2.3.1.1. Label only: no numeric, verdict or key-name change.
+    Hand check: V=200 gal, Q=800 gpm, sub-times 0 -> t_fill = 60*200/800 = 15 s, NFPA-OH limit 50 s,
+    margin 35 s, pass.
+    """
+    OLD = "V tested is pipe-only trapped volume"
+    G_PER_FT = 3.141592653589793 / 4 * 2.469 ** 2 / 144 * 7.48
+
+    def test_default_and_pipe_only_notes_do_not_claim_pipe_only_governs(self):
+        for vb in ({}, {"v_basis": "pipe-only"}):
+            r = f.di_trip_to_water(200, 800, 0, 0, 0, basis="NFPA-OH", edition=2025,
+                                   system_type="di", **vb)
+            n = r["note_60s_option"]
+            self.assertEqual((r["t_fill_s"], r["limit_s"], r["margin_s"], r["passes_screen"]),
+                             (15.0, 50.0, 35.0, True))
+            self.assertNotIn(self.OLD, n)
+            self.assertIn("lower-bound screen", n)
+            self.assertIn("full system size (zone_gal)", n)
+            self.assertIn("not pipe-only volume", n)
+            self.assertIn("§8.3.2.3.1.1", n)
+
+    def test_dry_and_screen_paths_use_same_wording(self):
+        seg = [{"d_in": 2.469, "length_ft": 400.0 / self.G_PER_FT}]
+        s = f.dry_delivery_screen(seg, 450, t_release_s=10, system_type="di", edition=2025,
+                                  basis="NFPA-OH")
+        d = f.di_trip_to_water(400, 450, 0, 10, 0, basis="NFPA-OH", edition=2019, system_type="dry")
+        for n in (s["note_60s_option"], d["note_60s_option"]):
+            self.assertNotIn(self.OLD, n)
+            self.assertIn("full system size (zone_gal)", n)
+        self.assertIn("nfpa_delivery_time_exempt", s)          # key not renamed
+        self.assertTrue(s["nfpa_delivery_time_exempt"])
+        self.assertEqual(s["nfpa_size_cap_gal"], 500.0)
+
+    def test_other_labels_and_fm_notes_unchanged(self):
+        vallow = f.di_trip_to_water(200, 800, 0, 0, 0, basis="NFPA-OH", system_type="di", v_basis="v_allow")
+        caller = f.di_trip_to_water(200, 800, 0, 0, 0, basis="NFPA-OH", system_type="di", v_basis="caller")
+        self.assertIn("V tested is V_allow (= pipe × 1.05 + 5 gal, ASSUMED; verify with engineer of record), not pipe-only trapped volume",
+                      vallow["note_60s_option"])
+        self.assertIn("V tested is caller-supplied v_gal (v_basis=caller), not labelled pipe-only",
+                      caller["note_60s_option"])
+        fm = f.di_trip_to_water(200, 800, 0, 0, 0, basis="FM", system_type="di")
+        self.assertNotIn("pipe-only", fm["note_60s_option"])
+        self.assertIn("FM 30 s governs", fm["note_60s_option"])
+        self.assertEqual(fm["t_total_s"], 15.0)
 
 
 if __name__ == "__main__":
