@@ -15,7 +15,25 @@ Deterministic fire-protection and fire-alarm math. The desktop app loads `calcs/
 | `test_pack_local.py` | Finite-number guard and fill-basis label tests |
 | `test_pack_content_lowair.py` | Scans every prose folder a model reads (`corpus/`, `specs/`, `skills/`, `roles/`, `modes/`) for wording that makes low air a release input; release is detection and P. The app suite runs the same detector over `docs/` and the app's own strings |
 
-The kernel file in this tree has 215 tests. `test_pack_local.py` adds 3 more for the finite-number guard and the two-basis fill labels, which this pack keeps on top of the kernel.
+### Where the kernel files come from
+
+`formulas.py`, `run.py` and `test_formulas.py` are the kernel source files (md5 prefixes `2b33548e`, `68d93bd9` and `e590c54c`), stripped of comments and docstrings that carry internal tags, with a few generic label edits, plus 3 pack-local behaviours that the kernel source does not have yet:
+
+1. **Finite-number guard.** `_as_float` rejects `inf` and `nan`, so an overflowing input such as `1e309` cannot become an infinite fill flow.
+2. **Two-basis fill label.** `fill_bases_text` states the gauge-basis and the absolute-basis air-fill rates side by side. It does not elect one.
+3. **`fill_bases` result key.** `air_fill_scfm` and `compressor_n2_sizing` return that label next to their numbers, and the air-fill docstring says the label does not pick a basis.
+
+The kernel source has 215 tests, and they pass on the pack copy of `test_formulas.py`. `test_pack_local.py` adds 3 more for the 3 pack-local behaviours.
+
+### Reproduce the kernel files
+
+One command stages the three files from a kernel source folder and byte-compares them with `calcs/fp/`. Run it from the repository root, with the folder that holds the kernel's `formulas.py`, `run.py` and `test_formulas.py`:
+
+```bash
+python3 scripts/check_fp_kernel_reproduce.py --kernel-dir <kernel-dir>
+```
+
+It exits 0 when all three files are identical. It exits 1 with a short diff summary when one differs, and 2 when the kernel folder cannot be staged. `scripts/fp_kernel_stage.py` holds the staging rules and can write the staged files to a folder with `--out`. `calcs/fp/test_kernel_reproduce.py` runs the same check, and is skipped unless `FP_KERNEL_DIR` is set to the kernel folder.
 
 `di_zone.py` loads `formulas.py` and `pipe_ids.py` from its own directory, so a content pack can replace `calcs/fp` without installing a package.
 
