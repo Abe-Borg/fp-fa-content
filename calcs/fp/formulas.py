@@ -1170,8 +1170,8 @@ def cross_main_walk(c: Number, branches: Any, segments: Any, tol_psi: Number = 0
     to the riser/feed point. HW 4.52 Q^1.85/(C^1.85 d^4.87) (NFPA 13-2025 hydraulic calc chapter),
     0.4333 psi/ft elevation. At each tee: NFPA 13-2025 s28.2.2.4.1-.2 via junction_balance -
     the lower-pressure side is raised to the higher pressure by Q=K*sqrt(P) and the higher
-    pressure is carried. C is an input (lock: C=100 dry/DI; 120 wet or N2-maintained per
-    Table 28.2.4.8.1). No velocity pressure. SCREEN - verify with engineer of record for submittal use.
+    pressure is carried. C is an input (company lock: C=100 for wet, dry and DI; no nitrogen
+    C-credit). No velocity pressure. SCREEN - verify with engineer of record for submittal use.
     """
     c = _require_positive("c", c)
     if not isinstance(branches, list) or not branches:
@@ -1280,8 +1280,8 @@ def bor_demand_pressure(q_gpm: Number, p_bor_psi: Number, c: Number = 100.0, seg
       caller-supplied; included per s28.2.4.8.1(1)). Segment dz_ft = rise in flow direction toward the BOR.
     dz_ft = extra elevation of BOR above pump discharge not carried in segments; +0.4333 psi/ft.
     friction_allow_psi = lump allowance (flagged; replace with segments for submittal).
-    C lock: dry / di (double-interlock) => C must be 100 (NFPA 13-2025 Table 28.2.4.8.1 practice lock);
-    wet: caller C (120 typical).
+    C lock (company): C=100 for wet, dry and DI; no nitrogen C-credit. Code enforces C=100 for dry / di;
+    wet C is caller-supplied and must be passed as 100 under the lock.
     p_discharge_req = p_bor + sum(pf) + 0.4333*sum(dz) + allowance;
     p_net_req = p_discharge_req - suction_residual_psi (net pump pressure at q, NFPA 20-2025 s6.2.1/s6.2.2 sense).
     Rated-pressure floor (only if qr_gpm given), using the NFPA 20-2025 s6.2.1/s6.2.2 envelope of pump_net_at_q:

@@ -70,25 +70,48 @@ class TrimAndReleaseTests(unittest.TestCase):
         self.assertEqual(table["row_count"], 32)
         self.assertEqual(table["solenoid_true_count"], 6)
         self.assertTrue(table["fm_no_cross_zone"])
-        self.assertIn("low_air", table["boolean"])
+        self.assertNotIn("low_air", table["boolean"])
+        self.assertEqual(table["boolean"], table["boolean_p"])
 
 
 class SecondLegLabelTests(unittest.TestCase):
     """The second DI leg is P, the pressure drop from sprinkler operation.
 
-    Low air is supervisory only and is never a release input. ``low_air`` stays
-    on each row only as a deprecated alias of ``p_second_leg``.
+    Low air is supervisory only and is never a release input. No output of the
+    truth table carries a ``low_air`` key or a ``low_air`` term in any string.
     """
 
     def setUp(self):
         self.table = di_zone.releasing_truth_table(manual_station=True, insurer="FM")
 
-    def test_p_second_leg_key_matches_deprecated_alias_on_every_row(self):
+    def test_no_row_carries_a_low_air_key_and_p_second_leg_is_on_every_row(self):
         self.assertEqual(self.table["row_count"], 32)
-        for row in self.table["rows"]:
-            self.assertIn("p_second_leg", row)
-            self.assertIn("low_air", row)
-            self.assertEqual(row["p_second_leg"], row["low_air"])
+        for name in ("rows", "rows_without_second_smoke"):
+            self.assertTrue(self.table[name])
+            for row in self.table[name]:
+                self.assertIn("p_second_leg", row)
+                self.assertNotIn("low_air", row)
+
+    def test_no_key_at_any_depth_and_no_string_names_low_air(self):
+        import json
+
+        def keys(node):
+            if isinstance(node, dict):
+                for key, value in node.items():
+                    yield str(key)
+                    yield from keys(value)
+            elif isinstance(node, list):
+                for item in node:
+                    yield from keys(item)
+
+        for key in keys(self.table):
+            self.assertNotIn("low_air", key.lower(), key)
+        for key in ("low_air_note", "deprecated"):
+            self.assertNotIn(key, self.table)
+        text = json.dumps(self.table)
+        self.assertNotIn("low_air", text.lower())
+        self.assertNotIn("AND low_air", text)
+        self.assertNotIn("low air", text.lower())
 
     def test_boolean_structure_and_counts_unchanged(self):
         self.assertEqual(self.table["solenoid_true_count"], 6)
@@ -113,23 +136,21 @@ class SecondLegLabelTests(unittest.TestCase):
         self.assertIn("psl-rel", text)
         self.assertIn("pa-rel", text)
 
-    def test_low_air_text_says_supervisory_and_not_a_release_input(self):
-        note = self.table["low_air_note"].lower()
-        self.assertIn("deprecated alias", note)
-        self.assertIn("p_second_leg", note)
-        self.assertIn("supervisory", note)
-        self.assertIn("never a release input", note)
-        self.assertIn("psl-sup", note)
+    def test_the_docstring_keeps_low_air_supervisory_and_names_no_alias(self):
+        doc = di_zone.releasing_truth_table.__doc__.lower()
+        self.assertIn("low air is supervisory only (psl-sup)", doc)
+        self.assertNotIn("low_air", doc)
+        self.assertNotIn("alias", doc)
 
     def test_no_new_text_names_low_air_as_a_release_input(self):
         import re
-        fields = [self.table["boolean_p"], self.table["second_leg"], self.table["low_air_note"],
+        fields = [self.table["boolean"], self.table["boolean_p"], self.table["second_leg"],
                   self.table["detection_leg"], self.table["second_smoke"], self.table["abort"]]
         for text in fields:
             for sentence in re.split(r"(?<=[.;])\s+", text):
                 low = sentence.lower()
                 if "low air" in low or "low_air" in low:
-                    self.assertTrue("supervisory" in low or "deprecated alias" in low, sentence)
+                    self.assertIn("supervisory", low, sentence)
                     self.assertNotRegex(low, r"and low[ _]air|low[ _]air (releases|opens|leg)", sentence)
         src = inspect.getsource(di_zone.releasing_truth_table).lower()
         self.assertNotIn("and low air", src)
@@ -145,12 +166,12 @@ class SecondLegLabelTests(unittest.TestCase):
                       "and is never a default (C&E skill footnote \u2079 election).", label)
         self.assertTrue(label.startswith("one detection zone, or a manual station in place of that zone"))
 
-    def test_legacy_boolean_string_kept_for_existing_consumers(self):
-        self.assertEqual(self.table["boolean"],
-                         "solenoid = (detection_leg OR manual_release) AND low_air AND NOT isolated")
-        self.assertIn("boolean", self.table["deprecated"])
-        self.assertIn("low_air", self.table["deprecated"])
-        self.assertIn("boolean_p", self.table["deprecated"]["boolean"])
+    def test_boolean_string_is_the_p_form_and_never_says_low_air(self):
+        expected = "solenoid = (detection_leg OR manual_release) AND p_second_leg AND NOT isolated"
+        self.assertEqual(self.table["boolean"], expected)
+        self.assertEqual(self.table["boolean"], self.table["boolean_p"])
+        self.assertNotIn("low_air", self.table["boolean"])
+        self.assertNotIn("deprecated", self.table)
 
 
 class ElectricElectricScopeTests(unittest.TestCase):
@@ -206,17 +227,13 @@ class ElectricElectricScopeTests(unittest.TestCase):
             self.table["boolean_p"],
             "solenoid = (detection_leg OR manual_release) AND p_second_leg AND NOT isolated",
         )
-        self.assertEqual(
-            self.table["boolean"],
-            "solenoid = (detection_leg OR manual_release) AND low_air AND NOT isolated",
-        )
+        self.assertEqual(self.table["boolean"], self.table["boolean_p"])
         self.assertEqual(self.table["row_count"], 32)
         self.assertEqual(self.table["solenoid_true_count"], 6)
-        keys = ("detection", "manual", "p_second_leg", "low_air", "isolated", "second_smoke", "solenoid")
+        keys = ("detection", "manual", "p_second_leg", "isolated", "second_smoke", "solenoid")
         fires = 0
         for row in self.table["rows"]:
             self.assertEqual(tuple(row), keys)
-            self.assertEqual(row["low_air"], row["p_second_leg"])
             det_leg = row["detection"] or row["manual"]
             expected = bool(det_leg and row["p_second_leg"] and not row["isolated"])
             self.assertEqual(row["solenoid"], expected)

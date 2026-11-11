@@ -85,9 +85,9 @@ These are corrections to the packaged copies of the content. The content team's 
 
 ## 6. The kernel's deprecated names
 
-`releasing_truth_table` still returns a `boolean` string and a `low_air` row key that spell the second leg the old way, beside `boolean_p` and `p_second_leg`. Only `app/fpfa/releasing.py` reads them, and nothing a model or a designer sees carries them; tests hold that.
+`releasing_truth_table` no longer returns a `low_air` row key, a `low_air_note` or a `deprecated` block. Its `boolean` string is kept and equals `boolean_p`, so it never names low air. Only `app/fpfa/releasing.py` still tolerates the old names, for a saved run or a pack from before the relabel; nothing a model or a designer sees carries them, and tests hold that.
 
-The reason once given for keeping them, that installed apps older than 0.2.0 read those names, no longer holds: a pack built from this tree asks for this app version or newer, so no older app will load it. They are kept for a different reason. `di_zone.py` has a copy on the content team's side, and removing the names here without removing them there would be undone by the next kernel sync or would split the two. Retiring them is a one-line change to make in both places together. It is listed for the owner in `docs/milestone-hardening-handback.md`.
+Two reasons were once given for keeping the old names: that installed apps older than 0.2.0 read them, and that `di_zone.py` has a copy on the content team's side. Neither holds. A pack built from this tree asks for this app version or newer, so no older app will load it. `di_zone.py` is pack-only and is not in the kernel reproduce set, so the change was made here alone.
 
 ## 7. How the statement is kept from drifting
 
