@@ -425,7 +425,7 @@ Do **not** emit: hall density×area transcript, hydrant P(Q) rebuild, pump namep
 | ≥4 in. / 250–500 gpm test drain | AXA XL **PRC.12.0.2** (2020) p.19 | Insurer feature → ITM handoff |
 | 500/250 demand shape; 1000 gpm light-hazard fully-sprinklered cap | Clarke/Schirmer 2006 secondary | `comparison-only` — DC ≠ light hazard |
 | 400 psi ceiling; 300 psi advocacy; FDC 2024 full-demand rumor | NFSA Hopkins 2026 secondary; code: 400 psi [CODE 2024 §10.2 / 2019 §7.2, pull 14-01], FDC [CODE 2024 §10.7, pull 14-01] | 300 psi advocacy stays secondary |
-| Hazen-Williams C for standpipe steel | UFGS §1.4.2 → **C = 120** steel (distinct from shop dry/DI **C = 100**) | Label both; do not conflate |
+| Hazen-Williams C for standpipe steel | UFGS §1.4.2 lists C = 120 for steel (comparison-only); design C = 100 for standpipe and sprinkler pipe | Design at 100; label 120 as comparison only |
 | Acceptance hydro ≥200 psi / 2 h; flush ≥10 min; flow ≥250 gpm / 5 min per riser | UFGS §3.7 / §3.8 | Template; reconcile to adopted NFPA 14 acceptance: 2024 Ch. 12 (hydro §12.4.1, flow §12.6) / 2019 Ch. 11 (hydro §11.4.1, flow §11.5), pull 14-02 |
 | Seattle manual-dry permission, 10–20 psi supervisory air, FDC/hydrant geometry, hydro, no flow test | Seattle FD **AR 9.03.25** (eff. 2025-09-25) §3.1 / §3.4 / §3.7 / §3.10 / §5.1 / §5.2; AR 9.03.20 (eff. 2020-03-01) superseded | **Seattle only** |
 | Packaged supervisory air: low < 7 psig / high > 23 psig; 15 SCFM @ 100 psig | UFS **STANDPIPE-PAC XL**, data sheet **UFS-213 Rev 1.01** (Dec 2021) | NYC/Boston construction & demolition — not a national or permanent-building rule |
