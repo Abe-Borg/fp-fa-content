@@ -21,6 +21,8 @@ Neither side is the master. Which one should be is your decision, and this page 
 
 Each of these is a correction to a packaged copy. If the live copy does not have it, a sync from live would undo it. The last column names the test that fails if it is lost; those tests are now run on every pull request (section 5).
 
+A read-only review on 2026-11-12 (`docs/app-content-handback.md`, sections 2 and 5) found that this section is incomplete. It leaves out the role additions of the team milestone (`3f6e07b`): the lead role, the "Working with the team" sections, and the QA role's kinds of cite. And some guards named below test behaviour, not the file's text, so they would not notice a lost sentence. This page has not been corrected yet; until it is, that page's manifest is the fuller list.
+
 ### 2a. From pull request #75 (`bc14eae`, 2026-11-10): the second release leg is P
 
 The second leg of the double-interlock release was written as low air in these files and now reads P, the pressure drop from sprinkler operation, with low air named as supervisory only.
