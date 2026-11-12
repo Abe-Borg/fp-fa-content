@@ -86,7 +86,7 @@ from fpfa.instance_lock import LOCK_NAME, ANOTHER_WINDOW_TEXT, InstanceLock, Ins
 from fpfa.jobs import KINDS as JOB_KINDS, JobInbox, label_result
 from fpfa.keystore import clear_api_key, key_status, key_storage_help, load_api_key, save_api_key
 from fpfa.managed import anthropic_request, reply_with_delete_status, run_heavy_job, session_system
-from fpfa.modes_loader import DEFAULT_MODE, MODE_SLUGS, list_modes, normalize_mode
+from fpfa.modes_loader import CHAT_MODE, normalize_mode
 from fpfa.paths import content_root, data_dir, is_content_pack, read_config, write_config
 from fpfa.projects import delete_project, list_projects, load_project, new_project, save_project
 from fpfa.checker import check_line, coverage, export_reason
@@ -369,7 +369,6 @@ def slash_help_text() -> str:
         "- /sample-di2 — load a second sample zone, on the size-exemption boundary, the same way\n"
         "- /sample-bess — load the sample Li-ion BESS room and run the explosion-control starter\n"
         "- /run — run the zone on the Inputs tab\n"
-        "- /mode — show the active mode. /mode brainstorm switches (also calculator, synthesis, mixed)\n"
         "- /new Job name — start a named job\n"
         "- /heavy task — text-only hosted reasoning on the zone packet already in the message. "
         "The reply comes back into this thread. It does not call read_role, read_skill, read_mode, "
@@ -390,24 +389,6 @@ def slash_help_text() -> str:
         "- A designer judgment the tools did not return is use best judgment. "
         "That label is not ASSUMED and it is not a calculated figure."
     )
-
-
-def describe_modes(root: Path, active: str) -> str:
-    """Active mode plus the descriptions stored on each MODE.md."""
-    slug = normalize_mode(active)
-    lines = [
-        f"Active mode: {slug}.",
-        "Mode files live in the content pack as modes/<slug>/MODE.md.",
-    ]
-    found = list_modes(root)
-    if not found:
-        lines.append("This content pack has no mode files.")
-    for item in found:
-        mark = " (active)" if item["slug"] == slug else ""
-        description = item["description"] or item["name"]
-        lines.append(f"- {item['slug']}: {description}{mark}")
-    lines.append("Usage: /mode brainstorm")
-    return "\n".join(lines)
 
 
 def unknown_slash_text(command: str) -> str:
@@ -753,7 +734,6 @@ class Desk:
         self.key_message = ""
         self.content_line = ""
         self.changelog = format_changelog(current_changelog())
-        self._mode_list: list[str] = []
         self._settings: dict | None = None
         self._assumption_cache: tuple[tuple[str, str], str] | None = None
         # Replies in flight. Workers put stream events on this queue; pump() reads it.
@@ -771,7 +751,6 @@ class Desk:
         self.content_status = Var(content_status_line(), touch)
         self.content_banner = Var("", touch)
         self.ask_claude = Var(False, touch)
-        self.mode_slug = Var(DEFAULT_MODE, touch)
         for name, value in _TEXT_FIELDS.items():
             setattr(self, name, Var(value, touch))
         for name, (value, _choices) in _CHOICE_FIELDS.items():
@@ -785,7 +764,6 @@ class Desk:
         self._load_key()
         self.status.set(self._key_status)
         self.ask_claude.set(self._key_saved)
-        self._apply_mode(DEFAULT_MODE)
         self.jobs = JobInbox(worker_count=2, on_change=self._on_jobs_changed)
         # The project record. Calc tools and record tools write to it by job id.
         try:
@@ -1214,12 +1192,7 @@ class Desk:
             self._typed.add("segments")
             self._form_loaded()
 
-    def _selected_mode(self) -> str:
-        return self.mode_slug.get() or DEFAULT_MODE
-
     def _write_form(self, project: dict) -> None:
-        # Selected mode is stored even when a later numeric field is invalid.
-        project["mode"] = self._selected_mode()
         project["basis"] = self.collect_basis()
         project["di"] = self.collect_di()
         project["chat"] = self.chat_log
@@ -1228,49 +1201,17 @@ class Desk:
             self._typed = set()
 
     def _capture_form(self, project: dict) -> str | None:
-        """Copy the form onto project. A bad number does not drop the chat or the mode."""
-        project["mode"] = self._selected_mode()
+        """Copy the form onto project. A bad number does not drop the chat."""
         try:
             self._write_form(project)
         except ValueError as exc:
             project["chat"] = self.chat_log
-            project["mode"] = self._selected_mode()
             return str(exc)
         return None
 
     def _save_form_or_chat(self, project: dict) -> str | None:
         """Write the form onto the project. A bad number does not drop the chat or the run."""
         return self._capture_form(project)
-
-    # Modes ----------------------------------------------------------------------
-
-    def _known_modes(self) -> list[str]:
-        try:
-            found = [item["slug"] for item in list_modes(content_root())]
-        except FileNotFoundError:
-            found = []
-        return found or list(MODE_SLUGS)
-
-    def _apply_mode(self, slug: str | None) -> None:
-        known = self._known_modes()
-        self._mode_list = known
-        chosen = normalize_mode(slug)
-        if chosen not in known:
-            chosen = DEFAULT_MODE if DEFAULT_MODE in known else known[0]
-        self.mode_slug.set(chosen)
-        self._touch()
-
-    def mode_choices(self) -> list[str]:
-        """Mode slugs listed on the Mode menu."""
-        return list(self._mode_list)
-
-    def set_mode(self, slug: str) -> None:
-        """The Mode menu. The choice is saved on the open job."""
-        if slug not in self._mode_list:
-            return
-        self.mode_slug.set(slug)
-        if self.project is not None:
-            self.project["mode"] = slug
 
     def set_narrate(self, on: bool) -> None:
         self.ask_claude.set(bool(on))
@@ -1313,7 +1254,6 @@ class Desk:
         self._opened_len = len(self.chat_log)
         self._render_chat()
         self._show_saved_run(project.get("last_run") or project.get("bess_run"))
-        self._apply_mode(project.get("mode"))
         self._open_record(project)
         self._post_recovery_note(project.get("id"))
         self._refresh_team()
@@ -1462,7 +1402,6 @@ class Desk:
             self._capture_form(self.project)
             save_project(self.project)
             project = new_project(name)
-            project["mode"] = self._selected_mode()
             save_project(project)
             self.refresh_projects(project["id"])
             self.open_project(project["id"])
@@ -1944,7 +1883,6 @@ class Desk:
         name, basis, di = sample_data.SAMPLE_ZONES.get(variant, sample_data.SAMPLE_ZONES["dh1"])
         project = new_project(name, copy.deepcopy(basis))
         project["di"] = copy.deepcopy(di)
-        project["mode"] = self._selected_mode()
         inputs.note_given(project, list(inputs.ZONE_FIELDS) + list(inputs.BASIS_FIELDS), inputs.SOURCE_SAMPLE)
         save_project(project)
         self.refresh_projects(project["id"])
@@ -1970,14 +1908,10 @@ class Desk:
             "Sample Li-ion BESS room",
             copy.deepcopy(sample_data.EXAMPLE_BESS_BASIS),
         )
-        project["mode"] = "synthesis"
         project["bess_inputs"] = copy.deepcopy(sample_data.EXAMPLE_BESS)
         save_project(project)
         self.refresh_projects(project["id"])
         self.open_project(project["id"])
-        self._apply_mode("synthesis")
-        if self.project is not None:
-            self.project["mode"] = "synthesis"
 
     def start_sample_bess(self, typed: str | None = None) -> None:
         """Load the generic BESS room and run the explosion-control starter."""
@@ -2025,7 +1959,7 @@ class Desk:
                 "This message uses the last saved zone. " + str(exc)
             )
         prior = [dict(turn) for turn in self.chat_log[:-1]]
-        mode = self.mode_slug.get()
+        mode = CHAT_MODE
         request_text = chat_request_text(
             prior,
             basis,
@@ -2126,33 +2060,8 @@ class Desk:
             self.show_usage(raw)
         elif command == "status":
             self.show_status(raw)
-        elif command == "mode":
-            self._slash_mode(raw, argument)
         else:
             self._local_exchange(raw, unknown_slash_text(command))
-
-    def _slash_mode(self, raw: str, argument: str) -> None:
-        argument = argument.strip().lower()
-        if not argument:
-            try:
-                reply = describe_modes(content_root(), self.mode_slug.get())
-            except FileNotFoundError as exc:
-                reply = str(exc)
-            self._local_exchange(raw, reply)
-            return
-        known = self._known_modes()
-        if argument not in known:
-            self._local_exchange(
-                raw,
-                f"No mode {argument}. Known modes: {', '.join(known) or '(none)'}.",
-            )
-            return
-        self._apply_mode(argument)
-        try:
-            reply = describe_modes(content_root(), argument)
-        except FileNotFoundError as exc:
-            reply = str(exc)
-        self._local_exchange(raw, reply)
 
     def run_zone(self, *, announce: bool = False, seed: str = "") -> None:
         if not self.project:
@@ -2167,7 +2076,6 @@ class Desk:
             return
         di = copy.deepcopy(self.project["di"])
         basis = copy.deepcopy(self.project["basis"])
-        mode = self.mode_slug.get()
         try:
             pack = content_root()
         except FileNotFoundError as exc:
@@ -2178,13 +2086,13 @@ class Desk:
         use_claude = bool(self.ask_claude.get()) and bool(key)
         if use_claude:
             self._enqueue_zone(
-                origin_id, project_name, pack, di, basis, mode, key, announce=announce, seed=seed
+                origin_id, project_name, pack, di, basis, key, announce=announce, seed=seed
             )
             return
-        self._run_zone_here(origin_id, project_name, pack, di, basis, mode, announce=announce, seed=seed)
+        self._run_zone_here(origin_id, project_name, pack, di, basis, announce=announce, seed=seed)
 
     def _run_zone_here(
-        self, origin_id, project_name, pack, di, basis, mode, *, announce: bool = False, seed: str = ""
+        self, origin_id, project_name, pack, di, basis, *, announce: bool = False, seed: str = ""
     ) -> None:
         """Tool plan with no model call. It finishes before the action returns."""
         job = self.jobs.record(
@@ -2199,7 +2107,7 @@ class Desk:
             self._remember_seed(job.id, seed)
         try:
             result = run_di_zone(
-                pack, di, basis, narrator=None, mode=mode, record=self.record, project_id=origin_id
+                pack, di, basis, narrator=None, record=self.record, project_id=origin_id
             )
         except Exception as exc:
             self.jobs.mark(job.id, "error", safe_error(exc))
@@ -2209,7 +2117,7 @@ class Desk:
         self._finish_run(origin_id, result, None, job_id=job.id)
 
     def _enqueue_zone(
-        self, origin_id, project_name, pack, di, basis, mode, key, *, announce: bool = False, seed: str = ""
+        self, origin_id, project_name, pack, di, basis, key, *, announce: bool = False, seed: str = ""
     ) -> None:
         """Queue a zone run that calls the model. The composer stays usable."""
 
@@ -2240,7 +2148,7 @@ class Desk:
 
             try:
                 result = run_di_zone(
-                    pack, di, basis, narrator=narrator, mode=mode, record=self.record, project_id=origin_id
+                    pack, di, basis, narrator=narrator, record=self.record, project_id=origin_id
                 )
                 error = None
                 if result.get("cancelled"):
@@ -2280,8 +2188,6 @@ class Desk:
             return
         origin_id = self.project["id"]
         project_name = self.project.get("name") or UNTITLED_JOB
-        self._apply_mode("synthesis")
-        self.project["mode"] = "synthesis"
         basis = dict(self.project.get("basis") or {})
         room = copy.deepcopy(self.project.get("bess_inputs") or sample_data.EXAMPLE_BESS)
         zone_result = self.project.get("last_run")
@@ -2413,7 +2319,6 @@ class Desk:
         if announce and still_here:
             self.chat_log.append(self._assistant_turn(message, job_id))
             self._render_chat()
-            self.project["mode"] = "synthesis"
             self._save_form_or_chat(self.project)
             save_project(self.project)
         elif announce and origin_id:
@@ -2439,7 +2344,6 @@ class Desk:
             if announce and still_here:
                 self.chat_log.append(self._assistant_turn(message, job_id))
                 self._render_chat()
-                self.project["mode"] = "synthesis"
                 self._save_form_or_chat(self.project)
                 save_project(self.project)
             elif announce:
@@ -2455,7 +2359,6 @@ class Desk:
         summary = self._with_job_label(job_id, self._with_seed(job_id, body)) if announce else ""
         if still_here:
             self.project["bess_run"] = result
-            self.project["mode"] = "synthesis"
             if summary:
                 self.chat_log.append(self._assistant_turn(summary, job_id))
                 self._render_chat()
@@ -2471,7 +2374,6 @@ class Desk:
                 self.status.set("The starter finished, and that project is no longer on this machine.")
                 return
             project["bess_run"] = result
-            project["mode"] = "synthesis"
             if summary:
                 chat = list(project.get("chat") or [])
                 chat.append(self._assistant_turn(summary, job_id))
@@ -3225,7 +3127,7 @@ class Desk:
                 "This message uses the last saved zone. " + str(exc)
             )
         prior = [dict(turn) for turn in self.chat_log[:-1]]
-        mode = self.mode_slug.get()
+        mode = CHAT_MODE
         # A run on inputs that have since changed does not govern anything. The lead is told so
         # in place of the note that would have repeated its figures.
         moved = inputs.changed_since(self.project.get("last_run"), di, basis)
@@ -3478,7 +3380,6 @@ class Desk:
         if result.status == "updated":
             self._set_content_banner(update_banner(result.version, result.changelog or []))
             self.content_status.set(version_line)
-            self._apply_mode(self.mode_slug.get())
         elif result.status in {"offline", "error", "rejected", "needs_app"} and not manual:
             self.content_status.set(f"{version_line} (still the last good pack)")
         else:
@@ -3526,7 +3427,6 @@ class Desk:
             self.content_line = f"Content pack: {resolved}"
         self._assumption_cache = None
         self._refresh_assumptions()
-        self._apply_mode(self.mode_slug.get())
         self._settings_changed()
 
     # Settings ------------------------------------------------------------------------
@@ -3684,7 +3584,6 @@ class Desk:
             "projects": self.project_rows,
             "open": open_job,
             "title": (open_job or {}).get("name") or "New chat",
-            "mode": {"slug": self.mode_slug.get(), "choices": self.mode_choices()},
             "narrate": bool(self.ask_claude.get()),
             "activity": self.activity_rows,
             "pending": self._pending_spec(),

@@ -66,14 +66,6 @@ export function Gear() {
   );
 }
 
-export function Chevron() {
-  return (
-    <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
-      <path d="M2 3.5l3 3 3-3" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
 export function Check() {
   return (
     <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
