@@ -16,7 +16,7 @@ class T(unittest.TestCase):
         self.assertTrue(r12["pass"])
 
     def test_ex66_16awg(self):
-        # QA-EX33-77 F-3: 16 AWG 4.99 gives drop 2.74 V, end 17.66 V. Inputs: 1.0 A? solve: L_both*4.99e-3*I = 2.74.
+        # 16 AWG 4.99 gives drop 2.74 V, end 17.66 V. Inputs: 1.0 A? solve: L_both*4.99e-3*I = 2.74.
         # Use I=1.10 A, one way 249.5 ft -> R=2.49 ohm, Vd=2.739 V, Veol=17.661 V.
         r = n.ell([1.10], 249.5, "16")
         self.assertAlmostEqual(r["Vd"], 2.739, places=2)

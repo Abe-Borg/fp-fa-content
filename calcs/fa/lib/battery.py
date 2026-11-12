@@ -4,7 +4,7 @@ Edition factors (NFPA 72 10.6.7; confirm the adopted edition):
 - 2019: 20 percent margin, factor 1.20 (10.6.7.2.1.1).
 - 2022 and 2025: aging factor 1.25 (10.6.7.2.14).
 - Durations: 24 h quiescent then 5 min alarm [CODE 2019 10.6.7.2.1; 2022/2025 10.6.7.2.1 and 10.6.7.2.2]. EVACS 15 min at max load [CODE 2019 10.6.7.2.1.2; 2025 10.6.7.2.4]. With a generator, 4 h batteries [CODE 10.6.7.3.1(2), all three].
-- Apply ONE factor only. Do not stack 1.25 on a maker aging factor (QA-EX33-77 F-2) [PRACTICE].
+- Apply ONE factor only. Do not stack 1.25 on a maker aging factor [PRACTICE].
 - Where adopted; AHJ to confirm the edition. Battery pick is next standard size up [PRACTICE].
 Formula: Ah_base = I_standby x H_standby + I_alarm x (min_alarm / 60). Ah_req = Ah_base x factor.
 """

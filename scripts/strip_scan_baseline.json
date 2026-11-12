@@ -1,0 +1,91 @@
+{
+  "note": "Reviewed baseline of tolerated names, by exact count per file. insurer-name is the data-sheet insurer cited in the skills; province-name is a provincial edition title of the national building code. Both await a ruling (Decision 8); this file records them so the scan can run in CI. It never covers calcs/. A count that moves, up or down, fails the scan until someone reviews it.",
+  "counts": {
+    "corpus/fp/standpipe-class-i.md": {
+      "province-name": 2
+    },
+    "skills/campus-looped-main-sizing/SKILL.md": {
+      "insurer-name": 47
+    },
+    "skills/commissioning-ist-acceptance-packet/SKILL.md": {
+      "insurer-name": 10
+    },
+    "skills/containment-ceiling-and-obstruction-coverage/SKILL.md": {
+      "insurer-name": 7
+    },
+    "skills/density-area-dry-increase/SKILL.md": {
+      "province-name": 2,
+      "insurer-name": 28
+    },
+    "skills/dry-preaction-water-delivery-screen/SKILL.md": {
+      "province-name": 1,
+      "insurer-name": 15
+    },
+    "skills/fa-fire-pump-and-preaction-supervisory-points/SKILL.md": {
+      "province-name": 8
+    },
+    "skills/fire-area-compartmentation-schedule/SKILL.md": {
+      "insurer-name": 24
+    },
+    "skills/fire-pump-controller-configuration-and-supervision/SKILL.md": {
+      "insurer-name": 2
+    },
+    "skills/freeze-heat-trace-fp-piping/SKILL.md": {
+      "insurer-name": 1
+    },
+    "skills/hydrant-supply-curve/SKILL.md": {
+      "province-name": 9,
+      "insurer-name": 33
+    },
+    "skills/itm-design-for-testability/SKILL.md": {
+      "insurer-name": 49
+    },
+    "skills/liquid-cooled-escaped-liquids-leak-detect/SKILL.md": {
+      "insurer-name": 7
+    },
+    "skills/most-stringent-basis-matrix/SKILL.md": {
+      "insurer-name": 27
+    },
+    "skills/multizone-preaction-zone-alignment/SKILL.md": {
+      "insurer-name": 10
+    },
+    "skills/mv-switchgear-room-package/SKILL.md": {
+      "insurer-name": 1
+    },
+    "skills/needed-fire-flow-method-election/SKILL.md": {
+      "insurer-name": 3
+    },
+    "skills/nitrogen-inerting-and-c-factor-gate/SKILL.md": {
+      "insurer-name": 23
+    },
+    "skills/occupancy-hazard-fork/SKILL.md": {
+      "insurer-name": 21
+    },
+    "skills/power-block-transformer-water-spray/SKILL.md": {
+      "insurer-name": 2
+    },
+    "skills/power-isolation-disconnect-control/SKILL.md": {
+      "insurer-name": 2
+    },
+    "skills/preaction-el-el-trim-election/SKILL.md": {
+      "insurer-name": 1
+    },
+    "skills/preaction-releasing-c-and-e-soo/SKILL.md": {
+      "insurer-name": 7
+    },
+    "skills/pump-envelope/SKILL.md": {
+      "insurer-name": 43
+    },
+    "skills/standpipe-class-i-election-and-demand/SKILL.md": {
+      "insurer-name": 7,
+      "province-name": 2
+    },
+    "skills/storage-staging-sprinkler-design/SKILL.md": {
+      "province-name": 1,
+      "insurer-name": 4
+    },
+    "skills/suppression-technology-selection/SKILL.md": {
+      "insurer-name": 4
+    }
+  }
+}
