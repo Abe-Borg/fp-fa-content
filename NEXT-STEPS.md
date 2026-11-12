@@ -434,7 +434,7 @@ Never run, on any version, by anyone. The report's PRE-01, PRE-04, FAIL-05, FAIL
 ### Offline, and can be done before either of the above
 
 - Two quick sends of the same message. The composer stays usable while a job runs and jobs queue, so a double Enter is two paid turns. The report did not test it (UX-02). Worth a scripted test to see what happens, then a decision on whether to guard it.
-- Python 3.12. The suites ran here on 3.13.18. CI (`tests.yml`) runs 3.12 and installs no Playwright, so the two browser tests do not run there.
+- Python 3.12. The suites ran here on 3.13.18. CI (`tests.yml`) runs 3.12 and installs no Playwright, so the browser tests do not run there.
 - The 13 skipped `calcs/fa` tests and the kernel reproduce check were skipped here too, and the 0.3.0 hand-back says they were skipped in every earlier run. They need material that is not in the repository.
 
 ### Not test gaps: features that do not exist
