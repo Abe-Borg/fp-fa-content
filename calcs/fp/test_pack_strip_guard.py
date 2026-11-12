@@ -7,6 +7,8 @@ What each guard covers:
   - the strip scan runs over every folder a pack ships, not only calcs/, and catches the
     QA-EX tag form as well as plain QA ids and batch tags;
   - the names the scan bans may stay only where a reviewed baseline records the exact count;
+  - a banned name or a tag in a directory or a file name is a finding on its own. The per-file
+    content baseline does not cover it, and the builder refuses the tree;
   - the builder stops on an out-of-scope slug and on a Canada-named path, so nothing is
     dropped without a message;
   - the held draft folder under calcs/fp is left out of the zip.
@@ -48,6 +50,7 @@ QA_EX = "QA" + "-EX33-77"
 QA_PLAIN = "q" + "a2"
 QA_DASH = "QA" + "-6"
 BATCH = "bat" + "ch 41"
+BATCH_DIR = "bat" + "ch12"
 ROUND_STD = "ROUND" + "-STANDARD"
 # The held-draft scan in test_draft_held.py flags literal draft paths, so these are built from pieces.
 DRAFT_DIR = "calcs/fp/" + "dr" + "aft"
@@ -145,6 +148,47 @@ class StripScanTests(unittest.TestCase):
         for rel in baseline["counts"]:
             self.assertFalse(rel.startswith("calcs/"), rel)
 
+    def test_banned_name_in_a_directory_component_is_a_finding(self):
+        scan = _scan()
+        word = _insurer_word()
+        cls = scan.name_class(word)
+        rel = f"skills/{word}/SKILL.md"
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write(root, rel, f"Sheet cites {word} once.\n")
+            # The in-file count matches the baseline. The directory hit must still be reported.
+            findings = scan.strip_findings(root, baseline={rel: {cls: 1}})
+        self.assertEqual(findings, [f"skills/{word} (directory name carries a banned name)"])
+
+    def test_banned_name_in_a_file_name_is_a_finding(self):
+        scan = _scan()
+        word = _insurer_word()
+        cls = scan.name_class(word)
+        rel = f"corpus/{word}.md"
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write(root, rel, f"Sheet cites {word} once.\n")
+            findings = scan.strip_findings(root, baseline={rel: {cls: 1}})
+        self.assertEqual(findings, [f"{rel} (file name carries a banned name)"])
+
+    def test_tag_in_a_file_name_is_a_finding(self):
+        scan = _scan()
+        rel = f"corpus/{QA_EX}.md"
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write(root, rel, "Clean line.\n")
+            findings = scan.strip_findings(root, baseline={})
+        self.assertEqual(findings, [f"{rel} (file name carries a QA tag)"])
+
+    def test_tag_in_a_directory_name_is_a_finding(self):
+        scan = _scan()
+        rel = f"skills/{BATCH_DIR}/SKILL.md"
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write(root, rel, "Clean line.\n")
+            findings = scan.strip_findings(root, baseline={})
+        self.assertEqual(findings, [f"skills/{BATCH_DIR} (directory name carries a batch or round tag)"])
+
     def test_scope_and_canada_names_in_a_path_are_findings(self):
         scan = _scan()
         with tempfile.TemporaryDirectory() as tmp:
@@ -220,6 +264,48 @@ class BuilderGuardTests(unittest.TestCase):
             result = _build(source, Path(tmp) / "out")
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("extra.md:1", result.stderr)
+
+    def test_banned_name_in_a_directory_fails_the_build(self):
+        word = _insurer_word()
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "src"
+            _mini_pack(source)
+            _write(source, f"skills/{word}/SKILL.md")
+            result = _build(source, Path(tmp) / "out")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(f"skills/{word} (directory name carries a banned name)", result.stderr)
+            self.assertFalse((Path(tmp) / "out" / "fp-fa-content-v9.9.9.zip").exists())
+
+    def test_banned_name_in_a_file_name_fails_the_build(self):
+        word = _insurer_word()
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "src"
+            _mini_pack(source)
+            _write(source, f"corpus/{word}.md")
+            result = _build(source, Path(tmp) / "out")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(f"corpus/{word}.md (file name carries a banned name)", result.stderr)
+            self.assertFalse((Path(tmp) / "out" / "fp-fa-content-v9.9.9.zip").exists())
+
+    def test_tag_in_a_file_name_fails_the_build(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "src"
+            _mini_pack(source)
+            _write(source, f"corpus/{QA_EX}.md")
+            result = _build(source, Path(tmp) / "out")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(f"corpus/{QA_EX}.md (file name carries a QA tag)", result.stderr)
+            self.assertFalse((Path(tmp) / "out" / "fp-fa-content-v9.9.9.zip").exists())
+
+    def test_tag_in_a_directory_name_fails_the_build(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "src"
+            _mini_pack(source)
+            _write(source, f"skills/{BATCH_DIR}/SKILL.md")
+            result = _build(source, Path(tmp) / "out")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(f"skills/{BATCH_DIR} (directory name carries a batch or round tag)", result.stderr)
+            self.assertFalse((Path(tmp) / "out" / "fp-fa-content-v9.9.9.zip").exists())
 
     def test_the_repository_builds_without_the_draft(self):
         with tempfile.TemporaryDirectory() as tmp:

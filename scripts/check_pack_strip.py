@@ -4,11 +4,13 @@
 The scan reads skills, calcs, corpus, specs, modes, and roles and reports:
 
   * job, client, and place names. The banned list is the one in calcs/fp/place_name_scan.py, whose
-    spellings are assembled at runtime. A name may stay only where scripts/strip_scan_baseline.json
-    records the exact count for that file. A new hit, a missing baseline entry, or a count that has
-    shrunk is reported, so the baseline cannot drift quietly;
+    spellings are assembled at runtime. Every relative path component is checked, directories and
+    file names alike, and a hit there is always reported. A name inside a file may stay only where
+    scripts/strip_scan_baseline.json records the exact count for that file. The baseline covers
+    in-file counts only. A new hit, a missing baseline entry, or a count that has shrunk is
+    reported, so the baseline cannot drift quietly;
   * QA ids in any spelling, including those with letters between the dash and the digits, and batch
-    or round-standard tags;
+    or round-standard tags, in file text and in every path component;
   * a path component that names clean-agent or foam content, and a path component named canada or
     canadian, which the pack builder would otherwise drop without a message.
 
@@ -23,7 +25,7 @@ import hashlib
 import json
 import re
 import sys
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 REPO = Path(__file__).resolve().parents[1]
 SHIPPED_TOPS = ("skills", "calcs", "corpus", "specs", "modes", "roles")
@@ -94,16 +96,40 @@ def path_findings(root: Path) -> list[str]:
     return found
 
 
+def _component_findings(rel: str, banned: re.Pattern[str]) -> list[str]:
+    """Banned names and tags in each component of a pack-relative path.
+
+    A hit names the path through that component and the kind of hit. These are not in-file
+    counts, so the baseline never covers them.
+    """
+    found: list[str] = []
+    parts = PurePosixPath(rel).parts
+    last = len(parts) - 1
+    for index, part in enumerate(parts):
+        shown = "/".join(parts[: index + 1])
+        where = "file name" if index == last else "directory name"
+        if banned.search(part):
+            found.append(f"{shown} ({where} carries a banned name)")
+        for label, pattern in _TAG_PATTERNS:
+            if pattern.search(part):
+                found.append(f"{shown} ({where} carries a {label})")
+    return found
+
+
 def strip_findings(root: Path, baseline: dict | None = None) -> list[str]:
-    """Findings for the tree under root. baseline maps a path to {class: exact count}."""
+    """Findings for the tree under root. baseline maps a file to {class: exact in-file count}."""
     root = Path(root)
     expected = load_baseline() if baseline is None else baseline
     banned = banned_pattern()
     found: list[str] = []
+    noted: set[str] = set()
     seen: dict[str, dict[str, int]] = {}
     for path, rel in _pack_files(root):
-        if banned.search(path.name):
-            found.append(f"{rel} (file name carries a banned name)")
+        # Path hits go straight to the report. The baseline counts text inside a file only.
+        for line in _component_findings(rel, banned):
+            if line not in noted:
+                noted.add(line)
+                found.append(line)
         if path.suffix.lower() not in _TEXT_SUFFIXES:
             continue
         text = path.read_text(encoding="utf-8", errors="replace")
