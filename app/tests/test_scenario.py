@@ -298,7 +298,7 @@ class ScenarioTests(unittest.TestCase):
         # Inputs, with who supplied each.
         self.assertIn("q_fill_gpm | 750 gpm | GIVEN | designer, in chat: the pump test at the riser", text)
         self.assertIn("trim_gal | 6.5 gal | GIVEN | designer, in chat: answered on the Team panel", text)
-        self.assertIn("t_release_s | 2 s | GIVEN | sample data", text)
+        self.assertIn("t_release_s | 2 s | GIVEN | SAMPLE data", text)
         # Findings by tier. The 500 gal cite was read in the content pack's own note.
         tiers = {row["tier"]: row["count"] for row in self.s.after["two"]["team"]["tiers"]}
         # The two findings with a figure are in the first group. The trim-family finding states no figure the

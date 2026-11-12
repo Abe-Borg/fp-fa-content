@@ -212,10 +212,10 @@ class SizeExemptionTests(unittest.TestCase):
         self.assertAlmostEqual(row["outputs"]["exemption_volume_gal"], volume["zone_gal"], places=9)
         self.assertEqual(row["inputs"]["zone_gal"], volume["zone_gal"])
         # The narrative, the tile, the Design Basis, and the Section export all say no.
-        self.assertIn("NFPA size exemption on the zone total of 505.5 gal against the 500 gal cap: no.", run["narrative"])
+        self.assertIn("NFPA size exemption on the zone total of 505.5 gal against the 500 gal exemption threshold (NFPA 13-2025 §8.3.2.3.1.1): no.", run["narrative"])
         tile = {item["key"]: item for item in zone_figures(run["tools"])}["size_exemption"]
         self.assertEqual(tile["value"], "no")
-        self.assertIn("Zone total of 505.5 gal against the 500 gal cap.", tile["lines"])
+        self.assertIn("Zone total of 505.5 gal against the 500 gal exemption threshold (NFPA 13-2025 §8.3.2.3.1.1).", tile["lines"])
         line = key_figures("dry_delivery_screen", row["inputs"], row["outputs"])
         self.assertIn("size exemption on the zone total of 505.5 gal: no", line)
         self.assertNotIn("exemption yes", line)
@@ -246,14 +246,14 @@ class SizeExemptionTests(unittest.TestCase):
         from fpfa.workflow import run_di_zone
 
         run = run_di_zone(REPO, di, basis)
-        said = ("NFPA size exemption on the zone total of 281.3 gal against the 500 gal cap: yes. That zone total includes "
+        said = ("NFPA size exemption on the zone total of 281.3 gal against the 500 gal exemption threshold (NFPA 13-2025 §8.3.2.3.1.1): yes. That zone total includes "
                 "trim that is ASSUMED, so the answer holds only while the measured trim and fittings keep the zone total "
-                "at or under the cap.")
+                "at or under the threshold.")
         self.assertIn(said, run["narrative"])
         tile = {item["key"]: item for item in zone_figures(run["tools"])}["size_exemption"]
         self.assertEqual(tile["value"], "yes")
         self.assertIn("That zone total includes trim that is ASSUMED, so the answer holds only while the measured trim and "
-                      "fittings keep the zone total at or under the cap.", tile["lines"])
+                      "fittings keep the zone total at or under the threshold.", tile["lines"])
 
     def test_a_pipe_only_screen_never_says_the_exemption_is_met(self):
         from fpfa.calc_tools import ToolSession
@@ -335,7 +335,8 @@ class SizeExemptionTests(unittest.TestCase):
         session = ToolSession(REPO, record=record, project_id="job1", agent="fp-sprinkler")
         takeoff = session.execute("zone_trapped_volume", {"segments": di["segments"], "fittings_percent": 0, "trim_gal": 5.0})
         self.assertTrue(500.0 < takeoff["zone_gal"] < 500.5, takeoff["zone_gal"])
-        times = {"q_fill_gpm": 1500, "t_detect_s": 8, "t_release_s": 2, "t_exhaust_s": 0, "basis": "FM"}
+        times = {"q_fill_gpm": 1500, "t_detect_s": 8, "t_release_s": 2, "t_exhaust_s": 0, "basis": "FM",
+                 "system_type": "di"}
         exact = session.execute("di_trip_to_water", {"v_gal": takeoff["zone_gal"], **times})
         self.assertNotIn("figure_taken_from_the_record", exact)
         rounded = session.execute("di_trip_to_water", {"v_gal": 500, **times})
@@ -999,8 +1000,9 @@ class BlankInputHoldTests(unittest.TestCase):
         from fpfa.sample_data import EXAMPLE_DI
         from fpfa.workflow import run_tool_plan, validate_di
 
-        for name, label in (("t_detect_s", "Detection time is blank."), ("t_release_s", "Releasing time is blank."),
-                            ("t_exhaust_s", "Exhaust time is blank."), ("delivery_basis", "Time basis is blank."),
+        # A blank detection, releasing, or exhaust time no longer holds the run (PR-C): the delivery rows are then
+        # the fill time alone, with no pass or fail, and nothing puts a 0 in its place (test_pr_c.SubTimeTests).
+        for name, label in (("delivery_basis", "Time basis is blank."),
                             ("hazard", "Hazard is blank."), ("supervised", "Supervised waterflow is blank."),
                             ("system_type", "System is blank."), ("length_basis", "Lengths is blank."),
                             ("manual_station", "Manual station is blank."), ("qod", "Quick-opening device is blank.")):
@@ -1010,11 +1012,17 @@ class BlankInputHoldTests(unittest.TestCase):
                 validate_di(di)
             self.assertIn(label, str(caught.exception))
         di = _copy.deepcopy(EXAMPLE_DI)
-        di.update(t_detect_s=None, delivery_basis="")
+        di.update(hazard=None, delivery_basis="")
         with self.assertRaises(ValueError) as caught:
             run_tool_plan(ToolSession(REPO), di, {"insurer": "FM"})
-        self.assertIn("Detection time is blank.", str(caught.exception))
+        self.assertIn("Hazard is blank.", str(caught.exception))
         self.assertIn("Time basis is blank.", str(caught.exception))
+        # A blank time is left out of the call, never sent as 0.
+        di = _copy.deepcopy(EXAMPLE_DI)
+        di.update(t_detect_s=None)
+        tools, sent = run_tool_plan(ToolSession(REPO), di, {"insurer": "FM"})
+        self.assertNotIn("t_detect_s", sent["di_trip_to_water"])
+        self.assertTrue(tools["di_trip_to_water"]["fill_only"])
         # A typed 0 runs as 0. The trim medium and the prime holder may be blank: the kernel says no election.
         di = _copy.deepcopy(EXAMPLE_DI)
         di.update(t_detect_s=0, medium=None, prime_held_by=None)
@@ -1035,24 +1043,34 @@ class BlankInputHoldTests(unittest.TestCase):
         truth = ToolSession(REPO).execute("releasing_truth_table", {"manual_station": True})
         self.assertEqual(truth["insurer"], "")
 
-    def test_the_delivery_tools_refuse_a_time_or_a_basis_left_out(self):
-        from fpfa.calc_tools import SCHEMAS, ToolSession
+    def test_the_delivery_tools_refuse_a_basis_or_a_system_left_out_and_take_no_time_as_0(self):
+        from fpfa.calc_tools import FILL_ONLY, SCHEMAS, ToolSession
 
         session = ToolSession(REPO)
-        full = {"v_gal": 281.3, "q_fill_gpm": 600, "t_detect_s": 8, "t_release_s": 2, "t_exhaust_s": 0, "basis": "FM"}
-        for left_out in ("t_detect_s", "t_release_s", "t_exhaust_s", "basis"):
+        full = {"v_gal": 281.3, "q_fill_gpm": 600, "t_detect_s": 8, "t_release_s": 2, "t_exhaust_s": 0, "basis": "FM",
+                "system_type": "di"}
+        for left_out in ("basis", "system_type"):
             args = {key: value for key, value in full.items() if key != left_out}
             with self.assertRaises(ValueError, msg=left_out) as caught:
                 session.execute("di_trip_to_water", args)
             self.assertIn(f"di_trip_to_water needs {left_out}.", str(caught.exception))
             with self.assertRaises(ValueError):
                 session.execute("di_trip_to_water", dict(full, **{left_out: ""}))
+        # A time left out, or blank, is not 0: the row is the fill time alone, with no pass or fail.
+        for left_out in ("t_detect_s", "t_release_s", "t_exhaust_s"):
+            for args in ({key: value for key, value in full.items() if key != left_out}, dict(full, **{left_out: ""})):
+                row = session.execute("di_trip_to_water", args)
+                self.assertEqual(row["screen_status"], FILL_ONLY, left_out)
+                self.assertNotIn("t_total_s", row)
+                self.assertNotIn("passes_screen", row)
         self.assertEqual(session.execute("di_trip_to_water", dict(full, t_exhaust_s=0))["t_total_s"],
                          session.execute("di_trip_to_water", full)["t_total_s"])
         for name in ("dry_delivery_screen", "di_trip_to_water"):
             required = next(item for item in SCHEMAS if item["name"] == name)["input_schema"]["required"]
-            for key in ("t_detect_s", "t_release_s", "t_exhaust_s", "basis"):
+            for key in ("basis", "system_type", "q_fill_gpm"):
                 self.assertIn(key, required, (name, key))
+            for key in ("t_detect_s", "t_release_s", "t_exhaust_s"):
+                self.assertNotIn(key, required, (name, key))
         with self.assertRaises(ValueError):
             session.execute("hose_duration", {"hazard": "", "supervised": True})
 
@@ -1142,7 +1160,7 @@ class SecondJobTests(unittest.TestCase):
             self.assertEqual(desk.project["name"], "Second sample DI zone (size-exemption boundary)")
             thread = desk.thread_text()
             self.assertIn("Sample loaded: data-hall double-interlock zone DH-2", thread)
-            self.assertIn("NFPA size exemption on the zone total of 505.5 gal against the 500 gal cap: no.", thread)
+            self.assertIn("NFPA size exemption on the zone total of 505.5 gal against the 500 gal exemption threshold (NFPA 13-2025 §8.3.2.3.1.1): no.", thread)
             self.assertIn("6.6 gal trim (entered on the form, not assumed)", thread)
         finally:
             loop.destroy()

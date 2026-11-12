@@ -196,8 +196,22 @@ def _number(value: Any) -> float:
     return number
 
 
-def convert(value: Any, from_unit: Any, to_unit: Any) -> dict:
-    """value in from_unit, given in to_unit, by the exact definitions. The convert_units tool's result."""
+# The pressure fields a gas-law fill rate reads: there gauge and absolute give different answers, so an SI pressure
+# written without a gauge mark is refused, never assumed gauge.
+GAS_LAW_FIELDS = ("p_psig", "supervisory_psig")
+# SI pressures as written with no gauge mark (kPa, bar, MPa, Pa). kPa(g), kpag, barg, and bar(g) are marked.
+_UNMARKED_SI_PRESSURE = frozenset({"kpa", "bar", "mpa", "pa"})
+ASSUMED_GAUGE = ("ASSUMED gauge: the pressure was written without a gauge mark (g) or an absolute mark (a), and is "
+                 "taken as gauge for this sprinkler-pressure field")
+
+
+def convert(value: Any, from_unit: Any, to_unit: Any, field: Any = None) -> dict:
+    """value in from_unit, given in to_unit, by the exact definitions. The convert_units tool's result.
+
+    An SI pressure written with no gauge mark and converted to a US pressure
+    needs the field it is for: a gas-law field (GAS_LAW_FIELDS) refuses it,
+    and any other field takes it as ASSUMED gauge, said on the result.
+    """
     number = _number(value)
     source, target = unit(from_unit), unit(to_unit)
     if source.dimension != target.dimension:
@@ -205,9 +219,25 @@ def convert(value: Any, from_unit: Any, to_unit: Any) -> dict:
             f"{source.display} is {kind(source.dimension)} and {target.display} is {kind(target.dimension)}. "
             "They do not convert into each other."
         )
+    assumed_gauge = False
+    if source.dimension == "pressure" and source.si and not target.si \
+            and _normal(str(from_unit)) in _UNMARKED_SI_PRESSURE:
+        name = str(field or "").strip()
+        if not name:
+            raise UnitError(
+                f"{from_unit!r} does not say gauge or absolute. Name the field the pressure is for (field), or write "
+                f"it as gauge (kPa(g), barg). A gas-law field ({', '.join(GAS_LAW_FIELDS)}) refuses an unmarked "
+                "pressure; a sprinkler-pressure field takes it as ASSUMED gauge."
+            )
+        if name in GAS_LAW_FIELDS:
+            raise UnitError(
+                f"{name} is a gas-law field: gauge and absolute give different fill rates. {from_unit!r} does not "
+                "say which, so it is refused. Write it as gauge (kPa(g), barg); an absolute pressure is not converted."
+            )
+        assumed_gauge = True
     factor = source.factor / target.factor
     result = number * factor
-    return {
+    out = {
         "formula": "result = value × factor, by the exact unit definitions",
         "given": {"value": number, "unit": source.display},
         "result": {"value": result, "unit": target.display},
@@ -216,6 +246,11 @@ def convert(value: Any, from_unit: Any, to_unit: Any) -> dict:
         "basis": _BASIS[source.dimension],
         "note": NOTE,
     }
+    if assumed_gauge:
+        out["label"] = "ASSUMED"
+        out["pressure_basis"] = ASSUMED_GAUGE
+        out["field"] = str(field).strip()
+    return out
 
 
 def split(text: Any) -> tuple[float, str] | None:

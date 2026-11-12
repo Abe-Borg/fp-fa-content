@@ -327,6 +327,7 @@ class CallBasisTests(unittest.TestCase):
         zone_gal = next(row["outputs"]["zone_gal"] for row in record.calcs("job1") if row["tool"] == "zone_trapped_volume")
         shown = session.execute("di_trip_to_water", {
             "v_gal": zone_gal, "q_fill_gpm": 750, "t_detect_s": 8, "t_release_s": 2, "t_exhaust_s": 0, "basis": "FM",
+            "system_type": "di",
         })
         self.assertIn("differs_from_project_inputs", shown)
         self.assertIn("q_fill_gpm 750 where the project input q_fill_gpm is 600", shown["differs_from_project_inputs"])
@@ -338,6 +339,7 @@ class CallBasisTests(unittest.TestCase):
         # The same call on the project's own values says nothing.
         same = session.execute("di_trip_to_water", {
             "v_gal": zone_gal, "q_fill_gpm": 600, "t_detect_s": 8, "t_release_s": 2, "t_exhaust_s": 0, "basis": "FM",
+            "system_type": "di",
         })
         self.assertNotIn("differs_from_project_inputs", same)
 
@@ -361,7 +363,8 @@ class CallBasisTests(unittest.TestCase):
         self.assertIn(own, takeoff["differs_from_project_inputs"])
         self.assertGreater(takeoff["zone_gal"], design["outputs"]["zone_gal"])
         # The trip time uses the project's own fill flow and times. Only its gallons belong to another case.
-        common = {"q_fill_gpm": 600, "t_detect_s": 8, "t_release_s": 2, "t_exhaust_s": 0, "basis": "FM"}
+        common = {"q_fill_gpm": 600, "t_detect_s": 8, "t_release_s": 2, "t_exhaust_s": 0, "basis": "FM",
+                  "system_type": "di"}
         trip = session.execute("di_trip_to_water", dict(common, v_gal=takeoff["zone_gal"]))
         carried = f"a figure from zone_trapped_volume [{takeoff['record_id']}], which ran on {own}"
         self.assertEqual(
@@ -412,7 +415,9 @@ class CallBasisTests(unittest.TestCase):
         self.assertIn("fittings_percent 0 where the project input fittings_percent is blank",
                       twin["differs_from_project_inputs"])
         self.assertEqual(twin["zone_gal"], design["outputs"]["zone_gal"])
-        common = {"q_fill_gpm": 600, "t_detect_s": 8, "t_release_s": 2, "t_exhaust_s": 0, "basis": "FM"}
+        # The job's own edition, as the tool plan passes it, so the call is the plan's own (PR-C).
+        common = {"q_fill_gpm": 600, "t_detect_s": 8, "t_release_s": 2, "t_exhaust_s": 0, "basis": "FM",
+                  "system_type": "di", "edition": "2025"}
         trip = session.execute("di_trip_to_water", dict(common, v_gal=design["outputs"]["zone_gal"]))
         self.assertNotIn("differs_from_project_inputs", trip)
         row = record.calc("job1", trip["record_id"])
@@ -443,13 +448,15 @@ class CallBasisTests(unittest.TestCase):
         # The project says supervised waterflow. Leaving it out runs the tool's own default, unsupervised.
         shown = session.execute("hose_duration", {"hazard": "ordinary"})
         self.assertIn("supervised False where the project input supervised is True", shown["differs_from_project_inputs"])
-        # The detection time is 8 s on the project. A call that leaves a time or the basis out is refused, naming
-        # them: no 0 and no FM is put in their place.
+        # The detection time is 8 s on the project. A call that leaves the basis or the system type out is refused,
+        # naming them: no FM and no "di" is put in their place. A time left out is not taken as 0 either: the row is
+        # then the fill time alone (test_pr_c).
         with self.assertRaises(ValueError) as caught:
             session.execute("di_trip_to_water", {"v_gal": 281.3, "q_fill_gpm": 600})
-        self.assertIn("di_trip_to_water needs t_detect_s, t_release_s, t_exhaust_s, basis.", str(caught.exception))
+        self.assertIn("di_trip_to_water needs basis, system_type.", str(caught.exception))
         shown = session.execute("di_trip_to_water", {"v_gal": 281.3, "q_fill_gpm": 600, "t_detect_s": 0,
-                                                     "t_release_s": 2, "t_exhaust_s": 0, "basis": "FM"})
+                                                     "t_release_s": 2, "t_exhaust_s": 0, "basis": "FM",
+                                                     "system_type": "di"})
         note = shown["differs_from_project_inputs"]
         self.assertIn("t_detect_s 0 where the project input t_detect_s is 8", note)
         self.assertIn("v_gal 281.3: no zone_trapped_volume result is on the record", note)
@@ -465,7 +472,8 @@ class CallBasisTests(unittest.TestCase):
                                                      "t_detect_s": inputs.encode("t_detect_s", 8)})
         session = ToolSession(REPO, record=record, project_id="job1", agent="fp-sprinkler")
         shown = session.execute("di_trip_to_water", {"v_gal": 281.3, "q_fill_gpm": 600, "t_detect_s": 8,
-                                                     "t_release_s": 2, "t_exhaust_s": 0, "basis": "FM"})
+                                                     "t_release_s": 2, "t_exhaust_s": 0, "basis": "FM",
+                                                     "system_type": "di"})
         self.assertIn("basis FM where the project input delivery_basis is", shown["differs_from_project_inputs"])
         row = record.calc("job1", shown["record_id"])
         self.assertEqual(row["varies"]["basis"]["project"], None)
@@ -488,7 +496,8 @@ class CallBasisTests(unittest.TestCase):
         _run_plan(record, di, basis)
         volume = next(row for row in record.calcs("job1") if row["tool"] == "zone_trapped_volume")
         session = ToolSession(REPO, record=record, project_id="job1", agent="fp-sprinkler")
-        common = {"q_fill_gpm": 600, "t_detect_s": 8, "t_release_s": 2, "t_exhaust_s": 0, "basis": "FM"}
+        common = {"q_fill_gpm": 600, "t_detect_s": 8, "t_release_s": 2, "t_exhaust_s": 0, "basis": "FM",
+                  "system_type": "di"}
         rounded = session.execute("di_trip_to_water", dict(common, v_gal=281.3))
         self.assertNotIn("differs_from_project_inputs", rounded)
         self.assertIn(volume["id"], record.calc("job1", rounded["record_id"])["depends"])
@@ -708,8 +717,10 @@ class StalenessTests(unittest.TestCase):
         self.assertEqual(analysis["evidence"][cite["id"]]["reasons"],
                          ["basis/nfpa_13 was emptied on the form; it was 2025; the job states no edition for this cite now"])
         self.assertEqual(analysis["findings"][on_cite["id"]]["state"], "stale")
-        # The calcs follow the zone inputs, and none of those moved.
-        self.assertEqual(analysis["stale"]["calcs"], [])
+        # The calcs follow the zone inputs, and none of those moved. The delivery rows follow the job's NFPA 13
+        # edition too (PR-C), so emptying it puts them, and only them, out of date.
+        calcs = {row["id"]: row["tool"] for row in record.calcs("job1")}
+        self.assertEqual({calcs[ident] for ident in analysis["stale"]["calcs"]}, {"dry_delivery_screen", "di_trip_to_water"})
         # The status names both changes while something current still rests on the old values.
         digest = status.build(snapshot)
         self.assertEqual({item["key"] for item in digest["changes"]}, {"ahj", "nfpa_13"})
@@ -797,7 +808,7 @@ class StalenessTests(unittest.TestCase):
         # plan's row: the rounded volume is run as the takeoff's figure, so the call replays.
         loose = fp.execute("nitrogen_gate", {"v_gal": 281.3, "p_psig": 40, "t_min": 20})
         self.assertNotIn(loose["record_id"], {row["id"] for row in record.calcs("job1") if row["agent"] == "tool-plan"})
-        screen = fp.execute("di_trip_to_water", {"v_gal": 281.3, "q_fill_gpm": 600, "t_detect_s": 8, "t_release_s": 2, "t_exhaust_s": 0, "basis": "FM"})
+        screen = fp.execute("di_trip_to_water", {"v_gal": 281.3, "q_fill_gpm": 600, "t_detect_s": 8, "t_release_s": 2, "t_exhaust_s": 0, "basis": "FM", "system_type": "di"})
         used = fp.execute("record_evidence", {"document": "NFPA 13", "edition": "2025", "section": "8.3.2.3.1.1"})
         unused = fp.execute("record_evidence", {"document": "NFPA 13", "edition": "2025", "section": "8.3.2.3.2"})
         finding = fp.execute("record_finding", {"text": "The FM screen misses.", "label": "calculated", "supports": [screen["record_id"]]})
@@ -825,7 +836,7 @@ class StalenessTests(unittest.TestCase):
 
         # Bring it up to date: run the zone again, replace the two findings on fresh rows.
         _run_plan(record, dict(di, q_fill_gpm=750, supervisory_psig=30), dict(basis, nfpa_13="2022"))
-        again = fp.execute("di_trip_to_water", {"v_gal": 281.3, "q_fill_gpm": 750, "t_detect_s": 8, "t_release_s": 2, "t_exhaust_s": 0, "basis": "FM"})
+        again = fp.execute("di_trip_to_water", {"v_gal": 281.3, "q_fill_gpm": 750, "t_detect_s": 8, "t_release_s": 2, "t_exhaust_s": 0, "basis": "FM", "system_type": "di"})
         fp.execute("record_finding", {"text": "The FM screen still misses.", "label": "calculated",
                                       "supports": [again["record_id"]], "replaces": finding["id"]})
         newer = fp.execute("record_evidence", {"document": "NFPA 13", "edition": "2022", "section": "8.3.2.3.1.1"})
@@ -915,7 +926,7 @@ class DeskInputTests(unittest.TestCase):
         project_id = desk.project["id"]
         rows = {row["key"]: row for row in desk.record.facts(project_id, inputs.INPUT_KIND)}
         self.assertEqual(set(rows), set(inputs.ZONE_FIELDS))
-        self.assertEqual({row["source"] for row in rows.values()}, {"sample data"})
+        self.assertEqual({row["source"] for row in rows.values()}, {"SAMPLE data"})
         self.assertEqual(inputs.decode(rows["q_fill_gpm"]["value"]), 600.0)
         analysis = analyze(desk.record.snapshot(project_id))
         self.assertEqual({item["state"] for item in analysis["calcs"].values()}, {"current"})
@@ -995,11 +1006,12 @@ class DeskInputTests(unittest.TestCase):
         from fpfa.checker import coverage
 
         self.assertTrue(any(gap.startswith("hose_gpm ASSUMED:") for gap in coverage(snapshot)["gaps"]))
-        # Typing a value, even the hint's own, makes it the designer's: GIVEN, and its ASSUMED line goes.
+        # Typing a value, even the hint's own, makes it the designer's: GIVEN, and its ASSUMED line goes. The source
+        # says it was typed from the form's hint (PR-C).
         desk.patch_form({"hose": "250"})
         desk.save_current()
         rows = desk.record.givens(project_id)
-        self.assertEqual((rows["hose_gpm"]["label"], rows["hose_gpm"]["source"]), ("GIVEN", "zone form"))
+        self.assertEqual((rows["hose_gpm"]["label"], rows["hose_gpm"]["source"]), ("GIVEN", "typed from form hint"))
         self.assertNotIn("hose", desk.snapshot()["form"]["assumed"])
         digest = status.build(desk.record.snapshot(project_id))
         self.assertFalse(any(line.startswith("hose_gpm ASSUMED") for line in digest["assumed"]))
@@ -1243,7 +1255,7 @@ class BasisStartingValueTests(unittest.TestCase):
         self.assertIn(inputs.UNCONFIRMED_MARK, _STARTING_SOURCE)
         self.assertEqual(inputs.source_text(inputs.SOURCE_DESIGNER, "nfpa_13"), "job form")
         self.assertEqual(inputs.source_text(inputs.SOURCE_CHAT, "nfpa_13"), "designer, in chat")
-        self.assertEqual(inputs.source_text(inputs.SOURCE_SAMPLE, "nfpa_13"), "sample data")
+        self.assertEqual(inputs.source_text(inputs.SOURCE_SAMPLE, "nfpa_13"), "SAMPLE data")
         # The zone form's words are unchanged.
         self.assertEqual(inputs.source_text(inputs.SOURCE_DESIGNER), "zone form")
         self.assertEqual(inputs.source_text(inputs.SOURCE_DEFAULT, "q_fill_gpm"),
@@ -1314,7 +1326,8 @@ class BasisStartingValueTests(unittest.TestCase):
         desk.patch_form({"nfpa_13": "2025"})
         desk.save_current()
         row = desk.record.givens(project_id)["nfpa_13"]
-        self.assertEqual((row["value"], row["source"], row["agent"], row["label"]), ("2025", "job form", "job form", "CODE"))
+        self.assertEqual((row["value"], row["source"], row["agent"], row["label"]),
+                         ("2025", "typed from form hint", "job form", "CODE"))
         # Emptying it leaves it blank: no starting value comes back, and the HOLD returns.
         desk.patch_form({"nfpa_13": ""})
         desk.save_current()
@@ -1485,7 +1498,7 @@ class BasisStartingValueTests(unittest.TestCase):
         desk = self._desk()
         desk._open_bess_project()
         rows = desk.record.givens(desk.project["id"])
-        self.assertEqual({rows[name]["source"] for name in ("nfpa_13", "nfpa_72", "insurer")}, {"sample data"})
+        self.assertEqual({rows[name]["source"] for name in ("nfpa_13", "nfpa_72", "insurer")}, {"SAMPLE data"})
 
 
 if __name__ == "__main__":

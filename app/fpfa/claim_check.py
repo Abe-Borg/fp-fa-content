@@ -599,7 +599,7 @@ def _claims_from_result(result: dict) -> list[dict]:
     narrative = governing_narrative(str((result or {}).get("narrative") or ""))
     tools = result.get("tools") if isinstance(result.get("tools"), dict) else {}
     sections = _tool_sections(tools)
-    figures = _package_figures(tools)
+    named = named_outputs(result)
     cites = _package_cites(tools)
     rows: list[dict] = []
     seen: set[tuple[str, str, str]] = set()
@@ -619,7 +619,8 @@ def _claims_from_result(result: dict) -> list[dict]:
                         "requirement": requirement,
                         "open": False,
                         "source_body": _package_source(
-                            figures,
+                            requirement,
+                            named,
                             cites,
                             section_cite=f"{doc} {section}. {sections[(doc, section)]}",
                         ),
@@ -644,7 +645,7 @@ def _claims_from_result(result: dict) -> list[dict]:
             "section": "",
             "requirement": requirement,
             "open": False,
-            "source_body": _package_source(figures, cites),
+            "source_body": _package_source(requirement, named, cites),
         })
     return rows
 
@@ -727,6 +728,8 @@ _NUMBER = re.compile(r"(?<![\w.\-])(\d+(?:\.\d+)?)(?![\d.])")
 
 def _requirement_text(sentence: str) -> str:
     stripped = " ".join(_TOKEN.sub(" ", sentence or "").split()).strip(" ;,.")
+    # A cite in brackets leaves the brackets behind once its tokens are taken out.
+    stripped = " ".join(re.sub(r"\(\s*\)", " ", stripped).split()).replace(" :", ":").strip(" ;,.")
     stripped = re.sub(r"(?i)^(?:per|see|requires)\s+", "", stripped).strip(" ;,.")
     if len(stripped) >= 8:
         return stripped
@@ -759,12 +762,31 @@ def _echoes(requirement: str, source: str) -> bool:
     return False
 
 
+_NAMED = re.compile(r"Named outputs: (.*?)\.(?: Behind | No named output holds |$)", re.S)
+_NAMED_VALUE = re.compile(r"= (-?\d+(?:\.\d+)?(?:e[-+]?\d+)?)")
+
+
 def _package_supports(requirement: str, source: str) -> bool:
-    """The package states every figure in the claim. A figure-free claim does not pass."""
+    """The package states every figure in the claim. A figure-free claim does not pass.
+
+    Only the named outputs count: an input in the line on what a row rests
+    on, and a figure the line says no output holds, are not support. So a
+    checker that calls every claim Supported does not carry a figure the
+    tools never returned. A source with no named outputs (an older packet)
+    is read whole, as it always was.
+    """
     quantities = _quantities(requirement)
     if not quantities:
         return False
-    have = set(_quantities(source))
+    named = _NAMED.search(source or "")
+    if named is None:
+        if "No named output holds" in (source or ""):
+            return False
+        have = set(_quantities(source))
+    else:
+        have: set[str] = set()
+        for value in _NAMED_VALUE.findall(named.group(1)):
+            _add_number(have, float(value))
     return all(item in have for item in quantities)
 
 
@@ -834,11 +856,129 @@ def _package_figures(tools: dict) -> str:
     return "Tool-plan figures: " + ", ".join(tokens)
 
 
-def _package_source(figures: str, cites: list[str], section_cite: str = "") -> str:
+# A named output's unit, read from the last part of its key as the kernels write it. A key with none of these is
+# printed without a unit, never given one.
+_KEY_UNITS = (
+    ("_gpm_ft2", "gpm/ft²"), ("_ft2", "ft²"), ("_gpm", "gpm"), ("_gal", "gal"), ("_s", "s"), ("_min", "min"),
+    ("_psig", "psig"), ("_psi", "psi"), ("_pct", "%"), ("_percent", "%"), ("scfm_gauge_basis", "scfm"),
+    ("scfm_abs_basis", "scfm"), ("_ft3", "ft³"), ("_scf_gauge", "scf"),
+)
+# The kernel's own cite strings, by row, printed as it wrote them.
+_CITE_KEYS = ("note_60s_option", "nfpa_basis", "basis", "nfpa_table_cite", "cites_withheld")
+
+
+def _key_unit(key: str) -> str:
+    if key in ("fittings_percent",):
+        return "%"
+    for tail, unit in _KEY_UNITS:
+        if key.endswith(tail) or key == tail:
+            return unit
+    return ""
+
+
+def named_outputs(result: dict | None) -> list[dict]:
+    """Every figure the run's tools returned, by name: the row, the key, the value, its unit, and what stands behind it.
+
+    behind holds the row's inputs as the tool plan passed them, each GIVEN or
+    ASSUMED (a hint the designer used, or the kernel's own assumption), the
+    condition the figure holds under, and the kernel's own cite strings.
+    """
+    result = result if isinstance(result, dict) else {}
+    tools = result.get("tools") if isinstance(result.get("tools"), dict) else {}
+    sent = {call.get("name"): call.get("input") or {} for call in result.get("transcript") or []
+            if call.get("by") == "tool-plan" and isinstance(call.get("input"), dict)}
+    assumed = set(result.get("assumed") or [])
+    out: list[dict] = []
+    names = [name for name in _TOOL_ORDER if name in tools] + [name for name in tools if name not in _TOOL_ORDER]
+    for tool in names:
+        row = tools.get(tool)
+        if not isinstance(row, dict):
+            continue
+        behind = _behind(tool, row, sent.get(tool) or {}, assumed)
+        for key, value in row.items():
+            # A figure, or a short list of figures (a table's range), each under its own name.
+            items = [(f"{key}[{index}]", item) for index, item in enumerate(value)] \
+                if isinstance(value, (list, tuple)) and len(value) <= 8 else [(key, value)]
+            for name, item in items:
+                if isinstance(item, bool) or not isinstance(item, (int, float)) or not math.isfinite(float(item)):
+                    continue
+                tokens: set[str] = set()
+                _add_number(tokens, float(item))
+                out.append({"tool": tool, "key": name, "value": float(item), "unit": _key_unit(key),
+                            "tokens": tokens, "behind": behind})
+    return out
+
+
+def _behind(tool: str, row: dict, args: dict, assumed: set[str]) -> str:
+    """What a row's figures rest on: its inputs, GIVEN or ASSUMED, its condition, and the kernel's cite."""
+    given, guessed = [], []
+    for arg, value in args.items():
+        if isinstance(value, (dict, list)) or value is None or value == "":
+            continue
+        shown = f"{value:.6g}" if isinstance(value, float) else value
+        text = f"{arg} {shown}"
+        (guessed if arg in assumed or arg in (row.get("assumed_zero") or []) else given).append(text)
+    if tool == "zone_trapped_volume" and row.get("trim_assumed"):
+        guessed.append(f"trim_gal {row.get('trim_gal')} (the kernel's assumption)")
+    for item in row.get("assumed_inputs") or []:
+        if isinstance(item, dict):
+            guessed.append(f"{item.get('name')} {item.get('value')} {item.get('unit')}")
+    parts = []
+    if given:
+        parts.append("GIVEN inputs: " + ", ".join(given))
+    if guessed:
+        parts.append("ASSUMED inputs: " + ", ".join(guessed))
+    condition = []
+    for key in ("system_type", "limit_basis", "edition_status", "length_basis", "screen_status", "release_status"):
+        if row.get(key) not in (None, ""):
+            condition.append(f"{key} {row[key]}")
+    if condition:
+        parts.append("condition: " + ", ".join(condition))
+    cites = [str(row[key]) for key in _CITE_KEYS if isinstance(row.get(key), str) and row[key].strip()]
+    if cites:
+        parts.append("kernel cite: " + " | ".join(dict.fromkeys(cites)))
+    return "; ".join(parts)
+
+
+def _package_source(requirement: str, named: list[dict], cites: list[str], section_cite: str = "") -> str:
+    """The cite for one claim: the named outputs that hold each of its figures, and nothing else.
+
+    A figure no named output holds is counted as held by none, and not
+    written into the line, so a checker that reads it has nothing to call it
+    Supported on. The package is the tools' own assertion, not a retrieved
+    standard passage.
+    """
     parts = [PACKAGE_MARK + "."]
     if section_cite:
         parts.append(section_cite.rstrip(".") + ".")
     elif cites:
         parts.append("Package cites: " + " | ".join(cites) + ".")
-    parts.append(figures)
+    shown: list[str] = []
+    missing: list[str] = []
+    seen: set[tuple[str, str]] = set()
+    behind: dict[str, str] = {}
+    for figure in dict.fromkeys(_quantities(requirement)):
+        matches = [item for item in named if figure in item["tokens"]]
+        if not matches:
+            missing.append(figure)
+            continue
+        for item in matches[:3]:
+            key = (item["tool"], item["key"])
+            if key in seen:
+                continue
+            seen.add(key)
+            unit = f" {item['unit']}" if item["unit"] else ""
+            # Full precision: the support check reads these figures back, and a rounded one (120003.6 shown as
+            # 120004) would refuse a claim that quotes the output exactly.
+            shown.append(f"{item['tool']}.{item['key']} = {item['value']:.12g}{unit}")
+            if item["behind"]:
+                behind.setdefault(item["tool"], item["behind"])
+    if shown:
+        parts.append("Named outputs: " + "; ".join(shown) + ".")
+        parts.extend(f"Behind {tool}: {text}." for tool, text in behind.items())
+    if missing:
+        # Counted, not repeated: a figure written into the cite would read as the cite holding it.
+        parts.append(f"No named output holds {len(missing)} of the claim's figures.")
+    if not shown and not missing:
+        parts.append("The claim states no figure; no named output is attached.")
     return " ".join(parts)

@@ -1126,6 +1126,35 @@ def export_gate(record: Record, project_id: str) -> str:
     return export_reason(record.snapshot(project_id))
 
 
+# The calc rows whose cites follow the job's NFPA 13 edition (calc_tools tells the kernel the job's edition).
+EDITION_ROWS = ("dry_delivery_screen", "di_trip_to_water")
+EDITION_EXPORT_HOLD = (
+    "HOLD: NFPA 13 " + inputs.EDITION_NOT_PINNED + ". The delivery rows on the record ran with their cites withheld "
+    "(EDITION NOT SET — cites withheld, VERIFY), so the Design Basis is not exported. Type the job's NFPA 13 edition "
+    "on the Inputs tab and run the zone again."
+)
+
+
+def edition_export_reason(snapshot: dict | None) -> str:
+    """The export hold for a record whose delivery rows have no pinned NFPA 13 edition behind them. Else "".
+
+    A record with no delivery row is not held for it. One is held when the
+    job's NFPA 13 field pins no edition (blank, not one year, ASSUMED, or an
+    unconfirmed starting value).
+    """
+    snapshot = snapshot or {}
+    if not any(row.get("tool") in EDITION_ROWS for row in snapshot.get("calcs") or []):
+        return ""
+    # The job's own field decides. A row a model ran without passing the edition the job pins has its cites
+    # withheld and says so; a row the tool plan ran before the edition was pinned is out of date, and the stale
+    # check above holds the export for it.
+    fact = next((row for row in snapshot.get("facts") or []
+                 if row.get("kind") == inputs.BASIS_KIND and row.get("key") == "nfpa_13"), None)
+    if coherence.pinned_edition(fact) is None:
+        return EDITION_EXPORT_HOLD
+    return ""
+
+
 def export_reason(snapshot: dict | None) -> str:
     """export_gate for a snapshot the caller already holds."""
     snapshot = snapshot or {}
@@ -1138,6 +1167,9 @@ def export_reason(snapshot: dict | None) -> str:
             + (f" ({changed})" if changed else "")
             + ". Run the zone again, or ask the lead to bring the findings up to date. /status lists them."
         )
+    held = edition_export_reason(snapshot)
+    if held:
+        return held
     findings = list(snapshot.get("findings") or [])
     if not findings:
         return ""

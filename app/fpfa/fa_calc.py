@@ -125,6 +125,8 @@ def run_fa_calc(content_root: Path, args: dict | None) -> dict:
         raise KeyError(f"unknown op {op_name!r} for module {module_name!r}")
     if module_name == "battery" and op_name == "split_supplies":
         _require_split_capacity(inputs)
+    if module_name == "battery" and op_name == "charger_ok":
+        _require_listed_charger_cap(module, inputs)
     return _as_dict(getattr(module, op_name)(**inputs))
 
 
@@ -161,6 +163,39 @@ def _require_split_capacity(inputs: dict) -> None:
     cap = inputs.get("cap_ah")
     if isinstance(cap, bool) or not isinstance(cap, (int, float)) or not math.isfinite(cap) or cap <= 0:
         raise ValueError("cap_ah must be > 0")
+
+
+CHARGER_CAP = "listed_charger_max_ah"
+
+
+def _require_listed_charger_cap(module, inputs: dict) -> None:
+    """charger_ok takes the charger's listed maximum Ah from the caller, and nothing else.
+
+    No maker table or remembered cap stands in: a maker key is refused, and a
+    missing, non-numeric, non-finite, or non-positive cap holds the check. A
+    pack whose charger_ok still takes a maker key holds too, until the pack
+    that takes the caller's cap is installed.
+    """
+    if "maker_key" in inputs:
+        raise ValueError(
+            "HOLD: charger_ok takes the charger's listed maximum Ah from its listing (listed_charger_max_ah), not a "
+            "maker key. The application holds no charger cap."
+        )
+    cap = inputs.get(CHARGER_CAP)
+    if isinstance(cap, bool) or not isinstance(cap, (int, float)) or not math.isfinite(cap) or cap <= 0:
+        raise ValueError(
+            f"HOLD: charger_ok needs {CHARGER_CAP}, the charger's listed maximum Ah, as a number greater than 0 "
+            f"(got {cap!r}). The application holds no charger cap."
+        )
+    try:
+        takes = CHARGER_CAP in inspect.signature(getattr(module, "charger_ok")).parameters
+    except (TypeError, ValueError):
+        takes = False
+    if not takes:
+        raise ValueError(
+            "HOLD: the installed content pack's charger_ok does not take the caller's listed cap "
+            f"({CHARGER_CAP}). The check waits for the pack that does; no maker cap is used."
+        )
 
 
 def _op_name(value) -> str:

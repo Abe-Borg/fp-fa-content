@@ -166,7 +166,8 @@ class DesignBasisExportTests(unittest.TestCase):
             "Pipe 276.3 gal (calculated)",
             "Zone total 281.3 gal (calculated)",
             "5.0 gal trim ASSUMED",
-            "NFPA size cap 500 gal; size exemption on the zone total of 281.3 gal: yes",
+            "Exemption threshold: the 500 gal exemption threshold (NFPA 13-2025 §8.3.2.3.1.1); size exemption on the "
+            "zone total of 281.3 gal: yes",
             "what in that total is ASSUMED is on the zone_trapped_volume record",
             "Fill 28.1 s, t_total 38.1 s, margin -8.1 s; the zone-total screen does not pass",
             "About 200.0 gal meets the limit",
@@ -293,9 +294,9 @@ class DesignBasisWindowTests(unittest.TestCase):
         self.assertIn("Sample data hall DI zone", text)
         self.assertIn("Zone total 281.3 gal (calculated)", text)
         self.assertIn("zone_trapped_volume | tool-plan", text)
-        self.assertIn("insurer | FM | OWNER | sample data", text)
+        self.assertIn("insurer | FM | OWNER | SAMPLE data", text)
         # The zone inputs are in the document with who supplied them, and the plan's calcs follow them.
-        self.assertIn("q_fill_gpm | 600 gpm | GIVEN | sample data", text)
+        self.assertIn("q_fill_gpm | 600 gpm | GIVEN | SAMPLE data", text)
         self.assertIn("| follows the project inputs |", text)
         # The ⋯ menu's row names the document from the state the page reads.
         self.assertEqual(app.snapshot()["app"]["design_basis_title"], DESIGN_BASIS_TITLE)

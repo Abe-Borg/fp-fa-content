@@ -269,7 +269,9 @@ def run_bess_plan(
     try:
         cites = read_starter_cites(content_root, BESS_SKILL)
     except (FileNotFoundError, ValueError) as exc:
-        raise ValueError(str(exc)) from exc
+        # A missing or unparsable starter block holds the starter, naming the skill. No percent stands in for it.
+        raise ValueError(f"HOLD: the explosion-control starter reads the starter block of skill {BESS_SKILL}, and "
+                         f"it could not be read ({exc}). Nothing was run.") from exc
     tool_input = {
         "mix": room.get("mix") or {},
         "lfl": room.get("lfl") or {},

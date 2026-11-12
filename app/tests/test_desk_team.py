@@ -200,7 +200,7 @@ class ResumeTests(DeskCase):
         # The helpers read job1 by default; this job has its own id.
         play.scripts["fp-sprinkler"] = [
             lambda _k: call(use("zone_trapped_volume", segments=SEGMENTS)),
-            lambda _k: call(use("di_trip_to_water", v_gal=281.3, q_fill_gpm=600, t_detect_s=8, t_release_s=2, t_exhaust_s=0, basis="FM")),
+            lambda _k: call(use("di_trip_to_water", v_gal=281.3, q_fill_gpm=600, t_detect_s=8, t_release_s=2, t_exhaust_s=0, basis="FM", system_type="di")),
             lambda _k: call(use("record_finding", text="Trip to water screens against the 30 s clock", label="calculated",
                                 supports=[_calc(app.record, "di_trip_to_water", "fp-sprinkler", project_id)["id"]])),
             say("Screen recorded."),
@@ -529,7 +529,7 @@ class TeamViewTests(unittest.TestCase):
         fa = ToolSession(REPO, record=record, project_id="job1", agent="fa-releasing")
         record.set_agent("job1", name="Sprinkler specialist", role_slug="fp-sprinkler", status="done")
         record.set_agent("job1", name="Releasing specialist", role_slug="fa-releasing", status="interrupted")
-        screen = fp.execute("di_trip_to_water", {"v_gal": 281.3, "q_fill_gpm": 600, "t_detect_s": 8, "t_release_s": 2, "t_exhaust_s": 0, "basis": "FM"})
+        screen = fp.execute("di_trip_to_water", {"v_gal": 281.3, "q_fill_gpm": 600, "t_detect_s": 8, "t_release_s": 2, "t_exhaust_s": 0, "basis": "FM", "system_type": "di"})
         cap = fp.execute("record_evidence", {"document": "NFPA 13", "edition": "2025", "section": "8.3.2.3.1.1",
                                              "note": "DI at or under 500 gal needs no delivery-time proof"})
         on_calc = fp.execute("record_finding", {"text": "t_total is 38.1 s against a 30 s limit", "label": "calculated",

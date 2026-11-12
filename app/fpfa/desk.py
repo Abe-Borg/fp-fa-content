@@ -46,7 +46,7 @@ from fpfa.about import (
 from fpfa import __version__
 from fpfa.app_update import AppUpdateResult, check_for_app_update
 from fpfa.bess import bess_chat_summary, bess_govern_note, run_bess_plan
-from fpfa.calc_tools import ToolSession, calc_identity, content_fingerprint
+from fpfa.calc_tools import REQUIRED_DI_TOOLS, ToolSession, calc_identity, content_fingerprint
 from fpfa.chat_render import CARET, is_job_heading, plain_text, settle_inline
 from fpfa.claim_check import (
     PACKAGE_STATUS,
@@ -100,7 +100,7 @@ from fpfa.record import (
     RecordError,
     RecordUnavailable,
 )
-from fpfa.spec_docx import DRAFT_SECTION, write_docx
+from fpfa.spec_docx import DRAFT_SECTION, section_problem, write_docx
 from fpfa.team import check_record, latest_check, team_summary
 from fpfa.team_panel import recovery_text, team_view
 from fpfa.usage_report import REQUESTS_EVENT, report_text
@@ -110,10 +110,12 @@ from fpfa.workflow import (
     format_transcript,
     govern_note,
     judgment_label_line,
+    planned_tools,
     run_di_zone,
     screen_limit_assumption_text,
     trim_assumption_text,
 )
+from fpfa.inputs import SUBTIMES_MISSING
 
 __all__ = ["Desk", "InstanceLockError", "ANOTHER_WINDOW_TEXT"]
 
@@ -439,7 +441,11 @@ def chat_run_summary(result: dict) -> str:
     judgment = judgment_label_line()
     if judgment not in narrative:
         extras.append(judgment)
-    extras.append(f"Figures are from the tool plan. Draft export is Section {DRAFT_SECTION}.")
+    if str((result.get("inputs") or {}).get("system_type") or "") == "di":
+        extras.append(f"Figures are from the tool plan. Draft export is Section {DRAFT_SECTION}.")
+    else:
+        # Section 21 13 19 is double-interlock only; a dry or wet zone is not written as it.
+        extras.append(f"Figures are from the tool plan. Section {DRAFT_SECTION} is double-interlock only.")
     return "\n\n".join(part for part in (narrative, *extras) if part)
 
 
@@ -1274,7 +1280,7 @@ class Desk:
             "area_increase": num(self.area_increase.get()),
             "hose_gpm": num(self.hose.get()),
             "q_fill_gpm": num(self.q_fill.get()),
-            # A blank time is None, never 0: the run holds on it (workflow.validate_di).
+            # A blank time is None, never 0: the delivery rows are then the fill time alone (calc_tools).
             "t_detect_s": num(self.t_detect.get()),
             "t_release_s": num(self.t_release.get()),
             "t_exhaust_s": num(self.t_exhaust.get()),
@@ -1406,8 +1412,11 @@ class Desk:
         project["di"] = self.collect_di()
         project["chat"] = self.chat_log
         if self._typed:
-            # An emptied basis field stays blank: what the designer typed, a blank included, is theirs.
-            inputs.note_given(project, self._typed, inputs.SOURCE_DESIGNER)
+            # An emptied basis field stays blank: what the designer typed, a blank included, is theirs. A value
+            # that is one of the field's hints is GIVEN all the same, with the source "typed from form hint".
+            values = {**project["basis"], **project["di"]}
+            for name in self._typed:
+                inputs.note_given(project, [name], inputs.typed_source(name, values.get(name)))
             self._typed = set()
         if self._accepted:
             # Hints the designer accepted: inputs now, recorded ASSUMED.
@@ -2396,7 +2405,9 @@ class Desk:
         name, basis, di = sample_data.SAMPLE_ZONES.get(variant, sample_data.SAMPLE_ZONES["dh1"])
         project = new_project(name, copy.deepcopy(basis))
         project["di"] = copy.deepcopy(di)
-        inputs.note_given(project, list(inputs.ZONE_FIELDS) + list(inputs.BASIS_FIELDS), inputs.SOURCE_SAMPLE)
+        # SAMPLE data keeps its values; a sample chosen for a test the owner has not confirmed says so (DH-2).
+        source = inputs.SOURCE_SAMPLE_UNCONFIRMED if variant in sample_data.OWNER_TO_CONFIRM else inputs.SOURCE_SAMPLE
+        inputs.note_given(project, list(inputs.ZONE_FIELDS) + list(inputs.BASIS_FIELDS), source)
         save_project(project)
         self.refresh_projects(project["id"])
         self.open_project(project["id"])
@@ -2652,13 +2663,8 @@ class Desk:
                     tools=tools,
                     execute=execute,
                     cancel=cancel,
-                    required=[
-                        "zone_trapped_volume",
-                        "dry_delivery_screen",
-                        "di_trip_to_water",
-                        "elect_di_trim",
-                        "releasing_truth_table",
-                    ],
+                    # The rows this zone runs: a wet zone has no delivery rows and no releasing table.
+                    required=[name for name in REQUIRED_DI_TOOLS if name in planned_tools(di)],
                     max_rounds=16,
                     max_tokens=MAX_OUTPUT_TOKENS,
                 )
@@ -3067,8 +3073,15 @@ class Desk:
     def _show_result(self, result: dict) -> None:
         tools = result["tools"]
         volume = tools["zone_trapped_volume"]
-        trip = tools["di_trip_to_water"]
+        trip = tools.get("di_trip_to_water") or {}
         trim = tools["elect_di_trim"]
+        if "t_total_s" in trip:
+            timing = (f"t_total {trip['t_total_s']:.1f} s    "
+                      f"passes screen: {'yes' if trip['passes_screen'] else 'no'}    ")
+        elif "t_fill_s" in trip:
+            timing = f"fill time alone {trip['t_fill_s']:.1f} s    {SUBTIMES_MISSING}    "
+        else:
+            timing = "no delivery rows    "
         source = result.get("source") or "tool-plan"
         if source == "claude":
             header = f"Narrative from {result.get('model') or MODEL_ID}. Tables use the tool plan."
@@ -3082,15 +3095,14 @@ class Desk:
         lines.extend([
             "Assumptions vs calculated",
             trim_assumption_text(volume),
-            screen_limit_assumption_text(trip),
+            *([screen_limit_assumption_text(trip)] if trip else []),
             judgment_label_line(),
             "",
             header,
             result.get("narrative") or "",
             "",
             "— Tool plan —",
-            f"Zone {volume['zone_gal']:.1f} gal    t_total {trip['t_total_s']:.1f} s    "
-            f"passes screen: {'yes' if trip['passes_screen'] else 'no'}    "
+            f"Zone {volume['zone_gal']:.1f} gal    {timing}"
             f"trim family: {trim.get('family') or trim.get('status')}",
             "",
             "Flags",
@@ -3150,6 +3162,10 @@ class Desk:
         if changed:
             raise RuntimeError(EXPORT_STALE_RUN.format(names=", ".join(changed), section=DRAFT_SECTION))
         snapshot = copy.deepcopy(self.project["last_run"])
+        problem = section_problem(snapshot, self.project)
+        if problem:
+            # Before the claim check, which is a billed request: this run is not written as the section at all.
+            raise RuntimeError(problem)
         outcome = self._claim_outcome(create, snapshot)
         job = self.jobs.record(
             project_id=self.project["id"],
@@ -3254,6 +3270,11 @@ class Desk:
             self.notify("Export", EXPORT_STALE_RUN.format(names=", ".join(changed), section=DRAFT_SECTION))
             return
         snapshot = copy.deepcopy(self.project["last_run"])
+        problem = section_problem(snapshot, self.project)
+        if problem:
+            # A dry or wet zone, an unpinned NFPA 13 edition, or an ASSUMED demand: no check is run or billed.
+            self.notify("Export", problem)
+            return
         packet = build_packet(snapshot)
         stored = self.project.get("claim_check") or {}
         if offer_export and stored.get("all_supported") and same_packet(stored, packet):

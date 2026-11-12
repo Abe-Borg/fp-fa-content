@@ -23,14 +23,19 @@ from typing import Any
 from fpfa.claude_client import MODEL_ID
 from fpfa.releasing import TRUTH_TABLE_TOOL, releasing_logic
 from fpfa.workflow import (
+    cite_note,
     exemption_answer,
     exemption_qualifier,
+    fill_only,
     fmt1,
     format_transcript,
     judgment_label_line,
     screen_limit_assumption_text,
+    threshold_gal,
+    threshold_words,
     trim_assumption_text,
 )
+from fpfa.inputs import SUBTIMES_MISSING
 
 CALCULATED = "calculated"
 ASSUMED = "ASSUMED"
@@ -59,6 +64,12 @@ def _source_line(result: dict, with_model: str, alone: str) -> str:
     if (result.get("source") or "tool-plan") == "claude":
         return f"Narrative from {result.get('model') or MODEL_ID}. {with_model}"
     return alone
+
+
+def _cite_line(row: dict) -> str:
+    """The kernel's own cite for a delivery row, as it wrote it, or the words that say it is withheld."""
+    note = cite_note(row)
+    return f"Kernel cite: {note}" if note else ""
 
 
 def zone_figures(tools: dict[str, Any]) -> list[dict]:
@@ -98,30 +109,47 @@ def zone_figures(tools: dict[str, Any]) -> list[dict]:
                          "releasing, and exhaust times on the inputs are added to it.")
         if "margin_s" in trip and "limit_s" in trip:
             lines.append(f"Margin to the {fmt1(trip['limit_s'])} s limit: {fmt1(trip['margin_s'])} s.")
-        lines += [screen_limit_assumption_text(trip), SCREEN_NOTE]
+        if trip.get("assumed_zero_note"):
+            lines.append(str(trip["assumed_zero_note"]))
+        lines += [screen_limit_assumption_text(trip), SCREEN_NOTE, _cite_line(trip)]
         figures.append(_figure(
             "t_total", "Delivery screen, t_total", fmt1(trip["t_total_s"]), "s", label=CALCULATED,
             tone="ok" if passes else "warn",
             verdict="The zone-total screen passes." if passes else "The zone-total screen does not pass.",
             lines=lines,
         ))
+    elif fill_only(trip) and "t_fill_s" in trip:
+        # A sub-time was blank: the fill time alone and its margin, and no verdict of any kind.
+        lines = []
+        if "fill_margin_s" in trip and "limit_s" in trip:
+            lines.append(f"Margin to the {fmt1(trip['limit_s'])} s limit on the fill time alone: "
+                         f"{fmt1(trip['fill_margin_s'])} s.")
+        lines += [screen_limit_assumption_text(trip), SCREEN_NOTE, _cite_line(trip)]
+        figures.append(_figure(
+            "t_fill", "Delivery screen, fill time only", fmt1(trip["t_fill_s"]), "s", label=CALCULATED,
+            tone="warn", verdict=SUBTIMES_MISSING.capitalize() + ".", lines=lines,
+        ))
 
-    if "nfpa_delivery_time_exempt" in screen and "nfpa_size_cap_gal" in screen and "zone_gal" in volume:
+    if "nfpa_delivery_time_exempt" in screen and threshold_gal(screen) is not None and "zone_gal" in volume:
         # The tool's own answer. A saved run from before the screen was handed the zone total was governed
-        # on it in memory and carries the same keys; a pipe-only result has no answer to print.
+        # on it in memory and carries the same keys; a pipe-only result has no answer to print. The answer is
+        # about the size threshold only: it never says the delivery screen passes.
         answer = exemption_answer(screen)
         judged_on = screen.get("exemption_volume_gal")
         lines = [
-            f"Zone total of {fmt1(judged_on)} gal against the {screen['nfpa_size_cap_gal']:.0f} gal cap."
+            f"Zone total of {fmt1(judged_on)} gal against {threshold_words(screen)}."
             if judged_on is not None else "Pipe-only screen. Fittings and trim are not in it.",
         ]
         qualifier = exemption_qualifier(volume, screen) if judged_on is not None else ""
         if qualifier:
             lines.append(qualifier)
-        lines.append("A quick-opening device does not raise the double-interlock cap.")
+        if screen.get("near_threshold"):
+            lines.append(str(screen["near_threshold"]))
+        if str(screen.get("system_type") or "") == "di":
+            lines.append("A quick-opening device does not raise the double-interlock exemption threshold.")
         figures.append(_figure(
             "size_exemption", "NFPA size exemption", answer, "",
-            tone="warn" if answer == "not determined" else "", lines=lines,
+            tone="warn" if answer == "not determined" or screen.get("near_threshold") else "", lines=lines,
         ))
 
     if "qd_gpm" in density:
@@ -134,7 +162,15 @@ def zone_figures(tools: dict[str, Any]) -> list[dict]:
         if "duration_min" in hose:
             around = f" (range {span[0]:g}–{span[1]:g})" if isinstance(span, (list, tuple)) and len(span) == 2 else ""
             lines.append(f"Table duration {hose['duration_min']:g} min{around}")
-        figures.append(_figure("demand", "Demand screen", fmt1(density["qd_gpm"]), "gpm", label=CALCULATED, lines=lines))
+        if hose.get("basis"):
+            lines.append(str(hose["basis"]))
+        label = CALCULATED
+        if density.get("release_status"):
+            # Built on an ASSUMED density or area: the label, the reason, and that it is not for release.
+            label = f"{CALCULATED}, {ASSUMED} input"
+            lines += [str(density.get("assumed_note") or ""), str(density["release_status"])]
+        figures.append(_figure("demand", "Demand screen", fmt1(density["qd_gpm"]), "gpm", label=label,
+                               tone="warn" if density.get("release_status") else "", lines=lines))
 
     if trim:
         family = str(trim.get("family") or "unresolved")
@@ -147,6 +183,8 @@ def zone_figures(tools: dict[str, Any]) -> list[dict]:
         # The kernel returns a gauge-basis and an absolute-basis rate and elects neither, so no one
         # number is the headline here.
         lines = [str(nitrogen["fill_bases"])]
+        if nitrogen.get("sizing_note"):
+            lines.append(str(nitrogen["sizing_note"]))
         if "design_c" in nitrogen:
             lines.append(f"Design Hazen-Williams C is {nitrogen['design_c']}.")
         figures.append(_figure("gas_fill", "Supervisory gas fill", "", "", label=CALCULATED, lines=lines))
@@ -206,6 +244,7 @@ def results_view(result: dict | None) -> dict:
         "source": _source_line(result, "Tables use the tool plan.", "Narrative from the tool plan."),
         "figures": zone_figures(tools),
         "governing": [],
-        "notes": [trim_assumption_text(volume), screen_limit_assumption_text(trip), judgment_label_line()],
+        "notes": [trim_assumption_text(volume)] + ([screen_limit_assumption_text(trip)] if trip else [])
+                 + [judgment_label_line()],
     })
     return view

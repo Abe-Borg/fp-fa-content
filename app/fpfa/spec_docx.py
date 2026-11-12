@@ -12,19 +12,64 @@ from docx import Document
 
 from fpfa import inputs
 from fpfa.workflow import (
+    cite_note,
     exemption_answer,
     exemption_qualifier,
+    fill_only,
     fmt1,
     governing_narrative,
     judgment_label_line,
     releasing_sentence,
     screen_limit_assumption_text,
+    screen_verdict,
     second_leg_value,
+    threshold_gal,
+    threshold_words,
     trim_assumption_text,
 )
 
 DRAFT_SECTION = "21 13 19"
 DRAFT_HEADING = "Section 21 13 19 — Double-interlock preaction (draft)"
+# The pipe-only row is a lower bound: it is never the screen a verdict is read from.
+PIPE_ONLY_VERDICT = "—"
+PIPE_ONLY_NOTE = "lower bound, not the governing screen"
+
+
+EDITION_EXPORT_HOLD = (
+    "HOLD: NFPA 13 " + inputs.EDITION_NOT_PINNED + ". The delivery rows ran with their cites withheld "
+    "(EDITION NOT SET — cites withheld, VERIFY), so {document} is not exported. Type the job's NFPA 13 edition on "
+    "the Inputs tab and run the zone again."
+)
+
+
+def section_problem(result: dict | None, project: dict | None = None) -> str:
+    """Why a run cannot be written as Section 21 13 19, or "". The section is double-interlock only.
+
+    Dry pipe is a different section and a wet zone has no delivery rows,
+    so neither is written here. A run whose demand is built on
+    an ASSUMED density or area is not for release. A run whose NFPA 13 edition
+    is not pinned (blank, or ASSUMED from its hint) carries no cites and is
+    not exported.
+    """
+    result = result if isinstance(result, dict) else {}
+    basis = result.get("basis") if isinstance(result.get("basis"), dict) else (project or {}).get("basis") or {}
+    assumed = inputs.accepted_inputs(project) if project is not None else set()
+    tools = result.get("tools") if isinstance(result.get("tools"), dict) else {}
+    # The job's edition as it stands, and the edition the run's own rows ran on: a run made before the designer
+    # typed the edition still has its cites withheld, and is run again first.
+    unset = any(isinstance(row, dict) and row.get("edition_status") == "not set" for row in tools.values())
+    if "NFPA 13" in inputs.unpinned_editions(basis, assumed) or unset:
+        return EDITION_EXPORT_HOLD.format(document=f"Section {DRAFT_SECTION}")
+    system = str((result.get("inputs") or {}).get("system_type") or "")
+    if system != "di" or "dry_delivery_screen" not in tools or "di_trip_to_water" not in tools:
+        named = {"dry": "a dry-pipe zone, which is a section of its own", "wet": "a wet zone"}.get(system, "this zone")
+        return (f"Section {DRAFT_SECTION} is double-interlock preaction. This run is {named}, so it is not written "
+                "as this section.")
+    for name, row in tools.items():
+        if isinstance(row, dict) and row.get("release_status"):
+            return (f"The {name} row is built on an ASSUMED input: {row['release_status']}. Type the job's own "
+                    "value and run the zone again before this section is exported.")
+    return ""
 
 
 def _yn(value) -> str:
@@ -83,6 +128,9 @@ def _table(doc: Document, headers: list[str], rows: list[list]) -> None:
 
 
 def write_docx(path: Path | str, project: dict, result: dict) -> Path:
+    problem = section_problem(result, project)
+    if problem:
+        raise ValueError(problem)
     path = Path(path)
     tools = result["tools"]
     volume = tools["zone_trapped_volume"]
@@ -91,8 +139,8 @@ def write_docx(path: Path | str, project: dict, result: dict) -> Path:
     trim = tools["elect_di_trim"]
     truth = tools["releasing_truth_table"]
     nitrogen = tools["nitrogen_gate"]
-    density = tools["density_area"]
-    hose = tools["hose_duration"]
+    density = tools.get("density_area")
+    hose = tools.get("hose_duration")
     if result.get("basis") is not None:
         basis = result["basis"]
     else:
@@ -150,43 +198,61 @@ def write_docx(path: Path | str, project: dict, result: dict) -> Path:
     doc.add_heading("Water-delivery screen", level=2)
     doc.add_paragraph(screen["formula"])
     doc.add_paragraph(
-        "Pipe-only row is the pipe timing comparison. "
-        "The size exemption uses the zone total (pipe, fittings, and trim) against the cap."
+        "Pipe-only row is the pipe timing comparison: a lower bound, not the governing screen. "
+        "The size exemption uses the zone total (pipe, fittings, and trim) against the exemption threshold."
     )
+    threshold = threshold_gal(screen)
+    threshold_cell = f"{threshold:.0f}" if threshold is not None else "—"
+    zone_time = "—" if fill_only(trip) else fmt1(trip["t_total_s"])
+    pipe_time = "—" if fill_only(screen) else fmt1(screen["t_total_s"])
     _table(
         doc,
-        ["Screen", "Volume gal", "t_total s", "Limit s", "Basis", "Passes", "NFPA size cap gal", "Size exemption"],
+        ["Screen", "Volume gal", "t_total s", "Limit s", "Basis", "Screen result", "Exemption threshold gal",
+         "Size exemption"],
         [
             [
                 "Pipe only",
                 fmt1(screen["volume_gal"]),
-                fmt1(screen["t_total_s"]),
+                pipe_time,
                 _limit_cell(screen),
                 screen["limit_basis"],
-                _yn(screen["passes_screen"]),
-                f"{screen['nfpa_size_cap_gal']:.0f}",
+                f"{PIPE_ONLY_VERDICT} ({PIPE_ONLY_NOTE})",
+                threshold_cell,
                 "—",
             ],
             [
                 "Zone total",
                 fmt1(volume["zone_gal"]),
-                fmt1(trip["t_total_s"]),
+                zone_time,
                 _limit_cell(trip),
                 trip["limit_basis"],
-                _yn(trip["passes_screen"]),
-                f"{screen['nfpa_size_cap_gal']:.0f}",
+                screen_verdict(trip).capitalize(),
+                threshold_cell,
                 exemption_answer(screen).capitalize(),
             ],
         ],
     )
+    if fill_only(trip):
+        doc.add_paragraph(
+            f"Fill time alone, 60·V/Q: {fmt1(trip['t_fill_s'])} s (calculated). Margin to the "
+            f"{fmt1(trip['limit_s'])} s limit on the fill time alone: {fmt1(trip['fill_margin_s'])} s. "
+            f"{inputs.SUBTIMES_MISSING.capitalize()}."
+        )
+    elif trip.get("assumed_zero_note"):
+        doc.add_paragraph(str(trip["assumed_zero_note"]))
+    doc.add_paragraph(f"Size exemption judged against {threshold_words(screen)}.")
     qualifier = exemption_qualifier(volume, screen)
     if qualifier:
         doc.add_paragraph(qualifier)
+    if screen.get("near_threshold"):
+        doc.add_paragraph(str(screen["near_threshold"]))
     doc.add_paragraph(screen["nfpa_basis"])
+    if cite_note(trip):
+        doc.add_paragraph(f"Kernel cite: {cite_note(trip)}")
     doc.add_paragraph(screen_limit_assumption_text(trip))
     doc.add_paragraph(
         f"Quick-opening device: {_yn(screen['qod'])}. "
-        "On double-interlock the quick-opening device does not raise the 500 gal cap."
+        "On double-interlock the quick-opening device does not raise the exemption threshold."
     )
 
     doc.add_heading("Trim election", level=2)
@@ -224,14 +290,20 @@ def write_docx(path: Path | str, project: dict, result: dict) -> Path:
     )
 
     doc.add_heading("Nitrogen and demand", level=2)
-    pressure = di.get("supervisory_psig") or 40
-    minutes = di.get("fill_minutes") or 30
+    # The pressure and the time the gas fill ran on, as the run's own call passed them. Nothing stands in for one.
+    sent = next((call.get("input") for call in result.get("transcript") or []
+                 if call.get("name") == "nitrogen_gate" and call.get("by") == "tool-plan"), None) or {}
+    pressure = sent.get("p_psig", di.get("supervisory_psig"))
+    minutes = sent.get("t_min", di.get("fill_minutes"))
+    pressure_text = f"{float(pressure):g} psig" if pressure not in (None, "") else "a fill pressure not given"
+    minutes_text = f"{float(minutes):g} min" if minutes not in (None, "") else "a fill time not given"
     doc.add_paragraph(
         f"Design Hazen-Williams C is {nitrogen['design_c']}. "
         f"Comparison C {nitrogen['comparison_c']} multiplies friction by about "
         f"{nitrogen['friction_ratio_c100_vs_c120']:.3f} and is not the design value. "
         f"{nitrogen['fill_bases']} "
-        f"Both rates use {pressure} psig and {minutes} min. "
+        + (f"{nitrogen['sizing_note']} " if nitrogen.get("sizing_note") else "")
+        + f"Both rates use {pressure_text} and {minutes_text}. "
         f"{nitrogen['formula']}."
     )
     _table(
@@ -242,19 +314,10 @@ def write_docx(path: Path | str, project: dict, result: dict) -> Path:
             ["Absolute", f"{nitrogen['scfm_abs_basis']:.2f}"],
         ],
     )
-    doc.add_paragraph(
-        f"Design area {density['design_area_ft2']:.0f} ft2. "
-        f"Sprinklers {fmt1(density['q_spr_gpm'])} gpm. "
-        f"Hose {fmt1(density['hose_gpm'])} gpm. "
-        f"Total demand {fmt1(density['qd_gpm'])} gpm. "
-        f"Table duration {hose['duration_min']:g} min "
-        f"(range {hose['duration_range_min'][0]:g}–{hose['duration_range_min'][1]:g} min). "
-        f"{hose['basis']}."
-    )
-    if density.get("gallons") is not None:
-        doc.add_paragraph(
-            f"Duration volume {fmt1(density['gallons'])} gal ({density.get('gallons_note') or 'includes hose'})."
-        )
+    if density is None or hose is None:
+        doc.add_paragraph("No demand was run for this zone: the form holds no density or base area.")
+    else:
+        _demand(doc, density, hose)
 
     doc.add_heading("Draft narrative", level=2)
     for paragraph in governing_narrative(result.get("narrative") or "").split("\n"):
@@ -269,3 +332,19 @@ def write_docx(path: Path | str, project: dict, result: dict) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     doc.save(path)
     return path
+
+
+def _demand(doc: Document, density: dict, hose: dict) -> None:
+    doc.add_paragraph(
+        f"Design area {density['design_area_ft2']:.0f} ft2. "
+        f"Sprinklers {fmt1(density['q_spr_gpm'])} gpm. "
+        f"Hose {fmt1(density['hose_gpm'])} gpm. "
+        f"Total demand {fmt1(density['qd_gpm'])} gpm. "
+        f"Table duration {hose['duration_min']:g} min "
+        f"(range {hose['duration_range_min'][0]:g}–{hose['duration_range_min'][1]:g} min). "
+        f"{hose['basis']}."
+    )
+    if density.get("gallons") is not None:
+        doc.add_paragraph(
+            f"Duration volume {fmt1(density['gallons'])} gal ({density.get('gallons_note') or 'includes hose'})."
+        )

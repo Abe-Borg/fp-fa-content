@@ -102,13 +102,25 @@ def _row_view(row: Any) -> Any:
     return shown
 
 
+# The kernel's SI K-factor beside a K-factor result. A display figure: never a design input and never converted with.
+K_SI_KEY = "k_si"
+K_SI_SHOWN = "k_si_display_only"
+K_SI_NOTE = ("k_si is the kernel's display figure (L/min/bar^0.5). It is not a design figure: never pass it to a "
+             "calculation and never convert a design input with it.")
+
+
 def reader_view(tool: str, output: Any) -> Any:
     """A calc output as a model or a designer sees it: the deprecated alias is left out.
 
-    Only the releasing truth table changes. Its Boolean is boolean_p, its rows
-    carry p_second_leg, and one sentence says what low air is. The stored
-    calc record and the saved run keep the kernel's full output.
+    The releasing truth table changes: its Boolean is boolean_p, its rows
+    carry p_second_leg, and one sentence says what low air is. A K-factor
+    result's k_si is shown as a display figure only. The stored calc record
+    and the saved run keep the kernel's full output.
     """
+    if isinstance(output, dict) and K_SI_KEY in output:
+        shown = {(K_SI_SHOWN if key == K_SI_KEY else key): value for key, value in output.items()}
+        shown["k_si_note"] = K_SI_NOTE
+        return shown
     if tool != TRUTH_TABLE_TOOL or not isinstance(output, dict):
         return output
     logic = releasing_logic(output)

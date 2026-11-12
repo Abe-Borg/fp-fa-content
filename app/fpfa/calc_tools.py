@@ -6,6 +6,8 @@ import contextvars
 import hashlib
 import importlib.util
 import json
+import math
+import re
 import sys
 from contextlib import contextmanager
 from pathlib import Path
@@ -106,12 +108,38 @@ LEAD = "lead"
 # Said on every calc tool whose fields carry a unit. A metric figure passed as it stands is a wrong number
 # with a right-looking record; the acceptance run of 0.3.0 saw 12.2 mm/min run as 12.2 gpm/ft².
 # What the delivery tools say of a time and a basis: the application puts nothing in place of one not given.
-TIME_NOTE = ("Seconds, from the releasing design. Required: a time not given is not taken as 0. Pass the job's "
-             "own, or a value you state as ASSUMED with its reason.")
+TIME_NOTE = ("Seconds, from the releasing design. Leave it out when the job has none: a time not given is never "
+             "taken as 0, and the result is then the fill time alone and its margin, with no pass or fail. A 0 you "
+             "pass is used and flagged ASSUMED-ZERO (an optimistic screen, NEEDS PE REVIEW).")
 BASIS_NOTE = ("Delivery time basis: FM, NFPA-LH, NFPA-OH, NFPA-EH, NFPA-HP, or NFPA-DU. Required: no basis is "
               "chosen for you, and a blank one is not taken as FM.")
-# The delivery inputs a call must give. Missing or blank, the tool refuses and names them (_missing).
-_DELIVERY_REQUIRED = ("t_detect_s", "t_release_s", "t_exhaust_s", "basis")
+SYSTEM_NOTE = ("dry or di. Required: no system type is taken for you. A wet zone has no delivery rows, so this tool "
+               "refuses wet.")
+EDITION_NOTE = ("The job's own NFPA 13 edition year, as the job states it. Leave it out when the job has not pinned "
+                "one: the figures still run and every cite is withheld (EDITION NOT SET). No edition is taken for you.")
+# The delivery inputs a call must give. Missing or blank, the tool refuses and names them (_missing). The
+# detection, releasing, and exhaust times are not here: without all three the result is the fill time alone.
+_DELIVERY_REQUIRED = ("q_fill_gpm", "basis", "system_type")
+SUB_TIMES = ("t_detect_s", "t_release_s", "t_exhaust_s")
+# The words a delivery row carries when a sub-time was not given, when one was typed as 0, and when its cites are
+# withheld. The figures that would depend on a missing time (t_total, the pass or fail, the volume at the limit)
+# are left out of the row, not computed on a 0 the application put there.
+FILL_ONLY = "sub-times not provided; no pass or fail"
+ASSUMED_ZERO = "ASSUMED-ZERO"
+NEEDS_PE_REVIEW = "NEEDS PE REVIEW"
+EDITION_NOT_SET = "EDITION NOT SET — cites withheld, VERIFY"
+EDITION_NOT_HELD = "NFPA 13-{year} labels are not in this calc pack — cites withheld, VERIFY"
+ASSUMED_NOT_FOR_RELEASE = "ASSUMED INPUT — not for release"
+# A zone total this close to the size threshold, as a fraction of it, is flagged: the answer can turn on trim and
+# fittings figures that are often ASSUMED. The owner's ruling of 2026-11-12 sets 1%; it decides no answer.
+NEAR_THRESHOLD_FRACTION = 0.01
+# Delivery rows whose cites are withheld: these keys hold the kernel's NFPA 13 cite strings.
+_NFPA13_TEXT = re.compile(r"\bNFPA\s*13\b(?!\s*[DR])")
+_YEAR = re.compile(r"(?<!\d)((?:19|20)\d{2})(?!\d)")
+# Ops the model reaches through fp_calc that have a tool of their own, where the application's argument rules live.
+_OWN_TOOL_OPS = {"dry_delivery_screen": "dry_delivery_screen", "di_trip_to_water": "di_trip_to_water"}
+# The pressure fields a gas-law fill rate reads. An unmarked kPa or bar is refused for one (fpfa.units).
+GAS_LAW_FIELDS = units.GAS_LAW_FIELDS
 US_UNITS_NOTE = (
     " Every number is in the US unit its field name states. Convert an SI figure with convert_units first, "
     "and never put another unit on the result."
@@ -177,14 +205,16 @@ SCHEMAS = [
     {
         "name": "dry_delivery_screen",
         "description": (
-            "Pipe timing, NFPA size cap, and optimistic trip-to-water screen from formulas.dry_delivery_screen. "
+            "Pipe timing, the NFPA size exemption, and optimistic trip-to-water screen from formulas.dry_delivery_screen. "
             "Not a listed water-delivery calculation. Timing stays on pipe volume. Each segment has length_ft and "
             "either d_in or nps with an optional schedule, as zone_trapped_volume takes them. The size exemption is judged on the zone total (pipe + fittings + trim), never on pipe "
             "alone: pass zone_gal, the zone total from zone_trapped_volume, and nfpa_delivery_time_exempt is then "
             "the zone-total answer. Without zone_gal (or trim_gal and fittings_percent) the result is a pipe-only "
             "screen: nfpa_delivery_time_exempt is null, exemption_status says it was not determined, and you must "
-            "not state the exemption from it. "
-            "Double-interlock has a 500 gal cap; a quick-opening device does not raise it."
+            "not state the exemption from it. The threshold is the result's nfpa_size_threshold_gal, an exemption "
+            "threshold and not a cap; on double-interlock a quick-opening device does not raise it. Quote the "
+            "result's note_60s_option and nfpa_basis as written. The application sends declared_interlock double for "
+            "di and none for dry unless you pass it."
         ) + US_UNITS_NOTE,
         "input_schema": _obj(
             {
@@ -195,17 +225,23 @@ SCHEMAS = [
                 "t_release_s": {"type": "number", "description": TIME_NOTE},
                 "t_exhaust_s": {"type": "number", "description": TIME_NOTE},
                 "basis": {"type": "string", "description": BASIS_NOTE},
-                "system_type": {"type": "string", "description": "dry or di"},
+                "system_type": {"type": "string", "description": SYSTEM_NOTE},
+                "edition": {"type": "string", "description": EDITION_NOTE},
+                "declared_interlock": {"type": "string", "description": "double or none. Left out, double for di and none for dry."},
                 "zone_gal": {"type": "number", "description": "Zone total gallons from zone_trapped_volume (zone_gal). The size exemption is judged on it."},
                 "trim_gal": {"type": "number", "description": "Trim gallons, when zone_gal is not passed. Omit both for a pipe-only screen."},
-                "fittings_percent": {"type": "number", "description": "Fittings allowance percent. Used with trim_gal when zone_gal is not passed."},
+                "fittings_percent": {"type": "number", "description": "Fittings allowance percent. Used with trim_gal when zone_gal is not passed; left out, the kernel's ASSUMED allowance for cut lengths applies, never 0."},
             },
-            ["segments", "q_fill_gpm", "system_type", "t_detect_s", "t_release_s", "t_exhaust_s", "basis"],
+            ["segments", "q_fill_gpm", "system_type", "basis"],
         ),
     },
     {
         "name": "di_trip_to_water",
-        "description": "Optimistic t = t_detect + t_release + t_exhaust + 60*V/Q from formulas.di_trip_to_water. Pass the zone total gallons, including trim. Not a listed delivery-time proof." + US_UNITS_NOTE,
+        "description": (
+            "Optimistic t = t_detect + t_release + t_exhaust + 60*V/Q from formulas.di_trip_to_water. Pass the zone "
+            "total gallons, including trim, as v_gal: the application tells the kernel V is the caller's "
+            "(v_basis caller). Not a listed delivery-time proof. Quote the result's note_60s_option as written."
+        ) + US_UNITS_NOTE,
         "input_schema": _obj(
             {
                 "v_gal": {"type": "number"},
@@ -214,27 +250,39 @@ SCHEMAS = [
                 "t_release_s": {"type": "number", "description": TIME_NOTE},
                 "t_exhaust_s": {"type": "number", "description": TIME_NOTE},
                 "basis": {"type": "string", "description": BASIS_NOTE},
+                "system_type": {"type": "string", "description": SYSTEM_NOTE},
+                "edition": {"type": "string", "description": EDITION_NOTE},
             },
-            ["v_gal", "q_fill_gpm", "t_detect_s", "t_release_s", "t_exhaust_s", "basis"],
+            ["v_gal", "q_fill_gpm", "system_type", "basis"],
         ),
     },
     {
         "name": "density_area",
-        "description": "Sprinkler demand from formulas.density_area. design area = base * (1 + increase); demand adds hose." + US_UNITS_NOTE,
+        "description": (
+            "Sprinkler demand from formulas.density_area. design area = base * (1 + increase); demand adds hose. "
+            "Density and base area must be greater than 0, and a duration greater than 0 when one is passed. "
+            "area_increase and hose_gpm are required: pass 0 when none applies, never leave one out. A density or "
+            "an area that is not the job's own is ASSUMED: name it in assumed, with assumed_reason, and only for a "
+            "demand the designer asked for. The result is then labeled ASSUMED, NEEDS PE REVIEW, and "
+            "'ASSUMED INPUT — not for release'. Never use a demand for the delivery or gas-fill screens."
+        ) + US_UNITS_NOTE,
         "input_schema": _obj(
             {
                 "density_gpm_ft2": {"type": "number"},
                 "base_area_ft2": {"type": "number"},
-                "area_increase": {"type": "number"},
-                "hose_gpm": {"type": "number"},
+                "area_increase": {"type": "number", "description": "A fraction: 0.30 is 30 percent. 0 when none applies."},
+                "hose_gpm": {"type": "number", "description": "0 when no hose stream is included."},
                 "duration_min": {"type": "number"},
+                "assumed": {"type": "array", "items": {"type": "string"},
+                            "description": "density_gpm_ft2 and/or base_area_ft2 when that value is ASSUMED."},
+                "assumed_reason": {"type": "string", "description": "Why the ASSUMED value is used, and its source."},
             },
-            ["density_gpm_ft2", "base_area_ft2"],
+            ["density_gpm_ft2", "base_area_ft2", "area_increase", "hose_gpm"],
         ),
     },
     {
         "name": "hose_duration",
-        "description": "Hose stream and duration from formulas.hose_duration (NFPA 13-2025 Table 19.2.3.1.2 screen).",
+        "description": "Hose stream and duration from formulas.hose_duration. The result's basis key names the table and its edition; quote it as written.",
         "input_schema": _obj(
             {"hazard": {"type": "string"}, "supervised": {"type": "boolean"}},
             ["hazard"],
@@ -244,7 +292,8 @@ SCHEMAS = [
         "name": "nitrogen_gate",
         "description": (
             "Design C is 100. Fill scfm is formulas.air_fill_scfm. "
-            "The result states the gauge-basis rate and the absolute-basis rate. Quote both. "
+            "The result states the gauge-basis rate and the absolute-basis rate. Quote both, and size on the larger "
+            "(the result's sizing_basis names it). "
             "Do not emit C=120 as the design value. p_psig is the supervisory fill pressure and t_min the fill "
             "time. Both are required: the application supplies neither. Pass the job's own, or a value you state "
             "as ASSUMED with its reason. A value passed is used as passed, a 0 included."
@@ -263,11 +312,14 @@ SCHEMAS = [
             "figure before you pass it, and convert a result the designer wants in SI after. Never convert in your "
             "head, and never put another unit on a tool's result. The result is a calculation record: cite it for "
             "the converted figure. A figure that was ASSUMED stays ASSUMED. Gauge stays gauge; an absolute "
-            "pressure and cubic feet are not converted."
+            "pressure, cubic feet, and a K-factor are not converted. A kPa or bar written without a gauge mark "
+            "becomes ASSUMED gauge for a sprinkler-pressure field and is refused for a gas-law field "
+            "(" + ", ".join(units.GAS_LAW_FIELDS) + "): name the field it is for, or write kPa(g) or barg."
         ),
         "input_schema": _obj(
             {
                 "value": {"type": "number"},
+                "field": {"type": "string", "description": "The calc field the figure is for, such as p_psig or p_psi. Needed for an unmarked kPa or bar going to psi."},
                 "from_unit": {"type": "string", "description": "The unit the figure is in: mm/min, m², L/min, L/s, m³/h, kPa, bar, m, mm, L, or a US unit."},
                 "to_unit": {"type": "string", "description": "The unit wanted: gpm/ft², ft², gpm, psi, gal, ft, in, or an SI unit."},
             },
@@ -312,7 +364,7 @@ SCHEMAS = [
         "input_schema": _obj(
             {
                 "mix": {"type": "object", "description": "Gas name to volume percent or fraction."},
-                "lfl": {"type": "object", "description": "Gas name to component LFL vol%. Use null for an inert."},
+                "lfl": {"type": "object", "description": "Gas name to component LFL vol%, for every gas in mix. Write \"inert\" for an inert gas. A blank, missing, or non-positive LFL holds the call."},
                 "screens": {
                     "type": "array",
                     "description": "Each item has name, pct, and basis (fuel or diluted). pct is the caller's percent.",
@@ -323,7 +375,12 @@ SCHEMAS = [
     },
     {
         "name": "fp_calc",
-        "description": "Run any other op in calcs/fp/formulas.py by name (hazen_williams, pump_envelope, k_factor, and the rest). Pass op and inputs. Do not compute the formula yourself." + US_UNITS_NOTE,
+        "description": (
+            "Run any other op in calcs/fp/formulas.py by name (hazen_williams, pump_envelope, k_factor, and the rest). "
+            "Pass op and inputs. Do not compute the formula yourself. The delivery screens have tools of their own "
+            "(dry_delivery_screen, di_trip_to_water) and are refused here. density_area here takes the same checks as "
+            "its own tool. A k_factor result's k_si is a display figure, never a design input."
+        ) + US_UNITS_NOTE,
         "input_schema": _obj(
             {"op": {"type": "string"}, "inputs": {"type": "object"}},
             ["op", "inputs"],
@@ -896,6 +953,122 @@ class ToolSession:
             )
         return out
 
+    def _fp_calc(self, args: dict) -> dict:
+        """One kernel op by name. An op with a tool of its own is refused, and density_area takes its tool's checks."""
+        op = str(args.get("op") or "")
+        payload = dict(args.get("inputs") or {})
+        key = op.strip().lower().replace(" ", "_")
+        canonical = (getattr(self.formulas, "OPS", {}) or {}).get(key, key)
+        if canonical in _OWN_TOOL_OPS:
+            raise ValueError(
+                f"fp_calc does not run {op!r}. Call the {_OWN_TOOL_OPS[canonical]} tool: it takes the system type, "
+                "the job's edition, and the sub-times by the application's rules."
+            )
+        if canonical == "density_area":
+            _check_density_area(payload, require_increase_and_hose=False)
+        missing = _elevation_missing(canonical, payload)
+        if missing:
+            raise ValueError(
+                f"fp_calc {op!r} needs every elevation given: " + ", ".join(missing) + ". Pass 0 where the run is "
+                "level; a blank is not taken as 0."
+            )
+        return self.formulas.dispatch(op, payload)
+
+    def _delivery(self, name: str, args: dict) -> dict:
+        """dry_delivery_screen or di_trip_to_water, with the arguments the application owes the kernel.
+
+        The system type is required and goes to the kernel as given (no "di"
+        stands in for a blank, and wet has no delivery rows). The delivery
+        screen is told the declared interlock (double for di, none for dry,
+        unless the caller says). The trip screen is told V is the caller's
+        (v_basis caller): the tool plan passes the zone total. The job's NFPA
+        13 edition goes to the kernel when the kernel holds its labels; when the
+        job pins none, or one the kernel does not hold, the figures run and
+        every NFPA 13 cite is withheld, and the row says so. No edition is
+        written for it. A sub-time not given leaves the row the fill time alone
+        and its margin, with no pass or fail; a sub-time given as 0 is used and
+        marked ASSUMED-ZERO.
+        """
+        _missing(name, args, _DELIVERY_REQUIRED)
+        system = _delivery_system(name, args.get("system_type"))
+        edition, withheld, requested = self._delivery_edition(args.get("edition"))
+        given = [key for key in SUB_TIMES if _number_was_passed(args, key)]
+        fill_only = len(given) < len(SUB_TIMES)
+        # Fill time only: none of the times goes to the kernel, so no figure is computed on one the job lacks.
+        times = {} if fill_only else {key: args[key] for key in SUB_TIMES}
+        kwargs: dict[str, Any] = {"basis": args.get("basis"), "system_type": system, **times}
+        if edition is not None:
+            kwargs["edition"] = edition
+        if name == "dry_delivery_screen":
+            segments = args.get("segments")
+            if isinstance(segments, list) and any(
+                    isinstance(row, dict) and row.get("d_in") in (None, "") for row in segments):
+                # A takeoff written by nominal size, as zone_trapped_volume takes it. The shop inside
+                # diameters are the kernel's (pipe_ids), not a figure worked out here.
+                rows, _flags = self.di._segments(segments)
+                segments = [{"d_in": row["d_in"], "length_ft": row["length_ft"]} for row in rows]
+            declared = args.get("declared_interlock")
+            if _blank(declared):
+                declared = "double" if system == "di" else "none"
+            out = self.formulas.dry_delivery_screen(
+                segments, args.get("q_fill_gpm"), qod=args.get("qod", False), declared_interlock=declared, **kwargs)
+            out = _govern_delivery_exemption(self.formulas, out, args, self.di, segments)
+        else:
+            out = self.formulas.di_trip_to_water(args.get("v_gal"), args.get("q_fill_gpm"), v_basis="caller", **kwargs)
+        if withheld:
+            out = _withhold_cites(out, withheld, requested)
+            stated = self._job_edition() if not requested else None
+            if stated:
+                # Said to the caller, never put in: the job states an edition this call did not pass.
+                out["edition_note"] = (f"This call passed no edition. The job states NFPA 13-{stated}; pass edition "
+                                       f"{stated} for the kernel's cites.")
+        else:
+            out = {**out, "edition_status": "pinned"}
+        if fill_only:
+            out = _fill_time_only(out, [key for key in SUB_TIMES if key not in given])
+        else:
+            out = _mark_assumed_zero(out, args)
+        return _near_threshold(out) if name == "dry_delivery_screen" else out
+
+    def _delivery_edition(self, value: Any) -> tuple[int | None, str, str]:
+        """(the edition the kernel is told, why cites are withheld or "", the year the caller asked for).
+
+        Blank: nothing is told and the cites are withheld, EDITION NOT SET. A
+        year the kernel holds labels for goes to it. Any other year runs with
+        its cites withheld until the kernel holds that edition's labels.
+        """
+        if _blank(value):
+            return None, EDITION_NOT_SET, ""
+        years = sorted(set(_YEAR.findall(str(value))))
+        if len(years) != 1:
+            raise ValueError(f"edition takes one NFPA 13 edition year, not {value!r}. Leave it out when the job "
+                             "has not pinned one.")
+        year = years[0]
+        if self._kernel_holds_edition(int(year)):
+            return int(year), "", year
+        return None, EDITION_NOT_HELD.format(year=year), year
+
+    def _job_edition(self) -> str | None:
+        """The NFPA 13 edition the job pins, read from the record for a note to the caller. None without one."""
+        if not self.recording:
+            return None
+        try:
+            return coherence.pinned_edition(self.record.givens(self.project_id).get("nfpa_13"))
+        except Exception:
+            return None
+
+    def _kernel_holds_edition(self, year: int) -> bool:
+        """Whether the kernel's delivery screens carry this NFPA 13 edition's labels. Asked of the kernel."""
+        cites = getattr(self.formulas, "nfpa13_cites", None)
+        check = cites or getattr(self.formulas, "_parse_nfpa13_dry_edition", None)
+        if check is None:
+            return False
+        try:
+            check(year)
+        except Exception:
+            return False
+        return True
+
     def _run(self, name: str, args: dict) -> dict:
         if name == "list_skills":
             return {"skills": list_skills(self.root)}
@@ -935,44 +1108,10 @@ class ToolSession:
                 args.get("fittings_percent"),
                 args.get("trim_gal"),
             )
-        if name == "dry_delivery_screen":
-            segments = args.get("segments")
-            if isinstance(segments, list) and any(
-                    isinstance(row, dict) and row.get("d_in") in (None, "") for row in segments):
-                # A takeoff written by nominal size, as zone_trapped_volume takes it. The shop inside
-                # diameters are the kernel's (pipe_ids), not a figure worked out here.
-                rows, _flags = self.di._segments(segments)
-                segments = [{"d_in": row["d_in"], "length_ft": row["length_ft"]} for row in rows]
-            _missing(name, args, _DELIVERY_REQUIRED)
-            screen = self.formulas.dry_delivery_screen(
-                segments,
-                args.get("q_fill_gpm"),
-                qod=args.get("qod", False),
-                t_detect_s=args.get("t_detect_s"),
-                t_release_s=args.get("t_release_s"),
-                t_exhaust_s=args.get("t_exhaust_s"),
-                basis=args.get("basis"),
-                system_type=args.get("system_type") or "di",
-            )
-            return _govern_delivery_exemption(self.formulas, screen, args)
-        if name == "di_trip_to_water":
-            _missing(name, args, _DELIVERY_REQUIRED)
-            return self.formulas.di_trip_to_water(
-                args.get("v_gal"),
-                args.get("q_fill_gpm"),
-                t_detect_s=args.get("t_detect_s"),
-                t_release_s=args.get("t_release_s"),
-                t_exhaust_s=args.get("t_exhaust_s"),
-                basis=args.get("basis"),
-            )
+        if name in ("dry_delivery_screen", "di_trip_to_water"):
+            return self._delivery(name, args)
         if name == "density_area":
-            return self.formulas.density_area(
-                args.get("density_gpm_ft2"),
-                args.get("base_area_ft2"),
-                area_increase=args.get("area_increase") or 0,
-                hose_gpm=args.get("hose_gpm") or 0,
-                duration_min=args.get("duration_min"),
-            )
+            return _density_area(self.formulas, args)
         if name == "hose_duration":
             _missing(name, args, ("hazard",))
             return self.formulas.hose_duration(args.get("hazard"), args.get("supervised", False))
@@ -980,12 +1119,14 @@ class ToolSession:
             # The pressure and the time are the caller's. A figure that was passed goes to the kernel as passed:
             # a 0 is refused there, never replaced. One not passed is refused here: no starting value stands in.
             _missing(name, args, ("p_psig", "t_min"))
-            return self.di.nitrogen_gate(args.get("v_gal"), args.get("p_psig"), args.get("t_min"))
+            return _sizing_basis(self.di.nitrogen_gate(args.get("v_gal"), args.get("p_psig"), args.get("t_min")))
         if name == CONVERT_TOOL:
-            return units.convert(args.get("value"), args.get("from_unit"), args.get("to_unit"))
+            return units.convert(args.get("value"), args.get("from_unit"), args.get("to_unit"), field=args.get("field"))
         if name == "elect_di_trim":
+            # A blank system type is not taken as anything: the call is refused, as a zone run is.
+            _missing(name, args, ("system_type",))
             return self.di.elect_di_trim(
-                args.get("system_type") or "",
+                args.get("system_type"),
                 prime_held_by=args.get("prime_held_by") or "unknown",
                 failsafe_on_total_power_loss=args.get("failsafe_on_total_power_loss", False),
                 supervisory_psi=args.get("supervisory_psi"),
@@ -1000,12 +1141,15 @@ class ToolSession:
         if name == "lfl_setpoints":
             return _lfl_setpoints(self.root, args)
         if name == "fp_calc":
-            return self.formulas.dispatch(str(args.get("op") or ""), dict(args.get("inputs") or {}))
+            return self._fp_calc(args)
         if name == "fa_calc":
             return run_fa_calc(self.root, args)
         if name == "search_corpus":
             return search_corpus(self.root, args)
         raise KeyError(f"unknown tool {name}")
+
+
+INERT = "inert"
 
 
 def _lfl_setpoints(content_root: Path, args: dict) -> dict:
@@ -1021,13 +1165,27 @@ def _lfl_setpoints(content_root: Path, args: dict) -> dict:
         raise ValueError("mix and lfl must be objects")
     if not isinstance(screens, list):
         raise ValueError("screens must be a list")
-    clean_lfl = {}
+    # Every gas in the mix has an LFL the caller gave, or is named inert. A blank, a missing one, a 0, or a negative
+    # one holds the call: the kernel reads a gas with no LFL as inert, and the application picks no LFL for it.
+    clean_lfl: dict[str, float | None] = {}
+    holds = []
     for key, value in table.items():
-        if value is None or value == "":
+        if isinstance(value, str) and value.strip().lower() == INERT:
             clean_lfl[str(key)] = None
-        else:
-            clean_lfl[str(key)] = float(value)
+            continue
+        number = None if _blank(value) else _finite(value)
+        if number is None or number <= 0:
+            holds.append(f"{key} (LFL {value!r})")
+            continue
+        clean_lfl[str(key)] = number
     clean_mix = {str(key): float(value) for key, value in mix.items()}
+    holds.extend(f"{key} (no LFL given)" for key in clean_mix if key not in clean_lfl
+                 and not any(f"{key} (LFL" in item for item in holds))
+    if holds:
+        raise ValueError(
+            "HOLD: lfl_setpoints needs a component LFL vol% greater than 0 for every gas in mix, or \"inert\": "
+            + ", ".join(holds) + ". The application picks no LFL and no percent."
+        )
     clean_screens = []
     for screen in screens:
         if not isinstance(screen, dict):
@@ -1073,19 +1231,227 @@ def _number_was_passed(args: dict, key: str) -> bool:
     return True
 
 
-def _govern_delivery_exemption(formulas, screen: dict, args: dict) -> dict:
+def _blank(value: Any) -> bool:
+    return value is None or (isinstance(value, str) and not value.strip())
+
+
+# The elevation arguments of the kernel ops that take one. The kernel puts 0 in for one left out; the application
+# does not let that stand: a 0 is allowed only when it is passed (typed).
+_ELEVATION_TOP = {
+    "electric_overpressure": ("elevation_ft",),
+    "relief_check": ("elevation_adj_psi",),
+    "bor_demand_pressure": ("dz_ft",),
+}
+_ELEVATION_SEGMENTS = ("tapered_branch", "cross_main_walk", "bor_demand_pressure")
+
+
+def _elevation_missing(op: str, payload: dict) -> list[str]:
+    """The elevations an fp_calc op would take as 0 because they were left out. Empty when every one was given."""
+    missing = [key for key in _ELEVATION_TOP.get(op, ()) if not _number_was_passed(payload, key)]
+
+    def walk(segments: Any, where: str) -> None:
+        if not isinstance(segments, list):
+            return
+        for index, row in enumerate(segments, start=1):
+            if isinstance(row, dict) and not _number_was_passed(row, "dz_ft"):
+                missing.append(f"{where}[{index}].dz_ft")
+
+    if op in _ELEVATION_SEGMENTS:
+        walk(payload.get("segments"), "segments")
+    if op == "cross_main_walk" and isinstance(payload.get("branches"), list):
+        for index, branch in enumerate(payload["branches"], start=1):
+            tapered = branch.get("tapered") if isinstance(branch, dict) else None
+            if isinstance(tapered, dict):
+                walk(tapered.get("segments"), f"branches[{index}].tapered.segments")
+    return missing
+
+
+def _delivery_system(tool: str, value: Any) -> str:
+    """The system type a delivery row runs on: dry or di, as given. Wet has no delivery rows."""
+    text = str(value).strip().lower().replace("-", "_").replace(" ", "_")
+    if text in ("wet", "wet_pipe"):
+        raise ValueError(f"{tool} takes system_type dry or di. A wet zone has no delivery rows.")
+    return str(value).strip()
+
+
+def _withhold_cites(out: dict, why: str, requested: str) -> dict:
+    """The row with every NFPA 13 cite the kernel wrote replaced by why. The figures are the kernel's, unchanged.
+
+    The kernel ran without an edition, so its cites name the one it labels by
+    default. That is not the job's edition, so none of them is kept: not on
+    the record, not shown, not sent to a model.
+    """
+    shown = {}
+    for key, value in out.items():
+        if isinstance(value, str) and _NFPA13_TEXT.search(value):
+            shown[key] = why
+        else:
+            shown[key] = value
+    shown["edition"] = None
+    shown["edition_status"] = "not set" if why == EDITION_NOT_SET else "not held"
+    shown["cites_withheld"] = why
+    if requested:
+        shown["edition_requested"] = requested
+    return shown
+
+
+def _fill_time_only(out: dict, missing: list[str]) -> dict:
+    """A delivery row with a sub-time not given: the fill time and its margin to the limit, and no verdict.
+
+    The kernel ran with no sub-time passed. t_total, the pass or fail, and the
+    volume that meets the limit would rest on times the job does not have, so
+    they are left out. fill_margin_s is the limit less the fill time alone.
+    """
+    dropped = ("t_total_s", "passes_screen", "v_max_gal_at_limit", "margin_s")
+    shown = {key: value for key, value in out.items() if key not in dropped}
+    shown["formula"] = "t_fill = 60*V/Q_fill (fill time only; sub-times not provided)"
+    if "margin_s" in out:
+        shown["fill_margin_s"] = out["margin_s"]
+        shown["fill_margin_basis"] = "the limit less the fill time alone; no detection, releasing, or exhaust time is in it"
+    shown["fill_only"] = True
+    shown["subtimes_missing"] = list(missing)
+    shown["screen_status"] = FILL_ONLY
+    return shown
+
+
+def _mark_assumed_zero(out: dict, args: dict) -> dict:
+    """A sub-time given as 0 is used as given, and the row says it is an optimistic assumption."""
+    zeros = []
+    for key in SUB_TIMES:
+        try:
+            if float(args.get(key)) == 0.0:
+                zeros.append(key)
+        except (TypeError, ValueError):
+            continue
+    if not zeros:
+        return out
+    return {**out, "assumed_zero": zeros,
+            "assumed_zero_note": (", ".join(f"{key} = 0 s" for key in zeros) + f" as typed: {ASSUMED_ZERO}. "
+                                  f"A zero sub-time makes the screen more optimistic. {NEEDS_PE_REVIEW}.")}
+
+
+def _threshold_gal(screen: dict) -> float | None:
+    """The size exemption threshold the kernel returned. nfpa_size_cap_gal is its legacy alias, on older rows."""
+    for key in ("nfpa_size_threshold_gal", "nfpa_size_cap_gal"):
+        value = screen.get(key)
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return float(value)
+    return None
+
+
+def _near_threshold(out: dict) -> dict:
+    """Flag a zone total within NEAR_THRESHOLD_FRACTION of the exemption threshold. The answer is unchanged."""
+    threshold = _threshold_gal(out)
+    judged = out.get("exemption_volume_gal")
+    if threshold is None or not isinstance(judged, (int, float)) or isinstance(judged, bool) or threshold <= 0:
+        return out
+    if abs(float(judged) - threshold) > NEAR_THRESHOLD_FRACTION * threshold:
+        return out
+    return {**out, "near_threshold": (
+        f"The zone total of {float(judged):.1f} gal is within {NEAR_THRESHOLD_FRACTION:.0%} of the "
+        f"{threshold:.0f} gal exemption threshold. The answer can turn on the trim and fittings figures. "
+        f"{NEEDS_PE_REVIEW}.")}
+
+
+def _sizing_basis(out: dict) -> dict:
+    """Say which of the kernel's two fill rates is the larger, the one the owner's ruling sizes on. Both stay."""
+    gauge, absolute = out.get("scfm_gauge_basis"), out.get("scfm_abs_basis")
+    if not all(isinstance(value, (int, float)) and not isinstance(value, bool) for value in (gauge, absolute)):
+        return out
+    which = "absolute" if float(absolute) >= float(gauge) else "gauge"
+    figure = float(absolute) if which == "absolute" else float(gauge)
+    return {**out, "sizing_basis": which,
+            "sizing_note": f"Both bases are quoted; size on the larger, the {which}-basis rate of {figure:.2f} scfm."}
+
+
+_POSITIVE_DEMAND = ("density_gpm_ft2", "base_area_ft2")
+_ASSUMABLE_DEMAND = ("density_gpm_ft2", "base_area_ft2")
+
+
+def _check_density_area(args: dict, *, require_increase_and_hose: bool = True) -> None:
+    """A demand the kernel would compute on a meaningless figure is refused, on every path that reaches it.
+
+    Density and base area must be greater than 0, and a duration greater than
+    0 when one is given. The area increase and the hose may be 0, but a blank
+    one is not taken as 0 (the density_area tool requires both).
+    """
+    problems = []
+    for key in _POSITIVE_DEMAND:
+        if not _number_was_passed(args, key):
+            problems.append(f"{key} is required")
+            continue
+        number = _finite(args[key])
+        if number is None or number <= 0:
+            problems.append(f"{key} must be a number greater than 0, not {args[key]!r}")
+    if _number_was_passed(args, "duration_min"):
+        number = _finite(args["duration_min"])
+        if number is None or number <= 0:
+            problems.append(f"duration_min must be a number greater than 0 when it is given, not {args['duration_min']!r}")
+    for key in ("area_increase", "hose_gpm"):
+        if not _number_was_passed(args, key):
+            if require_increase_and_hose:
+                problems.append(f"{key} is required: pass 0 when none applies; a blank is not taken as 0")
+            continue
+        number = _finite(args[key])
+        if number is None or number < 0:
+            problems.append(f"{key} must be 0 or more, not {args[key]!r}")
+    if problems:
+        raise ValueError("density_area: " + "; ".join(problems) + ".")
+
+
+def _finite(value: Any) -> float | None:
+    if isinstance(value, bool):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
+
+
+def _density_area(formulas, args: dict) -> dict:
+    """density_area with its checks, and an ASSUMED density or area labeled on the result and everything after it."""
+    _check_density_area(args)
+    assumed = args.get("assumed") or []
+    if isinstance(assumed, str):
+        assumed = [assumed]
+    if not isinstance(assumed, list) or any(item not in _ASSUMABLE_DEMAND for item in assumed):
+        raise ValueError("density_area: assumed lists density_gpm_ft2 and/or base_area_ft2, the values that are ASSUMED.")
+    reason = str(args.get("assumed_reason") or "").strip()
+    if assumed and not reason:
+        raise ValueError("density_area: an ASSUMED density or area needs assumed_reason, why it is used and its source.")
+    out = formulas.density_area(
+        args.get("density_gpm_ft2"),
+        args.get("base_area_ft2"),
+        area_increase=args.get("area_increase"),
+        hose_gpm=args.get("hose_gpm"),
+        duration_min=args.get("duration_min"),
+    )
+    if not assumed:
+        return out
+    units_of = {"density_gpm_ft2": "gpm/ft²", "base_area_ft2": "ft²"}
+    lines = [f"{key} {float(args[key]):g} {units_of[key]} ASSUMED ({reason}). {NEEDS_PE_REVIEW}." for key in assumed]
+    return {**out, "assumed_inputs": [{"name": key, "value": float(args[key]), "unit": units_of[key],
+                                       "label": "ASSUMED", "reason": reason} for key in assumed],
+            "assumed_note": " ".join(lines), "release_status": ASSUMED_NOT_FOR_RELEASE}
+
+
+def _govern_delivery_exemption(formulas, screen: dict, args: dict, di=None, segments: Any = None) -> dict:
     """The size exemption on the screen's result follows the zone total, or it is not stated at all.
 
-    The kernel screen compares pipe volume with the cap. That is a
+    The kernel screen compares pipe volume with the threshold. That is a
     lower-bound screen, and the kernel says it does not by itself claim the
-    exemption: the comparison that counts uses the full system size.
+    exemption: the comparison that counts uses the full system size. This
+    stays until the kernel returns the zone-total exemption itself.
 
-    - zone_gal passed: the exemption is that zone total against the cap
+    - zone_gal passed: the exemption is that zone total against the threshold
       (the tool plan passes the takeoff's own zone_gal).
-    - trim_gal or fittings_percent passed: the zone total is pipe plus those
-      allowances, as before. An omitted one counts as 0.
+    - trim_gal or fittings_percent passed: the zone total is the kernel's own
+      takeoff of these segments with those allowances. One left out takes the
+      kernel's ASSUMED value (its cut-length fittings allowance, its trim), never
+      0.
     - neither: the result is a pipe-only screen. It says "no" only when the
-      pipe alone is already over the cap, which settles it. Otherwise
+      pipe alone is already over the threshold, which settles it. Otherwise
       nfpa_delivery_time_exempt is None and exemption_status says why.
 
     Timing on the pipe-only screen stays in every case.
@@ -1100,17 +1466,24 @@ def _govern_delivery_exemption(formulas, screen: dict, args: dict) -> dict:
     fittings_passed = _number_was_passed(args, "fittings_percent")
     if not trim_passed and not fittings_passed:
         return pipe_only_screen(screen)
-    trim = formulas._require_non_negative("trim_gal", args["trim_gal"]) if trim_passed else 0.0
-    fittings = (
-        formulas._require_non_negative("fittings_percent", args["fittings_percent"])
-        if fittings_passed else 0.0
+    if di is None or segments is None:
+        raise ValueError("dry_delivery_screen: the zone total needs the kernel's takeoff of the segments.")
+    # The kernel's takeoff, cut lengths: an allowance left out is its ASSUMED one, and its flags say so.
+    takeoff = di.zone_trapped_volume(
+        segments, "cut",
+        args["fittings_percent"] if fittings_passed else None,
+        args["trim_gal"] if trim_passed else None,
     )
-    pipe = float(screen["volume_gal"])
-    zone_gal = pipe * (1.0 + fittings / 100.0) + trim
-    parts = []
-    parts.append(f"fittings {fittings:g}%" if fittings_passed else "no fittings allowance passed (counted as 0)")
-    parts.append(f"trim {trim:g} gal" if trim_passed else "no trim passed (counted as 0)")
-    return govern_nfpa_exemption(screen, zone_gal, "pipe plus the allowances passed to this call: " + ", ".join(parts))
+    parts = [f"fittings {float(takeoff['fittings_percent']):g}%"
+             + ("" if fittings_passed else " (left out; the kernel's ASSUMED allowance)"),
+             f"trim {float(takeoff['trim_gal']):g} gal"
+             + ("" if trim_passed else " (left out; the kernel's ASSUMED trim)")]
+    governed = govern_nfpa_exemption(screen, float(takeoff["zone_gal"]),
+                                     "pipe plus the allowances on this call: " + ", ".join(parts))
+    assumed = [flag for flag in takeoff.get("flags") or [] if isinstance(flag, str) and flag.startswith("ASSUMED")]
+    if assumed:
+        governed["exemption_assumptions"] = assumed
+    return governed
 
 
 _IDENTITY_CACHE: dict[str, str] = {}
