@@ -297,10 +297,17 @@ def matched_source(
     return (design or fresh or matching)[-1]
 
 
-# Arguments that decide a yes or no at a threshold. A tolerance that is harmless for a time or a flow can
-# carry such a figure across its threshold: a takeoff of 500.4 gal passed as 500 would read as exempt. So
-# the tool is handed the recorded figure itself, not the caller's rounding of it (ToolSession.execute).
-EXACT_FROM_SOURCE: dict[str, tuple[str, ...]] = {"dry_delivery_screen": ("zone_gal",)}
+# Arguments a calculation takes from an earlier one and that the tool is handed as recorded, not as the
+# caller rounded them (ToolSession.execute). The match that ties a passed figure to its source has a
+# tolerance, and that tolerance must not decide a yes or no at a threshold: a takeoff of 500.4 gal passed
+# as 500 would read as exempt on the size screen, and would pass a 30 s trip-time screen it fails by
+# 0.01 s. The gas fill decides nothing at a threshold; it is here so one zone total gives one recorded
+# fill, and a specialist that repeats the tool plan's call with the volume rounded replays that row.
+EXACT_FROM_SOURCE: dict[str, tuple[str, ...]] = {
+    "dry_delivery_screen": ("zone_gal",),
+    "di_trip_to_water": ("v_gal",),
+    "nitrogen_gate": ("v_gal",),
+}
 
 
 def _plain(value: Any) -> Any:

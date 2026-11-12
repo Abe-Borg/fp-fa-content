@@ -317,6 +317,46 @@ class SizeExemptionTests(unittest.TestCase):
         self.assertEqual(other["exemption_volume_gal"], 450)
         self.assertIn("matches no recorded zone_trapped_volume result", other["differs_from_project_inputs"])
 
+    def test_a_rounded_volume_cannot_carry_the_trip_time_across_its_limit(self):
+        """The same takeoff, 500.3 gal, passed to the trip time as 500. At 1500 gpm with 10 s of delays the
+        exact volume misses the 30 s screen by a hundredth of a second and the rounded one meets it. The
+        expected time is the tool's own stated sum on the takeoff's recorded volume, not on the rounding."""
+        from fpfa.calc_tools import ToolSession
+        from fpfa.coherence import analyze
+        from fpfa.sample_data import EXAMPLE_DI
+
+        record = _record()
+        di = copy.deepcopy(EXAMPLE_DI)
+        di.update(segments=[{"role": "main", "nps": "6", "schedule": "sch10", "length_ft": 300.45}],
+                  trim_gal=5.0, fittings_percent=0, q_fill_gpm=1500, t_detect_s=8, t_release_s=2, t_exhaust_s=0)
+        _seed_inputs(record, di=di)
+        session = ToolSession(REPO, record=record, project_id="job1", agent="fp-sprinkler")
+        takeoff = session.execute("zone_trapped_volume", {"segments": di["segments"], "fittings_percent": 0, "trim_gal": 5.0})
+        self.assertTrue(500.0 < takeoff["zone_gal"] < 500.5, takeoff["zone_gal"])
+        times = {"q_fill_gpm": 1500, "t_detect_s": 8, "t_release_s": 2, "t_exhaust_s": 0, "basis": "FM"}
+        exact = session.execute("di_trip_to_water", {"v_gal": takeoff["zone_gal"], **times})
+        self.assertNotIn("figure_taken_from_the_record", exact)
+        rounded = session.execute("di_trip_to_water", {"v_gal": 500, **times})
+        expected = 8 + 2 + 0 + 60.0 * takeoff["zone_gal"] / 1500
+        self.assertGreater(expected, 30.0)
+        self.assertAlmostEqual(rounded["t_total_s"], expected, places=9)
+        self.assertIs(rounded["passes_screen"], False, "500 gal would give exactly 30.0 s, which meets the screen")
+        self.assertEqual(rounded["record_id"], exact["record_id"], "one calculation, so one row")
+        self.assertIn("v_gal was passed as 500. The calculation used the figure on the zone_trapped_volume record "
+                      f"[{takeoff['record_id']}] itself", rounded["figure_taken_from_the_record"])
+        trips = [row for row in record.calcs("job1") if row["tool"] == "di_trip_to_water"]
+        self.assertEqual(len(trips), 1)
+        self.assertEqual(trips[0]["inputs"]["v_gal"], takeoff["zone_gal"], "the record holds the figure the call ran on")
+        self.assertEqual(analyze(record.snapshot("job1"))["calcs"][trips[0]["id"]]["state"], "current")
+        # The gas fill takes the same volume the same way: the rounded call is the exact call's row.
+        fill = session.execute("nitrogen_gate", {"v_gal": takeoff["zone_gal"], "p_psig": 40, "t_min": 30})
+        again = session.execute("nitrogen_gate", {"v_gal": 500, "p_psig": 40, "t_min": 30})
+        self.assertEqual(again["record_id"], fill["record_id"])
+        # A volume that matches no takeoff is used as passed and is marked as another case, as before.
+        other = session.execute("di_trip_to_water", {"v_gal": 450, **times})
+        self.assertIs(other["passes_screen"], True)
+        self.assertIn("matches no recorded zone_trapped_volume result", other["differs_from_project_inputs"])
+
     def test_the_sprinkler_role_tells_the_specialist_to_pass_the_zone_total(self):
         text = (REPO / "roles" / "fp-sprinkler" / "ROLE.md").read_text(encoding="utf-8")
         self.assertIn("pass its `zone_gal` to `dry_delivery_screen`", text)
