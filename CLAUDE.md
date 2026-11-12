@@ -135,7 +135,7 @@ The window:
 | `calcs/fp`, `calcs/fa` | Deterministic kernels and their tests. Engineering content (see Ownership). In `calcs/fp`, `formulas.py`, `run.py`, and `test_formulas.py` are staged from the kernel source (`scripts/check_fp_kernel_reproduce.py`); `di_zone.py` is pack-only |
 | `skills/`, `roles/`, `modes/` | One folder per item with one markdown file (`SKILL.md`, `ROLE.md`, `MODE.md`) and `name` and `description` frontmatter. Skills and the specialists' discipline rules are engineering content. `roles/lead` runs the team; `fp-sprinkler`, `fa-releasing`, and `spec-draft` are the specialists; `qa-specialist` is the checker; `everyday` is the shell for a turn with no record |
 | `specs/`, `corpus/` | Engineering content. Draft CSI sections, sent to the model in full; paraphrased pins and notes, searched by `search_corpus` |
-| `docs/` | Plan of record, known answers, acceptance and recovery protocols, live evaluation, releasing basis, content provenance, milestone hand-backs. Not part of the content pack |
+| `docs/` | Plan of record, known answers, acceptance and recovery protocols, live evaluation, releasing basis, content provenance, milestone hand-backs, the app/content hand-back for the content team. Not part of the content pack |
 | `NEXT-STEPS.md` | The reviews of the 0.2.0 and 0.3.0 acceptance reports against the source: what 0.3.1 and 0.3.2 fixed (section 0b for 0.3.2), what is still open, and the owner's decisions and open questions. Not part of the content pack |
 | `scripts/` | `build_content_pack.py` strips paths named foam, clean-agent, canada, catalog, and `_sources`, and refuses any file that holds an API key |
 

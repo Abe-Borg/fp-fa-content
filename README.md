@@ -455,7 +455,7 @@ The window, the look, the streaming, and the license have their own tests. `test
 | `calcs/fa` | Fire-alarm calculation libraries |
 | `specs/` | Draft CSI sections, one file each, sent to the model in full. README is not a spec. Double-interlock draft language is 21 13 19 |
 | `corpus/` | Paraphrased reference notes (edition pins and decision logs). `search_corpus` searches this folder |
-| `docs/` | Plan of record, the known answers for both sample zones, the acceptance and recovery protocols, the live evaluation guide, the basis of the releasing statement and its open gate, where the packaged content stands against the team's live content, and the accounts of the team milestone and the hardening milestone. Not part of the content pack |
+| `docs/` | Plan of record, the known answers for both sample zones, the acceptance and recovery protocols, the live evaluation guide, the basis of the releasing statement and its open gate, where the packaged content stands against the team's live content, the accounts of the team milestone and the hardening milestone, and the app/content hand-back for the content team (`docs/app-content-handback.md`: what a pack must provide, how packs load and are versioned, the app-side risks, and the content changes the app milestones made). Not part of the content pack |
 | `.github/workflows/` | `tests.yml` runs the four suites on every pull request; `content-pack.yml` tests the content before it packs a `content-v*` tag; `windows-app.yml` builds the installer |
 
 ## Not in this prototype
