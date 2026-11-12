@@ -530,7 +530,7 @@ Shop codebook **by title** (not a required filesystem path).
 - *Fire protection impairment management* — sectional valves, hidden impairment, restoration-is-a-test; **48 h / one-at-a-time as AXA XL not FM**; DS 10-7 **opened** (structure, not AXA attribution).
 - *Valve type selection, listing and supervision basis* — monthly-physical population by valve **type**; FM Approved IBV as the third lever; butterfly pressure tax (do not re-calc here).
 - *Hot-work management during campus construction* — DS 10-3 §2.5.1.1.C / §2.5.2.1.3 (work + watch + monitor).
-- *Nitrogen inerting and internal corrosion control* — originally-installed condition precedent; sample at branch-line ends; generator + compressor; C = 100 until 98% earned; DS 2-1 mined companion.
+- *Nitrogen inerting and internal corrosion control* — originally-installed condition precedent; sample at branch-line ends; generator + compressor; DS 2-1 mined companion. Nitrogen is a corrosion and reliability measure, never a C credit: design C = 100; C = 120 appears only as comparison.
 
 **Sheets as the codebook / holdings state them (do not invent sections)**
 

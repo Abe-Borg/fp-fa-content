@@ -6,7 +6,7 @@ Elevation change is 0.433 psi per foot of fresh water.
 
 The NFPA 13 remote-area length is 1.2 times the square root of the area. Hose is added at the base of the riser, not through the branch lines.
 
-Company reporting: C = 120 for wet pipe, C = 100 for dry and double-interlock. The nitrogen C = 120 column is comparison-only. Show the friction understatement if someone asks for the credit (`nitrogen-compressor-and-c-factor.md`). Do not size on C = 120.
+Company reporting: C = 100 for wet, dry, and double-interlock. C = 120 appears only as a labelled comparison value, including the nitrogen column, and nitrogen is not a C credit. Show the friction understatement if someone asks for the credit (`nitrogen-compressor-and-c-factor.md`). Do not size on C = 120.
 
 FM DS 2-0 Appendix A accepts Hazen-Williams at or below 30 ft/s and calls for Darcy-Weisbach above 30 ft/s, and for a non-water system. Water sprinklers stay on Hazen-Williams inside that speed.
 

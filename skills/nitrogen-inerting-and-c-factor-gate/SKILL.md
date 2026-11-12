@@ -178,7 +178,7 @@ Emit rows as needed:
 | **FM DS 2-81** | Full-flow 3→10 yr; originally-installed obstruction exemption; air tightness 40 psi / 1½ psi / 24 h | Codebook pin **April 2019 / IR October 2021**. Catalog current **IR April 2026** (routing inspect; not copied). Cite codebook until training role restamps; flag Δ `[V]`. Scope fence §1.0: ITM only. |
 | **FM DS 3-0** | Hazen-Williams physics for the 29 % swing | Held copy **March 2010** (verify current). Eq 15 is edition-independent physics. |
 | **AXA XL** DC white paper | Controlling AXA path that **mandates** N₂ = **DI** (+30 % area **AND** nitrogen-fill). SI preferred = **`comparison-only`** under company fence — may discuss N₂ for corrosion, **cannot** be controlling BOD | **March 2026**, p.8 |
-| **DoD UFC 3-600-01** | Controlling **only** on a DoD job: **mandatory** N₂, **≥98 % throughout piping within 14 days**, C=120 permitted (here `comparison-only` — emit 100), **no stand-alone bottles**; continuous venting not permitted | Change **6, 2021**, §9-6 / §9-7. **14-day = spec obligation**, not a Hopkins-supported achievement. |
+| **DoD UFC 3-600-01** | Controlling **only** on a DoD job: **mandatory** N₂, **≥98 % throughout piping within 14 days**, UFC lists C=120 (`comparison-only` here — emit 100), **no stand-alone bottles**; continuous venting not permitted | Change **6, 2021**, §9-6 / §9-7. **14-day = spec obligation**, not a Hopkins-supported achievement. |
 | **FM Approval Standard 1035** | Defines "FM Approved nitrogen generator" | **Certificate-held:** FM Approvals certificates cite **FM 1035 (September 2024)** — UFS **PR470042** (NGM-5 / 10 / 20 / 30 / 60, granted 15 Sep 2025, UFS-356 Rev 1.00) and **PR470065** (NITROGEN-PAC SC-1L, granted 25 Oct 2024, UFS-612A Rev 1.00). **Standard text unheld** (Sep 2022 copy training role-opened, PDF-held only). ECS / Potter "FM 1035 Approved" = **listing claims** in OEM sheets. Verify any listing at approvalguide.com (surveillance-dependent). |
 | **FM DS 2-1** *Corrosion in Automatic Sprinkler Systems* | Corrosion mechanism + N₂ in dry/preaction **and** wet; coupon rates; **does not grant C=120** | **Oct 2016 / IR July 2022**, 21 pp. Official ungated FMDS0201. |
 
@@ -312,14 +312,14 @@ Provenance: **mined** `_sources/` unless marked PDF-held. **Still refuse invent 
 
 ### 3.8 Parameter D — C-factor: emit C = 100 (always)
 
-**★★ the engineer dial: calc C = 100 on company dry / DI sprinkler pipe — always. Do not chase C=120.** This holds even when FM / UFC / NFPA 13-2022 would permit 120 and even when branch-end purity is measured ≥98 %. Emitting 100 is the most-stringent numeric (owner layer raises; nobody lowers).
+**★★ the engineer dial: calc C = 100 on company dry / DI sprinkler pipe — always. Do not chase C=120.** This holds even when FM / UFC / NFPA 13-2022 list 120 and even when branch-end purity is measured ≥98 %. Emitting 100 is the most-stringent numeric (owner layer raises; nobody lowers).
 
 | Situation | Emitted calc C | C=120 line | Status |
 |---|---|---|---|
 | Any company dry / DI black-steel system, air or N₂, purity measured or not | **C = 100** | `comparison-only` + 29 % | `grounded` on the 100 emit when inputs pinned |
 | Internally galvanized dry / preaction (FM row 120 vs Potter / 13-2013 = 100) | **C = 100** | both sources stay visible, `comparison-only` | `grounded` on 100 |
 | Polymer-enhanced (FM row 140) | **C = 100** | 140 = `comparison-only` (`[V]` if listing unopened) | `grounded` on 100 |
-| UFC job (permits 120 at ≥98 % / 14 days) | **C = 100** | UFC 120 = `comparison-only`; the 98 % / 14-day obligation still goes in the spec | `grounded` on 100 |
+| UFC job (lists 120 at ≥98 % / 14 days) | **C = 100** | UFC 120 = `comparison-only`; the 98 % / 14-day obligation still goes in the spec | `grounded` on 100 |
 | Software / owner / insurer already ran 120 | **Correct to C = 100** | Print the delta | name it in the BOD |
 
 **Comparison line (print whenever anyone shows 120) — FM DS 3-0 Eq 15, edition-independent physics:**
@@ -406,7 +406,7 @@ Nitrogen = `n` on a dry/DI hall is **not** a Stop — it is a lever **not taken*
 
 **ECS May 2014 (mined):** liquid N₂ never; 2 gal LN₂ / 1 Type A cylinder; OSHA 19.5 %.
 
-**UFC 3-600-01 Change 6 (2021) §9-6 / §9-7 (mined):** mandatory N₂, 98 % / 14 days, C=120, no bottles; continuous venting not permitted.
+**UFC 3-600-01 Change 6 (2021) §9-6 / §9-7 (mined):** mandatory N₂, 98 % / 14 days, UFC lists C=120 (`comparison-only` here — emit 100), no bottles; continuous venting not permitted.
 
 **AXA XL Mar-2026 p.8 (mined):** DI nitrogen-fill +30 % area (controlling AXA N₂ mandate). SI preferred = **`comparison-only`** under company fence.
 
