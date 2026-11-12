@@ -1028,8 +1028,10 @@ class Desk:
             "supervised": bool(self.supervised.get()),
             "density_gpm_ft2": num(self.density.get()),
             "base_area_ft2": num(self.base_area.get()),
-            "area_increase": num(self.area_increase.get()) or 0,
-            "hose_gpm": num(self.hose.get()) or 0,
+            # What the designer typed, a 0 as 0 and a blank as blank. The run names a blank it needs
+            # (workflow.validate_di); nothing here fills one in.
+            "area_increase": num(self.area_increase.get()),
+            "hose_gpm": num(self.hose.get()),
             "q_fill_gpm": num(self.q_fill.get()),
             "t_detect_s": num(self.t_detect.get()) or 0,
             "t_release_s": num(self.t_release.get()) or 0,
@@ -1047,8 +1049,8 @@ class Desk:
             ),
             "fittings_percent": _blank_to_none(self.fittings.get()),
             "trim_gal": _blank_to_none(self.trim_gal.get()),
-            "supervisory_psig": num(self.supervisory_psig.get()) or 40,
-            "fill_minutes": num(self.fill_minutes.get()) or 30,
+            "supervisory_psig": num(self.supervisory_psig.get()),
+            "fill_minutes": num(self.fill_minutes.get()),
             "segments": segments,
         }
 
@@ -1087,8 +1089,10 @@ class Desk:
         self.length_label.set(next((name for name, value in LENGTHS if value == length_code), "Center to center"))
         self.fittings.set(text(di.get("fittings_percent")))
         self.trim_gal.set(text(di.get("trim_gal")))
-        self.supervisory_psig.set(text(di.get("supervisory_psig"), "40"))
-        self.fill_minutes.set(text(di.get("fill_minutes"), "30"))
+        # A job saved before these fields existed starts from the form's own starting values. A blank the
+        # designer saved stays blank.
+        self.supervisory_psig.set(text(di.get("supervisory_psig"), "") if "supervisory_psig" in di else "40")
+        self.fill_minutes.set(text(di.get("fill_minutes"), "") if "fill_minutes" in di else "30")
         self.segments = []
         for segment in di.get("segments") or []:
             self._insert_segment(segment, loaded=False)

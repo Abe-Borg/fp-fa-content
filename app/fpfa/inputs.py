@@ -130,8 +130,60 @@ _INPUT_NOTES = {
 }
 
 
+# The zone form's name for an input and the unit it shows, for a message the designer reads.
+FORM_LABELS = {
+    "density_gpm_ft2": ("Density", "gpm/ft²"),
+    "base_area_ft2": ("Base area", "ft²"),
+    "area_increase": ("Area increase", ""),
+    "hose_gpm": ("Hose", "gpm"),
+    "q_fill_gpm": ("Fill flow", "gpm"),
+    "supervisory_psig": ("Supervisory fill", "psig"),
+    "fill_minutes": ("Fill time", "min"),
+}
+# What a zone run needs. The kernel refuses a fill flow, a fill pressure, or a fill time of 0. It would
+# compute a demand on a density or a base area of 0, but that is not a sprinkler demand, so a run refuses it
+# too. Nothing here is an engineering threshold: these are the values that do not describe a zone at all.
+POSITIVE = ("q_fill_gpm", "density_gpm_ft2", "base_area_ft2", "supervisory_psig", "fill_minutes")
+# These may be 0, which says none on purpose, but not blank: a blank is not an answer, and a run never puts
+# a 0 or a starting value in its place.
+NOT_BLANK = {
+    "area_increase": "Enter it as a fraction (0.30 is a 30 percent increase), or 0 when no increase applies.",
+    "hose_gpm": "Enter the hose stream in gpm, or 0 when none is included.",
+}
+
+
 class InputError(ValueError):
     """A value an input cannot hold. The message names the input and what it takes."""
+
+
+def run_problem(name: str, value: Any) -> str:
+    """Why a zone run cannot use this value of an input, in the form's words. "" when it can.
+
+    A value that is not a number is said to be one, a blank is named as a
+    blank, and nothing is defaulted: the designer decides what goes there.
+    """
+    label, unit = FORM_LABELS.get(name, (name, unit_of(name) if name in ZONE_FIELDS else ""))
+    in_unit = f" {unit}" if unit else ""
+    blank = value is None or (isinstance(value, str) and not value.strip())
+    if blank:
+        if name in NOT_BLANK:
+            return f"{label} is blank. {NOT_BLANK[name]}"
+        if name in POSITIVE:
+            return f"{label} is blank. Enter it in{in_unit}." if unit else f"{label} is blank."
+        return ""
+    if isinstance(value, bool):
+        return f"{label} must be a number."
+    try:
+        number = float(str(value).replace(",", "")) if isinstance(value, str) else float(value)
+    except (TypeError, ValueError):
+        return f"{label} must be a number."
+    if not math.isfinite(number):
+        return f"{label} must be a finite number."
+    if name in POSITIVE and number <= 0:
+        return f"{label} must be greater than 0{in_unit}."
+    if name in NOT_BLANK and number < 0:
+        return f"{label} cannot be negative."
+    return ""
 
 
 def kind_of(name: str) -> str:

@@ -86,7 +86,10 @@ REQUEUED_NOTE = "Re-queued after a relaunch. The receiver was interrupted before
 INTERRUPTED_NOTE = "Interrupted. The app was not running when this job would have ended. Run it again; recorded calcs replay."
 
 # Tools whose outputs are calculation records. Content and record tools are not.
+# A unit conversion is recorded like a calculation, so a converted figure has a row to cite (fpfa.units).
+CONVERT_TOOL = "convert_units"
 CALC_TOOLS = frozenset({
+    CONVERT_TOOL,
     "resolve_pipe_id",
     "zone_trapped_volume",
     "dry_delivery_screen",

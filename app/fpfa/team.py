@@ -35,10 +35,10 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
-from fpfa import inputs, status
+from fpfa import inputs, status, units
 from fpfa.calc_tools import SCHEMAS, ToolSession
 from fpfa.claude_client import TurnCancelled, attach_usage, empty_usage, incomplete_notice, run_tool_loop, safe_error
-from fpfa.record import ANSWERED_IN_CHAT, BASIS_LABELS, GIVEN, Record, RecordError
+from fpfa.record import ANSWERED_IN_CHAT, BASIS_LABELS, CONVERT_TOOL, GIVEN, Record, RecordError
 from fpfa.roles_loader import list_roles, read_role
 from fpfa.skills_loader import list_skills, spec_notes
 
@@ -122,7 +122,9 @@ _LEAD_TOOLS = [
                 "name": {"type": "string", "description": "The input's name."},
                 "value": {"type": "string", "description": (
                     "The new value as text: a number in the input's unit, one of the input's choices, true or "
-                    "false, or plain text. Leave it out for segments."
+                    "false, or plain text. A figure the designer gave in another unit goes in as they wrote it, "
+                    "with its unit (\"12.2 mm/min\", \"139 m²\"): the application converts it to the input's unit "
+                    "on a recorded conversion and keeps both. Never pass an SI number bare. Leave it out for segments."
                 )},
                 "segments": {
                     "type": "array",
@@ -910,6 +912,7 @@ class TeamSession:
 
     def _set_input(self, args: dict) -> dict:
         name = str(args.get("name") or "").strip()
+        converted: dict | None = None
         try:
             kind = inputs.kind_of(name)
             if name == "segments":
@@ -921,8 +924,15 @@ class TeamSession:
                         raise inputs.InputError("segments takes the pipe list in the segments argument") from exc
                 cooked = inputs.coerce(name, raw)
             else:
-                cooked = inputs.coerce(name, args.get("value"))
-        except inputs.InputError as exc:
+                # A figure the designer gave in another unit is converted to the input's own on a recorded
+                # conversion row, and the input takes the result. Nothing is converted any other way.
+                converted = self._converted_input(name, args.get("value"))
+                cooked = inputs.coerce(name, converted["result"]["value"] if converted else args.get("value"))
+                problem = inputs.run_problem(name, cooked) if cooked is not None and name in inputs.POSITIVE else ""
+                if problem:
+                    # A 0 density, area, fill flow, fill pressure, or fill time does not describe a zone.
+                    raise inputs.InputError(problem)
+        except (inputs.InputError, units.UnitError) as exc:
             raise RecordError(str(exc)) from exc
         if kind == inputs.BASIS_KIND:
             text = str(cooked)
@@ -934,6 +944,11 @@ class TeamSession:
             label = GIVEN
         why = str(args.get("why") or "").strip()
         source = inputs.source_text(inputs.SOURCE_CHAT) + (f": {why}" if why else "")
+        if converted:
+            # The designer's own figure and unit stay on the record beside the value the form takes.
+            given, result = converted["given"], converted["result"]
+            source += (f" (given as {given['value']:g} {given['unit']}; converted by the application to "
+                       f"{result['value']:.6g} {result['unit']}, convert_units [{converted.get('record_id', '')}])")
         row = self.record.set_given(
             self.project_id, kind=kind, key=name, value=text, label=label, source=source[:2000], agent=LEAD,
         )
@@ -943,6 +958,12 @@ class TeamSession:
             shown_old = inputs.show(name, old)
         shown_new = inputs.show(name, inputs.decode(text) if kind == inputs.INPUT_KIND else text)
         out: dict[str, Any] = {"id": row["id"], "name": name, "was": shown_old, "now": shown_new, "changed": row["changed"]}
+        if converted:
+            out["converted"] = {
+                "given": f"{converted['given']['value']:g} {converted['given']['unit']}",
+                "result": f"{converted['result']['value']:.6g} {converted['result']['unit']}",
+                "record_id": converted.get("record_id", ""),
+            }
         if row["changed"]:
             unsettled = _unsettled(self.record, self.project_id)["out_of_date"]
             out["out_of_date"] = unsettled
@@ -957,6 +978,31 @@ class TeamSession:
         else:
             out["note"] = "The record already held this value. It is now marked as stated by the designer."
         return out
+
+    def _converted_input(self, name: str, value: Any) -> dict | None:
+        """A figure the designer gave in another unit, converted to the input's own by convert_units. Else None.
+
+        "12.2 mm/min" for the density becomes gpm/ft² on a conversion row the
+        record keeps, so the figure the designer gave and the one the form takes
+        are both on the record. A bare number, a figure in the input's own unit,
+        and a unit that does not convert to it are left to coerce(), which takes
+        the first two and says what the input takes for the third.
+        """
+        own = inputs.unit_of(name)
+        written = units.split(value)
+        if not own or written is None:
+            return None
+        number, spelled = written
+        try:
+            source, target = units.unit(spelled), units.unit(own)
+        except units.UnitError:
+            return None
+        if source.key == target.key:
+            return None
+        if source.dimension != target.dimension:
+            raise units.UnitError(f"{name} takes {target.display}, and {value!r} is {units.kind(source.dimension)}, "
+                                  f"not {units.kind(target.dimension)}.")
+        return self.tools.execute(CONVERT_TOOL, {"value": number, "from_unit": spelled, "to_unit": own})
 
     def _answer_question(self, args: dict) -> dict:
         question_id = str(args.get("id") or "").strip()

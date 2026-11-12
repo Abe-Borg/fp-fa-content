@@ -2,18 +2,21 @@
 
 from __future__ import annotations
 
+import contextvars
 import hashlib
 import importlib.util
 import json
 import sys
+from contextlib import contextmanager
 from pathlib import Path
+from typing import Any, Iterator
 
-from fpfa import coherence
+from fpfa import coherence, quantities, units
 from fpfa.corpus_search import search_corpus
 from fpfa.fa_calc import run_fa_calc
 from fpfa.modes_loader import list_modes, read_mode
 from fpfa.inputs import BASIS_FIELDS, BASIS_KIND, GIVEN, INPUT_KIND
-from fpfa.record import CALC_TOOLS, LABELS, SKILL_READ, Record, RecordError
+from fpfa.record import CALC_TOOLS, CONVERT_TOOL, LABELS, SKILL_READ, Record, RecordError
 from fpfa.releasing import reader_view
 from fpfa.roles_loader import list_roles, read_role
 from fpfa.skills_loader import list_skills, read_skill
@@ -40,9 +43,72 @@ def _obj(properties: dict, required: list[str]) -> dict:
     return {"type": "object", "properties": properties, "required": required}
 
 
+# The SI figures in what the designer wrote this turn (units.foreign_figures). designer_words() sets them
+# for the length of a turn. Delegations and consults run on the turn's own thread, so every tool session the
+# turn opens, the specialists' too, reads the same ones. Outside a turn there are none.
+_DESIGNER_SI: contextvars.ContextVar[tuple] = contextvars.ContextVar("fpfa_designer_si", default=())
+
+
+@contextmanager
+def designer_words(text: str) -> Iterator[None]:
+    """For the length of a turn: the SI figures the designer gave, which no calc field in US units may take."""
+    token = _DESIGNER_SI.set(units.foreign_figures(text))
+    try:
+        yield
+    finally:
+        _DESIGNER_SI.reset(token)
+
+
+def _numbers_passed(value: Any, name: str | None = None) -> Iterator[tuple[str | None, float]]:
+    """(field name, number) for every number a call passes: nested rows and an op's inputs too."""
+    if isinstance(value, bool) or value is None:
+        return
+    if isinstance(value, (int, float)):
+        yield name, float(value)
+    elif isinstance(value, dict):
+        for key, child in value.items():
+            yield from _numbers_passed(child, str(key))
+    elif isinstance(value, (list, tuple)):
+        for child in value:
+            yield from _numbers_passed(child, name)
+
+
+def si_figure_problem(args: dict) -> str:
+    """Why a calc call is refused before it runs: it passes the designer's SI figure into a US field. Else "".
+
+    The designer wrote 12.2 mm/min and the call passes density_gpm_ft2=12.2,
+    or 139 m² and base_area_ft2=139. The number would run and be recorded as
+    gpm/ft² or ft², and a result in the wrong unit would follow with a right-
+    looking record. A number the designer also gave in a US unit of the same
+    kind is not refused.
+    """
+    said = _DESIGNER_SI.get()
+    if not said:
+        return ""
+    for name, value in _numbers_passed(args):
+        target = units.field_unit(name)
+        if target is None:
+            continue
+        number = quantities.normal(str(value))
+        for given, dimension, display in said:
+            if dimension == target.dimension and given == number:
+                return (
+                    f"{name} takes {target.display}. {value:g} is the figure the designer gave in {display}. "
+                    f"Convert it first with convert_units ({value:g} {display} to {target.display}) and pass the "
+                    "result. Nothing was run or recorded."
+                )
+    return ""
+
+
 # GIVEN says where a value came from. A finding or a decision is the team's own statement, so it never carries it.
 FINDING_LABELS = tuple(label for label in LABELS if label != GIVEN)
 LEAD = "lead"
+# Said on every calc tool whose fields carry a unit. A metric figure passed as it stands is a wrong number
+# with a right-looking record; the acceptance run of 0.3.0 saw 12.2 mm/min run as 12.2 gpm/ft².
+US_UNITS_NOTE = (
+    " Every number is in the US unit its field name states. Convert an SI figure with convert_units first, "
+    "and never put another unit on the result."
+)
 
 
 SCHEMAS = [
@@ -90,7 +156,7 @@ SCHEMAS = [
     },
     {
         "name": "zone_trapped_volume",
-        "description": "Trapped gallons for one zone. Pipe volume is formulas.pipe_volume. Fittings and trim are added here, not in your head.",
+        "description": "Trapped gallons for one zone. Pipe volume is formulas.pipe_volume. Fittings and trim are added here, not in your head." + US_UNITS_NOTE,
         "input_schema": _obj(
             {
                 "segments": {"type": "array", "description": "Each item has length_ft and either d_in or nps plus optional schedule and role."},
@@ -112,7 +178,7 @@ SCHEMAS = [
             "screen: nfpa_delivery_time_exempt is null, exemption_status says it was not determined, and you must "
             "not state the exemption from it. "
             "Double-interlock has a 500 gal cap; a quick-opening device does not raise it."
-        ),
+        ) + US_UNITS_NOTE,
         "input_schema": _obj(
             {
                 "segments": {"type": "array"},
@@ -132,7 +198,7 @@ SCHEMAS = [
     },
     {
         "name": "di_trip_to_water",
-        "description": "Optimistic t = t_detect + t_release + t_exhaust + 60*V/Q from formulas.di_trip_to_water. Pass the zone total gallons, including trim. Not a listed delivery-time proof.",
+        "description": "Optimistic t = t_detect + t_release + t_exhaust + 60*V/Q from formulas.di_trip_to_water. Pass the zone total gallons, including trim. Not a listed delivery-time proof." + US_UNITS_NOTE,
         "input_schema": _obj(
             {
                 "v_gal": {"type": "number"},
@@ -147,7 +213,7 @@ SCHEMAS = [
     },
     {
         "name": "density_area",
-        "description": "Sprinkler demand from formulas.density_area. design area = base * (1 + increase); demand adds hose.",
+        "description": "Sprinkler demand from formulas.density_area. design area = base * (1 + increase); demand adds hose." + US_UNITS_NOTE,
         "input_schema": _obj(
             {
                 "density_gpm_ft2": {"type": "number"},
@@ -172,11 +238,33 @@ SCHEMAS = [
         "description": (
             "Design C is 100. Fill scfm is formulas.air_fill_scfm. "
             "The result states the gauge-basis rate and the absolute-basis rate. Quote both. "
-            "Do not emit C=120 as the design value."
+            "Do not emit C=120 as the design value. p_psig is the supervisory fill pressure and t_min the fill "
+            "time; omitted, they are the zone form's starting values, 40 psig and 30 min, so say so. A value "
+            "passed is used as passed, a 0 included."
         ),
         "input_schema": _obj(
             {"v_gal": {"type": "number"}, "p_psig": {"type": "number"}, "t_min": {"type": "number"}},
             ["v_gal"],
+        ),
+    },
+    {
+        "name": "convert_units",
+        "description": (
+            "Convert a figure from one unit to another by the exact definitions: 1 ft = 0.3048 m, 1 US gallon = "
+            "3.785411784 L, 1 psi = 6.894757293 kPa, and a density in mm/min is L/min over each m². Every calc tool "
+            "takes the US units its field names state (gpm, ft², gpm/ft², psi, gal, ft, in), so convert an SI "
+            "figure before you pass it, and convert a result the designer wants in SI after. Never convert in your "
+            "head, and never put another unit on a tool's result. The result is a calculation record: cite it for "
+            "the converted figure. A figure that was ASSUMED stays ASSUMED. Gauge stays gauge; an absolute "
+            "pressure and cubic feet are not converted."
+        ),
+        "input_schema": _obj(
+            {
+                "value": {"type": "number"},
+                "from_unit": {"type": "string", "description": "The unit the figure is in: mm/min, m², L/min, L/s, m³/h, kPa, bar, m, mm, L, or a US unit."},
+                "to_unit": {"type": "string", "description": "The unit wanted: gpm/ft², ft², gpm, psi, gal, ft, in, or an SI unit."},
+            },
+            ["value", "from_unit", "to_unit"],
         ),
     },
     {
@@ -227,7 +315,7 @@ SCHEMAS = [
     },
     {
         "name": "fp_calc",
-        "description": "Run any other op in calcs/fp/formulas.py by name (hazen_williams, pump_envelope, k_factor, and the rest). Pass op and inputs. Do not compute the formula yourself.",
+        "description": "Run any other op in calcs/fp/formulas.py by name (hazen_williams, pump_envelope, k_factor, and the rest). Pass op and inputs. Do not compute the formula yourself." + US_UNITS_NOTE,
         "input_schema": _obj(
             {"op": {"type": "string"}, "inputs": {"type": "object"}},
             ["op", "inputs"],
@@ -484,6 +572,11 @@ class ToolSession:
         args = dict(arguments or {})
         if name in RECORD_TOOLS:
             return self._record_tool(name, args)
+        if name in CALC_TOOLS and name != CONVERT_TOOL:
+            # Before anything runs or is recorded: the designer's SI figure in a field that takes US units.
+            problem = si_figure_problem(args)
+            if problem:
+                raise units.UnitError(problem)
         if name in CALC_TOOLS and self.recording:
             args, taken = self._exact_from_record(name, args)
             found = self.record.find_calc(self.project_id, name, args, self.calc_identity)
@@ -873,7 +966,13 @@ class ToolSession:
         if name == "hose_duration":
             return self.formulas.hose_duration(args.get("hazard") or "ordinary", args.get("supervised", False))
         if name == "nitrogen_gate":
-            return self.di.nitrogen_gate(args.get("v_gal"), args.get("p_psig") or 40, args.get("t_min") or 30)
+            # Omitted, the pressure and the time are the zone form's starting values, as the tool says. A
+            # figure that was passed goes to the kernel as passed: a 0 is refused there, never replaced.
+            p_psig = args.get("p_psig") if _number_was_passed(args, "p_psig") else 40
+            t_min = args.get("t_min") if _number_was_passed(args, "t_min") else 30
+            return self.di.nitrogen_gate(args.get("v_gal"), p_psig, t_min)
+        if name == CONVERT_TOOL:
+            return units.convert(args.get("value"), args.get("from_unit"), args.get("to_unit"))
         if name == "elect_di_trim":
             return self.di.elect_di_trim(
                 args.get("system_type") or "",
