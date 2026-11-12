@@ -2483,8 +2483,7 @@ body.resizing .panel-edge::after {
   font-size: 12.5px;
   font-style: italic;
 }
-.fill-why::before {
-  content: "You said: ";
+.fill-why-head {
   font-style: normal;
 }
 .fill-actions {
@@ -2655,12 +2654,22 @@ body.resizing .panel-edge::after {
 .pop-line.dim {
   color: var(--ink-dim);
 }
-.field.filled .input {
+.field.filled .input,
+.card.segments.filled {
   border-color: var(--focus-edge);
   background: color-mix(in srgb, var(--accent) 7%, var(--raised));
 }
-.field.filled.fresh-fill .input {
+.card.segments.filled {
+  border: 1px solid var(--focus-edge);
+}
+.field.filled.fresh-fill .input,
+.card.segments.filled.fresh-fill {
   animation: fill-glow 2.4s ease-out;
+}
+.radios {
+  display: grid;
+  gap: 4px;
+  margin-top: 6px;
 }
 .check.field-flag.filled {
   border-radius: 6px;

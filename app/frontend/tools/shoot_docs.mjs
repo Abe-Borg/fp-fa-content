@@ -1,6 +1,7 @@
 // The README's pictures (docs/screenshots), taken from a running app:
-//   node tools/shoot_docs.mjs <page url with ?token=…> <folder> <welcome|job>
-// tests/docs_pictures.py starts the app twice, once empty and once on the scripted scenario's job, and runs
+//   node tools/shoot_docs.mjs <page url with ?token=…> <folder> <welcome|job|fill>
+// tests/docs_pictures.py starts the app three times: once empty, once on the scripted scenario's job, and once on a
+// scripted lead filling in the Inputs tab from a message. It runs
 // this for each. The pictures show the application; the team's words in them are a script's, not a model's.
 import { createRequire } from "node:module";
 import { mkdirSync } from "node:fs";
@@ -12,7 +13,7 @@ const { chromium } = require("playwright");
 
 const [url, folder = "screenshots", which = "job"] = process.argv.slice(2);
 if (!url) {
-  console.error("usage: node tools/shoot_docs.mjs <page url> [folder] [welcome|job]");
+  console.error("usage: node tools/shoot_docs.mjs <page url> [folder] [welcome|job|fill]");
   process.exit(2);
 }
 mkdirSync(folder, { recursive: true });
@@ -45,6 +46,15 @@ if (which === "welcome") {
   await page.click(".side-link");
   await page.waitForSelector(".settings");
   await shot("settings-appearance.png");
+} else if (which === "fill") {
+  // A message that states three inputs: the card under the reply, and the fields it filled on the Inputs tab.
+  await page.click("#tab-inputs");
+  await page.waitForSelector(".job-panel .inputs .field.filled");
+  await page.waitForSelector(".fill-card");
+  // The moment's highlight has passed: the fields show the mark they keep.
+  await page.waitForTimeout(3000);
+  await page.mouse.move(10, 890);
+  await shot("chat-fill-warm-clay.png");
 } else {
   // The whole window: the job list, the lead's reply, and the run's figures beside it.
   await page.click("#tab-results");

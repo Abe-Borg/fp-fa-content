@@ -108,8 +108,18 @@ function FromChat({ id, mark }: { id: string; mark: Mark }) {
         className="from-chat"
         aria-expanded={open}
         aria-controls={`${id}-from`}
-        onClick={() => setOpen(!open)}
+        onClick={(event) => {
+          // Inside a checkbox's label, the press is the tag's and does not tick the box.
+          event.preventDefault();
+          setOpen(!open);
+        }}
         onBlur={() => setOpen(false)}
+        onKeyDown={(event) => {
+          if (event.key === "Escape" && open) {
+            event.stopPropagation();
+            setOpen(false);
+          }
+        }}
         title="Filled in from the chat. Press for where it came from."
       >
         <svg width="10" height="10" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -121,7 +131,8 @@ function FromChat({ id, mark }: { id: string; mark: Mark }) {
       {open ? (
         <span id={`${id}-from`} className="from-chat-pop" role="note">
           <span className="pop-line">Filled in from the chat.</span>
-          {mark.why ? <span className="pop-quote">{mark.why}</span> : null}
+          {mark.why && mark.quoted ? <span className="pop-quote">{mark.why}</span> : null}
+          {mark.why && !mark.quoted ? <span className="pop-line dim">The lead's note: {mark.why}</span> : null}
           {mark.was ? <span className="pop-line dim">Before: {mark.was}</span> : null}
           <span className="pop-line dim">Type over it to make it yours; the record keeps both.</span>
         </span>
@@ -312,11 +323,17 @@ export function Inputs({
           </div>
           <div className="inputs-column">
             <section className="group" aria-labelledby="group-pipe">
-              <h3 id="group-pipe" className="group-title">
+              <h3 id="group-pipe" className="group-title field-head">
                 Pipe
+                {form.marks?.segments ? <FromChat id="f-segments" mark={form.marks.segments} /> : null}
               </h3>
               <Fields fields={PIPE_FIELDS} form={form} values={values} set={set} seen={seen} />
-              <div className="card segments">
+              <div
+                id="f-segments"
+                tabIndex={-1}
+                aria-label="Pipe segments"
+                className={`card segments${form.marks?.segments ? ` filled${form.marks.segments.fill > seen ? " fresh-fill" : ""}` : ""}`}
+              >
                 <table className="grid-table">
                   <thead>
                     <tr>

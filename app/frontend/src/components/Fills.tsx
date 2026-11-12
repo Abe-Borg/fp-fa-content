@@ -2,7 +2,10 @@
  * What the lead filled in on the Inputs tab from the designer's own words: a
  * card under the reply, one row per field, with the value before and after and
  * the words it came from. Show opens the field; Undo puts the old value back as
- * the designer's own edit (Desk.undo_fill). Every word on the card is the app's.
+ * the designer's own edit (Desk.undo_fill). In ask-first mode the rows wait for
+ * Apply or Skip (Desk.apply_fill, Desk.skip_fill). Every word on the card is the
+ * app's except the lead's reason, which is called the designer's words only when
+ * the app found it in their messages.
  */
 import type { Fill } from "../types";
 
@@ -67,7 +70,11 @@ export function FillCard({
                 </span>
                 <span className="visually-hidden"> becomes </span>
                 <span className="fill-now">{fill.now}</span>
-                {fill.why ? <span className="fill-why">{fill.why}</span> : null}
+                {fill.why ? (
+                  <span className="fill-why">
+                    <span className="fill-why-head">{fill.quoted ? "You said:" : "The lead's note:"}</span> {fill.why}
+                  </span>
+                ) : null}
               </span>
               <span className="fill-actions">
                 {word ? <span className={`fill-state${done ? " done" : ""}`}>{word}</span> : null}

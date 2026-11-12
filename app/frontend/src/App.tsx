@@ -451,9 +451,8 @@ export function App() {
                 fillActions={{
                   onShow: showField,
                   onUndo: (jobId, name) => void act("input-undo", { job_id: jobId, name }),
-                  // Ask-first is drawn for the mockup and not wired to the app yet.
-                  onApply: () => say("Ask-first is a mockup: Apply is not wired yet."),
-                  onSkip: () => say("Ask-first is a mockup: Skip is not wired yet."),
+                  onApply: (jobId, name) => void act("input-apply", { job_id: jobId, name: name || "" }),
+                  onSkip: (jobId, name) => void act("input-skip", { job_id: jobId, name }),
                   onRun: run,
                 }}
               />

@@ -134,6 +134,9 @@ def format_chat_request(
     for turn in prior_turns:
         who = "Designer" if turn.get("role") == "user" else "Assistant"
         lines.append(f"{who}: {turn.get('text') or ''}")
+        card = fill_card_line(turn.get("inputs"))
+        if card:
+            lines.append(card)
     history = "\n\n".join(lines) if lines else "(none)"
     if hosted:
         lead = (
@@ -155,6 +158,28 @@ def format_chat_request(
         + f"Earlier turns:\n{history}\n\n"
         + f"Designer: {latest}"
     )
+
+
+# What became of an input the lead filled in from the chat, as the next turn's history says it.
+FILL_STATE_WORDS = {
+    "applied": "on the form",
+    "undone": "undone by the designer",
+    "overtaken": "changed by the designer since",
+    "proposed": "proposed; the designer has not applied it",
+    "skipped": "skipped by the designer; not applied",
+}
+
+
+def fill_card_line(fills) -> str:
+    """The card under an earlier reply, for the lead: each input, before and after, and what became of it. App-written."""
+    if not isinstance(fills, list) or not fills:
+        return ""
+    parts = [
+        f"{item.get('label') or item.get('name')}: {item.get('was') or 'blank'} -> {item.get('now')} "
+        f"({FILL_STATE_WORDS.get(item.get('state'), item.get('state') or '')})"
+        for item in fills if isinstance(item, dict)
+    ]
+    return "[Inputs card under that reply, written by the application: " + "; ".join(parts) + "]" if parts else ""
 
 
 def chat_request_text(
@@ -457,7 +482,41 @@ INPUT_LABELS = {
 }
 INPUT_TO_FORM = {value: key for key, value in FORM_TO_INPUT.items()}
 # What a fill keeps for the app alone: the values an Undo puts back and checks against. The page is not sent them.
-_FILL_PRIVATE = ("was_raw", "now_raw")
+_FILL_PRIVATE = ("was_raw", "now_raw", "kind", "value_text", "record_label", "source")
+_QUOTE_MARKS = "\"'“”‘’«»"
+
+
+def _plain_words(text: str) -> str:
+    return " ".join(re.sub(r"[^\w\s./%-]", " ", str(text or "").lower()).split())
+
+
+def said_by_designer(why: str, said: list[str]) -> bool:
+    """Whether the lead's reason is the designer's own words: found, as written, in one of their messages.
+
+    Case, quote marks, punctuation, and spacing are set aside. Anything else
+    is the lead's paraphrase, and the card says so instead of "You said".
+    """
+    needle = _plain_words(str(why or "").strip().strip(_QUOTE_MARKS).strip().rstrip(".!?,;:").strip(_QUOTE_MARKS))
+    if len(needle) < 3:
+        return False
+    return any(needle in _plain_words(text) for text in said)
+
+# Who writes an input the designer applied from the chat card. Not a form agent, so the form takes it from the record.
+APPLIED_BY = "designer"
+
+
+def _why_of(source: str) -> str:
+    """The lead's reason (set_input's why) from an input row's source text. "" when the row is not from the chat."""
+    head = inputs.SOURCE_TEXT[inputs.SOURCE_CHAT] + ":"
+    if not source.startswith(head):
+        return ""
+    why = source[len(head):].strip()
+    # What the application added after it: a conversion, or that the designer applied it.
+    for tail in (" (given as ", " (applied by the designer)"):
+        if tail in why:
+            why = why.split(tail, 1)[0]
+    return why.strip()
+
 
 def _fill_text(name: str, value) -> str:
     """An input's value in the words its field shows: a choice by its label, anything else as inputs.show() writes it."""
@@ -630,6 +689,16 @@ def resume_prompts(team: dict | None, *, key_saved: bool, busy: bool, untouched:
     if worked and (untouched or chips):
         chips.append(("Where things stand", "/status"))
     return chips[:4]
+
+
+# How an input the designer states in chat reaches the Inputs tab: filled in at once with Undo on the card
+# ("auto"), or proposed on the card and written only when the designer applies it ("ask").
+FILL_MODES = ("auto", "ask")
+
+
+def fill_mode() -> str:
+    mode = str(read_config().get("fill_from_chat") or "auto")
+    return mode if mode in FILL_MODES else "auto"
 
 
 def reduce_motion() -> bool:
@@ -1410,8 +1479,7 @@ class Desk:
             basis = name in inputs.BASIS_FIELDS
             was_raw = shown_basis.get(name, "") if basis else inputs.decode(shown_zone.get(name))
             now_raw = (project.get("basis") or {}).get(name, "") if basis else (project.get("di") or {}).get(name)
-            source = str((rows.get(name) or {}).get("source") or "")
-            why = source.split(":", 1)[1].strip() if source.startswith(inputs.SOURCE_TEXT[inputs.SOURCE_CHAT] + ":") else ""
+            why = _why_of(str((rows.get(name) or {}).get("source") or ""))
             self._fill_seq += 1
             entry = {
                 "name": name,
@@ -1420,6 +1488,7 @@ class Desk:
                 "was": _fill_text(name, was_raw),
                 "now": _fill_text(name, now_raw),
                 "why": why[:300],
+                "quoted": said_by_designer(why, self._designer_said()),
                 "fill": self._fill_seq,
                 "state": "applied",
                 "stale_run": name in changed,
@@ -1448,10 +1517,101 @@ class Desk:
         for turn in self.chat_log:
             for item in turn.get("inputs") or []:
                 if item.get("name") in names and item.get("state") == "applied":
-                    self._fills[item["name"]] = dict(item)
+                    # Seen before: it is marked, and not highlighted again.
+                    self._fills[item["name"]] = dict(item, fill=0)
         for name in names:
             self._fills.setdefault(name, {"name": name, "field": INPUT_TO_FORM.get(name, name),
                                           "label": INPUT_LABELS.get(name, name), "was": "", "why": "", "fill": 0})
+
+    def _designer_said(self) -> list[str]:
+        return [str(turn.get("text") or "") for turn in self.chat_log if turn.get("role") == "user"]
+
+    def _proposal_entries(self, project: dict, proposed: list[dict] | None) -> list[dict]:
+        """Ask-first: each input set_input held, as a row of the card. Nothing is on the record or the form yet."""
+        entries = []
+        said = [str(turn.get("text") or "") for turn in project.get("chat") or [] if turn.get("role") == "user"]
+        if project is self.project:
+            said += self._designer_said()
+        for item in proposed or []:
+            name = str(item.get("name") or "")
+            if name not in inputs.INPUT_NAMES:
+                continue
+            basis = name in inputs.BASIS_FIELDS
+            now_raw = item.get("value") if basis else inputs.decode(item.get("value"))
+            was_raw = (project.get("basis") or {}).get(name, "") if basis else (project.get("di") or {}).get(name)
+            why = str(item.get("why") or "")[:300]
+            entries.append({
+                "name": name, "field": INPUT_TO_FORM.get(name, name), "label": INPUT_LABELS.get(name, name),
+                "was": _fill_text(name, was_raw), "now": _fill_text(name, now_raw), "why": why,
+                "quoted": said_by_designer(why, said), "fill": 0, "state": "proposed", "stale_run": False,
+                "kind": item.get("kind"), "value_text": item.get("value"), "record_label": item.get("label"),
+                "source": item.get("source"),
+            })
+        return entries
+
+    def apply_fill(self, job_id: str, name: str = "") -> None:
+        """Ask-first: write what the lead proposed, as the designer's approval of it. name "" applies every row.
+
+        The row is written the way set_input writes one, so the record keeps
+        who gave it (the designer, in chat) and the form takes it the way it
+        takes the lead's. The card's row becomes an applied one, with Undo.
+        """
+        if not self.project:
+            return
+        turn = next((turn for turn in reversed(self.chat_log)
+                     if turn.get("job_id") == job_id and turn.get("inputs")), None)
+        targets = [item for item in (turn or {}).get("inputs") or []
+                   if item.get("state") == "proposed" and (not name or item.get("name") == name)]
+        if not targets:
+            return
+        # What was typed and not yet saved is the designer's, and is written before the record changes under it.
+        self._capture_form(self.project)
+        save_project(self.project)
+        self._open_record(self.project)
+        for item in targets:
+            try:
+                self.record.set_given(
+                    self.project["id"], kind=item["kind"], key=item["name"], value=item["value_text"],
+                    label=item["record_label"],
+                    source=str(item.get("source") or "")[:1960] + " (applied by the designer)",
+                    agent=APPLIED_BY,
+                )
+            except Exception as exc:
+                self.notify("Apply", f"{item.get('label')} was not applied. {safe_error(exc)}", kind="error")
+                continue
+            item["state"] = "applied"
+        self._pull_inputs_onto_form(self.project)
+        for item in targets:
+            filled = self._fills.get(item["name"])
+            if item["state"] == "applied" and filled is not None:
+                for key in ("was", "now", "was_raw", "now_raw", "fill", "stale_run"):
+                    item[key] = filled.get(key)
+                filled["quoted"] = item.get("quoted", False)
+                if item.get("why") and not filled.get("why"):
+                    filled["why"] = item["why"]
+        self._capture_form(self.project)
+        save_project(self.project)
+        self._render_chat()
+        self._refresh_team()
+        applied = [item.get("label") for item in targets if item["state"] == "applied"]
+        if applied:
+            self.status.set("Applied from the chat: " + ", ".join(applied) + ".")
+
+    def skip_fill(self, job_id: str, name: str) -> None:
+        """Ask-first: leave a proposed input off the record and the form. The card keeps the row, marked skipped."""
+        if not self.project:
+            return
+        turn = next((turn for turn in reversed(self.chat_log)
+                     if turn.get("job_id") == job_id and turn.get("inputs")), None)
+        item = next((item for item in (turn or {}).get("inputs") or []
+                     if item.get("name") == name and item.get("state") == "proposed"), None)
+        if item is None:
+            return
+        item["state"] = "skipped"
+        self._capture_form(self.project)
+        save_project(self.project)
+        self._render_chat()
+        self.status.set(f"Skipped: {item.get('label')} stays as it is.")
 
     def form_marks(self) -> dict:
         """The Inputs tab's marks: each field whose value the lead filled in from the chat and nobody typed over since."""
@@ -1463,7 +1623,8 @@ class Desk:
             if noted.get(name) != inputs.SOURCE_CHAT or name in self._typed:
                 continue
             marks[entry.get("field") or name] = {
-                "why": entry.get("why", ""), "was": entry.get("was", ""), "fill": entry.get("fill", 0),
+                "why": entry.get("why", ""), "quoted": bool(entry.get("quoted")), "was": entry.get("was", ""),
+                "fill": entry.get("fill", 0),
             }
         return marks
 
@@ -1496,6 +1657,8 @@ class Desk:
         shown[name] = entry.get("was_raw")
         if basis:
             self._apply_basis(shown)
+            # A basis field set from here is a change the page did not make: it reloads the form.
+            self._form_loaded()
         else:
             self._apply_di(shown)
         self._typed.add(name)
@@ -3316,6 +3479,8 @@ class Desk:
             request = form_note + "\n\n" + request
         said = [text] + [str(turn.get("text") or "") for turn in prior if turn.get("role") == "user"]
         earlier = [str(turn.get("text") or "") for turn in prior if turn.get("role") != "user"]
+        # Read on the desk's thread when the message is sent: a change in Settings applies from the next one.
+        ask_first = fill_mode() == "ask"
 
         def work(job_id: str) -> None:
             cancel = self._cancel_event(job_id)
@@ -3338,8 +3503,9 @@ class Desk:
                 out = run_everyday(
                     pack, create, request, mode=mode,
                     record=self.record, project_id=origin_id, agent="lead", cancel=cancel,
-                    observe=observe,
+                    observe=observe, ask_first=ask_first,
                 )
+                proposed = list(out.get("inputs_proposed") or [])
                 reply = everyday_reply(out)
                 summary = team_summary(out, self._audit_reply(origin_id, pack, mode, out, said, earlier))
                 if summary:
@@ -3348,17 +3514,19 @@ class Desk:
             except TurnCancelled as exc:
                 reply = "Cancelled. " + str(exc) + " Nothing after that point was written."
                 used = ""
+                proposed = []
                 self.jobs.mark(job_id, "cancelled", str(exc))
             except Exception as exc:
                 reply = TURN_FAILED_TEXT.format(error=safe_error(exc))
                 used = ""
+                proposed = []
                 self.jobs.mark(job_id, "error", safe_error(exc))
             finally:
                 self._cancel_events.pop(job_id, None)
                 self._note_client(origin_id, made)
             self.queue.put(
-                lambda oid=origin_id, answer=reply, jid=job_id, tokens=used: self._finish_chat(
-                    oid, answer, job_id=jid, usage=tokens
+                lambda oid=origin_id, answer=reply, jid=job_id, tokens=used, held=proposed: self._finish_chat(
+                    oid, answer, job_id=jid, usage=tokens, proposed=held
                 )
             )
 
@@ -3439,8 +3607,12 @@ class Desk:
         reply: str,
         job_id: str | None = None,
         usage: str = "",
+        proposed: list[dict] | None = None,
     ) -> None:
-        """Post the reply. usage is the token line from usage_summary, shown on the status line."""
+        """Post the reply. usage is the token line from usage_summary, shown on the status line.
+
+        proposed is what set_input held for the designer in ask-first mode: it goes on the reply's card.
+        """
         origin_id = self._destination_id(origin_id, job_id)
         reply = self._with_job_label(job_id, reply)
         self._end_stream(job_id, origin_id)
@@ -3450,9 +3622,9 @@ class Desk:
             form_error = self._save_form_or_chat(self.project)
             # An input the lead recorded from the chat goes onto the form before anything reads the form again.
             pulled = self._pull_inputs_onto_form(self.project, job_id=job_id)
-            fills = self._job_fills.pop(job_id, []) if job_id else []
-            if fills:
-                self.chat_log[-1]["inputs"] = fills
+            card = (self._job_fills.pop(job_id, []) if job_id else []) + self._proposal_entries(self.project, proposed)
+            if card:
+                self.chat_log[-1]["inputs"] = card
                 self._render_chat()
             save_project(self.project)
             if self.project.get("last_run"):
@@ -3460,7 +3632,9 @@ class Desk:
             else:
                 note = "Chat updated."
             if pulled:
-                note += " Inputs updated from the chat: " + ", ".join(pulled) + "."
+                note += " Filled in from the chat: " + ", ".join(INPUT_LABELS.get(name, name) for name in pulled) + "."
+            if proposed:
+                note += " Inputs wait for your OK on the card under the reply."
             if usage:
                 note = f"{note} {usage}"
             self.status.set(form_error or self._with_job_label(job_id, note))
@@ -3475,6 +3649,10 @@ class Desk:
             return
         chat = list(project.get("chat") or [])
         chat.append(self._assistant_turn(reply, job_id))
+        held = self._proposal_entries(project, proposed)
+        if held:
+            # Applied or skipped when the designer opens the job.
+            chat[-1]["inputs"] = held
         project["chat"] = chat
         try:
             self._sync_inputs(project)
@@ -3651,6 +3829,13 @@ class Desk:
             self._settings_changed()
         return layout
 
+    def set_fill_mode(self, mode: str) -> None:
+        """Settings: fill in what the designer states in chat at once, or ask first. Unknown words are ignored."""
+        if mode not in FILL_MODES:
+            return
+        write_config({"fill_from_chat": mode})
+        self._settings_changed()
+
     def set_reduce_motion(self, on: bool) -> None:
         write_config({"reduce_motion": bool(on)})
         self._settings_changed()
@@ -3738,6 +3923,7 @@ class Desk:
             ],
             "reduce_motion": reduce_motion(),
             "reduce_motion_forced": reduce_motion_forced(),
+            "fill_from_chat": fill_mode(),
             "key_saved": self._key_saved,
             "key_status": self._key_status,
             "key_message": self.key_message or self._key_status,

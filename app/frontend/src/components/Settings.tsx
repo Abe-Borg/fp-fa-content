@@ -1,6 +1,7 @@
 /**
- * Settings: Appearance (the five colour schemes and Reduce motion), the
- * Anthropic API key, the content pack, app updates, and About with the license.
+ * Settings: Appearance (the five colour schemes and Reduce motion), how an
+ * input stated in chat reaches the Inputs tab, the Anthropic API key, the
+ * content pack, app updates, and About with the license.
  */
 import { useState } from "react";
 import type { AppInfo, SchemeInfo, Settings as SettingsState } from "../types";
@@ -76,6 +77,36 @@ export function SettingsDialog({
             {settings.reduce_motion_forced ? " (FPFA_REDUCE_MOTION is set for this run)" : ""}
           </span>
         </label>
+      </section>
+
+      <section className="panel" aria-labelledby="settings-fill">
+        <h3 className="display" id="settings-fill">
+          Inputs from the chat
+        </h3>
+        <p className="dim small">
+          When you state a project input in a message (the AHJ, a fill flow, the pipe), the lead can put it on the Inputs tab.
+          Either way the card under the reply lists each one, and the record keeps who gave it.
+        </p>
+        <div className="radios" role="radiogroup" aria-labelledby="settings-fill">
+          <label className="check">
+            <input
+              type="radio"
+              name="fill-from-chat"
+              checked={settings.fill_from_chat !== "ask"}
+              onChange={() => void act("fill-mode", { mode: "auto" })}
+            />
+            <span>Fill them in at once. Each one can be undone from the card.</span>
+          </label>
+          <label className="check">
+            <input
+              type="radio"
+              name="fill-from-chat"
+              checked={settings.fill_from_chat === "ask"}
+              onChange={() => void act("fill-mode", { mode: "ask" })}
+            />
+            <span>Ask me first. Nothing goes on the form until I apply it on the card.</span>
+          </label>
+        </div>
       </section>
 
       <section className="panel">

@@ -197,6 +197,7 @@ def _run_everyday(
     agent: str = "lead",
     cancel: Any = None,
     observe: Callable[[dict], Any] | None = None,
+    ask_first: bool = False,
 ) -> dict:
     """One everyday turn. create() is Messages.create. Tools run in calcs/.
 
@@ -217,6 +218,7 @@ def _run_everyday(
         team = TeamSession(
             content_root, record, project_id, create,
             max_rounds=SPECIALIST_ROUNDS, max_tokens=max_tokens, cancel=cancel, observe=observe,
+            ask_first=ask_first,
         )
         # Where the job stands rides at the top of the user message, read from the record: the plan,
         # the inputs, what changed, what is out of date, open objections, and handoffs waiting. It
@@ -270,6 +272,7 @@ def _run_everyday(
         out["delegations"] = team.delegations
         out["checks"] = team.checks
         out["inputs_set"] = team.inputs_set
+        out["inputs_proposed"] = team.inputs_proposed
         out["answered"] = team.answered
         out["resolved"] = team.resolved
         out["failed"] = team.failed

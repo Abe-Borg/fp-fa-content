@@ -21,6 +21,8 @@ export interface Fill {
   was: string;
   now: string;
   why: string;
+  /** The app found the lead's reason, as written, in the designer's own messages (Desk.said_by_designer). */
+  quoted?: boolean;
   fill: number;
   /** applied: on the form. undone: put back. overtaken: typed over since. proposed and skipped: the ask-first mode. */
   state: "applied" | "undone" | "overtaken" | "proposed" | "skipped";
@@ -31,6 +33,7 @@ export interface Fill {
 /** A field of the Inputs tab whose value the lead filled in from the chat, and nobody typed over since. */
 export interface Mark {
   why: string;
+  quoted?: boolean;
   was: string;
   fill: number;
 }
@@ -229,6 +232,8 @@ export interface Settings {
   schemes: SchemeInfo[];
   reduce_motion: boolean;
   reduce_motion_forced: boolean;
+  /** auto: what the designer states in chat is filled in, with Undo. ask: it waits on the card for Apply. */
+  fill_from_chat: "auto" | "ask";
   key_saved: boolean;
   key_status: string;
   key_message: string;
