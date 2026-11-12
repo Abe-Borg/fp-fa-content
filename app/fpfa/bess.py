@@ -12,13 +12,13 @@ from typing import Any, Callable
 
 from fpfa.calc_tools import SCHEMAS, ToolSession
 from fpfa.claude_client import MODEL_ID, TurnCancelled, incomplete_notice, safe_error
-from fpfa.modes_loader import normalize_mode
+from fpfa.modes_loader import NARRATION_MODE, normalize_mode
 from fpfa.record import Record
 from fpfa.skills_loader import read_starter_cites
 from fpfa.workflow import NARRATION_CANCELLED, fmt1, judgment_label_line, system_prompt
 
 BESS_SKILL = "ess-isolation-venting-and-duration"
-BESS_MODE = "synthesis"
+BESS_MODE = NARRATION_MODE
 
 
 def fmt_vol(value: Any) -> str:

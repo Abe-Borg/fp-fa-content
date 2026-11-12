@@ -288,14 +288,6 @@ export function App() {
     { label: "About and versions", onSelect: () => showText("about") },
   ];
 
-  const modeItems = (): MenuItem[] =>
-    state.mode.choices.map((slug) => ({
-      kind: "radio" as const,
-      label: slug.charAt(0).toUpperCase() + slug.slice(1),
-      checked: slug === state.mode.slug,
-      onSelect: () => void act("mode", { slug }),
-    }));
-
   const projectName = (id: string) => state.projects.find((project) => project.id === id)?.name || "this job";
 
   /** A start card or a link of the welcome: three are the page's own, the rest are the server's. */
@@ -434,8 +426,6 @@ export function App() {
                 hint={app.composer_hint}
                 status={!connected ? "Reconnecting to the app…" : flash || state.status}
                 statusTitle={state.status_full}
-                mode={state.mode.slug}
-                modeItems={modeItems}
                 chips={state.chips}
                 running={state.running_here}
                 onSend={(text) => void act("send", { text })}
