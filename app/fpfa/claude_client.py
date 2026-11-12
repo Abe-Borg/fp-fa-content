@@ -36,6 +36,13 @@ create()'s, so the tool loop does not know which one it was given. Tool
 definitions are not marked for eager input streaming: every tool here takes
 a few scalars, and the API keeps validating them.
 
+Every request a job sends streams on the wire. A chat turn passes its
+listener; a job whose words are not drawn (a zone run's narration, a
+starter, a trace check, a claim check) passes none through streamed_create.
+The output ceiling, MAX_OUTPUT_TOKENS, is longer than a request that is not
+streamed can wait for: its reply arrives whole, so a long one would outlast
+the HTTP timeout and be sent again. A stream delivers as it is written.
+
 Retries. A rate limit, an overload, a timeout, or a dropped connection is
 sent again, up to RETRY_ATTEMPTS attempts in all. The wait is the API's
 retry-after when it names one, and otherwise RETRY_WAITS. A retry-after is
@@ -75,6 +82,12 @@ import time
 from typing import Any, Callable
 
 MODEL_ID = "claude-opus-5-5"
+# max_tokens on every request the application sends: the lead, a specialist, a consult, a narration, the trace
+# check, and the claim check. On this model it caps the model's thinking and its reply together, and thinking
+# cannot be turned off. The model accepts up to 128,000. The owner set 64,000 on 2026-11-12, up from 16,000. It is
+# a ceiling, not a target: a reply is billed for what it writes. A request this large has to stream
+# (streamed_create), or a long reply outlasts the HTTP timeout.
+MAX_OUTPUT_TOKENS = 64000
 # Attempts for one request, the first included.
 RETRY_ATTEMPTS = 5
 # Seconds before the second, third, fourth, and fifth attempt when the API names no wait.
@@ -378,7 +391,7 @@ def run_tool_loop(
     required: list[str] | None = None,
     max_rounds: int = 8,
     max_nudges: int = 3,
-    max_tokens: int = 8192,
+    max_tokens: int = MAX_OUTPUT_TOKENS,
     cancel: Any = None,
     observe: Callable[[dict], Any] | None = None,
 ) -> dict:
@@ -659,3 +672,18 @@ class AnthropicMessages:
     def check_model(self) -> str:
         info = self._client.models.retrieve(self.model)
         return getattr(info, "id", self.model)
+
+
+def _unheard(_event: dict) -> None:
+    """The listener of a stream whose words nobody draws."""
+
+
+def streamed_create(client: Any) -> Callable[..., Any]:
+    """create() for a job whose words are not drawn, sent as a stream.
+
+    The request, its retries, and the message it returns are create()'s;
+    only the transport differs (see Streaming in the module notes). A
+    stand-in with no streaming call answers through its create().
+    """
+    streaming = getattr(client, "streaming", None)
+    return streaming(_unheard) if callable(streaming) else client.create

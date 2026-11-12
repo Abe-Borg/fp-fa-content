@@ -123,6 +123,33 @@ class StreamingClientTests(unittest.TestCase):
         self.assertEqual(inner.created, [])
         self.assertEqual(len(inner.streamed), 1)
 
+    def test_a_request_whose_words_are_not_drawn_still_streams(self):
+        """A narration or a check draws nothing, and still streams: at this ceiling a whole reply outlasts the timeout."""
+        from fpfa.claude_client import streamed_create
+
+        inner = _Inner(REPLY, EVENTS)
+        out = streamed_create(_client(inner))(
+            max_tokens=100, system="SYSTEM TEXT", tools=TOOLS, messages=[{"role": "user", "content": "q"}]
+        )
+        self.assertIs(out, REPLY)
+        self.assertEqual(inner.created, [])
+        self.assertEqual(len(inner.streamed), 1)
+        # A stand-in with no streaming call answers through its create().
+        plain = SimpleNamespace(create=Mock(return_value=REPLY))
+        self.assertIs(streamed_create(plain), plain.create)
+
+    def test_every_request_asks_for_64000_output_tokens(self):
+        from fpfa.claim_check import CHECK_MAX_TOKENS
+        from fpfa.claude_client import MAX_OUTPUT_TOKENS, run_tool_loop, streamed_create
+
+        # The owner's figure, stated here on its own rather than read back from the constant under test.
+        self.assertEqual(MAX_OUTPUT_TOKENS, 64000)
+        self.assertEqual(CHECK_MAX_TOKENS, 64000)
+        inner = _Inner(REPLY, EVENTS)
+        run_tool_loop(streamed_create(_client(inner)), system="S", user_text="q", tools=TOOLS,
+                      execute=lambda *_args: {})
+        self.assertEqual([call["max_tokens"] for call in inner.streamed], [64000])
+
     def test_the_streamed_request_is_the_request_create_sends(self):
         """Same model, same cached system block, same cache marker on the tail, same tools: one cache."""
         plain, streamed = _Inner(REPLY), _Inner(REPLY, EVENTS)
@@ -426,6 +453,56 @@ class StreamingWindowTests(unittest.TestCase):
         self.assertIn("could not find on the record or in anything the lead read: 281.3 gal, 38.1 s. "
                       "Treat them as unverified.", tail)
         self.assertEqual([job.status for job in app.jobs.snapshot()], ["done"])
+
+    def test_every_job_that_calls_the_model_streams_with_the_64000_ceiling(self):
+        """A zone narration, a starter, a trace check, and a claim check: none of them may send a whole-reply request."""
+        app = self._app()
+        app.ask_claude.set(True)
+        sent: list[dict] = []
+
+        class Recorded:
+            def __init__(self, _key):
+                pass
+
+            def create(self, **_kwargs):
+                raise AssertionError("a request that is not streamed outlasts the HTTP timeout at this ceiling")
+
+            def streaming(self, _on_event):
+                def create(**kwargs):
+                    sent.append(kwargs)
+                    return SimpleNamespace(stop_reason="end_turn",
+                                           content=[SimpleNamespace(type="text", text='1. Supported. Cite: "281.3"')])
+
+                return create
+
+        def settled(count: int):
+            def done() -> bool:
+                jobs = app.jobs.snapshot()
+                return len(jobs) >= count and all(job.status in ("done", "error", "cancelled") for job in jobs)
+
+            return done
+
+        def run(start, count: int) -> int:
+            before = len(sent)
+            start()
+            self._pump(app, settled(count), timeout=15.0)
+            return len(sent) - before
+
+        with patch("fpfa.desk.AnthropicMessages", Recorded):
+            narrated = run(app.start_sample_di, 1)
+            project_id = app.project["id"]
+            calc_id = app.record.calcs(project_id)[0]["id"]
+            app.record.record_finding(project_id, agent="fp-sprinkler", text="Zone total 281.3 gal",
+                                      label="calculated", supports=[calc_id])
+            checked = run(app.start_record_check, 2)
+            claimed = run(app.start_claim_check, 3)
+            started = run(app.start_sample_bess, 4)
+        self.assertGreater(narrated, 0, "the zone run's narration")
+        self.assertGreater(checked, 0, "the trace check")
+        self.assertGreater(claimed, 0, "the claim check")
+        self.assertGreater(started, 0, "the explosion-control starter")
+        self.assertEqual({call["max_tokens"] for call in sent}, {64000})
+        self.assertEqual([job.status for job in app.jobs.snapshot() if job.status == "error"], [])
 
     def test_a_specialists_words_stay_out_of_the_thread(self):
         app = self._app()

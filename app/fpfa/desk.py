@@ -56,7 +56,16 @@ from fpfa.claim_check import (
     unanswered,
     write_packet_files,
 )
-from fpfa.claude_client import MODEL_ID, AnthropicMessages, TurnCancelled, run_tool_loop, safe_error, usage_summary
+from fpfa.claude_client import (
+    MAX_OUTPUT_TOKENS,
+    MODEL_ID,
+    AnthropicMessages,
+    TurnCancelled,
+    run_tool_loop,
+    safe_error,
+    streamed_create,
+    usage_summary,
+)
 from fpfa.content_update import (
     ContentUpdateError,
     UpdateResult,
@@ -1814,7 +1823,8 @@ class Desk:
                     # Stop is heard between the check's requests, as between a turn's rounds, and in a wait
                     # to send a refused request again.
                     client = _model_client(key, cancel)
-                    outcome = check_record(content_root(), self.record, origin_id, client.create, cancel=cancel)
+                    outcome = check_record(content_root(), self.record, origin_id, streamed_create(client),
+                                           cancel=cancel)
                     text = outcome.get("status_line") or "Trace check ran."
                     if outcome.get("verdict"):
                         text += "\n" + outcome["verdict"]
@@ -2211,7 +2221,7 @@ class Desk:
                 client = _model_client(key, cancel)
                 made.append(client)
                 return run_tool_loop(
-                    client.create,
+                    streamed_create(client),
                     system=system,
                     user_text=user_text,
                     tools=tools,
@@ -2225,7 +2235,7 @@ class Desk:
                         "releasing_truth_table",
                     ],
                     max_rounds=16,
-                    max_tokens=16000,
+                    max_tokens=MAX_OUTPUT_TOKENS,
                 )
 
             try:
@@ -2332,7 +2342,7 @@ class Desk:
                 client = _model_client(key, cancel)
                 made.append(client)
                 return run_tool_loop(
-                    client.create,
+                    streamed_create(client),
                     system=system,
                     user_text=user_text,
                     tools=tools,
@@ -2340,7 +2350,7 @@ class Desk:
                     cancel=cancel,
                     required=["lfl_setpoints", "read_skill"],
                     max_rounds=16,
-                    max_tokens=16000,
+                    max_tokens=MAX_OUTPUT_TOKENS,
                 )
 
             try:
@@ -2840,7 +2850,7 @@ class Desk:
             client = _model_client(key, self._cancel_event(job_id)) if key else None
             try:
                 if client is not None:
-                    outcome = judge_recorded(content_root(), packet, client.create, self.record, origin_id)
+                    outcome = judge_recorded(content_root(), packet, streamed_create(client), self.record, origin_id)
                 else:
                     outcome = unanswered(packet)
             except Exception as exc:
@@ -2879,7 +2889,7 @@ class Desk:
             if not key:
                 return unanswered(packet)
             client = AnthropicMessages(key)
-            create = client.create
+            create = streamed_create(client)
         self._open_record(self.project)
         try:
             return judge_recorded(content_root(), packet, create, self.record, self.project["id"])
