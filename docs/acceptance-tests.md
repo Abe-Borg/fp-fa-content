@@ -164,7 +164,9 @@ Automated half, already passed: `app/tests/test_usage.py` proves the events, the
 | The lead and specialist role files as prompts: whether the model follows them | **Unrun** | live only |
 | Whether the live model writes a reply differently in one mode than in another, and whether a zone narration in synthesis keeps the governing figures as well as the mixed one did | **Unrun** | live only |
 | The trace check's own judgment (the checker stand-in never disagrees). The runner's probe step and step 8 of the guide are how to test it | **Unrun** | live only |
-| Whether the live checker's reply now finishes on a record of sixteen to twenty-two findings, eight claims to a request with a 16,000-token ceiling | **Unrun**. The 0.2.0 acceptance run saw it cut off at 4,000 | live only; keep the reply's stop reason |
+| Whether the live checker's reply now finishes on a record of sixteen to twenty-two findings, eight claims to a request with a 64,000-token ceiling (16,000 before 2026-11-12) | **Unrun**. The 0.2.0 acceptance run saw it cut off at 4,000 | live only; keep the reply's stop reason |
+| Every request asks for 64,000 output tokens, and a zone narrative, a starter, a trace check, and a claim check stream rather than wait for a whole reply | **Simulated** (a stand-in client records each request) | `test_streaming.py`, `StreamingClientTests`, `StreamingWindowTests` |
+| Whether a live reply longer than 16,000 tokens now finishes, and how long it takes | **Unrun** | live only; `/usage` |
 | Whether the Section 21 13 19 export can open with the live checker at all. The 0.2.0 acceptance run saw 1 claim of 12 supported; the cite the checker is shown is an unlabeled list of the tool plan's numbers | **Unrun**, and open as a question (`NEXT-STEPS.md`, N-2) | live only |
 | Whether a live specialist reads a skill before it records findings, and follows it | **Unrun** | live only |
 | The second job with the live model | **Unrun** | `--job dh2` |

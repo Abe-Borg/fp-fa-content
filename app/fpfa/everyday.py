@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from fpfa.calc_tools import SCHEMAS, ToolSession, designer_words
-from fpfa.claude_client import TurnCancelled, incomplete_notice, run_tool_loop
+from fpfa.claude_client import MAX_OUTPUT_TOKENS, TurnCancelled, incomplete_notice, run_tool_loop
 from fpfa.modes_loader import list_modes, normalize_mode, read_mode
 from fpfa.record import TURN_START, Record
 from fpfa.roles_loader import list_roles, read_role
@@ -191,7 +191,7 @@ def _run_everyday(
     mode: str | None = None,
     required: list[str] | None = None,
     max_rounds: int | None = None,
-    max_tokens: int = 16000,
+    max_tokens: int = MAX_OUTPUT_TOKENS,
     record: Record | None = None,
     project_id: str | None = None,
     agent: str = "lead",
