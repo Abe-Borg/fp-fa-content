@@ -61,6 +61,35 @@ try {
     coverage === null || stand.includes("Design Basis export: ready, as an incomplete draft."), stand);
   check("the kinds of checking are on the panel", (await page.$("#team-assurance")) !== null);
   check("the methods read are on the panel", (await page.$("#team-methods")) !== null);
+  // With its row closed, the kinds of checking card says the whole of what was not performed, never one clipped
+  // line, and its words start where another card's do. The row still opens to the kinds of assurance.
+  const ladder = await page.$eval("#team-assurance .card", (card) => {
+    const inset = (box, node) => {
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      return Math.round(Math.min(...[...range.getClientRects()].map((rect) => rect.left)) - box.getBoundingClientRect().left);
+    };
+    const summary = card.querySelector("summary");
+    const words = summary.querySelector("span");
+    const methods = document.querySelector("#team-methods .card");
+    const whole = (node) => node.scrollWidth <= node.clientWidth && node.scrollHeight <= node.clientHeight;
+    return {
+      open: card.querySelector("details").open,
+      text: summary.textContent.replace(/\s+/g, " ").trim(),
+      whole: whole(summary) && whole(words),
+      inset: inset(card, words),
+      methods: inset(methods, methods.querySelector("p")),
+    };
+  });
+  check("what was not performed is read with the row closed",
+    !ladder.open && ladder.whole && ladder.text.endsWith("Two kinds of assurance were not performed."), JSON.stringify(ladder));
+  check("and from where the other cards' words start", ladder.inset === ladder.methods, JSON.stringify(ladder));
+  await page.focus("#team-assurance summary");
+  await page.keyboard.press("Enter");
+  const assurance = await page.$$eval("#team-assurance details[open] li", (nodes) => nodes.map((node) => node.textContent));
+  check("the row opens to the kinds of assurance, the last two not performed",
+    assurance.length === 6 && assurance.slice(4).every((row) => row.includes("NOT PERFORMED")), JSON.stringify(assurance));
+  await page.keyboard.press("Enter");
 
   // Findings: the group that needs attention is open; the others wait to be opened.
   const tiers = await page.$$eval(".tier", (nodes) => nodes.map((node) => [node.querySelector(".tier-title").textContent, node.open]));

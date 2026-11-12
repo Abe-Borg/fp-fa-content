@@ -1924,24 +1924,28 @@ body.resizing .panel-edge::after {
 }
 .tier > summary,
 .finding > summary,
-.exchange > summary {
+.exchange > summary,
+.assurance > summary {
   cursor: pointer;
   border-radius: 7px;
   list-style: none;
 }
 .tier > summary::-webkit-details-marker,
 .finding > summary::-webkit-details-marker,
-.exchange > summary::-webkit-details-marker {
+.exchange > summary::-webkit-details-marker,
+.assurance > summary::-webkit-details-marker {
   display: none;
 }
 .tier > summary:hover,
 .finding > summary:hover,
-.exchange > summary:hover {
+.exchange > summary:hover,
+.assurance > summary:hover {
   background: var(--raised-hover);
 }
 /* The mark that says a row opens: a corner that turns down when it has. */
 .tier > summary::after,
 .finding > summary::after,
+.assurance > summary::after,
 .disclosure > summary::before {
   content: "";
   width: 6px;
@@ -1955,6 +1959,7 @@ body.resizing .panel-edge::after {
 }
 .tier[open] > summary::after,
 .finding[open] > summary::after,
+.assurance[open] > summary::after,
 .disclosure[open] > summary::before {
   transform: rotate(45deg);
 }
@@ -2081,6 +2086,30 @@ body.resizing .panel-edge::after {
 }
 .exchange[open] .exchange-brief {
   white-space: normal;
+}
+/* What kind of checking this is: one row that opens to the kinds of assurance. Its sentence says two of them
+   were not performed, so the closed row shows all of it, never one clipped line, and it starts where the other
+   cards' text starts. The card is padded as the exchanges are, and the row's own padding brings the words in. */
+.ladder {
+  padding: 4px 6px;
+}
+.assurance > summary {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 7px 8px;
+}
+.assurance-brief {
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  color: var(--ink-dim);
+}
+.assurance[open] > summary {
+  background: color-mix(in srgb, var(--accent) 9%, var(--raised));
+}
+.assurance > .evidence {
+  margin: 6px 8px 8px;
 }
 .text-card {
   white-space: pre-wrap;
