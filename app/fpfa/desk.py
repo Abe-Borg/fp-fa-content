@@ -51,7 +51,7 @@ from fpfa.claim_check import (
     PACKAGE_STATUS,
     build_packet,
     claim_dir,
-    judge,
+    judge_recorded,
     same_packet,
     unanswered,
     write_packet_files,
@@ -2757,6 +2757,8 @@ class Desk:
         if offer_export and stored.get("all_supported") and same_packet(stored, packet):
             self._offer_export(stored)
             return
+        # The check is a billed request. Its usage closes on the job's record, so the job has to be there.
+        self._open_record(self.project)
         origin_id = self.project["id"]
         project_name = self.project.get("name") or UNTITLED_JOB
         key = self._api_key()
@@ -2764,7 +2766,8 @@ class Desk:
         def work(job_id: str) -> None:
             try:
                 if key:
-                    outcome = judge(content_root(), packet, AnthropicMessages(key).create)
+                    outcome = judge_recorded(content_root(), packet, AnthropicMessages(key).create,
+                                             self.record, origin_id)
                 else:
                     outcome = unanswered(packet)
             except Exception as exc:
@@ -2798,7 +2801,8 @@ class Desk:
             if not key:
                 return unanswered(packet)
             create = AnthropicMessages(key).create
-        return judge(content_root(), packet, create)
+        self._open_record(self.project)
+        return judge_recorded(content_root(), packet, create, self.record, self.project["id"])
 
     def _store_claim(self, project: dict, outcome: dict, job_id: str | None) -> None:
         stored = dict(outcome)

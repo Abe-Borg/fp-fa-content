@@ -12,6 +12,7 @@ import math
 from pathlib import Path
 from typing import Any, Callable
 
+from fpfa import coherence
 from fpfa.calc_tools import REQUIRED_DI_TOOLS, SCHEMAS, ToolSession
 from fpfa.claude_client import MODEL_ID, TurnCancelled, incomplete_notice, safe_error
 from fpfa.everyday import EVERYDAY_ROLE, SPECIALIST_ROLES, assemble_system
@@ -475,8 +476,11 @@ def governing_narrative(text: str) -> str:
     return raw.strip()
 
 
-def _flags(di: dict, tools: dict[str, Any], extra: list[str]) -> list[str]:
+def _flags(di: dict, tools: dict[str, Any], extra: list[str], basis: dict | None = None) -> list[str]:
     flags: list[str] = []
+    # First, because it qualifies every cite below it: the calculations name one edition of a standard and
+    # the job states another. The kernel is not told the job's edition, so a rerun does not change this.
+    flags.extend(coherence.edition_flags(tools, basis))
     flags.extend(tools["zone_trapped_volume"].get("flags") or [])
     flags.extend(tools["elect_di_trim"].get("flags") or [])
     screen = tools["dry_delivery_screen"]
@@ -665,7 +669,7 @@ def run_di_zone(
         "narrative": narrative,
         "narrative_checks": checks,
         "warnings": warnings,
-        "flags": _flags(di, tools, warnings),
+        "flags": _flags(di, tools, warnings, basis),
         "inputs": di,
         "basis": basis,
         "mode": selected,

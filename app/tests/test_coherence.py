@@ -380,8 +380,10 @@ class CallBasisTests(unittest.TestCase):
         snapshot = record.snapshot("job1")
         analysis = analyze(snapshot)
         self.assertEqual(analysis["calcs"][takeoff["record_id"]]["state"], "alternative")
+        # The job states NFPA 13 2025, which is the edition this calculation's cites carry: no edition gap.
         self.assertEqual(analysis["calcs"][trip["record_id"]],
-                         {"state": "alternative", "reasons": [], "note": carried, "tracked": True, "unchecked": ""})
+                         {"state": "alternative", "reasons": [], "note": carried, "tracked": True, "unchecked": "",
+                          "edition_gaps": [], "edition_hold": ""})
         self.assertEqual(analysis["calcs"][nitrogen["record_id"]]["state"], "alternative")
         # The finding on the derived trip time is named as resting on another case, to the lead and on the panel.
         self.assertEqual(analysis["findings"][finding["id"]]["state"], "current")
@@ -760,7 +762,10 @@ class StalenessTests(unittest.TestCase):
         record, di, basis = self._seeded()
         fp = ToolSession(REPO, record=record, project_id="job1", agent="fp-sprinkler")
         # A specialist's exploratory calc with no finding on it, a calc with one, and a cite with and without one.
-        loose = fp.execute("nitrogen_gate", {"v_gal": 281.3, "p_psig": 40, "t_min": 30})
+        # The exploratory one is a what-if on the fill time. With the plan's own fill time it would be the
+        # plan's row: the rounded volume is run as the takeoff's figure, so the call replays.
+        loose = fp.execute("nitrogen_gate", {"v_gal": 281.3, "p_psig": 40, "t_min": 20})
+        self.assertNotIn(loose["record_id"], {row["id"] for row in record.calcs("job1") if row["agent"] == "tool-plan"})
         screen = fp.execute("di_trip_to_water", {"v_gal": 281.3, "q_fill_gpm": 600, "t_detect_s": 8, "t_release_s": 2, "basis": "FM"})
         used = fp.execute("record_evidence", {"document": "NFPA 13", "edition": "2025", "section": "8.3.2.3.1.1"})
         unused = fp.execute("record_evidence", {"document": "NFPA 13", "edition": "2025", "section": "8.3.2.3.2"})

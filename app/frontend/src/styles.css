@@ -1900,6 +1900,11 @@ body.resizing .panel-edge::after {
 .dot.tier-source {
   background: var(--ok);
 }
+/* The same rows as the first group, and nothing the application matched itself: the ring, not the full dot. */
+.dot.tier-checker {
+  background: transparent;
+  box-shadow: inset 0 0 0 2px var(--ok);
+}
 .dot.tier-reviewed {
   background: var(--warn);
 }

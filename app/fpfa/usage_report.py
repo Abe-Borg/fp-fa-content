@@ -3,7 +3,9 @@
 Every model context already sums its own usage. The lead turn writes a `turn`
 event with the task total (lead rounds plus every delegation and check it ran),
 a narrated zone run or starter writes a `narration` event, a trace check writes
-its usage on the `record_check` event, each delegation writes a `delegation`
+its usage on the `record_check` event (or on `check_incomplete` when its reply
+was cut off and no verdict was kept), the blind claim check before a Section
+export writes a `section_check` event, each delegation writes a `delegation`
 event, and each question one specialist put to another writes a `consult`
 event. This module reads those events back and prices them.
 
@@ -43,8 +45,9 @@ RATES_PER_MILLION = {"input": 4.00, "output": 20.00, "cache_write": 5.00, "cache
 # Event kinds that carry usage, and whether the kind counts toward a job's total.
 # A delegation's usage is already inside its turn's total, and a consult's is inside its
 # delegation's, so both are shown but not added.
-USAGE_KINDS = ("turn", "narration", "record_check", "check_failed", "delegation", "consult")
-COUNTED_KINDS = ("turn", "narration", "record_check", "check_failed")
+USAGE_KINDS = ("turn", "narration", "record_check", "check_failed", "check_incomplete", "section_check",
+               "delegation", "consult")
+COUNTED_KINDS = ("turn", "narration", "record_check", "check_failed", "check_incomplete", "section_check")
 RETRY_EVENT = "api_retry"
 UNKNOWN_LINE = (
     "A request that fails returns no usage. If the API billed any part of one, it is not in this total."
@@ -194,7 +197,13 @@ def _label(row: dict) -> str:
     if kind == "record_check":
         return "trace check"
     if kind == "check_failed":
-        return "trace check, FAILED"
+        return "trace check, cancelled" if row.get("cancelled") else "trace check, FAILED"
+    if kind == "check_incomplete":
+        # The requests were answered and billed in full. The reply was cut off, so no verdict was kept.
+        return "trace check, NOT FINISHED" + (f" ({row['stop_reason']})" if row.get("stop_reason") else "")
+    if kind == "section_check":
+        # The blind claim check before a Section export. Billed whether or not the export was then allowed.
+        return "Section export claim check" + (", FAILED" if row.get("failed") else "")
     return kind
 
 

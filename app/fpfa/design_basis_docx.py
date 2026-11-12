@@ -261,6 +261,8 @@ def _rests_on(finding: dict, rows: dict[str, dict]) -> str:
         elif row["_kind"] == "fact":
             word = "input" if row.get("kind") in (inputs.INPUT_KIND, inputs.BASIS_KIND) else "fact"
             parts.append(f"{word} {row['key']} [{ident}]")
+        elif row["_kind"] == "decision":
+            parts.append(f"decision [{ident}]")
         else:
             parts.append(f"finding [{ident}]")
     return "; ".join(parts) or "nothing cited"
@@ -271,7 +273,9 @@ _SOURCE_WORDS = {
     "pack": "content-pack note",
     "author": "its author's own note; the section is not in the content pack",
     "input": "project input",
+    "fact": "a fact a contributor recorded, not a project input",
     "finding": "another finding",
+    "decision": "a decision the team recorded",
     "missing": "a row that is not on the record",
 }
 
@@ -330,6 +334,8 @@ def write_design_basis(
         rows_by_id[row["id"]] = dict(row, _kind="fact")
     for row in findings + list(snapshot.get("retired_findings") or []):
         rows_by_id[row["id"]] = dict(row, _kind="finding")
+    for row in list(snapshot.get("decisions") or []) + list(snapshot.get("retired_decisions") or []):
+        rows_by_id[row["id"]] = dict(row, _kind="decision")
 
     doc = Document()
     doc.core_properties.title = DESIGN_BASIS_TITLE
@@ -449,8 +455,13 @@ def write_design_basis(
     if current_calcs:
         def standing_of(row: dict) -> str:
             item = analysis["calcs"][row["id"]]
+            hold = item.get("edition_hold") or ""
             if item["state"] == coherence.ALTERNATIVE:
-                return f"ALTERNATIVE: ran on {item['note']}. Not the design case."
+                return f"ALTERNATIVE: ran on {item['note']}. Not the design case." + (f" {hold}" if hold else "")
+            if hold:
+                # The figures follow the zone inputs. The cite does not follow the edition the job states,
+                # so the row is never called "follows the project inputs" while that stands.
+                return hold + (" Its figures follow the zone inputs." if item.get("tracked") else "")
             if item.get("tracked"):
                 return "follows the project inputs"
             if item.get("unchecked"):

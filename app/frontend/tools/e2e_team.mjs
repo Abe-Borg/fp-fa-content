@@ -64,8 +64,10 @@ try {
 
   // Findings: the group that needs attention is open; the others wait to be opened.
   const tiers = await page.$$eval(".tier", (nodes) => nodes.map((node) => [node.querySelector(".tier-title").textContent, node.open]));
-  check("findings are grouped by how far each was taken", tiers.length === 3 && tiers[2][0] === "Needs further evidence or engineering review", JSON.stringify(tiers));
-  check("only the group that needs attention starts open", JSON.stringify(tiers.map((tier) => tier[1])) === "[false,false,true]", JSON.stringify(tiers));
+  // Four groups hold a finding on this job. The second is the one the application matched nothing in itself.
+  check("findings are grouped by how far each was taken", tiers.length === 4 && tiers[3][0] === "Needs further evidence or engineering review", JSON.stringify(tiers));
+  check("a statement only the checker connected to its row has a group of its own", tiers[1][0] === "Trace-consistent with an identified row, on the checker's reading alone", JSON.stringify(tiers));
+  check("only the group that needs attention starts open", JSON.stringify(tiers.map((tier) => tier[1])) === "[false,false,false,true]", JSON.stringify(tiers));
   const whys = await page.$$eval(".tier[open] .finding-why", (nodes) => nodes.map((node) => node.textContent));
   check("an open finding says why on its row", whys.some((text) => text.startsWith("fa-releasing objects:")) && whys.some((text) => text.startsWith("It is an assumption.")), JSON.stringify(whys));
   await page.focus(".tier:first-of-type > summary");

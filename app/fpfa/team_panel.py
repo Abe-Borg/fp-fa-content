@@ -155,7 +155,9 @@ _SOURCE_WORD = {
     "pack": "content-pack note",
     "author": "its author's own note (not in the content pack)",
     "input": "project input",
+    "fact": "a fact a contributor recorded, not a project input",
     "finding": "another finding",
+    "decision": "a decision the team recorded",
     "missing": "a row that is not on the record",
 }
 
@@ -178,6 +180,8 @@ def _rests_on(row: dict, rows: dict[str, dict]) -> list[str]:
                 out.append(f"project input {found['key']}: {_short(value, 80)} [{ident}]")
             else:
                 out.append(f"fact {found.get('kind')}/{found.get('key')}: {_short(found.get('value'), 80)} [{ident}]")
+        elif found["_kind"] == "decision":
+            out.append(f"decision by {found.get('decided_by')}: {_short(found.get('text'), 100)} [{ident}]")
         else:
             out.append(f"finding by {found.get('agent')}: {_short(found.get('text'), 100)} [{ident}]")
     return out
@@ -210,6 +214,8 @@ def finding_rows(snapshot: dict | None) -> list[dict]:
         rows[row["id"]] = dict(row, _kind="fact")
     for row in findings + list(snap.get("retired_findings") or []):
         rows[row["id"]] = dict(row, _kind="finding")
+    for row in list(snap.get("decisions") or []) + list(snap.get("retired_decisions") or []):
+        rows[row["id"]] = dict(row, _kind="decision")
     reviews: dict[str, list[dict]] = {}
     for row in snap.get("reviews") or []:
         reviews.setdefault(row["finding_id"], []).append(row)
@@ -326,7 +332,10 @@ def team_view(snapshot: dict | None, *, export_reason: str | None = None,
         # The same agents with what each had recorded when it stopped, and what asking again repeats.
         "partial": [status.partial_text(row) for row in digest["interrupted"]],
         "retry_line": status.RETRY_LINE if digest["interrupted"] or digest["interrupted_jobs"] else "",
-        "unchecked": [f"{row['tool']} by {row['by'] or 'the app'}: {row['note']}" for row in digest["unchecked"]],
+        # The page prints each of these after "Not reconciled by the app:". An edition the calculations cite
+        # and the job does not state is one of them, said once for the tools that share it.
+        "unchecked": [f"{row['tool']} by {row['by'] or 'the app'}: {row['note']}" for row in digest["unchecked"]]
+        + list(digest.get("edition_lines") or []),
         "export": digest["export"],
         "not_standard": checker.NOT_STANDARD,
         # What a design basis exported now would be missing, and the kinds of assurance with the two never performed.

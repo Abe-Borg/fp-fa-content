@@ -54,6 +54,20 @@ The second leg of the double-interlock release was written as low air in these f
 
 Roles are part of the pack. The reviewers did not report on whether the team keeps live copies of the roles; if it does, the role rows above are at the same risk as the skills.
 
+### 2b-1. From the 0.3.1 fixes that followed the app-v0.2.0 acceptance report (2026-11-12)
+
+One packaged file changed, and only in the part that is the application's contract with the checker: the list of marks the application puts on a cite. No discipline rule, skill, corpus note, specification, or calculation was changed.
+
+| File | What changed | Why | Guard |
+| --- | --- | --- | --- |
+| `roles/qa-specialist/ROLE.md` | Two marks added to "Kinds of cite on a project record": RECORDED FACT (a fact a contributor wrote, not a value the designer gave) and DECISION (an election the team recorded) | The application used to package every fact as PROJECT INPUT, which the role says is "a value the designer gave", so a specialist's own assumption read to the checker as the designer's. And a finding that rests on a decision now reaches the checker as one | `app/tests/test_acceptance_report.py`, `test_the_checker_is_told_what_the_two_new_marks_mean` |
+
+Three things the acceptance report raised are engineering content and were **not** changed here. They are proposals for the content team, routed through the FP/FA App Grok Bot:
+
+- **The gallons constant.** The FP kernel computes pipe volume with 7.48 gal per cubic foot; the exact value is 1728/231. `NEXT-STEPS.md`, section 4, has the figures and what a change would move.
+- **A 2022 body in the kernel's edition gate.** `formulas._parse_nfpa13_dry_edition` holds 2019 and 2025. The application now holds applicability on a job that states another edition; it does not pass an edition to the kernel.
+- **The release wording rules.** `releasing.release_wording_hits` and the pack lint's copy read only a sentence that names the supervisory air signal. A statement that the valve releases on one leg alone, or on either leg, reaches no rule. The application now keeps such a statement out of the first group of findings when nothing in it can be matched to the releasing record, but it does not reject it. Rejecting it needs new wording rules, and the two copies change together.
+
 ### 2c. Not changed, and why
 
 - **`calcs/fp/di_zone.py`** is pack-only. It is not in the kernel reproduce set, so no kernel sync overwrites it. It no longer returns a `low_air` row key, a `low_air_note` or a `deprecated` block, and its `boolean` string equals `boolean_p`. See `docs/releasing-basis.md`, section 6.

@@ -62,20 +62,30 @@ from typing import Any, Callable
 from fpfa import coherence, inputs, quantities, status
 from fpfa.corpus_search import trace_cite
 from fpfa.record import Record
-from fpfa.releasing import LOW_AIR_SUPERVISORY, reader_view, release_wording_hits
+from fpfa.releasing import LOW_AIR_SUPERVISORY, TRUTH_TABLE_TOOL, reader_view, release_wording_hits, releasing_logic
 
 CHECKER_ROLE = "qa-specialist"
 CHECK_EVENT = "record_check"
 # A trace check whose request failed. Kept apart from CHECK_EVENT so the last good check stays the latest one.
 CHECK_FAILED_EVENT = "check_failed"
+# A trace check whose reply was cut off before every claim had a verdict. Its requests were billed and its
+# usage is on the event. No finding was changed by it, and it is never the latest check.
+CHECK_INCOMPLETE_EVENT = "check_incomplete"
+# Claims sent to the checker in one request. On a live job a packet of sixteen claims was about 30,000
+# input tokens, and the reply's ceiling covers the model's thinking as well as its verdict lines. A cut-off
+# then loses one batch's claims, not the whole check's.
+CLAIMS_PER_REQUEST = 8
+NO_VERDICT_REASON = "the checker returned no verdict for this claim; it stays not checked"
 
 TIER_SOURCE = "source"
+TIER_CHECKER = "checker"
 TIER_REVIEWED = "reviewed"
 TIER_STATED = "stated"
 TIER_OPEN = "open"
-TIERS = (TIER_SOURCE, TIER_REVIEWED, TIER_STATED, TIER_OPEN)
+TIERS = (TIER_SOURCE, TIER_CHECKER, TIER_REVIEWED, TIER_STATED, TIER_OPEN)
 TIER_TITLE = {
     TIER_SOURCE: "Trace-consistent with a row the application identified",
+    TIER_CHECKER: "Trace-consistent with an identified row, on the checker's reading alone",
     TIER_REVIEWED: "Trace-consistent with its author's own cite only",
     TIER_STATED: "Stated by a specialist, not checked",
     TIER_OPEN: "Needs further evidence or engineering review",
@@ -86,6 +96,12 @@ TIER_NOTE = {
         "record, a content-pack note the application looked up, or a project input, and every figure in it is in "
         "those rows with its unit. The row is named beside each. This is consistency with the team's own record. "
         "It is not verification: the standard was not opened, and no engineer has reviewed it."
+    ),
+    TIER_CHECKER: (
+        "The trace check found each of these consistent with a calculation record, a content-pack note, or a "
+        "project input. The statement carries no figure, and not the releasing record's own expression, that the "
+        "application could hold to those rows itself. So only the checker's reading (a second pass by the same AI "
+        "model) connects the words to the row. Whether they follow from it is for the engineer of record."
     ),
     TIER_REVIEWED: (
         "The trace check found each of these consistent with a cite its own author wrote. The application did "
@@ -106,10 +122,11 @@ LADDER = (
      "Where the Agreed-by column or section 5 names a reviewer."),
     ("Trace consistency", "A second pass by the same AI model judged the statement against the rows it cites. "
      "The application also holds each figure, with its unit, to those rows.",
-     "Findings in the first two groups of section 4."),
+     "Findings in the first three groups of section 4."),
     ("Support from an identified row", "The rows are ones the application found itself: a calculation record, a "
      "content-pack note, or a project input. A content-pack note is the content team's paraphrase.",
-     "Findings in the first group of section 4."),
+     "Findings in the first two groups of section 4. In the first the application itself matched a figure, or "
+     "the releasing record's expression, to the row. In the second only the checker's reading connects them."),
     ("Verification against the primary standard", "The adopted standard, the insurer data sheet, or the "
      "manufacturer's listing was opened and the statement checked against its text.",
      "NOT PERFORMED by this application, for any finding."),
@@ -119,6 +136,17 @@ LADDER = (
 PACK_MARK = "CONTENT-PACK NOTE"
 AUTHOR_MARK = "AUTHOR'S NOTE (written by the claim's author; not found in the content pack)"
 INPUT_MARK = "PROJECT INPUT"
+# A fact a contributor wrote to the record: an assumption, an owner standard, a reading. It is not a value
+# the designer gave, and the checker is told so.
+FACT_MARK = "RECORDED FACT"
+GIVEN_LABEL = "GIVEN"
+# What stands behind a Supported verdict. "checker": the rows are ones the application identified and it
+# could match nothing in the claim to them itself.
+BASIS_SOURCE, BASIS_CHECKER, BASIS_AUTHOR = "source", "checker", "author"
+CHECKER_ONLY_REASON = (
+    "It carries no figure, and not the releasing record's own expression, that the application could hold to "
+    "the rows it cites. Only the checker's reading connects it to them."
+)
 STALE_MARK = "OUT OF DATE"
 NOT_STANDARD = "The standards were not opened. Engineer-of-record review still applies."
 _JUDGMENT_LABELS = ("ASSUMED", "use best judgment")
@@ -154,6 +182,16 @@ def figures(text: str) -> list[str]:
 def _figures_with_units(text: str) -> list[tuple[str, str]]:
     cleaned = _strip_cites(text)
     return [(_normal(match.group(1)), match.group(2).lower()) for match in _FIGURE.finditer(cleaned)]
+
+
+def _claim_figures(text: str) -> list[tuple[str, str, str]]:
+    """Every figure a claim states, for the trace check: (number, the unit as written, its class).
+
+    Wider than figures(): any unit the application knows, a number written
+    out in words before a unit, and the dotted spellings (fpfa.quantities).
+    The reply audit keeps the narrower reading.
+    """
+    return quantities.claim_figures(_strip_cites(text))
 
 
 def _strip_cites(text: str) -> str:
@@ -225,6 +263,7 @@ def _cite_for(content_root: Path | None, rows: dict[str, dict], finding: dict, a
     numbers: set[str] = set()
     held: set = set()
     author_notes: list[str] = []
+    expressions: list[str] = []
     open_cite = False
     author_only = False
     for ident in finding.get("supports") or []:
@@ -240,6 +279,11 @@ def _cite_for(content_root: Path | None, rows: dict[str, dict], finding: dict, a
             pieces.append(f"{claim_check.PACKAGE_MARK}. {row['tool']}: {stated + '. ' if stated else ''}{shown}")
             numbers |= _calc_numbers(row["tool"], row["outputs"], row.get("inputs"))
             held |= _calc_quantities(row["outputs"], row.get("inputs"))
+            if row["tool"] == TRUTH_TABLE_TOOL:
+                # The one thing a releasing record holds that is not a figure: its own logic expression.
+                expression = releasing_logic(row["outputs"])["expression"]
+                if expression:
+                    expressions.append(expression)
             state = analysis["calcs"].get(ident, {})
             label = "calculation record"
             if state.get("state") == coherence.ALTERNATIVE:
@@ -279,13 +323,32 @@ def _cite_for(content_root: Path | None, rows: dict[str, dict], finding: dict, a
             else:
                 value = str(row.get("value"))
             source = row.get("source") or row.get("agent") or ""
-            pieces.append(f"{INPUT_MARK} {row['key']}: {value} ({row['label']}; {source})")
-            numbers |= _numbers_in(value)
-            if row.get("kind") == inputs.INPUT_KIND:
-                held |= quantities.in_value(inputs.decode(row["value"]), row["key"], strings=False)
-            # As the input is shown, with the unit the form gives it.
-            held |= quantities.in_text(value)
-            sources.append({"id": ident, "kind": "input", "text": f"{row['key']}: {value}"})
+            is_input = row.get("kind") == inputs.INPUT_KIND or (
+                row.get("kind") == inputs.BASIS_KIND and row.get("key") in inputs.BASIS_FIELDS)
+            if is_input or str(row.get("label") or "").upper() == GIVEN_LABEL:
+                # A zone input, a basis field, or a value the lead recorded as the designer's own words.
+                pieces.append(f"{INPUT_MARK} {row['key']}: {value} ({row['label']}; {source})")
+                numbers |= _numbers_in(value)
+                if row.get("kind") == inputs.INPUT_KIND:
+                    held |= quantities.in_value(inputs.decode(row["value"]), row["key"], strings=False)
+                # As the input is shown, with the unit the form gives it.
+                held |= quantities.in_text(value)
+                sources.append({"id": ident, "kind": "input", "text": f"{row['key']}: {value}"})
+            else:
+                # A fact a contributor wrote: an assumption, an owner standard, a reading. It is the team's
+                # own statement, like a finding, and adds no independent source. Packaged as a project input
+                # it told the checker the designer gave it, and a specialist could back a claim with a fact
+                # it had written a moment before.
+                writer = row.get("agent") or "a contributor"
+                pieces.append(f"{FACT_MARK} {row.get('kind')}/{row['key']}: {value} ({row['label']}; recorded by {writer})")
+                numbers |= _numbers_in(_strip_cites(value))
+                held |= _text_quantities(value)
+                author_only = True
+                if writer == finding.get("agent"):
+                    # The claim's own author wrote it. A claim that only says it back is not supported by it.
+                    author_notes.append(value)
+                sources.append({"id": ident, "kind": "fact",
+                                "text": f"{row.get('kind')}/{row['key']}: {_clip(value, 120)} (recorded by {writer})"})
         elif kind == "finding":
             pieces.append(f"FINDING by {row['agent']}: {row['text']} [{row['status']}]")
             numbers |= _numbers_in(_strip_cites(row["text"]))
@@ -294,12 +357,23 @@ def _cite_for(content_root: Path | None, rows: dict[str, dict], finding: dict, a
             author_only = True
             author_notes.append(str(row["text"]))
             sources.append({"id": ident, "kind": "finding", "text": f"finding by {row['agent']}"})
+        elif kind == "decision":
+            # An election or a judgment the team recorded. Like a finding it is the team's own statement:
+            # it is on the record, so the claim is not without a source, and it adds no independent one.
+            basis = f" Basis: {row['basis']}" if row.get("basis") else ""
+            pieces.append(f"DECISION by {row.get('decided_by') or 'the team'}: {row['text']}{basis} [{row.get('label') or ''}]")
+            numbers |= _numbers_in(_strip_cites(row["text"]))
+            held |= _text_quantities(row["text"])
+            author_only = True
+            author_notes.append(str(row["text"]))
+            sources.append({"id": ident, "kind": "decision", "text": f"decision by {row.get('decided_by') or 'the team'}"})
     if not pieces:
         return {"cite": claim_check.OPEN_MARK, "open": True, "basis": "none", "numbers": set(), "held": set(),
-                "sources": sources, "author_notes": []}
+                "sources": sources, "author_notes": [], "expressions": []}
     return {
-        "cite": " | ".join(pieces), "open": open_cite, "basis": "author" if author_only else "source",
+        "cite": " | ".join(pieces), "open": open_cite, "basis": BASIS_AUTHOR if author_only else BASIS_SOURCE,
         "numbers": numbers, "held": held, "sources": sources, "author_notes": author_notes,
+        "expressions": expressions,
     }
 
 
@@ -317,6 +391,9 @@ def build_record_packet(record: Record, project_id: str, content_root: Path | No
         rows[row["id"]] = dict(row, _kind="fact")
     for row in findings:
         rows[row["id"]] = dict(row, _kind="finding")
+    for row in snapshot.get("decisions") or []:
+        # A finding may rest on a decision. Left out of this index it read as "not on the record".
+        rows[row["id"]] = dict(row, _kind="decision")
     claims: list[str] = []
     sources: list[str] = []
     meta: list[dict] = []
@@ -325,7 +402,8 @@ def build_record_packet(record: Record, project_id: str, content_root: Path | No
         stale = standing.get("state") == coherence.STALE
         if stale:
             cite = {"cite": f"{STALE_MARK}: " + "; ".join(standing.get("reasons") or [])[:400], "open": True,
-                    "basis": "none", "numbers": set(), "held": set(), "sources": [], "author_notes": []}
+                    "basis": "none", "numbers": set(), "held": set(), "sources": [], "author_notes": [],
+                    "expressions": []}
         else:
             cite = _cite_for(content_root, rows, finding, analysis)
         claims.append(f"{index}. {finding['text'].rstrip('.')}.")
@@ -334,7 +412,7 @@ def build_record_packet(record: Record, project_id: str, content_root: Path | No
             "n": index, "finding_id": finding["id"], "open": cite["open"], "stale": stale,
             "calc_only": cite["basis"] == "source" and all(item["kind"] == "calc" for item in cite["sources"]),
             "basis": cite["basis"], "numbers": sorted(cite["numbers"]), "held": _pairs(cite["held"]),
-            "sources": cite["sources"],
+            "sources": cite["sources"], "expressions": cite["expressions"],
             "author_notes": cite["author_notes"], "requirement": finding["text"], "cite": cite["cite"],
         })
     return {
@@ -356,8 +434,8 @@ def _missing_figures(requirement: str, numbers: list[str], held: list | None = N
     """
     if held is not None:
         have = {(str(number), cls) for number, cls in held}
-        return [f"{number} {unit}" for number, unit in _figures_with_units(requirement)
-                if not quantities.has(number, unit, have)]
+        return [f"{number} {unit}" for number, unit, cls in _claim_figures(requirement)
+                if not quantities.holds(number, cls or None, have)]
     have_numbers = set(numbers)
     missing = []
     for number, unit in _figures_with_units(requirement):
@@ -421,43 +499,61 @@ def check_record(content_root: Path, record: Record, project_id: str, create: Ca
         }
         record.log_event(project_id, CHECK_EVENT, outcome, agent=CHECKER_ROLE)
         return outcome
-    system = claim_check.checker_system(content_root)
-    try:
-        model_text, usage = claim_check._ask_usage(
-            create, system, claim_check.checker_request(packet["claims"], packet["sources"])
-        )
-    except Exception as exc:
-        if type(exc).__name__ == "TurnCancelled":
-            raise
-        from fpfa.claude_client import safe_error
+    from fpfa.claude_client import attach_usage, empty_usage, incomplete_notice, safe_error
 
-        # One request, and it failed. It returned no usage, so none is known. The failure is still a fact
-        # about the job: nothing was judged, and the last good check stands as it was.
-        record.log_event(project_id, CHECK_FAILED_EVENT, {
-            "failed": True, "error": safe_error(exc)[:400], "usage": dict(getattr(exc, "usage", None) or {}),
-            "claim_count": packet["claim_count"], "seconds": round(time.time() - started, 1),
-        }, agent=CHECKER_ROLE)
+    system = claim_check.checker_system(content_root)
+    usage = empty_usage()
+    # By claim number: what the checker said. A claim it said nothing about has no entry, and no entry is
+    # never read as a verdict.
+    words: dict[int, str] = {}
+    cut_off: dict | None = None
+    try:
+        for batch in _batches(packet["meta"]):
+            reply = claim_check.ask(create, system, _batch_request(claim_check, batch))
+            for field, value in reply["usage"].items():
+                usage[field] = int(usage.get(field, 0)) + int(value or 0)
+            said_here = claim_check._verdict_words(reply["text"])
+            for position, item in enumerate(batch, start=1):
+                if position in said_here:
+                    words[item["n"]] = said_here[position]
+            silent = [item["n"] for item in batch
+                      if item["n"] not in words and _without_checker(claim_check, item) is None]
+            if silent and (incomplete_notice(reply["stop_reason"]) or not reply["text"].strip()):
+                # The reply ran into its ceiling, was declined, or held no text. What it did not say about
+                # these claims is not a verdict, and the batches after it are not sent: the check as a
+                # whole cannot speak for the findings now.
+                cut_off = {"stop_reason": reply["stop_reason"], "claims": silent}
+                break
+    except Exception as exc:
+        # The batches that finished were billed, whatever ended this one. The request that failed returned
+        # no usage. Nothing was judged, and the last good check stands as it was.
+        attach_usage(exc, usage)
+        spent = dict(getattr(exc, "usage", None) or {})
+        cancelled = type(exc).__name__ == "TurnCancelled"
+        if not cancelled or spent.get("rounds"):
+            record.log_event(project_id, CHECK_FAILED_EVENT, {
+                "failed": not cancelled, "cancelled": cancelled, "error": safe_error(exc)[:400], "usage": spent,
+                "claim_count": packet["claim_count"], "seconds": round(time.time() - started, 1),
+            }, agent=CHECKER_ROLE)
         raise
-    words = claim_check._verdict_words(model_text)
+    if cut_off is not None:
+        return _incomplete(record, project_id, packet, usage, cut_off, words, started, claim_check)
     rows: list[dict] = []
     # Where the application's own rules set aside what the checker said. A checker that approves a claim
     # the rules catch is a checker to distrust on the claims no rule covers.
     overruled: list[dict] = []
     for item in packet["meta"]:
         reason = ""
-        if item["stale"]:
-            verdict = claim_check.VERDICT_OPEN
-            reason = "its basis changed; it is out of date"
-        elif item["open"]:
-            verdict = claim_check.VERDICT_OPEN
-            reason = "no source on the record, or the cite was not pulled"
-        elif any(claim_check._echoes(item["requirement"], note) for note in item["author_notes"]):
-            # Only a note the claim's own author wrote can be the claim said back. A pack note
-            # that states the claim word for word is what support looks like.
-            verdict = claim_check.VERDICT_NOT
-            reason = "its author's note only repeats the claim"
+        decided = _without_checker(claim_check, item)
+        if decided is not None:
+            verdict, reason = decided
+        elif item["n"] not in words:
+            # The reply finished and skipped this claim. It is not a "no": the finding goes back to not
+            # checked, and the row says why.
+            verdict = claim_check.VERDICT_NONE
+            reason = NO_VERDICT_REASON
         else:
-            verdict = words.get(item["n"], claim_check.VERDICT_NOT)
+            verdict = words[item["n"]]
             if verdict not in (claim_check.VERDICT_SUPPORTED, claim_check.VERDICT_NOT, claim_check.VERDICT_OPEN):
                 verdict = claim_check.VERDICT_NOT
             said = verdict
@@ -475,19 +571,38 @@ def check_record(content_root: Path, record: Record, project_id: str, create: Ca
                     reason += ". The rows hold " + ", ".join(text.split()[0] for text in other) + " only as another quantity"
             if verdict != said:
                 overruled.append({"n": item["n"], "finding_id": item["finding_id"], "checker_said": said})
+        basis, matched = "", []
+        if verdict == claim_check.VERDICT_SUPPORTED:
+            basis = item["basis"]
+            # What the application itself could hold to the cited rows. Every figure in a supported claim is
+            # held, or the verdict would not have stood, so a claim with a figure has one.
+            matched = _held_by_app(item)
+            if basis == BASIS_SOURCE and not matched:
+                # The rows are ones the application identified, and nothing in the claim could be matched to
+                # them by the application. Only the checker's word connects the two.
+                basis = BASIS_CHECKER
+                reason = CHECKER_ONLY_REASON
         rows.append({
             "n": item["n"], "finding_id": item["finding_id"], "verdict": verdict,
-            "cite": item["cite"].replace('"', "'"), "basis": item["basis"] if verdict == claim_check.VERDICT_SUPPORTED else "",
+            "cite": item["cite"].replace('"', "'"), "basis": basis, "held_by_app": matched,
             "sources": item["sources"], "reason": reason,
         })
-        record.set_finding_status(project_id, item["finding_id"], status=verdict, by=CHECKER_ROLE)
+        # A finding the checker said nothing about goes back to "open", which is where it started: an
+        # earlier check's verdict must not stand in for this one's silence.
+        record.set_finding_status(
+            project_id, item["finding_id"],
+            status="open" if verdict == claim_check.VERDICT_NONE else verdict, by=CHECKER_ROLE)
     supported = [row for row in rows if row["verdict"] == claim_check.VERDICT_SUPPORTED]
-    on_source = sum(1 for row in supported if row["basis"] == "source")
-    on_author = len(supported) - on_source
-    not_ok = [row for row in rows if row["verdict"] != claim_check.VERDICT_SUPPORTED]
-    all_supported = bool(rows) and not not_ok
+    on_source = sum(1 for row in supported if row["basis"] == BASIS_SOURCE)
+    on_checker = sum(1 for row in supported if row["basis"] == BASIS_CHECKER)
+    on_author = len(supported) - on_source - on_checker
+    no_word = [row for row in rows if row["verdict"] == claim_check.VERDICT_NONE]
+    not_ok = [row for row in rows if row["verdict"] not in (claim_check.VERDICT_SUPPORTED, claim_check.VERDICT_NONE)]
+    all_supported = bool(rows) and not not_ok and not no_word
     split = (f"{on_source} against a calculation record, a content-pack note, or a project input, "
              f"{on_author} against a cite their author wrote")
+    if on_checker:
+        split += f", {on_checker} against such a row on the checker's reading alone"
     if overruled:
         split += (f"; the application's own rules set aside the checker's verdict on "
                   f"{len(overruled)} finding{'s' if len(overruled) != 1 else ''}")
@@ -498,11 +613,13 @@ def check_record(content_root: Path, record: Record, project_id: str, create: Ca
         )
         block_reason = ""
     else:
-        listed = ", ".join(str(row["n"]) for row in not_ok)
-        status_line = (
-            f"Trace check: {len(supported)} of {len(rows)} findings are consistent with the rows they cite ({split}). "
-            f"Not supported or without a source: {listed}. " + NOT_STANDARD
-        )
+        status_line = f"Trace check: {len(supported)} of {len(rows)} findings are consistent with the rows they cite ({split}). "
+        if not_ok:
+            status_line += "Not supported or without a source: " + ", ".join(str(row["n"]) for row in not_ok) + ". "
+        if no_word:
+            status_line += ("The checker returned no verdict for: " + ", ".join(str(row["n"]) for row in no_word)
+                            + "; they stay not checked. ")
+        status_line += NOT_STANDARD
         block_reason = status_line
     outcome = {
         "usage": usage,
@@ -512,6 +629,7 @@ def check_record(content_root: Path, record: Record, project_id: str, create: Ca
         "claim_count": len(rows),
         "supported": len(supported),
         "on_source": on_source,
+        "on_checker": on_checker,
         "on_author": on_author,
         "token": packet["token"],
         "status_line": status_line,
@@ -525,6 +643,87 @@ def check_record(content_root: Path, record: Record, project_id: str, create: Ca
         ),
     }
     record.log_event(project_id, CHECK_EVENT, outcome, agent=CHECKER_ROLE)
+    return outcome
+
+
+def _plain(text: str) -> str:
+    """Text as two spellings of one expression compare equal: no code marks, one case, single spaces."""
+    return " ".join(str(text or "").replace("`", " ").lower().split())
+
+
+def _held_by_app(item: dict) -> list[str]:
+    """What in a claim the application itself can hold to the rows it cites. Empty when nothing can be.
+
+    Its figures, each with its unit, and the releasing record's own logic
+    expression when the claim quotes it (whole, or the part after the equals
+    sign). A claim with neither states something the application has no way
+    to match: whatever the checker says of it rests on the checker alone.
+    """
+    found = [f"{number} {unit}" for number, unit, _cls in _claim_figures(item["requirement"])]
+    said = _plain(item["requirement"])
+    for expression in item.get("expressions") or []:
+        whole = _plain(expression)
+        body = _plain(expression.split("=", 1)[1]) if "=" in expression else whole
+        if whole and (whole in said or (body and body in said)):
+            found.append("the releasing record's expression")
+            break
+    return found
+
+
+def _batches(meta: list[dict]) -> list[list[dict]]:
+    """The claims in the order they stand, CLAIMS_PER_REQUEST to a request."""
+    return [meta[start:start + CLAIMS_PER_REQUEST] for start in range(0, len(meta), CLAIMS_PER_REQUEST)]
+
+
+def _batch_request(claim_check, batch: list[dict]) -> str:
+    """The checker's two files for one batch, numbered from 1 so every request reads the same way.
+
+    A record with one batch sends exactly the claims and cites build_record_packet numbered.
+    """
+    claims = "\n".join(f"{position}. {item['requirement'].rstrip('.')}." for position, item in enumerate(batch, start=1))
+    sources = "\n".join(f"{position}. {item['cite']}" for position, item in enumerate(batch, start=1))
+    return claim_check.checker_request(claims, sources)
+
+
+def _without_checker(claim_check, item: dict) -> tuple[str, str] | None:
+    """The verdict the application gives a claim itself, whatever the checker says. None when it gives none."""
+    if item["stale"]:
+        return claim_check.VERDICT_OPEN, "its basis changed; it is out of date"
+    if item["open"]:
+        return claim_check.VERDICT_OPEN, "no source on the record, or the cite was not pulled"
+    if any(claim_check._echoes(item["requirement"], note) for note in item["author_notes"]):
+        # Only a note the claim's own author wrote can be the claim said back. A pack note
+        # that states the claim word for word is what support looks like.
+        return claim_check.VERDICT_NOT, "its author's note only repeats the claim"
+    return None
+
+
+def _incomplete(record: Record, project_id: str, packet: dict, usage: dict, cut_off: dict, words: dict,
+                started: float, claim_check) -> dict:
+    """Close a trace check whose reply was cut off. Nothing is written to a finding.
+
+    The check speaks for the findings it saw or for none of them: a verdict
+    on half the record beside an older check's on the rest would read as one
+    check. So the verdict lines that did come back are counted and dropped,
+    the usage is kept, and the last complete check stays the latest one.
+    """
+    waiting = [item["n"] for item in packet["meta"]
+               if item["n"] not in words and _without_checker(claim_check, item) is None]
+    stop_reason = str(cut_off.get("stop_reason") or "")
+    why = f"stop_reason {stop_reason}" if stop_reason and stop_reason != "end_turn" else "the reply held no text"
+    count = packet["claim_count"]
+    status_line = (
+        f"Trace check did not finish: the checker's reply was cut off ({why}) with no verdict on "
+        f"{len(waiting)} of {count} finding{'s' if count != 1 else ''}. No finding was changed, and the last complete "
+        "check, if there was one, stands as it was. Run the trace check again."
+    )
+    outcome = {
+        "incomplete": True, "usage": usage, "seconds": round(time.time() - started, 1), "rows": [],
+        "all_supported": False, "claim_count": count, "unjudged": waiting, "cut_off_at": list(cut_off.get("claims") or []),
+        "stop_reason": stop_reason, "token": packet["token"], "status_line": status_line, "block_reason": status_line,
+        "checked_against_standard": False,
+    }
+    record.log_event(project_id, CHECK_INCOMPLETE_EVENT, outcome, agent=CHECKER_ROLE)
     return outcome
 
 
@@ -556,10 +755,49 @@ def check_is_current(snapshot: dict | None) -> bool:
     return not (was and now and was != now)
 
 
+def _newest(snapshot: dict | None, kind: str) -> dict | None:
+    """The newest event of one kind a snapshot carries: from its latest table, else from its recent window."""
+    found = ((snapshot or {}).get("latest") or {}).get(kind)
+    if found is None:
+        for row in (snapshot or {}).get("events") or []:
+            if row.get("kind") == kind:
+                found = row
+    return found
+
+
+def unfinished_check(snapshot: dict | None) -> str:
+    """Why the newest trace check gave no verdicts, when it came after the last complete one. Else "".
+
+    A check that was cut off, or whose request failed, changed nothing. A
+    view that only knew the last complete check would say "not run" or "run
+    it again" with no word on why the run just made left nothing behind.
+    """
+    done = _newest(snapshot, CHECK_EVENT)
+    done_seq = int((done or {}).get("seq") or 0)
+    newest: dict | None = None
+    for kind in (CHECK_INCOMPLETE_EVENT, CHECK_FAILED_EVENT):
+        event = _newest(snapshot, kind)
+        if event is not None and int(event.get("seq") or 0) > max(done_seq, int((newest or {}).get("seq") or 0)):
+            newest = event
+    if newest is None:
+        return ""
+    payload = newest.get("payload") or {}
+    if newest.get("kind") == CHECK_INCOMPLETE_EVENT:
+        stop_reason = str(payload.get("stop_reason") or "")
+        why = f"stop_reason {stop_reason}" if stop_reason and stop_reason != "end_turn" else "the reply held no text"
+        return f"the last run did not finish: the checker's reply was cut off ({why})"
+    if payload.get("cancelled"):
+        return "the last run was cancelled before it finished"
+    return "the last run failed before it returned (" + _clip(payload.get("error") or "no reason recorded", 160) + ")"
+
+
 def check_line(snapshot: dict | None) -> str:
     """One line on the trace check for the panel and the lead. It speaks for the findings the check saw."""
     snap = snapshot or {}
     payload = _latest_check_in(snap)
+    unfinished = "" if check_is_current(snap) else unfinished_check(snap)
+    if unfinished and snap.get("findings"):
+        return f"Trace check: {unfinished}. No finding was changed. Run it again."
     if payload is None:
         if snap.get("findings"):
             return "Trace check: not run on the current findings."
@@ -576,14 +814,23 @@ def check_line(snapshot: dict | None) -> str:
 
 def summary_line(outcome: dict | None) -> str:
     """The check in a few words for the block under a lead reply."""
+    if (outcome or {}).get("incomplete"):
+        stop_reason = str(outcome.get("stop_reason") or "")
+        why = f" (stop_reason {stop_reason})" if stop_reason and stop_reason != "end_turn" else ""
+        return f"trace check: did not finish{why}; no finding was changed. Run it again."
     rows = (outcome or {}).get("rows") or []
     if not rows:
         return "trace check: nothing to check"
     supported = sum(1 for row in rows if row.get("verdict") == "Supported")
-    on_source = sum(1 for row in rows if row.get("verdict") == "Supported" and row.get("basis") == "source")
+    on_source = sum(1 for row in rows if row.get("verdict") == "Supported" and row.get("basis") == BASIS_SOURCE)
+    on_checker = sum(1 for row in rows if row.get("verdict") == "Supported" and row.get("basis") == BASIS_CHECKER)
     text = f"trace check: {supported} of {len(rows)} findings consistent with what they cite"
     if supported:
-        text += f" ({on_source} against a calc record, a pack note, or an input; {supported - on_source} against the author's own cite)"
+        text += (f" ({on_source} against a calc record, a pack note, or an input; "
+                 f"{supported - on_source - on_checker} against the author's own cite")
+        if on_checker:
+            text += f"; {on_checker} against such a row on the checker's reading alone"
+        text += ")"
     return text + ". The standards were not opened."
 
 
@@ -602,6 +849,7 @@ def assurance(snapshot: dict | None, check: dict | None = None) -> dict[str, dic
     analysis = coherence.analyze(snap)
     payload = check if isinstance(check, dict) else (_latest_check_in(snap) or {})
     by_finding = {row.get("finding_id"): row for row in payload.get("rows") or []}
+    calcs = {row["id"]: row for row in snap.get("calcs") or []}
     objections: dict[str, list[dict]] = {}
     agreements: dict[str, list[str]] = {}
     for row in snap.get("reviews") or []:
@@ -631,8 +879,19 @@ def assurance(snapshot: dict | None, check: dict | None = None) -> dict[str, dic
             tier = TIER_OPEN
             reasons.append("No source on the record" + (f": {seen['reason']}" if seen.get("reason") else "") + ".")
         elif verdict == "Supported":
-            basis = seen.get("basis") or "author"
-            tier = TIER_SOURCE if basis == "source" else TIER_REVIEWED
+            basis = seen.get("basis") or BASIS_AUTHOR
+            if basis == BASIS_SOURCE and "held_by_app" not in seen:
+                # A check made before the application kept what it had matched itself. Worked out again
+                # here from the finding and the releasing records it cites, so an old check cannot keep a
+                # statement with nothing matched in the first group.
+                expressions = [releasing_logic(calcs[item].get("outputs"))["expression"]
+                               for item in finding.get("supports") or []
+                               if item in calcs and calcs[item].get("tool") == TRUTH_TABLE_TOOL]
+                if not _held_by_app({"requirement": finding.get("text") or "", "expressions": expressions}):
+                    basis = BASIS_CHECKER
+            tier = {BASIS_SOURCE: TIER_SOURCE, BASIS_CHECKER: TIER_CHECKER}.get(basis, TIER_REVIEWED)
+            if tier == TIER_CHECKER:
+                reasons.append(CHECKER_ONLY_REASON)
             if finding.get("label") in _JUDGMENT_LABELS:
                 # Consistent with what it cites, and still an assumption or a judgment by its own label.
                 tier = TIER_OPEN
@@ -641,6 +900,8 @@ def assurance(snapshot: dict | None, check: dict | None = None) -> dict[str, dic
                                "the engineer of record confirms it.")
         else:
             tier = TIER_STATED
+            if seen.get("verdict") == "No verdict":
+                reasons.append("The trace check returned no verdict for it, so it stays not checked.")
             if finding.get("label") in _JUDGMENT_LABELS:
                 tier = TIER_OPEN
                 kind = "an assumption" if finding["label"] == "ASSUMED" else "a judgment the tools did not return"
@@ -649,7 +910,7 @@ def assurance(snapshot: dict | None, check: dict | None = None) -> dict[str, dic
             reasons.append("Alternative: " + note)
         for note in standing.get("unchecked") or []:
             reasons.append("Not reconciled by the application: " + note)
-        if standing.get("unchecked") and tier in (TIER_SOURCE, TIER_REVIEWED):
+        if standing.get("unchecked") and tier in (TIER_SOURCE, TIER_CHECKER, TIER_REVIEWED):
             # Consistent with a row the record cannot vouch for any more. It goes to the engineer.
             tier = TIER_OPEN
         out[ident] = {
@@ -771,6 +1032,9 @@ def coverage(snapshot: dict | None) -> dict:
         count = len(digest["unchecked"])
         gaps.append(f"{count} calculation{'s' if count != 1 else ''} the application cannot reconcile after an "
                     "input change: the tool is not tied to the project inputs. Check by hand or run again.")
+    for line in digest.get("edition_lines") or []:
+        # The cites of a calculation name another edition of a standard than the job states.
+        gaps.append(line)
     if digest["stale"]:
         count = len(digest["stale"])
         gaps.append(f"{count} row{'s' if count != 1 else ''} on the record {'are' if count != 1 else 'is'} out of date.")
@@ -818,6 +1082,11 @@ def export_reason(snapshot: dict | None) -> str:
     if not findings:
         return ""
     check = _latest_check_in(snapshot)
+    unfinished = "" if check_is_current(snapshot) else unfinished_check(snapshot)
+    if unfinished:
+        # The run that was just made left nothing behind. Say why, not only that a check is wanted.
+        return (f"The trace check has not judged the findings as they are now: {unfinished}. "
+                "Ask the lead to run it again, or press Run trace check.")
     if not check:
         return "The record has findings that no trace check has judged. Ask the lead to run it, or press Run trace check."
     if check.get("token") != check_token(findings):
