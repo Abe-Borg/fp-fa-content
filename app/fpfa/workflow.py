@@ -487,11 +487,13 @@ def governing_narrative(text: str) -> str:
     return raw.strip()
 
 
-def _flags(di: dict, tools: dict[str, Any], extra: list[str], basis: dict | None = None) -> list[str]:
+def _flags(di: dict, tools: dict[str, Any], extra: list[str], basis: dict | None = None,
+           unconfirmed_basis: Any = ()) -> list[str]:
     flags: list[str] = []
     # First, because it qualifies every cite below it: the calculations name one edition of a standard and
     # the job states another. The kernel is not told the job's edition, so a rerun does not change this.
-    flags.extend(coherence.edition_flags(tools, basis))
+    # A basis field still at the form's starting value is said to be one, never an edition the job states.
+    flags.extend(coherence.edition_flags(tools, basis, unconfirmed_basis))
     flags.extend(tools["zone_trapped_volume"].get("flags") or [])
     flags.extend(tools["elect_di_trim"].get("flags") or [])
     screen = tools["dry_delivery_screen"]
@@ -581,12 +583,16 @@ def run_di_zone(
     *,
     record: Record | None = None,
     project_id: str | None = None,
+    unconfirmed_basis: Any = (),
 ) -> dict[str, Any]:
     """Run the fixed tool plan, then the optional narrative.
 
     With record and project_id, the plan's eight calls are written to that
     job's record as tool-plan, and a narrator's own calls as narrator. A
     repeat run with the same inputs replays the recorded figures.
+    unconfirmed_basis names the basis fields that hold the job form's
+    starting value (inputs.unconfirmed_basis): the flags do not say the job
+    states those.
     """
     basis = dict(basis or {})
     # A zone narration is a draft after the tool plan. The app picks its mode; no menu does.
@@ -681,7 +687,7 @@ def run_di_zone(
         "narrative": narrative,
         "narrative_checks": checks,
         "warnings": warnings,
-        "flags": _flags(di, tools, warnings, basis),
+        "flags": _flags(di, tools, warnings, basis, unconfirmed_basis),
         "inputs": di,
         "basis": basis,
         "mode": selected,

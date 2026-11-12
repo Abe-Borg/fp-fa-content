@@ -339,6 +339,11 @@ EDITION_OPEN = (
     "Whether the rule and the section apply in the edition the job states was not resolved here. "
     "The engineer of record confirms it."
 )
+# The same open sentence where the job's edition is the form's starting value, which the designer has not stated.
+EDITION_OPEN_STARTING = (
+    "Whether the rule and the section apply in the job's edition was not resolved here, and the designer has not "
+    "stated that edition. The engineer of record confirms it."
+)
 
 
 def cited_editions(outputs: Any) -> dict[str, list[str]]:
@@ -370,12 +375,17 @@ def stated_edition(value: Any) -> str | None:
     return years[0] if len(years) == 1 else None
 
 
-def edition_gaps(outputs: Any, basis: dict | None) -> list[dict]:
+def edition_gaps(outputs: Any, basis: dict | None, unconfirmed: Any = ()) -> list[dict]:
     """Where a calc output's cites name an edition of a standard that is not the edition the job states.
 
     basis maps a basis field to its value ({"nfpa_13": "2022"}). Returns
-    [{"document", "cited", "job"}]: cited is the cites' own edition in words
-    ("NFPA 13-2025"), job is what the job states, as a clause.
+    [{"document", "cited", "job", "starting"}]: cited is the cites' own edition
+    in words ("NFPA 13-2025"), job is what the job states, as a clause. unconfirmed
+    names the basis fields that hold the job form's starting value, which
+    nobody stated: the clause says so and never says the job states it, and
+    "starting" is True.
+    Whether such a field is compared at all is unchanged: it is compared like
+    any other, and an edition that matches the cites is no gap.
 
     A basis field that is not on the job at all is not compared: nothing is
     stated to differ from. A field that is blank, or that does not name one
@@ -389,6 +399,7 @@ def edition_gaps(outputs: Any, basis: dict | None) -> list[dict]:
     carry, or when the content pack's calculation cites the job's.
     """
     basis = basis if isinstance(basis, dict) else {}
+    unconfirmed = set(unconfirmed or ())
     cited = cited_editions(outputs)
     gaps: list[dict] = []
     for document, field, _pattern in _CITED_EDITION:
@@ -399,14 +410,26 @@ def edition_gaps(outputs: Any, basis: dict | None) -> list[dict]:
         if job is not None and years == [job]:
             continue
         raw = " ".join(str(basis.get(field) or "").split())
-        if job is not None:
+        if raw and field in unconfirmed:
+            # The form's own starting value. The designer has not stated an edition, so the job does not either.
+            states = (f"the job's {document} edition is the form's starting value \"{raw[:60]}\", "
+                      "not confirmed by the designer")
+        elif job is not None:
             states = f"the job states {document}-{job}"
         elif raw:
             states = f'the job\'s {document} edition reads "{raw[:60]}", which does not name one edition'
         else:
             states = f"the job states no {document} edition"
-        gaps.append({"document": document, "cited": " and ".join(f"{document}-{year}" for year in years), "job": states})
+        gaps.append({"document": document, "cited": " and ".join(f"{document}-{year}" for year in years), "job": states,
+                     "starting": bool(raw and field in unconfirmed)})
     return gaps
+
+
+def edition_open(gaps: list[dict]) -> str:
+    """The open sentence a hold ends with: EDITION_OPEN_STARTING when every gap is on a starting value."""
+    if gaps and all(gap.get("starting") for gap in gaps):
+        return EDITION_OPEN_STARTING
+    return EDITION_OPEN
 
 
 def edition_hold_text(gaps: list[dict], subject: str = "This calculation's cites are") -> str:
@@ -414,19 +437,20 @@ def edition_hold_text(gaps: list[dict], subject: str = "This calculation's cites
     if not gaps:
         return ""
     parts = "; ".join(f"{subject} {gap['cited']} and {gap['job']}" for gap in gaps)
-    return f"{EDITION_HOLD}. {parts}. {EDITION_OPEN}"
+    return f"{EDITION_HOLD}. {parts}. {edition_open(gaps)}"
 
 
-def edition_flags(outputs_by_tool: dict | None, basis: dict | None) -> list[str]:
+def edition_flags(outputs_by_tool: dict | None, basis: dict | None, unconfirmed: Any = ()) -> list[str]:
     """The same hold for a zone run's flags: one line for the tools that share a gap, naming them."""
-    grouped: dict[tuple[str, str], list[str]] = {}
+    grouped: dict[tuple[str, str, bool], list[str]] = {}
     for tool, outputs in (outputs_by_tool or {}).items():
-        for gap in edition_gaps(outputs, basis):
-            grouped.setdefault((gap["cited"], gap["job"]), []).append(str(tool))
+        for gap in edition_gaps(outputs, basis, unconfirmed):
+            grouped.setdefault((gap["cited"], gap["job"], gap["starting"]), []).append(str(tool))
     lines = []
-    for (cited, job), tools in grouped.items():
+    for (cited, job, starting), tools in grouped.items():
         cites = "cites are" if len(tools) > 1 else "cite is"
-        lines.append(f"{EDITION_HOLD}. The {', '.join(tools)} {cites} {cited} and {job}. {EDITION_OPEN}")
+        lines.append(f"{EDITION_HOLD}. The {', '.join(tools)} {cites} {cited} and {job}. "
+                     f"{edition_open([{'starting': starting}])}")
     return lines
 
 
@@ -557,6 +581,10 @@ def analyze(snapshot: dict | None) -> dict:
     # The basis fields as the job states them now, for the edition a calculation's cites are held to.
     stated_basis = {row.get("key"): row.get("value") for row in snap.get("facts") or []
                     if row.get("kind") == inputs.BASIS_KIND}
+    # The basis fields that hold the form's starting value: the job has not stated those.
+    starting_basis = {row.get("key") for row in snap.get("facts") or []
+                      if row.get("kind") == inputs.BASIS_KIND
+                      and inputs.UNCONFIRMED_MARK in str(row.get("source") or "")}
     code_now = str((snap.get("context") or {}).get("calc_identity") or "")
     # When each input change was written. A calc on a tool the record does not track, recorded before one
     # of them, may or may not have used the input that changed.
@@ -600,7 +628,7 @@ def analyze(snapshot: dict | None) -> dict:
             if later:
                 unchecked = UNCHECKED_NOTE
         # An out-of-date row is not read for its cites: it is waiting to be run again as it is.
-        gaps = edition_gaps(row.get("outputs"), stated_basis) if state != STALE else []
+        gaps = edition_gaps(row.get("outputs"), stated_basis, starting_basis) if state != STALE else []
         calc_state[calc_id] = {
             "state": state, "reasons": reasons, "note": note, "tracked": tracked, "unchecked": unchecked,
             "edition_gaps": gaps, "edition_hold": edition_hold_text(gaps),

@@ -483,7 +483,7 @@ INPUT_LABELS = {
 INPUT_TO_FORM = {value: key for key, value in FORM_TO_INPUT.items()}
 # What a fill keeps for the app alone: the values an Undo puts back and checks against. The page is not sent them.
 # stale_run is read from the run when the page draws the card, so a card saved before a run never says it is stale.
-_FILL_PRIVATE = ("was_raw", "now_raw", "kind", "value_text", "record_label", "source", "stale_run")
+_FILL_PRIVATE = ("was_raw", "was_given", "now_raw", "kind", "value_text", "record_label", "source", "stale_run")
 _QUOTE_MARKS = "\"'“”‘’«»"
 
 
@@ -517,6 +517,18 @@ def _why_of(source: str) -> str:
         if tail in why:
             why = why.split(tail, 1)[0]
     return why.strip()
+
+
+def _is_blank_value(value) -> bool:
+    return value is None or value == [] or (isinstance(value, str) and not value.strip())
+
+
+def _was_text(name: str, value, given: str) -> str:
+    """The value a field held before the chat filled it, saying so when it was the form's starting value."""
+    text = _fill_text(name, value)
+    if given == inputs.SOURCE_DEFAULT and not _is_blank_value(value):
+        return f"{text} (starting value)"
+    return text
 
 
 def _fill_text(name: str, value) -> str:
@@ -767,8 +779,9 @@ class Shell:
 
 # Text fields of the form, with the value a blank form shows.
 _TEXT_FIELDS = {
-    # Basis
-    "ahj": "", "nfpa_13": "2025", "nfpa_72": "2025", "insurer": "FM", "hazard_notes": "",
+    # Basis. The three starting values are fpfa.inputs.BASIS_STARTING; nobody stated them.
+    "ahj": "", "nfpa_13": inputs.BASIS_STARTING["nfpa_13"], "nfpa_72": inputs.BASIS_STARTING["nfpa_72"],
+    "insurer": inputs.BASIS_STARTING["insurer"], "hazard_notes": "",
     # Zone
     "zone_id": "", "density": "0.20", "base_area": "1500", "area_increase": "0.30", "hose": "250",
     "q_fill": "600", "t_detect": "0", "t_release": "0", "t_exhaust": "0", "supervisory_psi": "15",
@@ -1126,13 +1139,22 @@ class Desk:
         return Var(self._assumption_cache[1] if self._assumption_cache else "")
 
     def collect_basis(self) -> dict:
+        # An emptied NFPA 13, NFPA 72, or insurer field goes back to its starting value. That value is not the
+        # designer's: _write_form notes it as a starting value, and the record says it is not confirmed.
+        # Whether an emptied field should stay blank instead is the owner's question (the releasing table is
+        # given an insurer either way); until it is answered the form keeps the starting value.
+        starting = inputs.BASIS_STARTING
         return {
             "ahj": str(self.ahj.get()).strip(),
-            "nfpa_13": str(self.nfpa_13.get()).strip() or "2025",
-            "nfpa_72": str(self.nfpa_72.get()).strip() or "2025",
-            "insurer": str(self.insurer.get()).strip() or "FM",
+            "nfpa_13": str(self.nfpa_13.get()).strip() or starting["nfpa_13"],
+            "nfpa_72": str(self.nfpa_72.get()).strip() or starting["nfpa_72"],
+            "insurer": str(self.insurer.get()).strip() or starting["insurer"],
             "hazard_notes": str(self.hazard_notes.get()).strip(),
         }
+
+    def _refilled_basis(self) -> set[str]:
+        """The basis fields that are empty on the form, so collect_basis put their starting value back."""
+        return {name for name in inputs.BASIS_STARTING if not str(getattr(self, name).get()).strip()}
 
     def collect_di(self) -> dict:
         code = next((value for name, value in SYSTEM_CHOICES if name == self.system_label.get()), "di")
@@ -1187,10 +1209,11 @@ class Desk:
         }
 
     def _apply_basis(self, basis: dict) -> None:
+        starting = inputs.BASIS_STARTING
         self.ahj.set(basis.get("ahj") or "")
-        self.nfpa_13.set(basis.get("nfpa_13") or "2025")
-        self.nfpa_72.set(basis.get("nfpa_72") or "2025")
-        self.insurer.set(basis.get("insurer") or "FM")
+        self.nfpa_13.set(basis.get("nfpa_13") or starting["nfpa_13"])
+        self.nfpa_72.set(basis.get("nfpa_72") or starting["nfpa_72"])
+        self.insurer.set(basis.get("insurer") or starting["insurer"])
         self.hazard_notes.set(basis.get("hazard_notes") or "")
 
     def _apply_di(self, di: dict) -> None:
@@ -1302,7 +1325,10 @@ class Desk:
         project["di"] = self.collect_di()
         project["chat"] = self.chat_log
         if self._typed:
-            inputs.note_given(project, self._typed, inputs.SOURCE_DESIGNER)
+            # A basis field the designer emptied holds its starting value again. They did not type that value.
+            refilled = self._typed & self._refilled_basis()
+            inputs.note_given(project, self._typed - refilled, inputs.SOURCE_DESIGNER)
+            inputs.note_given(project, refilled, inputs.SOURCE_DEFAULT)
             self._typed = set()
 
     def _capture_form(self, project: dict) -> str | None:
@@ -1409,9 +1435,14 @@ class Desk:
         zone = inputs.zone_values(project)
         zone_now = {name: inputs.encode(name, value) for name, value in zone.items()}
         sources = {name: inputs.source_text(inputs.provenance(project, name, zone[name])) for name in zone}
-        # A basis field has no starting value, so one the job holds no note on was typed on the Inputs tab.
-        noted = project.get("given") if isinstance(project.get("given"), dict) else {}
-        basis_sources = {key: (inputs.source_text(noted[key]) if noted.get(key) in inputs.SOURCE_TEXT else "job form")
+        # NFPA 13, NFPA 72, and the insurer start with a value (inputs.BASIS_STARTING) that nobody stated. One the
+        # job holds no note on and that still equals it is recorded as a starting value not confirmed by the
+        # designer, as an untouched zone field is; any other value with no note was typed on the Inputs tab.
+        starting = inputs.unconfirmed_basis(project, basis_now)
+        if starting:
+            # Kept on the job, so a later change of the starting values cannot turn this one into a typed one.
+            inputs.note_given(project, starting, inputs.SOURCE_DEFAULT)
+        basis_sources = {key: inputs.source_text(inputs.provenance(project, key, basis_now[key]), key)
                          for key in basis_now}
         from_basis = self.record.sync_form(
             project_id, inputs.BASIS_KIND, basis_now, labels=dict(BASIS_LABELS),
@@ -1472,6 +1503,8 @@ class Desk:
         typed (the mid-turn pull, which does not capture the form first).
         """
         before = copy.deepcopy(project.get("synced")) if isinstance(project.get("synced"), dict) else {}
+        # Who supplied each input before the sync marks the pulled ones as given in chat: Undo puts that back too.
+        given_before = dict(project.get("given") or {}) if isinstance(project.get("given"), dict) else {}
         try:
             pulled = self._sync_inputs(project)
         except Exception as exc:
@@ -1480,11 +1513,11 @@ class Desk:
         if pulled and self.project is not None and self.project.get("id") == project.get("id"):
             held = self._typed_over(project, pulled) if keep_typed else set()
             self._show_pulled(project, pulled, held=held)
-            self._note_fills(project, pulled, before, job_id, held=held)
+            self._note_fills(project, pulled, before, job_id, held=held, given_before=given_before)
         return pulled
 
     def _note_fills(self, project: dict, pulled: list[str], before: dict, job_id: str | None,
-                    held: set[str] | frozenset[str] = frozenset()) -> None:
+                    held: set[str] | frozenset[str] = frozenset(), given_before: dict | None = None) -> None:
         """What the lead filled in from the chat: the Inputs tab marks the field, and the turn's card lists it.
 
         Every word here is the app's: the field's label, the value before and
@@ -1502,12 +1535,13 @@ class Desk:
             was_raw = shown_basis.get(name, "") if basis else inputs.decode(shown_zone.get(name))
             now_raw = (project.get("basis") or {}).get(name, "") if basis else (project.get("di") or {}).get(name)
             why = _why_of(str((rows.get(name) or {}).get("source") or ""))
+            was_given = inputs.provenance({"given": given_before or {}}, name, was_raw)
             self._fill_seq += 1
             entry = {
                 "name": name,
                 "field": INPUT_TO_FORM.get(name, name),
                 "label": INPUT_LABELS.get(name, name),
-                "was": _fill_text(name, was_raw),
+                "was": _was_text(name, was_raw, was_given),
                 "now": _fill_text(name, now_raw),
                 "why": why[:300],
                 "quoted": said_by_designer(why, self._designer_said()),
@@ -1515,6 +1549,7 @@ class Desk:
                 # A field the designer was typing in kept their value: the lead's is on the record until theirs replaces it.
                 "state": "overtaken" if name in held else "applied",
                 "was_raw": was_raw,
+                "was_given": was_given,
                 "now_raw": now_raw,
             }
             self._fills[name] = entry
@@ -1524,6 +1559,7 @@ class Desk:
                 if earlier is not None:
                     # Filled twice in one turn: one line, from the first value to the last.
                     entry["was"], entry["was_raw"] = earlier["was"], earlier["was_raw"]
+                    entry["was_given"] = earlier.get("was_given")
                     listed[listed.index(earlier)] = entry
                 else:
                     listed.append(entry)
@@ -1564,7 +1600,8 @@ class Desk:
             why = str(item.get("why") or "")[:300]
             entries.append({
                 "name": name, "field": INPUT_TO_FORM.get(name, name), "label": INPUT_LABELS.get(name, name),
-                "was": _fill_text(name, was_raw), "now": _fill_text(name, now_raw), "why": why,
+                "was": _was_text(name, was_raw, inputs.provenance(project, name, was_raw)),
+                "now": _fill_text(name, now_raw), "why": why,
                 "quoted": said_by_designer(why, said), "fill": 0, "state": "proposed",
                 "kind": item.get("kind"), "value_text": item.get("value"), "record_label": item.get("label"),
                 "source": item.get("source"),
@@ -1606,7 +1643,7 @@ class Desk:
         for item in targets:
             filled = self._fills.get(item["name"])
             if item["state"] == "applied" and filled is not None:
-                for key in ("was", "now", "was_raw", "now_raw", "fill"):
+                for key in ("was", "now", "was_raw", "was_given", "now_raw", "fill"):
                     item[key] = filled.get(key)
                 filled["quoted"] = item.get("quoted", False)
                 if item.get("why") and not filled.get("why"):
@@ -1683,7 +1720,17 @@ class Desk:
             self._form_loaded()
         else:
             self._apply_di(shown)
-        self._typed.add(name)
+        # The old value goes back with whoever supplied it: a starting value stays a starting value the designer has
+        # not confirmed, a sample's value stays sample data, and a value the designer typed stays theirs.
+        given = self.project.setdefault("given", {})
+        was_given = entry.get("was_given")
+        if _is_blank_value(entry.get("was_raw")):
+            given.pop(name, None)
+        elif was_given in inputs.SOURCE_TEXT:
+            given[name] = was_given
+        else:
+            # A card that kept no source: the old value is the designer's edit.
+            self._typed.add(name)
         entry["state"] = "undone"
         self._fills.pop(name, None)
         self.save_current()
@@ -2249,6 +2296,8 @@ class Desk:
             copy.deepcopy(sample_data.EXAMPLE_BESS_BASIS),
         )
         project["bess_inputs"] = copy.deepcopy(sample_data.EXAMPLE_BESS)
+        # The sample's basis is sample data, as the DI sample's is, and not a starting value of the form.
+        inputs.note_given(project, list(inputs.BASIS_FIELDS), inputs.SOURCE_SAMPLE)
         save_project(project)
         self.refresh_projects(project["id"])
         self.open_project(project["id"])
@@ -2422,17 +2471,20 @@ class Desk:
             self._report_run_problem(origin_id, str(exc), announce=announce)
             return
         self._open_record(self.project)
+        # The basis fields still at the form's starting value. A run's flags never say the job states them.
+        starting = tuple(inputs.unconfirmed_basis(self.project, basis))
         key = self._api_key()
         use_claude = bool(self.ask_claude.get()) and bool(key)
         if use_claude:
             self._enqueue_zone(
-                origin_id, project_name, pack, di, basis, key, announce=announce, seed=seed
+                origin_id, project_name, pack, di, basis, key, announce=announce, seed=seed, starting=starting
             )
             return
-        self._run_zone_here(origin_id, project_name, pack, di, basis, announce=announce, seed=seed)
+        self._run_zone_here(origin_id, project_name, pack, di, basis, announce=announce, seed=seed, starting=starting)
 
     def _run_zone_here(
-        self, origin_id, project_name, pack, di, basis, *, announce: bool = False, seed: str = ""
+        self, origin_id, project_name, pack, di, basis, *, announce: bool = False, seed: str = "",
+        starting: tuple = (),
     ) -> None:
         """Tool plan with no model call. It finishes before the action returns."""
         job = self.jobs.record(
@@ -2447,7 +2499,7 @@ class Desk:
             self._remember_seed(job.id, seed)
         try:
             result = run_di_zone(
-                pack, di, basis, narrator=None, record=self.record, project_id=origin_id
+                pack, di, basis, narrator=None, record=self.record, project_id=origin_id, unconfirmed_basis=starting
             )
         except Exception as exc:
             self.jobs.mark(job.id, "error", safe_error(exc))
@@ -2457,7 +2509,8 @@ class Desk:
         self._finish_run(origin_id, result, None, job_id=job.id)
 
     def _enqueue_zone(
-        self, origin_id, project_name, pack, di, basis, key, *, announce: bool = False, seed: str = ""
+        self, origin_id, project_name, pack, di, basis, key, *, announce: bool = False, seed: str = "",
+        starting: tuple = (),
     ) -> None:
         """Queue a zone run that calls the model. The composer stays usable."""
 
@@ -2488,7 +2541,8 @@ class Desk:
 
             try:
                 result = run_di_zone(
-                    pack, di, basis, narrator=narrator, record=self.record, project_id=origin_id
+                    pack, di, basis, narrator=narrator, record=self.record, project_id=origin_id,
+                    unconfirmed_basis=starting,
                 )
                 error = None
                 if result.get("cancelled"):

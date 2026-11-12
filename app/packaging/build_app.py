@@ -20,10 +20,18 @@ writes THIRD-PARTY-NOTICES.txt beside it (third_party_notices.py), so the
 installer and the portable zip both ship them. A license text that cannot be
 found fails the build.
 
+The seed carries a pack.json with a numbered content version, set when the
+app build is cut: the one line of packaging/seed_content_version.txt, or
+--seed-version. The owner confirms the number. With neither, or with one that
+is not a numbered version, the build stops before anything is written. The
+updater compares that number with the feed, so an older published pack never
+replaces this seed (fpfa.content_update).
+
 From the app directory:
 
     python3 packaging/build_app.py
     python3 packaging/build_app.py --seed-only
+    python3 packaging/build_app.py --seed-only --seed-version 0.6.0
 """
 
 from __future__ import annotations
@@ -40,7 +48,7 @@ APP_DIR = Path(__file__).resolve().parents[1]
 REPO = APP_DIR.parent
 sys.path.insert(0, str(APP_DIR))
 
-from fpfa.content_pack import copy_pack  # noqa: E402
+from fpfa.content_pack import ContentPackError, copy_pack, require_version  # noqa: E402
 from fpfa.paths import is_content_pack  # noqa: E402
 
 # The exe and its folder. The app's name is "+Cynosure"; a file name leaves the plus off.
@@ -49,13 +57,39 @@ ICON = APP_DIR / "packaging" / "assets" / "Cynosure.ico"
 LICENSE_SOURCE = REPO / "LICENSE"
 LICENSE_NAME = "LICENSE.txt"
 NOTICES_NAME = "THIRD-PARTY-NOTICES.txt"
+# The bundled seed's content version, one line, set when the app build is cut. The owner confirms the number;
+# nothing here supplies one.
+SEED_VERSION_FILE = APP_DIR / "packaging" / "seed_content_version.txt"
 
 
-def write_seed(dest: Path) -> list[str]:
-    """Copy the curated trees into dest. The seed has no pack.json and no app/."""
+def seed_version(explicit: str | None = None, path: Path = SEED_VERSION_FILE) -> str:
+    """The seed's numbered content version: --seed-version, else the file's first line. Stops when neither is one."""
+    text = (explicit or "").strip()
+    where = "--seed-version"
+    if not text:
+        where = str(path)
+        try:
+            lines = [line.strip() for line in path.read_text(encoding="utf-8").splitlines()]
+        except OSError:
+            lines = []
+        text = next((line for line in lines if line and not line.startswith("#")), "")
+    if not text:
+        raise SystemExit(
+            "The seed's content version is not set. Put the numbered version the owner confirmed (such as 0.6.0) "
+            f"on one line of {path}, or pass --seed-version. The build does not choose one."
+        )
+    try:
+        return require_version(text)
+    except ContentPackError:
+        raise SystemExit(f"The seed's content version from {where} is {text!r}. It must be numbered, such as 0.6.0.")
+
+
+def write_seed(dest: Path, version: str) -> list[str]:
+    """Copy the curated trees into dest with a pack.json that holds the seed's numbered version. No app/."""
+    numbered = require_version(version)
     if dest.exists():
         shutil.rmtree(dest)
-    stripped = copy_pack(REPO, dest)
+    stripped = copy_pack(REPO, dest, numbered)
     if not is_content_pack(dest):
         raise SystemExit("seed is missing skills/ or calcs/fp/formulas.py")
     return stripped
@@ -204,6 +238,11 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Build a distributable +Cynosure app folder")
     parser.add_argument("--seed-only", action="store_true", help="Write the seed folder and stop")
     parser.add_argument("--seed", default=str(APP_DIR / "build" / "seed"), help="Seed output directory")
+    parser.add_argument(
+        "--seed-version",
+        default="",
+        help=f"The seed's numbered content version. Empty reads {SEED_VERSION_FILE.name}; the owner confirms it.",
+    )
     parser.add_argument("--dist", default=str(APP_DIR / "dist"), help="PyInstaller dist directory")
     parser.add_argument("--console", action="store_true", help="Keep a console window")
     parser.add_argument("--windowed", action="store_true", help="Hide the console")
@@ -216,10 +255,15 @@ def main(argv: list[str] | None = None) -> int:
     if args.console and args.windowed:
         parser.error("choose one of --console or --windowed")
     seed = Path(args.seed)
-    stripped = write_seed(seed)
+    version = seed_version(args.seed_version)
+    try:
+        stripped = write_seed(seed, version)
+    except ContentPackError as exc:
+        sys.stderr.write(f"{exc}\n")
+        return 1
     for rel in stripped:
         sys.stderr.write(f"stripped {rel}\n")
-    sys.stdout.write(f"seed {seed}\n")
+    sys.stdout.write(f"seed {seed} (content {version})\n")
     if args.seed_only:
         return 0
     if importlib.util.find_spec("PyInstaller") is None:

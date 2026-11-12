@@ -1,5 +1,10 @@
 # Publish a content pack when a content-v* tag is pushed.
 # Assets: manifest.json and fp-fa-content-v<version>.zip.
+#
+# A tag publishes only when its commit is on main and the repository's owner pushed it
+# (scripts/check_content_tag.py); any other tag fails this job before anything is built.
+# The calc suites, the pack lint, and the app suite run before the pack is built.
+# The kernel reproduce check is a hand run attached to the release manifest: FP_KERNEL_DIR is not set here.
 
 name: Content pack
 
@@ -23,12 +28,30 @@ jobs:
         with:
           python-version: "3.12"
 
+      # A tag on a branch that was never merged, or on a commit main no longer holds, publishes nothing.
+      - name: Refuse a tag that is not on main
+        env:
+          ACTOR: ${{ github.actor }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          python3 scripts/check_content_tag.py \
+            --tag "$GITHUB_REF_NAME" \
+            --main-ref refs/remotes/origin/main \
+            --actor "$ACTOR" \
+            --owner "$OWNER"
+
+      - name: Install the app's dependencies
+        run: python -m pip install -r app/requirements.txt
+
       # A tag used to publish whatever the tree held. The calc suites and the pack lint run first now: a pack
       # whose prose names low air as a release input, or that lost a recorded correction, is not published.
-      - name: Test the content before it is packed
+      # The app suite runs too: it loads the pack the way an installed app does. Every agent in it is scripted.
+      - name: Test the content and the app before the pack is built
         run: |
           (cd calcs/fp && python -m unittest discover -s . -p 'test_*.py')
           (cd calcs/fa && python -m unittest discover -s tests)
+          (cd app && python -m unittest discover -s tests)
 
       - name: Build content pack
         run: |

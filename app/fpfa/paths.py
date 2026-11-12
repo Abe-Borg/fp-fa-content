@@ -76,19 +76,67 @@ def _bundled_seed_candidates() -> list[Path]:
     return candidates
 
 
+def _marker_numbers(root: Path) -> tuple[int, ...] | None:
+    """The numbered version in a folder's pack.json, or None."""
+    from fpfa.content_pack import MARKER_NAME, parse_version_numbers
+
+    try:
+        data = json.loads((root / MARKER_NAME).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    version = data.get("version") if isinstance(data, dict) else None
+    return parse_version_numbers(version) if isinstance(version, str) else None
+
+
+def _older_than_seed(saved: Path) -> bool:
+    """True when the saved folder is a pack the updater installed and the bundled seed is numbered higher.
+
+    After an app upgrade the new seed can be newer than the pack an earlier
+    version downloaded. That pack is passed over so it does not stand in for
+    the newer seed. A folder the designer chose elsewhere is never passed
+    over, and FPFA_CONTENT_ROOT is not affected.
+    """
+    try:
+        installs = (data_dir() / "content-packs").resolve()
+        if saved.resolve().parent != installs:
+            return False
+    except OSError:
+        return False
+    installed = _marker_numbers(saved)
+    if installed is None:
+        # A pack installed from a zip with no pack.json: the version the updater saved for this folder.
+        from fpfa.content_pack import parse_version_numbers
+
+        cfg = read_config()
+        try:
+            same = bool(cfg.get("content_root")) and Path(cfg["content_root"]).resolve() == saved.resolve()
+        except OSError:
+            same = False
+        version = cfg.get("content_version") if same else None
+        installed = parse_version_numbers(version) if isinstance(version, str) else None
+    if installed is None:
+        return False
+    for seed in _bundled_seed_candidates():
+        if is_content_pack(seed):
+            numbers = _marker_numbers(seed)
+            return numbers is not None and numbers > installed
+    return False
+
+
 def content_root() -> Path:
     """Env pin, the folder saved in Settings, then the bundled seed.
 
     A content pack has the same top-level layout: skills/, roles/, modes/, calcs/, corpus/, specs/.
     The bundled seed is the source checkout, or the seed folder shipped with a frozen app.
-    An incomplete saved folder is skipped so a bad update cannot blank the app.
+    An incomplete saved folder is skipped so a bad update cannot blank the app, and so
+    is a downloaded pack older than the bundled seed (_older_than_seed).
     """
     candidates = []
     env = os.environ.get("FPFA_CONTENT_ROOT")
     if env:
         candidates.append(Path(env))
     saved = read_config().get("content_root")
-    if saved:
+    if saved and not _older_than_seed(Path(saved)):
         candidates.append(Path(saved))
     candidates.extend(_bundled_seed_candidates())
     seen = set()

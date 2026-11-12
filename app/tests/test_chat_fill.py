@@ -115,7 +115,7 @@ class FilledAsRecorded(ChatFillCase):
         turn = self.turn()
         ahj, insurer = self.row("ahj"), self.row("insurer")
         self.assertEqual((ahj["label"], ahj["was"], ahj["now"], ahj["state"]), ("AHJ", "blank", "City of Irvine", "applied"))
-        self.assertEqual((insurer["label"], insurer["was"], insurer["now"]), ("Insurer", "FM", "FM Global"))
+        self.assertEqual((insurer["label"], insurer["was"], insurer["now"]), ("Insurer", "FM (starting value)", "FM Global"))
         self.assertTrue(ahj["quoted"], "the lead's reason is found in the designer's message")
         shown = self.app.snapshot()["thread"]["turns"][-1]["inputs"]
         for item in shown:
@@ -124,7 +124,7 @@ class FilledAsRecorded(ChatFillCase):
         # The Team block no longer lists the inputs: the card does.
         self.assertNotIn("input ahj", turn["text"])
         text = self.app.thread_text()
-        self.assertIn("Filled in on the Inputs tab\nAHJ: blank → City of Irvine\nInsurer: FM → FM Global", text)
+        self.assertIn("Filled in on the Inputs tab\nAHJ: blank → City of Irvine\nInsurer: FM (starting value) → FM Global", text)
 
     def test_a_reason_not_found_in_the_designers_words_is_the_leads_note(self):
         self.play(call(use("set_input", name="ahj", value="City of Irvine", why="AHJ given as Irvine")), say("Done."))
@@ -167,7 +167,7 @@ class FilledAsRecorded(ChatFillCase):
         self.turn("Thanks. What next?")
         opening = play.of("lead")[-1]["user"]
         self.assertIn("[Inputs card under that reply, written by the application: AHJ: blank -> City of Irvine "
-                      "(on the form); Insurer: FM -> FM Global (undone by the designer)]", opening)
+                      "(on the form); Insurer: FM (starting value) -> FM Global (undone by the designer)]", opening)
 
 
 class TypingDuringTheTurn(ChatFillCase):
@@ -256,7 +256,17 @@ class TypingDuringTheTurn(ChatFillCase):
 
 
 class UndoTests(ChatFillCase):
-    def test_undo_puts_the_old_value_back_as_the_designers_edit_and_the_record_keeps_both(self):
+    def test_undo_of_a_value_the_designer_typed_puts_it_back_as_theirs(self):
+        self.app.patch_form({"insurer": "Zurich"})
+        self.app.save_current()
+        self.play(call(INSURER), say("Done."))
+        self.turn()
+        self.assertEqual(self.row("insurer")["was"], "Zurich")
+        self.app.undo_fill(self.app.chat_log[-1]["job_id"], "insurer")
+        given = self.app.record.givens(self.app.project["id"])["insurer"]
+        self.assertEqual((given["value"], given["source"]), ("Zurich", "job form"))
+
+    def test_undo_puts_back_the_old_value_and_who_gave_it_and_the_record_keeps_both(self):
         self.play(call(INSURER), say("Done."))
         self.turn()
         job = self.app.chat_log[-1]["job_id"]
@@ -265,11 +275,14 @@ class UndoTests(ChatFillCase):
         self.assertEqual(self.row("insurer")["state"], "undone")
         self.assertNotIn("insurer", self.app.form_marks())
         project = self.app.project["id"]
-        self.assertEqual(self.app.record.givens(project)["insurer"]["value"], "FM")
+        given = self.app.record.givens(project)["insurer"]
+        self.assertEqual(given["value"], "FM")
+        # It goes back as what it was: the form's starting value, which the designer has not confirmed.
+        self.assertEqual(given["source"], "job form (starting value, not confirmed by the designer)")
         history = [row["value"] for row in self.app.record.facts(project, "basis", include_superseded=True)
                    if row["key"] == "insurer"]
         self.assertIn("FM Global", history, "the lead's row stays as history")
-        self.assertIn("Undone: Insurer is back to FM.", self.app.status.get())
+        self.assertIn("Undone: Insurer is back to FM (starting value).", self.app.status.get())
         # Twice is once.
         self.app.undo_fill(job, "insurer")
         self.assertEqual(self.app.insurer.get(), "FM")
@@ -304,6 +317,8 @@ class RunUsedTheOldValue(ChatFillCase):
         self.app.undo_fill(self.app.chat_log[-1]["job_id"], "q_fill_gpm")
         self.assertEqual(float(self.app.q_fill.get()), 600.0)
         self.assertEqual(self.app.run_changes(), [], "the form is back to what the run used")
+        self.assertEqual(self.app.record.givens(self.app.project["id"])["q_fill_gpm"]["source"], "sample data",
+                         "the sample's value goes back as the sample's")
         self.assertFalse(self.shown("q_fill_gpm")["stale_run"], "an undone row says nothing about the run")
 
     def test_the_note_goes_when_the_zone_is_run_on_the_new_value(self):

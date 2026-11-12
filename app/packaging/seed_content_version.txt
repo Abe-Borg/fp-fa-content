@@ -1,0 +1,4 @@
+# The bundled seed's content version: one numbered version on the first line that is not a comment, such as 0.6.0.
+# It is set when an app build is cut, and the owner confirms the number. packaging/build_app.py writes it into the
+# seed's pack.json, and the updater never replaces a seed with an older or equal published pack.
+# Until a number is on a line below, packaging/build_app.py stops, and so does the Windows app workflow.

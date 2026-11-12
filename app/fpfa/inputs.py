@@ -43,7 +43,14 @@ SOURCE_TEXT = {
     SOURCE_DEFAULT: "zone form (starting value, not confirmed by the designer)",
     SOURCE_SAMPLE: "sample data",
 }
+# A basis field is on the same Inputs tab, but the record has always called its form "job form".
+BASIS_SOURCE_TEXT = {
+    SOURCE_DESIGNER: "job form",
+    SOURCE_DEFAULT: "job form (starting value, not confirmed by the designer)",
+}
 UNCONFIRMED_MARK = "not confirmed by the designer"
+# How a reader is told a value is a starting value, beside the value.
+UNCONFIRMED_NOTE = "(starting value, not confirmed by the designer)"
 
 SYSTEM_TYPES = ("di", "dry", "wet")
 HAZARDS = ("ordinary", "light", "extra")
@@ -90,6 +97,11 @@ ZONE_FIELDS: dict[str, tuple] = {
     "segments": (SEGMENTS, None, [], ""),
 }
 BASIS_FIELDS = ("ahj", "nfpa_13", "nfpa_72", "insurer", "hazard_notes")
+# The values a new job's basis fields start with. The other two start blank. Nobody stated these: a value
+# still equal to one is recorded and shown as a starting value the designer has not confirmed (provenance).
+# Which edition and which insurer a job starts with is the owner's and the content team's decision, not the
+# app's; it is open, and this is the one place the app holds it (projects.new_project and the form read it).
+BASIS_STARTING = {"nfpa_13": "2025", "nfpa_72": "2025", "insurer": "FM"}
 INPUT_NAMES = tuple(ZONE_FIELDS) + BASIS_FIELDS
 # Ways a person writes a unit after a number. A number with its own input's unit is that number;
 # any other trailing text is refused, so nothing is converted and nothing is guessed.
@@ -424,7 +436,7 @@ def default_of(name: str) -> Any:
     """The value a blank form holds for this input."""
     if name in ZONE_FIELDS:
         return ZONE_FIELDS[name][2]
-    return {"nfpa_13": "2025", "nfpa_72": "2025", "insurer": "FM"}.get(name, "")
+    return BASIS_STARTING.get(name, "")
 
 
 def provenance(project: dict | None, name: str, value: Any) -> str:
@@ -433,6 +445,8 @@ def provenance(project: dict | None, name: str, value: Any) -> str:
     A job keeps a note per input once the designer types it, the lead sets it,
     or a sample fills it. With no note, a value that is still the form's
     starting value was not supplied by anyone; any other value was typed.
+    The basis fields are read the same way: NFPA 13 2025, NFPA 72 2025, and
+    insurer FM are a new job's starting values, not the designer's statement.
     """
     noted = ((project or {}).get("given") or {}).get(name)
     if noted in SOURCE_TEXT:
@@ -440,6 +454,20 @@ def provenance(project: dict | None, name: str, value: Any) -> str:
     if same(canonical(name, value), canonical(name, default_of(name))):
         return SOURCE_DEFAULT
     return SOURCE_DESIGNER
+
+
+def unconfirmed_basis(project: dict | None, basis: dict | None = None) -> list[str]:
+    """The basis fields that hold a starting value the designer has not confirmed. A blank field is not one.
+
+    basis is the basis to read, the job's own when None (a run reads the
+    basis it ran on). Each is judged by provenance, so a value the designer
+    typed or stated in chat is theirs even where it equals the starting value.
+    """
+    if basis is None:
+        basis = (project or {}).get("basis") if isinstance((project or {}).get("basis"), dict) else {}
+    return [name for name in BASIS_FIELDS
+            if str((basis or {}).get(name) or "").strip()
+            and provenance(project, name, (basis or {}).get(name)) == SOURCE_DEFAULT]
 
 
 def changed_since(run: dict | None, di: dict | None, basis: dict | None) -> list[str]:
@@ -466,8 +494,12 @@ def changed_since(run: dict | None, di: dict | None, basis: dict | None) -> list
     return changed
 
 
-def source_text(source: str) -> str:
-    return SOURCE_TEXT.get(source, source or SOURCE_TEXT[SOURCE_DESIGNER])
+def source_text(source: str, name: str = "") -> str:
+    """The fact's source text for who supplied an input. name picks the basis form's words for a basis field."""
+    source = source or SOURCE_DESIGNER
+    if name in BASIS_FIELDS and source in BASIS_SOURCE_TEXT:
+        return BASIS_SOURCE_TEXT[source]
+    return SOURCE_TEXT.get(source, source)
 
 
 def note_given(project: dict, names, source: str) -> None:
