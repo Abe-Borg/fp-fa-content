@@ -10,6 +10,7 @@ from pathlib import Path
 
 from docx import Document
 
+from fpfa import inputs
 from fpfa.workflow import (
     exemption_answer,
     exemption_qualifier,
@@ -35,6 +36,27 @@ def _limit_cell(row: dict) -> str:
     if row.get("limit_basis") != "explicit":
         return f"{text} ASSUMED"
     return text
+
+
+def basis_line(project: dict, basis: dict) -> str:
+    """The basis fields as the section prints them. A starting value nobody stated is marked as one.
+
+    The run's basis is read against the job's own note of who supplied each
+    field (inputs.provenance): the export is written only while the form
+    still holds the values the run used.
+    """
+    unconfirmed = set(inputs.unconfirmed_basis(project, basis))
+
+    def field(name: str) -> str:
+        value = str(basis.get(name) or "").strip() or "—"
+        return f"{value} {inputs.UNCONFIRMED_NOTE}" if name in unconfirmed else value
+
+    line = (f"AHJ: {field('ahj')}. NFPA 13: {field('nfpa_13')}. "
+            f"NFPA 72: {field('nfpa_72')}. Insurer: {field('insurer')}.")
+    if unconfirmed:
+        line += (" A starting value is the job form's own; the designer did not state it. "
+                 "Confirm it before this section is relied on.")
+    return line
 
 
 def _table(doc: Document, headers: list[str], rows: list[list]) -> None:
@@ -84,12 +106,7 @@ def write_docx(path: Path | str, project: dict, result: dict) -> Path:
 
     doc.add_heading("Basis of design", level=2)
     doc.add_paragraph("Recorded with this calculation.")
-    doc.add_paragraph(
-        f"AHJ: {basis.get('ahj') or '—'}. "
-        f"NFPA 13: {basis.get('nfpa_13') or '—'}. "
-        f"NFPA 72: {basis.get('nfpa_72') or '—'}. "
-        f"Insurer: {basis.get('insurer') or '—'}."
-    )
+    doc.add_paragraph(basis_line(project, basis))
     if basis.get("hazard_notes"):
         doc.add_paragraph(
             "Hazard notes (use best judgment; the tools did not return this text): "

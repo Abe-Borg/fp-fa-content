@@ -82,18 +82,19 @@ def input_rows(snapshot: dict | None) -> list[dict]:
 
 def _edition_lines(analysis: dict, calcs: dict[str, dict]) -> list[str]:
     """One sentence for each edition a job's calculations cite and the job does not state, naming the tools."""
-    grouped: dict[tuple[str, str], list[str]] = {}
+    grouped: dict[tuple[str, str, bool], list[str]] = {}
     for ident in analysis.get("edition_holds") or []:
         if ident not in calcs:
             continue
         for gap in analysis["calcs"][ident].get("edition_gaps") or []:
-            tools = grouped.setdefault((gap["cited"], gap["job"]), [])
+            tools = grouped.setdefault((gap["cited"], gap["job"], bool(gap.get("starting"))), [])
             if calcs[ident]["tool"] not in tools:
                 tools.append(calcs[ident]["tool"])
     lines = []
-    for (cited, job), tools in grouped.items():
+    for (cited, job, starting), tools in grouped.items():
         cites = "cites are" if len(tools) > 1 else "cite is"
-        lines.append(f"{coherence.EDITION_HOLD}. The {', '.join(tools)} {cites} {cited} and {job}. {coherence.EDITION_OPEN}")
+        lines.append(f"{coherence.EDITION_HOLD}. The {', '.join(tools)} {cites} {cited} and {job}. "
+                     f"{coherence.edition_open([{'starting': starting}])}")
     return lines
 
 
@@ -263,6 +264,16 @@ def partial_text(row: dict) -> str:
     if kept:
         text += " Treat them as partial: it had not reviewed or summarized its work."
     return text
+
+
+def unconfirmed_line(digest: dict | None) -> str:
+    """One sentence naming the starting values the designer has not confirmed. Empty when there are none."""
+    rows = (digest or {}).get("unconfirmed") or []
+    if not rows:
+        return ""
+    return ("Starting values you have not confirmed: " + "; ".join(f"{row['name']} {row['text']}" for row in rows)
+            + ". They are the form's own starting values, not your input. Type the value on the Inputs tab, "
+            "or state it to the lead, to confirm it.")
 
 
 def needs_attention(digest: dict) -> int:
@@ -541,7 +552,9 @@ def record_text(snapshot: dict | None, *, max_rows: int = 40) -> str:
     if other_facts:
         lines.append("Facts:")
         for row in other_facts[:max_rows]:
-            lines.append(f"- [{row['id']}] {row['kind']}/{row['key']}: {row['value']} ({row['label']})")
+            # A basis field still at the job's starting value (NFPA 13 2025, say) was not stated by anyone.
+            note = " (starting value, not confirmed)" if inputs.UNCONFIRMED_MARK in str(row.get("source") or "") else ""
+            lines.append(f"- [{row['id']}] {row['kind']}/{row['key']}: {row['value']} ({row['label']}){note}")
     zone = [row for row in snap.get("facts") or [] if row.get("kind") == inputs.INPUT_KIND]
     if zone:
         lines.append("Zone inputs (cite the id when a finding rests on one):")

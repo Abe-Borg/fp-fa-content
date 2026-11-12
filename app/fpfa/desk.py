@@ -670,8 +670,9 @@ class Shell:
 
 # Text fields of the form, with the value a blank form shows.
 _TEXT_FIELDS = {
-    # Basis
-    "ahj": "", "nfpa_13": "2025", "nfpa_72": "2025", "insurer": "FM", "hazard_notes": "",
+    # Basis. The three starting values are fpfa.inputs.BASIS_STARTING; nobody stated them.
+    "ahj": "", "nfpa_13": inputs.BASIS_STARTING["nfpa_13"], "nfpa_72": inputs.BASIS_STARTING["nfpa_72"],
+    "insurer": inputs.BASIS_STARTING["insurer"], "hazard_notes": "",
     # Zone
     "zone_id": "", "density": "0.20", "base_area": "1500", "area_increase": "0.30", "hose": "250",
     "q_fill": "600", "t_detect": "0", "t_release": "0", "t_exhaust": "0", "supervisory_psi": "15",
@@ -1024,13 +1025,22 @@ class Desk:
         return Var(self._assumption_cache[1] if self._assumption_cache else "")
 
     def collect_basis(self) -> dict:
+        # An emptied NFPA 13, NFPA 72, or insurer field goes back to its starting value. That value is not the
+        # designer's: _write_form notes it as a starting value, and the record says it is not confirmed.
+        # Whether an emptied field should stay blank instead is the owner's question (the releasing table is
+        # given an insurer either way); until it is answered the form keeps the starting value.
+        starting = inputs.BASIS_STARTING
         return {
             "ahj": str(self.ahj.get()).strip(),
-            "nfpa_13": str(self.nfpa_13.get()).strip() or "2025",
-            "nfpa_72": str(self.nfpa_72.get()).strip() or "2025",
-            "insurer": str(self.insurer.get()).strip() or "FM",
+            "nfpa_13": str(self.nfpa_13.get()).strip() or starting["nfpa_13"],
+            "nfpa_72": str(self.nfpa_72.get()).strip() or starting["nfpa_72"],
+            "insurer": str(self.insurer.get()).strip() or starting["insurer"],
             "hazard_notes": str(self.hazard_notes.get()).strip(),
         }
+
+    def _refilled_basis(self) -> set[str]:
+        """The basis fields that are empty on the form, so collect_basis put their starting value back."""
+        return {name for name in inputs.BASIS_STARTING if not str(getattr(self, name).get()).strip()}
 
     def collect_di(self) -> dict:
         code = next((value for name, value in SYSTEM_CHOICES if name == self.system_label.get()), "di")
@@ -1085,10 +1095,11 @@ class Desk:
         }
 
     def _apply_basis(self, basis: dict) -> None:
+        starting = inputs.BASIS_STARTING
         self.ahj.set(basis.get("ahj") or "")
-        self.nfpa_13.set(basis.get("nfpa_13") or "2025")
-        self.nfpa_72.set(basis.get("nfpa_72") or "2025")
-        self.insurer.set(basis.get("insurer") or "FM")
+        self.nfpa_13.set(basis.get("nfpa_13") or starting["nfpa_13"])
+        self.nfpa_72.set(basis.get("nfpa_72") or starting["nfpa_72"])
+        self.insurer.set(basis.get("insurer") or starting["insurer"])
         self.hazard_notes.set(basis.get("hazard_notes") or "")
 
     def _apply_di(self, di: dict) -> None:
@@ -1200,7 +1211,10 @@ class Desk:
         project["di"] = self.collect_di()
         project["chat"] = self.chat_log
         if self._typed:
-            inputs.note_given(project, self._typed, inputs.SOURCE_DESIGNER)
+            # A basis field the designer emptied holds its starting value again. They did not type that value.
+            refilled = self._typed & self._refilled_basis()
+            inputs.note_given(project, self._typed - refilled, inputs.SOURCE_DESIGNER)
+            inputs.note_given(project, refilled, inputs.SOURCE_DEFAULT)
             self._typed = set()
 
     def _capture_form(self, project: dict) -> str | None:
@@ -1306,9 +1320,14 @@ class Desk:
         zone = inputs.zone_values(project)
         zone_now = {name: inputs.encode(name, value) for name, value in zone.items()}
         sources = {name: inputs.source_text(inputs.provenance(project, name, zone[name])) for name in zone}
-        # A basis field has no starting value, so one the job holds no note on was typed on the Inputs tab.
-        noted = project.get("given") if isinstance(project.get("given"), dict) else {}
-        basis_sources = {key: (inputs.source_text(noted[key]) if noted.get(key) in inputs.SOURCE_TEXT else "job form")
+        # NFPA 13, NFPA 72, and the insurer start with a value (inputs.BASIS_STARTING) that nobody stated. One the
+        # job holds no note on and that still equals it is recorded as a starting value not confirmed by the
+        # designer, as an untouched zone field is; any other value with no note was typed on the Inputs tab.
+        starting = inputs.unconfirmed_basis(project, basis_now)
+        if starting:
+            # Kept on the job, so a later change of the starting values cannot turn this one into a typed one.
+            inputs.note_given(project, starting, inputs.SOURCE_DEFAULT)
+        basis_sources = {key: inputs.source_text(inputs.provenance(project, key, basis_now[key]), key)
                          for key in basis_now}
         from_basis = self.record.sync_form(
             project_id, inputs.BASIS_KIND, basis_now, labels=dict(BASIS_LABELS),
@@ -1912,6 +1931,8 @@ class Desk:
             copy.deepcopy(sample_data.EXAMPLE_BESS_BASIS),
         )
         project["bess_inputs"] = copy.deepcopy(sample_data.EXAMPLE_BESS)
+        # The sample's basis is sample data, as the DI sample's is, and not a starting value of the form.
+        inputs.note_given(project, list(inputs.BASIS_FIELDS), inputs.SOURCE_SAMPLE)
         save_project(project)
         self.refresh_projects(project["id"])
         self.open_project(project["id"])
@@ -2085,17 +2106,20 @@ class Desk:
             self._report_run_problem(origin_id, str(exc), announce=announce)
             return
         self._open_record(self.project)
+        # The basis fields still at the form's starting value. A run's flags never say the job states them.
+        starting = tuple(inputs.unconfirmed_basis(self.project, basis))
         key = self._api_key()
         use_claude = bool(self.ask_claude.get()) and bool(key)
         if use_claude:
             self._enqueue_zone(
-                origin_id, project_name, pack, di, basis, key, announce=announce, seed=seed
+                origin_id, project_name, pack, di, basis, key, announce=announce, seed=seed, starting=starting
             )
             return
-        self._run_zone_here(origin_id, project_name, pack, di, basis, announce=announce, seed=seed)
+        self._run_zone_here(origin_id, project_name, pack, di, basis, announce=announce, seed=seed, starting=starting)
 
     def _run_zone_here(
-        self, origin_id, project_name, pack, di, basis, *, announce: bool = False, seed: str = ""
+        self, origin_id, project_name, pack, di, basis, *, announce: bool = False, seed: str = "",
+        starting: tuple = (),
     ) -> None:
         """Tool plan with no model call. It finishes before the action returns."""
         job = self.jobs.record(
@@ -2110,7 +2134,7 @@ class Desk:
             self._remember_seed(job.id, seed)
         try:
             result = run_di_zone(
-                pack, di, basis, narrator=None, record=self.record, project_id=origin_id
+                pack, di, basis, narrator=None, record=self.record, project_id=origin_id, unconfirmed_basis=starting
             )
         except Exception as exc:
             self.jobs.mark(job.id, "error", safe_error(exc))
@@ -2120,7 +2144,8 @@ class Desk:
         self._finish_run(origin_id, result, None, job_id=job.id)
 
     def _enqueue_zone(
-        self, origin_id, project_name, pack, di, basis, key, *, announce: bool = False, seed: str = ""
+        self, origin_id, project_name, pack, di, basis, key, *, announce: bool = False, seed: str = "",
+        starting: tuple = (),
     ) -> None:
         """Queue a zone run that calls the model. The composer stays usable."""
 
@@ -2151,7 +2176,8 @@ class Desk:
 
             try:
                 result = run_di_zone(
-                    pack, di, basis, narrator=narrator, record=self.record, project_id=origin_id
+                    pack, di, basis, narrator=narrator, record=self.record, project_id=origin_id,
+                    unconfirmed_basis=starting,
                 )
                 error = None
                 if result.get("cancelled"):
