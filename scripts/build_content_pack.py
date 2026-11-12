@@ -2,15 +2,16 @@
 """Build a versioned content zip and manifest.json.
 
 The zip includes skills, calcs, corpus, specs, modes, and roles.
-It omits the app, project files, API keys, _sources, and foam,
-clean-agent, Canada, and vendor-catalog paths.
+It omits the app, project files, API keys, _sources, and vendor-catalog
+paths. A foam or clean-agent path stops the build. A Canada-named path is
+packed under its own name: Canada is in scope through a skill's Country gate.
 
 Before packing, this script runs the strip scan (scripts/check_pack_strip.py) and stops with a
 message on any finding: a job, client, or place name outside the reviewed baseline, a QA or batch
-tag, a clean-agent or foam name in a path, or a path the pack builder would drop for being named
-canada or canadian. It then packs a staged copy that leaves out calcs/fp/draft/, the held and
-unwired draft, so that folder is not in the zip. The builder in app/fpfa/content_pack.py is not
-changed here; its seed copy and installer filters are the app's.
+tag, or a clean-agent or foam name in a path. It then packs a staged copy that leaves out
+calcs/fp/draft/, the held and unwired draft, so that folder is not in the zip. The builder in
+app/fpfa/content_pack.py also leaves that folder out and refuses the same scope prefixes, so the
+app's seed copy and installer follow the same rules.
 """
 
 from __future__ import annotations

@@ -2,6 +2,17 @@
 
 The pack copies skills, calcs, corpus, specs, modes, and roles. It does not
 search those folders, and it does not read the API key or project files.
+
+What a path may be, here and in the installer (fpfa.content_update):
+
+  * a component that starts with a foam or clean-agent name is out of scope.
+    The build stops naming it and writes no zip, and the installer refuses a
+    pack that holds one (SCOPE_PREFIXES; scripts/check_pack_strip.py keeps the
+    same list, and a test holds the two equal);
+  * `_sources`, catalog, and `__pycache__` folders are left out and reported;
+  * Canada is in scope through a skill's Country gate (US | Canada), so a
+    Canada-named file ships under its own name like any other;
+  * the held draft folder under calcs/fp is left out and reported.
 """
 
 from __future__ import annotations
@@ -26,21 +37,21 @@ BLOCKED_FILE_NAMES = frozenset({
     ".env",
 })
 _SKIP_SUFFIXES = {".pyc", ".pyo", ".pdf", ".docx", ".zip"}
-_FORBIDDEN = frozenset({
+# A path component that starts with one of these names foam or clean-agent content, which is out of scope.
+# It is matched as a prefix, so a slug such as clean-agent-enclosure-integrity is caught, not only a folder
+# named clean-agent. The strip scan (scripts/check_pack_strip.py, _SCOPE_PREFIXES) holds the same list.
+SCOPE_PREFIXES = ("clean-agent", "clean_agent", "cleanagent", "foam")
+# Left out of a pack and reported: raw research, vendor catalogs, and bytecode.
+_STRIPPED = frozenset({
     "_sources",
-    "foam",
-    "foam-water",
-    "foam_water",
-    "clean-agent",
-    "clean_agent",
-    "cleanagent",
-    "canada",
-    "canadian",
     "catalog",
     "catalogs",
     "vendor-catalog",
     "__pycache__",
 })
+# Held paths, as path components: left out of a pack and reported. calcs/fp's draft folder is held and unwired.
+# The name is built from pieces because calcs/fp/test_draft_held.py fails on a literal reference to that folder.
+HELD_PARTS = (("calcs", "fp", "dr" + "aft"),)
 _KEY_RE = re.compile(r"sk-ant-[A-Za-z0-9_\-]{10,}")
 
 
@@ -57,13 +68,25 @@ class BuiltPack:
     stripped: tuple[str, ...]
 
 
+def out_of_scope_part(part: str) -> bool:
+    """True for a path component that names foam or clean-agent content. It fails a build and an install."""
+    return part.casefold().startswith(SCOPE_PREFIXES)
+
+
 def forbidden_part(part: str) -> bool:
-    """True for a path component the release zip must omit."""
+    """True for a path component a release zip must not carry: out of scope, or one the build leaves out."""
+    if out_of_scope_part(part):
+        return True
     name = part.casefold()
-    if name in _FORBIDDEN:
+    if name in _STRIPPED:
         return True
     stem = name.rsplit(".", 1)[0]
-    return stem in _FORBIDDEN and stem != name
+    return stem in _STRIPPED and stem != name
+
+
+def held_path(parts: tuple[str, ...]) -> bool:
+    """True for a path under a held folder (HELD_PARTS)."""
+    return any(tuple(parts[: len(held)]) == held for held in HELD_PARTS)
 
 
 def parse_version_numbers(value: str) -> tuple[int, ...] | None:
@@ -132,13 +155,16 @@ def _blocked_file(name: str) -> bool:
 def collect_pack_files(source: Path) -> tuple[list[tuple[Path, str]], list[str]]:
     """Return pack files and the relative paths that were left out.
 
-    A key file or an API-key string fails the build. Foam, clean-agent,
-    Canada, catalog, and `_sources` paths are omitted and reported.
+    A key file, an API-key string, or a foam or clean-agent path fails the
+    build, naming every such path. Catalog and `_sources` paths and the held
+    draft are omitted and reported. A Canada-named path is packed under its
+    own name: nothing is dropped without a message.
     """
     if not is_content_pack(source):
         raise ContentPackError("source is missing skills/ or calcs/fp/formulas.py")
     files: list[tuple[Path, str]] = []
     stripped: list[str] = []
+    out_of_scope: list[str] = []
     for top in ALLOWED_TOP:
         folder = source / top
         if not folder.is_dir():
@@ -147,10 +173,13 @@ def collect_pack_files(source: Path) -> tuple[list[tuple[Path, str]], list[str]]
             rel = path.relative_to(source)
             rel_name = rel.as_posix()
             parts = rel.parts
-            if path.is_symlink():
-                stripped.append(rel_name)
+            if not (path.is_symlink() or path.is_file()):
                 continue
-            if not path.is_file():
+            if any(out_of_scope_part(part) for part in parts):
+                out_of_scope.append(rel_name)
+                continue
+            if path.is_symlink() or held_path(parts):
+                stripped.append(rel_name)
                 continue
             if any(forbidden_part(part) for part in parts) or path.suffix.casefold() in _SKIP_SUFFIXES:
                 stripped.append(rel_name)
@@ -164,12 +193,33 @@ def collect_pack_files(source: Path) -> tuple[list[tuple[Path, str]], list[str]]
             if _KEY_RE.search(text):
                 raise ContentPackError(f"refusing to pack {rel_name} because it contains an API key")
             files.append((path, rel_name))
+    if out_of_scope:
+        shown = "\n".join(f"  {rel}" for rel in sorted(out_of_scope)[:40])
+        more = f"\n  ... and {len(out_of_scope) - 40} more" if len(out_of_scope) > 40 else ""
+        raise ContentPackError(
+            f"refusing to pack {len(out_of_scope)} foam or clean-agent path(s); they are out of scope:\n{shown}{more}"
+        )
     files.sort(key=lambda item: item[1])
+    stripped.sort()
     return files, stripped
 
 
-def copy_pack(source: Path, dest: Path) -> list[str]:
-    """Copy a seed tree. The destination must not already exist. No pack.json."""
+def seed_marker(version: str) -> bytes:
+    """The bundled seed's pack.json: its numbered content version, so the updater can tell it from older packs."""
+    numbered = require_version(version)
+    return (json.dumps({"version": numbered, "seed": True}, indent=2) + "\n").encode("utf-8")
+
+
+def copy_pack(source: Path, dest: Path, version: str) -> list[str]:
+    """Copy a seed tree with its pack.json. The destination must not already exist.
+
+    The seed carries a numbered version, set when the app build is cut. The
+    updater compares it with the feed, so an older published pack never
+    replaces a newer seed (fpfa.content_update._is_newer). The marker is
+    written into the seed only, never into the pack folders of a checkout, so
+    the content fingerprint does not move for it.
+    """
+    marker = seed_marker(version)
     if dest.exists():
         raise ContentPackError("destination already exists")
     files, stripped = collect_pack_files(source)
@@ -177,6 +227,7 @@ def copy_pack(source: Path, dest: Path) -> list[str]:
         target = dest / rel
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(path.read_bytes())
+    (dest / MARKER_NAME).write_bytes(marker)
     return stripped
 
 

@@ -28,6 +28,7 @@ from fpfa.content_pack import (
     MARKER_NAME,
     canonical_version,
     forbidden_part,
+    out_of_scope_part,
     parse_version_numbers,
     sha256_file,
 )
@@ -620,6 +621,11 @@ def _safe_parts(name: str) -> tuple[str, ...]:
 
 
 def _check_member(parts: tuple[str, ...]) -> None:
+    if any(out_of_scope_part(part) for part in parts):
+        raise ContentUpdateError(
+            "The pack contains a foam or clean-agent path, which is out of scope. The last good pack is still in use.",
+            status="rejected",
+        )
     if any(forbidden_part(part) for part in parts):
         raise ContentUpdateError(
             "The pack contains a stripped path. The last good pack is still in use.",
@@ -656,6 +662,13 @@ def _zip_name_ok(name: str) -> bool:
 
 
 def _is_newer(remote: str, local: str) -> bool:
+    """Whether the feed's pack replaces what is in use: only a numbered version greater than a numbered local one.
+
+    The bundled seed carries its own number (fpfa.content_pack.seed_marker), so
+    a published pack older than or equal to the seed leaves it in place. A
+    local label with no number (a source checkout, a seed built before seeds
+    were numbered) is replaced by any numbered pack.
+    """
     remote_numbers = parse_version_numbers(remote)
     local_numbers = parse_version_numbers(local)
     if remote_numbers is None:
