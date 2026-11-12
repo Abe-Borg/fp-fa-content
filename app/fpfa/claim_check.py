@@ -968,7 +968,9 @@ def _package_source(requirement: str, named: list[dict], cites: list[str], secti
                 continue
             seen.add(key)
             unit = f" {item['unit']}" if item["unit"] else ""
-            shown.append(f"{item['tool']}.{item['key']} = {item['value']:.6g}{unit}")
+            # Full precision: the support check reads these figures back, and a rounded one (120003.6 shown as
+            # 120004) would refuse a claim that quotes the output exactly.
+            shown.append(f"{item['tool']}.{item['key']} = {item['value']:.12g}{unit}")
             if item["behind"]:
                 behind.setdefault(item["tool"], item["behind"])
     if shown:

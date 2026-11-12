@@ -459,6 +459,15 @@ class ClaimCiteTests(unittest.TestCase):
         self.assertIn("condition: limit_basis FM, edition_status pinned", source)
         self.assertIn("kernel cite:", source)
 
+    def test_a_large_figure_is_read_back_at_the_precision_it_was_quoted(self):
+        from fpfa.claim_check import _package_source, _package_supports, named_outputs
+
+        named = named_outputs({"tools": {"density_area": {"gallons": 120003.6}}, "transcript": []})
+        source = _package_source("Duration volume 120003.6 gal", named, [])
+        self.assertIn("density_area.gallons = 120003.6", source)
+        self.assertTrue(_package_supports("Duration volume 120003.6 gal", source))
+        self.assertFalse(_package_supports("Duration volume 120004.6 gal", source))
+
     def test_an_approve_all_checker_does_not_carry_a_figure_no_output_holds(self):
         from fpfa.claim_check import VERDICT_NOT, VERDICT_SUPPORTED, _from_model, build_packet, numbered_bodies
 
