@@ -482,7 +482,8 @@ INPUT_LABELS = {
 }
 INPUT_TO_FORM = {value: key for key, value in FORM_TO_INPUT.items()}
 # What a fill keeps for the app alone: the values an Undo puts back and checks against. The page is not sent them.
-_FILL_PRIVATE = ("was_raw", "now_raw", "kind", "value_text", "record_label", "source")
+# stale_run is read from the run when the page draws the card, so a card saved before a run never says it is stale.
+_FILL_PRIVATE = ("was_raw", "now_raw", "kind", "value_text", "record_label", "source", "stale_run")
 _QUOTE_MARKS = "\"'“”‘’«»"
 
 
@@ -1442,13 +1443,33 @@ class Desk:
                 pass
         return pulled
 
-    def _pull_inputs_onto_form(self, project: dict, job_id: str | None = None) -> list[str]:
+    def _typed_over(self, project: dict, pulled: list[str]) -> set[str]:
+        """The pulled inputs the designer has typed a different value into since the last save."""
+        try:
+            shown = {**self.collect_basis(), **self.collect_di()}
+        except ValueError:
+            return set(pulled) & self._typed
+        now = {**(project.get("basis") or {}), **(project.get("di") or {})}
+        return {name for name in set(pulled) & self._typed
+                if not inputs.same(inputs.canonical(name, shown.get(name)), inputs.canonical(name, now.get(name)))}
+
+    def _form_readable(self) -> bool:
+        try:
+            self.collect_basis()
+            self.collect_di()
+        except ValueError:
+            return False
+        return True
+
+    def _pull_inputs_onto_form(self, project: dict, job_id: str | None = None, *, keep_typed: bool = False) -> list[str]:
         """Sync the job with the record and, when the record put an input on it and it is the open job, redraw the form.
 
         The form has to show what the sync pulled before it is read again: a
         field still showing the old value would be captured as the designer's
         change and would overrule what the lead recorded. job_id is the chat
         turn that recorded them, when one did: its reply carries the card.
+        keep_typed leaves a field the designer typed since the last save as
+        typed (the mid-turn pull, which does not capture the form first).
         """
         before = copy.deepcopy(project.get("synced")) if isinstance(project.get("synced"), dict) else {}
         try:
@@ -1457,11 +1478,13 @@ class Desk:
             self.status.set("Project record is not available. " + safe_error(exc))
             return []
         if pulled and self.project is not None and self.project.get("id") == project.get("id"):
-            self._show_pulled(project, pulled)
-            self._note_fills(project, pulled, before, job_id)
+            held = self._typed_over(project, pulled) if keep_typed else set()
+            self._show_pulled(project, pulled, held=held)
+            self._note_fills(project, pulled, before, job_id, held=held)
         return pulled
 
-    def _note_fills(self, project: dict, pulled: list[str], before: dict, job_id: str | None) -> None:
+    def _note_fills(self, project: dict, pulled: list[str], before: dict, job_id: str | None,
+                    held: set[str] | frozenset[str] = frozenset()) -> None:
         """What the lead filled in from the chat: the Inputs tab marks the field, and the turn's card lists it.
 
         Every word here is the app's: the field's label, the value before and
@@ -1474,7 +1497,6 @@ class Desk:
             rows = {}
         shown_basis = (before or {}).get("basis") or {}
         shown_zone = (before or {}).get("zone") or {}
-        changed = set(self.run_changes())
         for name in pulled:
             basis = name in inputs.BASIS_FIELDS
             was_raw = shown_basis.get(name, "") if basis else inputs.decode(shown_zone.get(name))
@@ -1490,8 +1512,8 @@ class Desk:
                 "why": why[:300],
                 "quoted": said_by_designer(why, self._designer_said()),
                 "fill": self._fill_seq,
-                "state": "applied",
-                "stale_run": name in changed,
+                # A field the designer was typing in kept their value: the lead's is on the record until theirs replaces it.
+                "state": "overtaken" if name in held else "applied",
                 "was_raw": was_raw,
                 "now_raw": now_raw,
             }
@@ -1543,7 +1565,7 @@ class Desk:
             entries.append({
                 "name": name, "field": INPUT_TO_FORM.get(name, name), "label": INPUT_LABELS.get(name, name),
                 "was": _fill_text(name, was_raw), "now": _fill_text(name, now_raw), "why": why,
-                "quoted": said_by_designer(why, said), "fill": 0, "state": "proposed", "stale_run": False,
+                "quoted": said_by_designer(why, said), "fill": 0, "state": "proposed",
                 "kind": item.get("kind"), "value_text": item.get("value"), "record_label": item.get("label"),
                 "source": item.get("source"),
             })
@@ -1584,7 +1606,7 @@ class Desk:
         for item in targets:
             filled = self._fills.get(item["name"])
             if item["state"] == "applied" and filled is not None:
-                for key in ("was", "now", "was_raw", "now_raw", "fill", "stale_run"):
+                for key in ("was", "now", "was_raw", "now_raw", "fill"):
                     item[key] = filled.get(key)
                 filled["quoted"] = item.get("quoted", False)
                 if item.get("why") and not filled.get("why"):
@@ -1668,12 +1690,13 @@ class Desk:
         self._render_chat()
         self.status.set(f"Undone: {label} is back to {entry.get('was') or 'blank'}.")
 
-    def _show_pulled(self, project: dict, pulled: list[str]) -> None:
+    def _show_pulled(self, project: dict, pulled: list[str], held: set[str] | frozenset[str] = frozenset()) -> None:
         """Put the inputs the record supplied on the open form. The other fields stay as the designer has them.
 
         Not every caller saved the form first (/status, an answer on the
         panel), so a field typed since the last save is still only on the
-        form. It is kept, with its mark that the designer typed it.
+        form. It is kept, with its mark that the designer typed it. A pulled
+        input in held is one the designer is typing in: it keeps their value.
         """
         basis = dict(project.get("basis") or {})
         di = dict(project.get("di") or {})
@@ -1686,6 +1709,8 @@ class Desk:
             self._typed = set()
             return
         for name in pulled:
+            if name in held:
+                continue
             if name in basis and name in shown_basis:
                 shown_basis[name] = basis[name]
             elif name in di:
@@ -1693,7 +1718,7 @@ class Desk:
         self._apply_basis(shown_basis)
         self._apply_di(shown_di)
         # Putting the record's values on the form is not the designer typing them.
-        self._typed -= set(pulled)
+        self._typed -= set(pulled) - set(held)
 
     def save_current(self) -> None:
         self._ensure_project()
@@ -3314,8 +3339,11 @@ class Desk:
                     self._team_due = True
                 continue
             if kind == "input_set":
-                if self.project is not None and job.project_id == self.project.get("id"):
-                    if self._pull_inputs_onto_form(self.project, job_id=job_id):
+                if self.project is not None and job.project_id == self.project.get("id") and self._form_readable():
+                    # Mid-turn the form is not captured first, so a field typed since the last save keeps what was
+                    # typed: the reply's end captures it, and the designer's edit replaces the lead's row as before.
+                    # A form that does not parse is left alone until then, with everything typed on it.
+                    if self._pull_inputs_onto_form(self.project, job_id=job_id, keep_typed=True):
                         save_project(self.project)
                         activity_changed = True
                 continue
@@ -4007,6 +4035,7 @@ class Desk:
             state["thread"]["turns"] = [
                 {key: turn[key] for key in ("role", "text", "job_id") if key in turn}
                 | ({"inputs": [{key: value for key, value in item.items() if key not in _FILL_PRIVATE}
+                               | {"stale_run": item.get("state") == "applied" and item.get("name") in changed}
                                for item in turn["inputs"]]} if turn.get("inputs") else {})
                 for turn in self.chat_log
             ]

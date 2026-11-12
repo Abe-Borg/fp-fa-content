@@ -170,6 +170,91 @@ class FilledAsRecorded(ChatFillCase):
                       "(on the form); Insurer: FM -> FM Global (undone by the designer)]", opening)
 
 
+class TypingDuringTheTurn(ChatFillCase):
+    def test_a_field_the_designer_is_typing_in_keeps_their_value_and_their_edit_wins(self):
+        gate, reply = threading.Event(), threading.Event()
+
+        def first(_kwargs):
+            gate.wait(10)
+            return call(INSURER)
+
+        def last(_kwargs):
+            reply.wait(10)
+            return say("Recorded the insurer.")
+
+        self.play(first, last)
+        self.app.send_chat(MESSAGE)
+        # The designer types in the field while the lead is working, and the lead then records the same field.
+        self.app.patch_form({"insurer": "Zurich"})
+        gate.set()
+        try:
+            deadline = time.time() + 10
+            while not self.app._job_fills and time.time() < deadline:
+                self.app.pump()
+                time.sleep(0.02)
+            self.assertTrue(self.app._job_fills, "the lead's value was taken mid-turn")
+            self.assertEqual(self.app.insurer.get(), "Zurich", "the field being typed in keeps its value")
+            self.assertNotIn("insurer", self.app.form_marks())
+        finally:
+            reply.set()
+        self.settle()
+        self.assertEqual(self.app.insurer.get(), "Zurich")
+        given = self.app.record.givens(self.app.project["id"])["insurer"]
+        self.assertEqual((given["value"], given["agent"]), ("Zurich", "job form"))
+        history = [row["value"] for row in self.app.record.facts(self.app.project["id"], "basis", include_superseded=True)
+                   if row["key"] == "insurer"]
+        self.assertIn("FM Global", history, "the lead's row stays as history")
+        self.assertEqual(self.row("insurer")["state"], "overtaken")
+        self.assertNotIn("insurer", self.app.form_marks())
+
+    def test_typing_the_same_value_the_lead_records_is_no_conflict(self):
+        gate, reply = threading.Event(), threading.Event()
+
+        def first(_kwargs):
+            gate.wait(10)
+            return call(INSURER)
+
+        def last(_kwargs):
+            reply.wait(10)
+            return say("Recorded the insurer.")
+
+        self.play(first, last)
+        self.app.send_chat(MESSAGE)
+        self.app.patch_form({"insurer": "FM Global"})
+        gate.set()
+        try:
+            deadline = time.time() + 10
+            while not self.app._job_fills and time.time() < deadline:
+                self.app.pump()
+                time.sleep(0.02)
+        finally:
+            reply.set()
+        self.settle()
+        self.assertEqual(self.row("insurer")["state"], "applied")
+
+    def test_a_form_that_does_not_parse_is_left_alone_until_the_reply_ends(self):
+        gate = threading.Event()
+
+        def held(_kwargs):
+            gate.wait(10)
+            return say("Recorded the AHJ.")
+
+        self.play(call(AHJ), held)
+        self.app.send_chat(MESSAGE)
+        self.app.patch_form({"q_fill": "7,5,0"})
+        try:
+            deadline = time.time() + 2
+            while time.time() < deadline:
+                self.app.pump()
+                time.sleep(0.02)
+            self.assertTrue(self.app._pending_here())
+            self.assertEqual(self.app.q_fill.get(), "7,5,0", "what was typed is kept")
+            self.assertEqual(self.app.ahj.get(), "", "the fill waits for the reply's end")
+        finally:
+            gate.set()
+        self.settle()
+
+
 class UndoTests(ChatFillCase):
     def test_undo_puts_the_old_value_back_as_the_designers_edit_and_the_record_keeps_both(self):
         self.play(call(INSURER), say("Done."))
@@ -213,11 +298,31 @@ class RunUsedTheOldValue(ChatFillCase):
         self.play(call(use("set_input", name="q_fill_gpm", value="750", why="“750 gpm at the riser”")), say("Done."))
         self.turn("The pump test came back at 750 gpm at the riser. Use that.")
         row = self.row("q_fill_gpm")
-        self.assertEqual((row["label"], row["was"], row["now"], row["stale_run"]), ("Fill flow", "600 gpm", "750 gpm", True))
+        self.assertEqual((row["label"], row["was"], row["now"]), ("Fill flow", "600 gpm", "750 gpm"))
+        self.assertTrue(self.shown("q_fill_gpm")["stale_run"])
         self.assertEqual(self.app.q_fill.get(), "750.0")
         self.app.undo_fill(self.app.chat_log[-1]["job_id"], "q_fill_gpm")
         self.assertEqual(float(self.app.q_fill.get()), 600.0)
         self.assertEqual(self.app.run_changes(), [], "the form is back to what the run used")
+        self.assertFalse(self.shown("q_fill_gpm")["stale_run"], "an undone row says nothing about the run")
+
+    def test_the_note_goes_when_the_zone_is_run_on_the_new_value(self):
+        self.app.ask_claude.set(False)
+        self.app.start_sample_di()
+        self.app.pump()
+        self.play(call(use("set_input", name="q_fill_gpm", value="750", why="“750 gpm at the riser”")), say("Done."))
+        self.turn("The pump test came back at 750 gpm at the riser. Use that.")
+        self.assertTrue(self.shown("q_fill_gpm")["stale_run"])
+        self.app.run_zone()
+        self.settle(30)
+        self.assertEqual(self.app.run_changes(), [])
+        self.assertFalse(self.shown("q_fill_gpm")["stale_run"], "the run used the new value")
+        self.assertNotIn("stale_run", self.app.chat_log[-2 if self.app.chat_log[-1].get("inputs") is None else -1]
+                         .get("inputs", [{}])[0], "the note is read from the run, never stored")
+
+    def shown(self, name: str) -> dict:
+        turn = next(turn for turn in reversed(self.app.snapshot()["thread"]["turns"]) if turn.get("inputs"))
+        return next(item for item in turn["inputs"] if item["name"] == name)
 
 
 class AskFirst(ChatFillCase):
