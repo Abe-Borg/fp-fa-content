@@ -322,6 +322,7 @@ class UnitConversionTests(unittest.TestCase):
 
         self.assertEqual(quantities.in_value({"value": 1695.8, "unit": "L/min"}, strings=False),
                          {("1695.8", "lpm")})
+        self.assertEqual({quantities.unit_class(spelling) for spelling in ("m²", "m2", "sq m", "sqm")}, {"m2"})
         # A unit the module does not class leaves the figure with none, as a compound field name does.
         self.assertEqual({cls for _number, cls in quantities.in_value({"value": 0.2994, "unit": "gpm/ft²"})}, {None})
         # A kernel output that names its unit once for several figures is not a pair, and reads as before.
@@ -361,6 +362,23 @@ class CheckerReasonTests(unittest.TestCase):
                       'It quoted: "zone_gal=281.346".', why)
         event = record.latest_event("job1", checker.CHECK_EVENT)["payload"]
         self.assertIn("marker 4", event["replies"][0]["text"], "the reply is kept for an audit of the check")
+
+    def test_the_lead_reads_the_reasons_and_is_not_sent_the_reply_text_again(self):
+        from fpfa import checker
+        from fpfa.team import TeamSession
+
+        record, calcs = _planned()
+        _findings(record, calcs, 2)
+
+        def create(**kwargs):
+            return _reply("\n".join(f'{n}. Not supported. Cite: "x" (reason {n})' for n, _text in _claim_lines(kwargs)))
+
+        out = TeamSession(REPO, record, "job1", create).execute("request_check", {})
+        self.assertNotIn("replies", out)
+        self.assertEqual([row["checker_reason"] for row in out["rows"]], ["reason 1", "reason 2"])
+        kept = record.latest_event("job1", checker.CHECK_EVENT)["payload"]
+        self.assertIn("reason 2", kept["replies"][0]["text"], "the record keeps the reply for an audit")
+        self.assertTrue(kept["within_turn"], "its time is the turn's")
 
     def test_a_reason_the_checker_did_not_give_is_said_and_not_made_up(self):
         from fpfa import checker

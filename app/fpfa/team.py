@@ -900,7 +900,10 @@ class TeamSession:
             # The check's usage closes on its own record_check event, which the cost report counts.
             # It is not added to the turn's total, or it would be counted twice.
             self.checks.append(outcome)
-            return {key: value for key, value in outcome.items() if key != "verdict"} | {"verdict": outcome.get("verdict", "")}
+            # The checker's reply text stays on the record for an audit. The lead reads the rows, which carry the
+            # checker's reasons already, and is not billed for the same words twice.
+            return ({key: value for key, value in outcome.items() if key not in ("verdict", "replies")}
+                    | {"verdict": outcome.get("verdict", "")})
         if name == "set_input":
             return self._set_input(args)
         if name == "answer_question":

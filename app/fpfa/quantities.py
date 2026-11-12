@@ -73,7 +73,7 @@ _FAMILIES: dict[str, tuple[str, ...]] = {
     "l": ("L",), "lpm": ("lpm", "LPM", "L/min", "l/min"),
     # The SI units a metric job gives its figures in (fpfa.units converts them). Each is its own class, so
     # 139 m² is not backed by 139 ft², and 12.2 mm/min is a density, not a length.
-    "m2": ("m2", "m²", "sq m"), "m3": ("m3", "m³"), "m3h": ("m3/h", "m³/h", "m3/hr", "m³/hr"),
+    "m2": ("m2", "m²", "sq m", "sqm"), "m3": ("m3", "m³"), "m3h": ("m3/h", "m³/h", "m3/hr", "m³/hr"),
     "lps": ("L/s", "l/s"), "mmmin": ("mm/min", "L/min/m2", "L/min/m²", "lpm/m2", "lpm/m²"),
     "kpa": ("kPa",), "bar": ("bar",), "cfm": ("cfm", "CFM"),
     "h": ("hours", "hour", "hr"), "d": ("days", "day"), "y": ("years", "year"),
