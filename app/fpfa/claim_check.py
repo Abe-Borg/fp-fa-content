@@ -26,7 +26,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
-from fpfa.claude_client import MODEL_ID, incomplete_notice, safe_error
+from fpfa.claude_client import MAX_OUTPUT_TOKENS, MODEL_ID, incomplete_notice, safe_error
 from fpfa.paths import data_dir
 from fpfa.roles_loader import read_role
 from fpfa.spec_docx import DRAFT_SECTION
@@ -44,8 +44,8 @@ VERDICT_OPEN = "Source not found"
 VERDICT_NONE = "No verdict"
 # The ceiling for one checker request. It caps the model's thinking and its reply together, and this model's
 # thinking cannot be turned off: at 4,000 a packet of sixteen claims spent all of it thinking and returned
-# no text at all. Every tool-loop request in the application sends this much.
-CHECK_MAX_TOKENS = 16000
+# no text at all. It is the ceiling every request in the application sends (claude_client.MAX_OUTPUT_TOKENS).
+CHECK_MAX_TOKENS = MAX_OUTPUT_TOKENS
 OPEN_MARK = "NOT PULLED"
 PACKAGE_MARK = "PACKAGE ASSERTION (not a retrieved standard passage)"
 PACKAGE_STATUS = (

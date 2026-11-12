@@ -325,8 +325,8 @@ class FullSpecRequestTests(unittest.TestCase):
             self.assertEqual(call["system"], [{"type": "text", "text": expected, "cache_control": {"type": "ephemeral"}}])
             self.assertIn(self.fa, _system_text(call))
             self.assert_every_spec_in_full(_system_text(call))
-            # The output setting is separate from spec loading and stays where it was.
-            self.assertEqual(call["max_tokens"], 16000)
+            # The output setting is separate from spec loading. It is the owner's ceiling for every request.
+            self.assertEqual(call["max_tokens"], 64000)
 
     def test_request_too_large_is_reported_and_never_resent_shorter(self):
         from fpfa.claude_client import RequestTooLarge, safe_error

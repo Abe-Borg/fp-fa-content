@@ -37,7 +37,9 @@ from typing import Any, Callable
 
 from fpfa import inputs, status, units
 from fpfa.calc_tools import SCHEMAS, ToolSession
-from fpfa.claude_client import TurnCancelled, attach_usage, empty_usage, incomplete_notice, run_tool_loop, safe_error
+from fpfa.claude_client import (
+    MAX_OUTPUT_TOKENS, TurnCancelled, attach_usage, empty_usage, incomplete_notice, run_tool_loop, safe_error,
+)
 from fpfa.record import ANSWERED_IN_CHAT, BASIS_LABELS, CONVERT_TOOL, GIVEN, Record, RecordError
 from fpfa.roles_loader import list_roles, read_role
 from fpfa.skills_loader import list_skills, spec_notes
@@ -503,7 +505,7 @@ class SpecialistSession:
         *,
         agent: str,
         depth: int = 0,
-        max_tokens: int = 16000,
+        max_tokens: int = MAX_OUTPUT_TOKENS,
         cancel: Any = None,
         observe: Callable[[dict], Any] | None = None,
     ):
@@ -569,7 +571,7 @@ def consult(
     question: str,
     context: str = "",
     max_rounds: int = CONSULT_ROUNDS,
-    max_tokens: int = 16000,
+    max_tokens: int = MAX_OUTPUT_TOKENS,
     cancel: Any = None,
     observe: Callable[[dict], Any] | None = None,
 ) -> dict:
@@ -670,7 +672,7 @@ def delegate(
     brief: str,
     inputs: dict | None = None,
     max_rounds: int = SPECIALIST_ROUNDS,
-    max_tokens: int = 16000,
+    max_tokens: int = MAX_OUTPUT_TOKENS,
     cancel: Any = None,
     observe: Callable[[dict], Any] | None = None,
 ) -> dict:
@@ -834,7 +836,7 @@ class TeamSession:
         create: Callable[..., Any],
         *,
         max_rounds: int = SPECIALIST_ROUNDS,
-        max_tokens: int = 16000,
+        max_tokens: int = MAX_OUTPUT_TOKENS,
         cancel: Any = None,
         observe: Callable[[dict], Any] | None = None,
     ):
