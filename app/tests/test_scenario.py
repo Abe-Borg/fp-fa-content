@@ -300,8 +300,14 @@ class ScenarioTests(unittest.TestCase):
         self.assertIn("t_release_s | 2 s | GIVEN | sample data", text)
         # Findings by tier. The 500 gal cite was read in the content pack's own note.
         tiers = {row["tier"]: row["count"] for row in self.s.after["two"]["team"]["tiers"]}
-        self.assertEqual(tiers, {"source": 3, "reviewed": 1, "stated": 0, "open": 1})
-        self.assertIn(f"{TIER_TITLE['source']} (3)", text)
+        # The two findings with a figure are in the first group. The trim-family finding states no figure the
+        # application could hold to its calculation record, so the stand-in checker's word is all that connects
+        # them, and the draft files it in the group that says so.
+        self.assertEqual(tiers, {"source": 2, "checker": 1, "reviewed": 1, "stated": 0, "open": 1})
+        self.assertIn(f"{TIER_TITLE['source']} (2)", text)
+        self.assertIn(f"{TIER_TITLE['checker']} (1)", text)
+        family = next(line for line in text.splitlines() if line.startswith("Trim family is El/El, provisional"))
+        self.assertIn("Only the checker's reading connects it to them.", family)
         row = next(line for line in text.splitlines() if line.startswith("The FM 30 s screen is still missed"))
         self.assertIn("| calculated | fp-sprinkler | di_trip_to_water [", row)
         self.assertIn("input t_detect_s [", row)

@@ -155,6 +155,7 @@ _SOURCE_WORD = {
     "pack": "content-pack note",
     "author": "its author's own note (not in the content pack)",
     "input": "project input",
+    "fact": "a fact a contributor recorded, not a project input",
     "finding": "another finding",
     "decision": "a decision the team recorded",
     "missing": "a row that is not on the record",

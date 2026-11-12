@@ -467,5 +467,184 @@ class IdentityTests(unittest.TestCase):
         self.assertFalse(analysis["code_changed"])
 
 
+class TraceGuardTests(unittest.TestCase):
+    """BUG-003. With a checker that says Supported to everything, only the application's own rules are left.
+
+    The report's seven claims and three more. No false claim may come back in
+    the first group, "a row the application identified", and the claims that
+    are true and that the application can match must stay there.
+    """
+
+    def _given(self, record, key: str, value: str) -> str:
+        """A value the designer stated, recorded by the lead: it stands as a project input."""
+        return record.record_fact("job1", kind="owner", key=key, value=value, label="GIVEN",
+                                  source="designer, in chat", agent="lead")["id"]
+
+    def _check(self, record, cases):
+        from fpfa import checker
+
+        ids = {}
+        for name, text, supports in cases:
+            ids[name] = record.record_finding("job1", agent="fp-sprinkler", label="calculated", supports=supports, text=text)["id"]
+        outcome = checker.check_record(REPO, record, "job1", yes_to_everything)
+        rows = {row["finding_id"]: row for row in outcome["rows"]}
+        tiers = checker.assurance(record.snapshot("job1"))
+        return {name: (rows[ident]["verdict"], rows[ident]["basis"], tiers[ident]["tier"], rows[ident]["reason"])
+                for name, ident in ids.items()}, outcome
+
+    def test_a_figure_is_held_to_its_unit_whatever_unit_it_is_in(self):
+        record, calcs = _planned()
+        feet = self._given(record, "main_run", "900 ft")
+        litres = self._given(record, "pump_test", "600 L/min")
+        riser = self._given(record, "riser_height", "99 ft")
+        lpm = self._given(record, "pump_test_b", "600 lpm")
+        hose = self._given(record, "hose_run", "450 feet of hose")
+        battery = self._given(record, "battery", "The panel carries a 99 Ah battery set.")
+        found, outcome = self._check(record, [
+            ("flow from a length", "The fill flow is 900 gpm.", [feet]),
+            ("flow in words from a length", "The fill flow is nine hundred g.p.m.", [feet]),
+            ("gpm from L/min", "The fill flow is 600 gpm.", [litres]),
+            ("gpm from lpm", "The pump delivers 600 gpm.", [lpm]),
+            ("amp-hours from feet", "The battery capacity required is 99 Ah.", [riser]),
+            ("gallons from feet", "The hose holds 450 gal.", [hose]),
+            ("true: a length from that length", "The main run is 900 ft.", [feet]),
+            ("true: amp-hours from amp-hours", "The battery set is 99 Ah.", [battery]),
+            ("true: a nominal size and a length from the takeoff", "The 6 in. main is 48 ft long.", [calcs["zone_trapped_volume"]]),
+            ("true: a row count from the truth table", "The table has 32 rows.", [calcs["releasing_truth_table"]]),
+        ])
+        for name in ("flow from a length", "flow in words from a length", "gpm from L/min", "gpm from lpm",
+                     "amp-hours from feet", "gallons from feet"):
+            verdict, basis, tier, reason = found[name]
+            self.assertEqual((verdict, basis, tier), ("Not supported", "", "open"), name)
+            self.assertIn("figure not in the rows it cites:", reason, name)
+            self.assertIn("only as another quantity", reason, name)
+        for name in ("true: a length from that length", "true: amp-hours from amp-hours",
+                     "true: a nominal size and a length from the takeoff", "true: a row count from the truth table"):
+            self.assertEqual(found[name][:3], ("Supported", "source", "source"), name)
+        self.assertEqual(found["flow in words from a length"][3],
+                         "figure not in the rows it cites: 900 gpm. The rows hold 900 only as another quantity")
+        self.assertEqual(len(outcome["overruled"]), 6, "the stand-in approved all six and the record keeps that it was overruled")
+
+    def test_a_statement_the_application_can_match_nothing_in_is_not_in_the_first_group(self):
+        from fpfa import checker
+
+        record, calcs = _planned()
+        truth = calcs["releasing_truth_table"]
+        found, outcome = self._check(record, [
+            ("false: one leg", "The solenoid releases the valve on detection alone.", [truth]),
+            ("false: either leg", "The valve releases on either detection OR the pressure drop from sprinkler operation.", [truth]),
+            ("true, in other words", "Release needs the detection leg AND the pressure drop from sprinkler operation, "
+                                     "with the zone not isolated.", [truth]),
+            ("true, quoting the record", "The record gives solenoid = (detection_leg OR manual_release) AND p_second_leg "
+                                         "AND NOT isolated.", [truth]),
+            ("true, quoting the right-hand side", "The valve is released on `(detection_leg OR manual_release) AND "
+                                                  "p_second_leg AND NOT isolated`.", [truth]),
+            ("trim family", "The trim family is El/El.", [calcs["elect_di_trim"]]),
+        ])
+        # The application cannot tell the two false statements from the true one said in other words: none
+        # carries anything it can hold to the record. So none of the three is in the first group, whatever the
+        # checker said, and each says that only the checker's reading stands behind it.
+        for name in ("false: one leg", "false: either leg", "true, in other words", "trim family"):
+            verdict, basis, tier, reason = found[name]
+            self.assertEqual((verdict, basis, tier), ("Supported", "checker", "checker"), name)
+            self.assertEqual(reason, checker.CHECKER_ONLY_REASON, name)
+        for name in ("true, quoting the record", "true, quoting the right-hand side"):
+            self.assertEqual(found[name][:3], ("Supported", "source", "source"), name)
+        self.assertEqual((outcome["on_source"], outcome["on_checker"], outcome["on_author"]), (2, 4, 0))
+        self.assertIn("2 against a calculation record, a content-pack note, or a project input, 0 against a cite their "
+                      "author wrote, 4 against such a row on the checker's reading alone", outcome["status_line"])
+        self.assertIn("4 against such a row on the checker's reading alone", checker.summary_line(outcome))
+        rows = {row["finding_id"]: row for row in outcome["rows"]}
+        quoted = [row["held_by_app"] for row in rows.values() if row["basis"] == "source"]
+        self.assertEqual(quoted, [["the releasing record's expression"], ["the releasing record's expression"]])
+
+    def test_the_new_group_is_named_and_explained_and_no_name_reads_as_verification(self):
+        from fpfa.checker import LADDER, TIER_NOTE, TIER_TITLE, TIERS
+
+        self.assertEqual(TIERS, ("source", "checker", "reviewed", "stated", "open"))
+        self.assertEqual(TIER_TITLE["checker"], "Trace-consistent with an identified row, on the checker's reading alone")
+        for text in TIER_TITLE.values():
+            self.assertNotRegex(text.lower(), r"verif|checked against|approved|validated")
+        self.assertIn("only the checker's reading (a second pass by the same AI model) connects the words to the row",
+                      TIER_NOTE["checker"])
+        where = {name: place for name, _what, place in LADDER}
+        self.assertIn("first three groups", where["Trace consistency"])
+        self.assertIn("In the second only the checker's reading connects them.", where["Support from an identified row"])
+
+    def test_a_check_made_before_this_rule_cannot_keep_a_bare_statement_in_the_first_group(self):
+        from fpfa import checker
+
+        record, calcs = _planned()
+        bare = record.record_finding("job1", agent="fp-sprinkler", label="calculated", supports=[calcs["elect_di_trim"]],
+                                     text="The trim family is El/El.")
+        figure = record.record_finding("job1", agent="fp-sprinkler", label="calculated", supports=[calcs["zone_trapped_volume"]],
+                                       text="The zone total is 281.3 gal.")
+        outcome = checker.check_record(REPO, record, "job1", yes_to_everything)
+        # The check as 0.3.0 wrote it: every supported row on an identified row said "source", with no account
+        # of what the application had matched.
+        old = dict(outcome, rows=[{key: value for key, value in dict(row, basis="source").items() if key != "held_by_app"}
+                                  for row in outcome["rows"]])
+        tiers = checker.assurance(record.snapshot("job1"), old)
+        self.assertEqual((tiers[bare["id"]]["tier"], tiers[figure["id"]]["tier"]), ("checker", "source"))
+
+    def test_a_fact_a_specialist_wrote_is_not_a_project_input(self):
+        """N-3. A specialist records an assumption, then a finding in the same words citing it."""
+        from fpfa import checker
+        from fpfa.calc_tools import ToolSession
+
+        record, _calcs = _planned()
+        fp = ToolSession(REPO, record=record, project_id="job1", agent="fp-sprinkler")
+        fa = ToolSession(REPO, record=record, project_id="job1", agent="fa-releasing")
+        own = fp.execute("record_fact", {"kind": "assumption", "key": "pump_churn", "label": "ASSUMED",
+                                         "value": "The fire pump delivers 1,250 gpm at 140 psi."})
+        other = fa.execute("record_fact", {"kind": "assumption", "key": "panel_delay", "label": "ASSUMED",
+                                           "value": "The panel adds 2 s between alarm and release."})
+        given = self._given(record, "owner_medium", "The owner requires nitrogen at 40 psi.")
+        said_back = fp.execute("record_finding", {"text": "The fire pump delivers 1,250 gpm at 140 psi.",
+                                                  "label": "calculated", "supports": [own["id"]]})
+        built_on = fp.execute("record_finding", {"text": "At 1,250 gpm the pump carries the 640 gpm demand with margin.",
+                                                 "label": "PRACTICE", "supports": [own["id"]]})
+        from_other = fp.execute("record_finding", {"text": "The panel adds 2 s between alarm and release.",
+                                                   "label": "PRACTICE", "supports": [other["id"]]})
+        from_designer = fp.execute("record_finding", {"text": "The supervisory gas is held at 40 psi.",
+                                                      "label": "OWNER", "supports": [given]})
+        packet = checker.build_record_packet(record, "job1", REPO)
+        self.assertIn("RECORDED FACT assumption/pump_churn: The fire pump delivers 1,250 gpm at 140 psi. "
+                      "(ASSUMED; recorded by fp-sprinkler)", packet["sources"])
+        self.assertIn("PROJECT INPUT owner_medium: The owner requires nitrogen at 40 psi. (GIVEN; designer, in chat)",
+                      packet["sources"])
+        outcome = checker.check_record(REPO, record, "job1", yes_to_everything)
+        rows = {row["finding_id"]: row for row in outcome["rows"]}
+        tiers = checker.assurance(record.snapshot("job1"))
+        # Its own fact said back: the same rule as an author's note that only repeats the claim.
+        self.assertEqual((rows[said_back["id"]]["verdict"], rows[said_back["id"]]["reason"]),
+                         ("Not supported", "its author's note only repeats the claim"))
+        self.assertEqual(tiers[said_back["id"]]["tier"], "open")
+        # A claim that goes past its own fact: 640 gpm is not in the fact, so the figure rule stops it.
+        self.assertEqual(rows[built_on["id"]]["verdict"], "Not supported")
+        self.assertIn("640 gpm", rows[built_on["id"]]["reason"])
+        # Another contributor's fact is still the team's own statement: consistent, and never the first group.
+        self.assertEqual((rows[from_other["id"]]["verdict"], rows[from_other["id"]]["basis"]), ("Supported", "author"))
+        self.assertEqual(tiers[from_other["id"]]["tier"], "reviewed")
+        self.assertEqual(rows[from_other["id"]]["sources"][0]["kind"], "fact")
+        # What the designer stated, recorded by the lead, stands as an input.
+        self.assertEqual((rows[from_designer["id"]]["verdict"], rows[from_designer["id"]]["basis"]), ("Supported", "source"))
+        self.assertEqual(tiers[from_designer["id"]]["tier"], "source")
+
+    def test_the_checker_is_told_what_the_two_new_marks_mean(self):
+        role = (REPO / "roles" / "qa-specialist" / "ROLE.md").read_text(encoding="utf-8")
+        self.assertIn("- RECORDED FACT is a fact a contributor wrote to the record", role)
+        self.assertIn("The designer did not give it.", role)
+        self.assertIn("- DECISION is an election or a judgment the team recorded on the same record.", role)
+
+    def test_the_reply_audit_still_reads_only_the_eight_units_it_always_read(self):
+        from fpfa import checker
+
+        self.assertEqual(checker.figures("6 true rows of 32; the 4 in. cross main is 160 ft; 24 VDC; 7 Ah"), [])
+        self.assertEqual(checker.figures("281.3 gal at 600 gpm in 38.1 s"), ["281.3", "600", "38.1"])
+        self.assertEqual([f"{number} {unit}" for number, unit, _cls in checker._claim_figures(
+            "6 true rows of 32; the 4 in. cross main is 160 ft; 24 VDC; 7 Ah")], ["4 in.", "160 ft", "24 VDC", "7 Ah"])
+
+
 if __name__ == "__main__":
     unittest.main()

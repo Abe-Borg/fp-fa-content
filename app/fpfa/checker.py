@@ -62,7 +62,7 @@ from typing import Any, Callable
 from fpfa import coherence, inputs, quantities, status
 from fpfa.corpus_search import trace_cite
 from fpfa.record import Record
-from fpfa.releasing import LOW_AIR_SUPERVISORY, reader_view, release_wording_hits
+from fpfa.releasing import LOW_AIR_SUPERVISORY, TRUTH_TABLE_TOOL, reader_view, release_wording_hits, releasing_logic
 
 CHECKER_ROLE = "qa-specialist"
 CHECK_EVENT = "record_check"
@@ -78,12 +78,14 @@ CLAIMS_PER_REQUEST = 8
 NO_VERDICT_REASON = "the checker returned no verdict for this claim; it stays not checked"
 
 TIER_SOURCE = "source"
+TIER_CHECKER = "checker"
 TIER_REVIEWED = "reviewed"
 TIER_STATED = "stated"
 TIER_OPEN = "open"
-TIERS = (TIER_SOURCE, TIER_REVIEWED, TIER_STATED, TIER_OPEN)
+TIERS = (TIER_SOURCE, TIER_CHECKER, TIER_REVIEWED, TIER_STATED, TIER_OPEN)
 TIER_TITLE = {
     TIER_SOURCE: "Trace-consistent with a row the application identified",
+    TIER_CHECKER: "Trace-consistent with an identified row, on the checker's reading alone",
     TIER_REVIEWED: "Trace-consistent with its author's own cite only",
     TIER_STATED: "Stated by a specialist, not checked",
     TIER_OPEN: "Needs further evidence or engineering review",
@@ -94,6 +96,12 @@ TIER_NOTE = {
         "record, a content-pack note the application looked up, or a project input, and every figure in it is in "
         "those rows with its unit. The row is named beside each. This is consistency with the team's own record. "
         "It is not verification: the standard was not opened, and no engineer has reviewed it."
+    ),
+    TIER_CHECKER: (
+        "The trace check found each of these consistent with a calculation record, a content-pack note, or a "
+        "project input. The statement carries no figure, and not the releasing record's own expression, that the "
+        "application could hold to those rows itself. So only the checker's reading (a second pass by the same AI "
+        "model) connects the words to the row. Whether they follow from it is for the engineer of record."
     ),
     TIER_REVIEWED: (
         "The trace check found each of these consistent with a cite its own author wrote. The application did "
@@ -114,10 +122,11 @@ LADDER = (
      "Where the Agreed-by column or section 5 names a reviewer."),
     ("Trace consistency", "A second pass by the same AI model judged the statement against the rows it cites. "
      "The application also holds each figure, with its unit, to those rows.",
-     "Findings in the first two groups of section 4."),
+     "Findings in the first three groups of section 4."),
     ("Support from an identified row", "The rows are ones the application found itself: a calculation record, a "
      "content-pack note, or a project input. A content-pack note is the content team's paraphrase.",
-     "Findings in the first group of section 4."),
+     "Findings in the first two groups of section 4. In the first the application itself matched a figure, or "
+     "the releasing record's expression, to the row. In the second only the checker's reading connects them."),
     ("Verification against the primary standard", "The adopted standard, the insurer data sheet, or the "
      "manufacturer's listing was opened and the statement checked against its text.",
      "NOT PERFORMED by this application, for any finding."),
@@ -127,6 +136,17 @@ LADDER = (
 PACK_MARK = "CONTENT-PACK NOTE"
 AUTHOR_MARK = "AUTHOR'S NOTE (written by the claim's author; not found in the content pack)"
 INPUT_MARK = "PROJECT INPUT"
+# A fact a contributor wrote to the record: an assumption, an owner standard, a reading. It is not a value
+# the designer gave, and the checker is told so.
+FACT_MARK = "RECORDED FACT"
+GIVEN_LABEL = "GIVEN"
+# What stands behind a Supported verdict. "checker": the rows are ones the application identified and it
+# could match nothing in the claim to them itself.
+BASIS_SOURCE, BASIS_CHECKER, BASIS_AUTHOR = "source", "checker", "author"
+CHECKER_ONLY_REASON = (
+    "It carries no figure, and not the releasing record's own expression, that the application could hold to "
+    "the rows it cites. Only the checker's reading connects it to them."
+)
 STALE_MARK = "OUT OF DATE"
 NOT_STANDARD = "The standards were not opened. Engineer-of-record review still applies."
 _JUDGMENT_LABELS = ("ASSUMED", "use best judgment")
@@ -162,6 +182,16 @@ def figures(text: str) -> list[str]:
 def _figures_with_units(text: str) -> list[tuple[str, str]]:
     cleaned = _strip_cites(text)
     return [(_normal(match.group(1)), match.group(2).lower()) for match in _FIGURE.finditer(cleaned)]
+
+
+def _claim_figures(text: str) -> list[tuple[str, str, str]]:
+    """Every figure a claim states, for the trace check: (number, the unit as written, its class).
+
+    Wider than figures(): any unit the application knows, a number written
+    out in words before a unit, and the dotted spellings (fpfa.quantities).
+    The reply audit keeps the narrower reading.
+    """
+    return quantities.claim_figures(_strip_cites(text))
 
 
 def _strip_cites(text: str) -> str:
@@ -233,6 +263,7 @@ def _cite_for(content_root: Path | None, rows: dict[str, dict], finding: dict, a
     numbers: set[str] = set()
     held: set = set()
     author_notes: list[str] = []
+    expressions: list[str] = []
     open_cite = False
     author_only = False
     for ident in finding.get("supports") or []:
@@ -248,6 +279,11 @@ def _cite_for(content_root: Path | None, rows: dict[str, dict], finding: dict, a
             pieces.append(f"{claim_check.PACKAGE_MARK}. {row['tool']}: {stated + '. ' if stated else ''}{shown}")
             numbers |= _calc_numbers(row["tool"], row["outputs"], row.get("inputs"))
             held |= _calc_quantities(row["outputs"], row.get("inputs"))
+            if row["tool"] == TRUTH_TABLE_TOOL:
+                # The one thing a releasing record holds that is not a figure: its own logic expression.
+                expression = releasing_logic(row["outputs"])["expression"]
+                if expression:
+                    expressions.append(expression)
             state = analysis["calcs"].get(ident, {})
             label = "calculation record"
             if state.get("state") == coherence.ALTERNATIVE:
@@ -287,13 +323,32 @@ def _cite_for(content_root: Path | None, rows: dict[str, dict], finding: dict, a
             else:
                 value = str(row.get("value"))
             source = row.get("source") or row.get("agent") or ""
-            pieces.append(f"{INPUT_MARK} {row['key']}: {value} ({row['label']}; {source})")
-            numbers |= _numbers_in(value)
-            if row.get("kind") == inputs.INPUT_KIND:
-                held |= quantities.in_value(inputs.decode(row["value"]), row["key"], strings=False)
-            # As the input is shown, with the unit the form gives it.
-            held |= quantities.in_text(value)
-            sources.append({"id": ident, "kind": "input", "text": f"{row['key']}: {value}"})
+            is_input = row.get("kind") == inputs.INPUT_KIND or (
+                row.get("kind") == inputs.BASIS_KIND and row.get("key") in inputs.BASIS_FIELDS)
+            if is_input or str(row.get("label") or "").upper() == GIVEN_LABEL:
+                # A zone input, a basis field, or a value the lead recorded as the designer's own words.
+                pieces.append(f"{INPUT_MARK} {row['key']}: {value} ({row['label']}; {source})")
+                numbers |= _numbers_in(value)
+                if row.get("kind") == inputs.INPUT_KIND:
+                    held |= quantities.in_value(inputs.decode(row["value"]), row["key"], strings=False)
+                # As the input is shown, with the unit the form gives it.
+                held |= quantities.in_text(value)
+                sources.append({"id": ident, "kind": "input", "text": f"{row['key']}: {value}"})
+            else:
+                # A fact a contributor wrote: an assumption, an owner standard, a reading. It is the team's
+                # own statement, like a finding, and adds no independent source. Packaged as a project input
+                # it told the checker the designer gave it, and a specialist could back a claim with a fact
+                # it had written a moment before.
+                writer = row.get("agent") or "a contributor"
+                pieces.append(f"{FACT_MARK} {row.get('kind')}/{row['key']}: {value} ({row['label']}; recorded by {writer})")
+                numbers |= _numbers_in(_strip_cites(value))
+                held |= _text_quantities(value)
+                author_only = True
+                if writer == finding.get("agent"):
+                    # The claim's own author wrote it. A claim that only says it back is not supported by it.
+                    author_notes.append(value)
+                sources.append({"id": ident, "kind": "fact",
+                                "text": f"{row.get('kind')}/{row['key']}: {_clip(value, 120)} (recorded by {writer})"})
         elif kind == "finding":
             pieces.append(f"FINDING by {row['agent']}: {row['text']} [{row['status']}]")
             numbers |= _numbers_in(_strip_cites(row["text"]))
@@ -314,10 +369,11 @@ def _cite_for(content_root: Path | None, rows: dict[str, dict], finding: dict, a
             sources.append({"id": ident, "kind": "decision", "text": f"decision by {row.get('decided_by') or 'the team'}"})
     if not pieces:
         return {"cite": claim_check.OPEN_MARK, "open": True, "basis": "none", "numbers": set(), "held": set(),
-                "sources": sources, "author_notes": []}
+                "sources": sources, "author_notes": [], "expressions": []}
     return {
-        "cite": " | ".join(pieces), "open": open_cite, "basis": "author" if author_only else "source",
+        "cite": " | ".join(pieces), "open": open_cite, "basis": BASIS_AUTHOR if author_only else BASIS_SOURCE,
         "numbers": numbers, "held": held, "sources": sources, "author_notes": author_notes,
+        "expressions": expressions,
     }
 
 
@@ -346,7 +402,8 @@ def build_record_packet(record: Record, project_id: str, content_root: Path | No
         stale = standing.get("state") == coherence.STALE
         if stale:
             cite = {"cite": f"{STALE_MARK}: " + "; ".join(standing.get("reasons") or [])[:400], "open": True,
-                    "basis": "none", "numbers": set(), "held": set(), "sources": [], "author_notes": []}
+                    "basis": "none", "numbers": set(), "held": set(), "sources": [], "author_notes": [],
+                    "expressions": []}
         else:
             cite = _cite_for(content_root, rows, finding, analysis)
         claims.append(f"{index}. {finding['text'].rstrip('.')}.")
@@ -355,7 +412,7 @@ def build_record_packet(record: Record, project_id: str, content_root: Path | No
             "n": index, "finding_id": finding["id"], "open": cite["open"], "stale": stale,
             "calc_only": cite["basis"] == "source" and all(item["kind"] == "calc" for item in cite["sources"]),
             "basis": cite["basis"], "numbers": sorted(cite["numbers"]), "held": _pairs(cite["held"]),
-            "sources": cite["sources"],
+            "sources": cite["sources"], "expressions": cite["expressions"],
             "author_notes": cite["author_notes"], "requirement": finding["text"], "cite": cite["cite"],
         })
     return {
@@ -377,8 +434,8 @@ def _missing_figures(requirement: str, numbers: list[str], held: list | None = N
     """
     if held is not None:
         have = {(str(number), cls) for number, cls in held}
-        return [f"{number} {unit}" for number, unit in _figures_with_units(requirement)
-                if not quantities.has(number, unit, have)]
+        return [f"{number} {unit}" for number, unit, cls in _claim_figures(requirement)
+                if not quantities.holds(number, cls or None, have)]
     have_numbers = set(numbers)
     missing = []
     for number, unit in _figures_with_units(requirement):
@@ -514,9 +571,20 @@ def check_record(content_root: Path, record: Record, project_id: str, create: Ca
                     reason += ". The rows hold " + ", ".join(text.split()[0] for text in other) + " only as another quantity"
             if verdict != said:
                 overruled.append({"n": item["n"], "finding_id": item["finding_id"], "checker_said": said})
+        basis, matched = "", []
+        if verdict == claim_check.VERDICT_SUPPORTED:
+            basis = item["basis"]
+            # What the application itself could hold to the cited rows. Every figure in a supported claim is
+            # held, or the verdict would not have stood, so a claim with a figure has one.
+            matched = _held_by_app(item)
+            if basis == BASIS_SOURCE and not matched:
+                # The rows are ones the application identified, and nothing in the claim could be matched to
+                # them by the application. Only the checker's word connects the two.
+                basis = BASIS_CHECKER
+                reason = CHECKER_ONLY_REASON
         rows.append({
             "n": item["n"], "finding_id": item["finding_id"], "verdict": verdict,
-            "cite": item["cite"].replace('"', "'"), "basis": item["basis"] if verdict == claim_check.VERDICT_SUPPORTED else "",
+            "cite": item["cite"].replace('"', "'"), "basis": basis, "held_by_app": matched,
             "sources": item["sources"], "reason": reason,
         })
         # A finding the checker said nothing about goes back to "open", which is where it started: an
@@ -525,13 +593,16 @@ def check_record(content_root: Path, record: Record, project_id: str, create: Ca
             project_id, item["finding_id"],
             status="open" if verdict == claim_check.VERDICT_NONE else verdict, by=CHECKER_ROLE)
     supported = [row for row in rows if row["verdict"] == claim_check.VERDICT_SUPPORTED]
-    on_source = sum(1 for row in supported if row["basis"] == "source")
-    on_author = len(supported) - on_source
+    on_source = sum(1 for row in supported if row["basis"] == BASIS_SOURCE)
+    on_checker = sum(1 for row in supported if row["basis"] == BASIS_CHECKER)
+    on_author = len(supported) - on_source - on_checker
     no_word = [row for row in rows if row["verdict"] == claim_check.VERDICT_NONE]
     not_ok = [row for row in rows if row["verdict"] not in (claim_check.VERDICT_SUPPORTED, claim_check.VERDICT_NONE)]
     all_supported = bool(rows) and not not_ok and not no_word
     split = (f"{on_source} against a calculation record, a content-pack note, or a project input, "
              f"{on_author} against a cite their author wrote")
+    if on_checker:
+        split += f", {on_checker} against such a row on the checker's reading alone"
     if overruled:
         split += (f"; the application's own rules set aside the checker's verdict on "
                   f"{len(overruled)} finding{'s' if len(overruled) != 1 else ''}")
@@ -558,6 +629,7 @@ def check_record(content_root: Path, record: Record, project_id: str, create: Ca
         "claim_count": len(rows),
         "supported": len(supported),
         "on_source": on_source,
+        "on_checker": on_checker,
         "on_author": on_author,
         "token": packet["token"],
         "status_line": status_line,
@@ -572,6 +644,30 @@ def check_record(content_root: Path, record: Record, project_id: str, create: Ca
     }
     record.log_event(project_id, CHECK_EVENT, outcome, agent=CHECKER_ROLE)
     return outcome
+
+
+def _plain(text: str) -> str:
+    """Text as two spellings of one expression compare equal: no code marks, one case, single spaces."""
+    return " ".join(str(text or "").replace("`", " ").lower().split())
+
+
+def _held_by_app(item: dict) -> list[str]:
+    """What in a claim the application itself can hold to the rows it cites. Empty when nothing can be.
+
+    Its figures, each with its unit, and the releasing record's own logic
+    expression when the claim quotes it (whole, or the part after the equals
+    sign). A claim with neither states something the application has no way
+    to match: whatever the checker says of it rests on the checker alone.
+    """
+    found = [f"{number} {unit}" for number, unit, _cls in _claim_figures(item["requirement"])]
+    said = _plain(item["requirement"])
+    for expression in item.get("expressions") or []:
+        whole = _plain(expression)
+        body = _plain(expression.split("=", 1)[1]) if "=" in expression else whole
+        if whole and (whole in said or (body and body in said)):
+            found.append("the releasing record's expression")
+            break
+    return found
 
 
 def _batches(meta: list[dict]) -> list[list[dict]]:
@@ -726,10 +822,15 @@ def summary_line(outcome: dict | None) -> str:
     if not rows:
         return "trace check: nothing to check"
     supported = sum(1 for row in rows if row.get("verdict") == "Supported")
-    on_source = sum(1 for row in rows if row.get("verdict") == "Supported" and row.get("basis") == "source")
+    on_source = sum(1 for row in rows if row.get("verdict") == "Supported" and row.get("basis") == BASIS_SOURCE)
+    on_checker = sum(1 for row in rows if row.get("verdict") == "Supported" and row.get("basis") == BASIS_CHECKER)
     text = f"trace check: {supported} of {len(rows)} findings consistent with what they cite"
     if supported:
-        text += f" ({on_source} against a calc record, a pack note, or an input; {supported - on_source} against the author's own cite)"
+        text += (f" ({on_source} against a calc record, a pack note, or an input; "
+                 f"{supported - on_source - on_checker} against the author's own cite")
+        if on_checker:
+            text += f"; {on_checker} against such a row on the checker's reading alone"
+        text += ")"
     return text + ". The standards were not opened."
 
 
@@ -748,6 +849,7 @@ def assurance(snapshot: dict | None, check: dict | None = None) -> dict[str, dic
     analysis = coherence.analyze(snap)
     payload = check if isinstance(check, dict) else (_latest_check_in(snap) or {})
     by_finding = {row.get("finding_id"): row for row in payload.get("rows") or []}
+    calcs = {row["id"]: row for row in snap.get("calcs") or []}
     objections: dict[str, list[dict]] = {}
     agreements: dict[str, list[str]] = {}
     for row in snap.get("reviews") or []:
@@ -777,8 +879,19 @@ def assurance(snapshot: dict | None, check: dict | None = None) -> dict[str, dic
             tier = TIER_OPEN
             reasons.append("No source on the record" + (f": {seen['reason']}" if seen.get("reason") else "") + ".")
         elif verdict == "Supported":
-            basis = seen.get("basis") or "author"
-            tier = TIER_SOURCE if basis == "source" else TIER_REVIEWED
+            basis = seen.get("basis") or BASIS_AUTHOR
+            if basis == BASIS_SOURCE and "held_by_app" not in seen:
+                # A check made before the application kept what it had matched itself. Worked out again
+                # here from the finding and the releasing records it cites, so an old check cannot keep a
+                # statement with nothing matched in the first group.
+                expressions = [releasing_logic(calcs[item].get("outputs"))["expression"]
+                               for item in finding.get("supports") or []
+                               if item in calcs and calcs[item].get("tool") == TRUTH_TABLE_TOOL]
+                if not _held_by_app({"requirement": finding.get("text") or "", "expressions": expressions}):
+                    basis = BASIS_CHECKER
+            tier = {BASIS_SOURCE: TIER_SOURCE, BASIS_CHECKER: TIER_CHECKER}.get(basis, TIER_REVIEWED)
+            if tier == TIER_CHECKER:
+                reasons.append(CHECKER_ONLY_REASON)
             if finding.get("label") in _JUDGMENT_LABELS:
                 # Consistent with what it cites, and still an assumption or a judgment by its own label.
                 tier = TIER_OPEN
@@ -797,7 +910,7 @@ def assurance(snapshot: dict | None, check: dict | None = None) -> dict[str, dic
             reasons.append("Alternative: " + note)
         for note in standing.get("unchecked") or []:
             reasons.append("Not reconciled by the application: " + note)
-        if standing.get("unchecked") and tier in (TIER_SOURCE, TIER_REVIEWED):
+        if standing.get("unchecked") and tier in (TIER_SOURCE, TIER_CHECKER, TIER_REVIEWED):
             # Consistent with a row the record cannot vouch for any more. It goes to the engineer.
             tier = TIER_OPEN
         out[ident] = {

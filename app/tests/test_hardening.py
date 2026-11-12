@@ -145,13 +145,14 @@ class QuantityTests(unittest.TestCase):
         self.assertEqual(quantities.name_class("zone_gal"), "gal")
         self.assertEqual(quantities.name_class("t_total_s"), "s")
         self.assertEqual(quantities.name_class("v_max_gal_at_limit"), "gal")
-        self.assertEqual(quantities.name_class("length_ft"), quantities.OTHER)
+        # A unit a claim did not use to carry has a class of its own now, not one class shared by all of them.
+        self.assertEqual(quantities.name_class("length_ft"), "ft")
         self.assertIsNone(quantities.name_class("density_gpm_ft2"), "a compound unit says nothing")
         self.assertIsNone(quantities.name_class("area_increase"))
         found = quantities.in_text("Hold 900 gpm for 60 minutes; 2 zones; about 38,400 gal; ratio 0.714.")
         self.assertIn(("900", "gpm"), found)
         self.assertIn(("60", "min"), found)
-        self.assertIn(("2", quantities.OTHER), found)
+        self.assertIn(("2", "count"), found)
         self.assertIn(("38400", "gal"), found)
         self.assertIn(("0.714", None), found)
 

@@ -16,6 +16,7 @@ import type { FindingRow, Team } from "../types";
 /** The words beside a tier's dot. The colour is never the only signal. */
 const TIER_SHORT: Record<string, string> = {
   source: "checked against a source",
+  checker: "a source, on the checker's reading only",
   reviewed: "reviewed, author's cite only",
   stated: "not reviewed",
   open: "needs evidence or review",

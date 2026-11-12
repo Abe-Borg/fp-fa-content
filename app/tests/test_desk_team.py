@@ -553,7 +553,8 @@ class TeamViewTests(unittest.TestCase):
         self.assertEqual(rows[on_calc["id"]]["rests_on"][0], f"calculation di_trip_to_water [{screen['record_id']}]")
         self.assertTrue(rows[on_calc["id"]]["rests_on"][1].startswith("project input t_release_s: 2 s ["))
         self.assertEqual(rows[bare["id"]]["tier"], "open")
-        self.assertEqual({row["tier"]: row["count"] for row in view["tiers"]}, {"source": 1, "reviewed": 0, "stated": 0, "open": 2})
+        self.assertEqual({row["tier"]: row["count"] for row in view["tiers"]},
+                         {"source": 1, "checker": 0, "reviewed": 0, "stated": 0, "open": 2})
         self.assertEqual([(row["by"], row["author"], row["status"]) for row in view["disagreements"]],
                          [("fa-releasing", "fp-sprinkler", "open")])
         self.assertEqual(view["interrupted"], ["Releasing specialist"])

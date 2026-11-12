@@ -6,13 +6,27 @@ of the number alone, 900 gpm is found whenever a 900 ft pipe is on the
 record. This module asks it of the pair.
 
 A quantity is (number, unit class). The class comes from the unit written
-after the number in prose (gal, gpm, psi, scfm, s, min, ft2, pct), or from
-the name of the field a calc record or a project input keeps the number in
-(zone_gal, t_total_s, q_fill_gpm, length_ft). A number with no unit the
-module knows has the class None.
+after the number in prose, or from the name of the field a calc record or a
+project input keeps the number in (zone_gal, t_total_s, q_fill_gpm,
+length_ft). A number with no unit the module knows has the class None.
 
-The rule, in has(): a figure with a unit is found where the same number is
-held with the same class, or with no class at all. It is not found where
+Two sets of units:
+
+- The eight a reply or a claim has always carried: gal, gpm, psi, scfm, s,
+  min, ft2, pct (FIGURE). The reply audit reads these.
+- Every other unit the module knows, each with a class of its own: feet,
+  inches, amp-hours, volts, amps, litres per minute, hours, a count of rows
+  or zones, and so on (_FAMILIES). A source has always been read for these.
+  The trace check now reads them in a claim too (claim_figures), so a
+  99 Ah claim is not backed by a 99 ft fact. Before, they all shared one
+  class and a claim's figure in one of them was not read at all.
+
+A unit written as a ratio that the module does not know (gal/hr, psi/ft)
+gets a class of its own from its spelling. It is not "no unit": 600 of
+something per hour does not back 600 gpm.
+
+The rule, in holds(): a figure with a class is found where the same number
+is held with the same class, or with no class at all. It is not found where
 the number is held only with a different class. So a length never backs a
 flow, and a number in a sentence that names no unit still backs anything,
 because nothing says what it is.
@@ -40,29 +54,70 @@ _CLAIM_UNITS = {
     "ft2": "ft2", "ft²": "ft2", "sqft": "ft2",
     "percent": "pct", "%": "pct",
 }
-# Units that mark a number as something else. A claim never carries these; a source may.
-_OTHER_UNITS = (
-    r"ft|feet|foot|in\.|inch(?:es)?|V|kV|VAC|VDC|A|mA|Ah|kW|MW|kVA|Hz|dB|dBA|°F|°C|mm|cm|m|L|"
-    r"hours?|hr|days?|years?|rows?|zones?|sprinklers?|heads?|detectors?|ohms?|AWG|cd"
+# Every other unit the module knows, by class, as it is spelled. Case counts: A is amps and a is a word.
+# "in." needs its full stop, because "in" is a word too.
+_FAMILIES: dict[str, tuple[str, ...]] = {
+    "ft": ("ft", "feet", "foot"),
+    "in": ("in.", "inch", "inches"),
+    "mm": ("mm",), "cm": ("cm",), "m": ("m",),
+    "v": ("V", "VAC", "VDC"), "kv": ("kV",),
+    "a": ("A",), "ma": ("mA",), "ah": ("Ah",),
+    "kw": ("kW",), "mw": ("MW",), "kva": ("kVA",),
+    "hz": ("Hz",), "db": ("dB", "dBA"), "degf": ("°F",), "degc": ("°C",),
+    "l": ("L",), "lpm": ("lpm", "LPM", "L/min", "l/min"),
+    "kpa": ("kPa",), "bar": ("bar",), "cfm": ("cfm", "CFM"),
+    "h": ("hours", "hour", "hr"), "d": ("days", "day"), "y": ("years", "year"),
+    "count": ("rows", "row", "zones", "zone", "sprinklers", "sprinkler", "heads", "head", "detectors", "detector"),
+    "ohm": ("ohms", "ohm"), "awg": ("AWG",), "cd": ("cd",),
+}
+_FAMILY_OF = {spelling: cls for cls, spellings in _FAMILIES.items() for spelling in spellings}
+_NUMBER = r"(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)"
+_CORE_UNITS = r"(gallons?|gal|gpm|psig|psi|scfm|seconds?|sec|s|minutes?|min|ft2|ft²|sq\s*ft|percent|%)"
+FIGURE = re.compile(r"(?<![\w.§-])" + _NUMBER + r"\s*" + _CORE_UNITS + r"(?![\w²])", re.IGNORECASE)
+# The longest spelling first, so L/min is not read as L.
+_FAMILY = re.compile(
+    r"(?<![\w.§-])" + _NUMBER + r"\s*(" + "|".join(re.escape(item) for item in sorted(_FAMILY_OF, key=len, reverse=True))
+    + r")(?![\w²])"
 )
-FIGURE = re.compile(
-    r"(?<![\w.§-])(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)\s*"
-    r"(gallons?|gal|gpm|psig|psi|scfm|seconds?|sec|s|minutes?|min|ft2|ft²|sq\s*ft|percent|%)(?![\w²])",
-    re.IGNORECASE,
+# A ratio of two unit-like words after a number that no table above knows: gal/hr, psi/ft, m3/h.
+_RATIO = re.compile(r"(?<![\w.§-])" + _NUMBER + r"\s*([A-Za-zµ°][A-Za-z]{0,5}\d?/[A-Za-z]{1,6}\d?)(?![\w²])")
+_ANY_NUMBER = re.compile(r"(?<![\w.])" + _NUMBER + r"(?![\d])")
+# Spellings a sentence may use for a unit the tables hold under another one.
+_RESPELL = (
+    (re.compile(r"(?i)\bg\.\s?p\.\s?m\.?(?![\w])"), "gpm"),
+    (re.compile(r"(?i)\bs\.\s?c\.\s?f\.\s?m\.?(?![\w])"), "scfm"),
+    (re.compile(r"(?i)\bp\.\s?s\.\s?i\.\s?g\.?(?![\w])"), "psig"),
+    (re.compile(r"(?i)\bp\.\s?s\.\s?i\.?(?![\w])"), "psi"),
+    (re.compile(r"(?i)\bgal(?:lons?)?\s?/\s?min(?:ute)?\b"), "gpm"),
+    (re.compile(r"(?i)\bgal(?:lons?)?\s+per\s+min(?:ute)?\b"), "gpm"),
+    (re.compile(r"(?i)\blit(?:er|re)s?\s?(?:/|per)\s?min(?:ute)?\b"), "L/min"),
 )
-_OTHER = re.compile(
-    r"(?<![\w.§-])(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)\s*(?:" + _OTHER_UNITS + r")(?![\w²])"
-)
-_ANY_NUMBER = re.compile(r"(?<![\w.])(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)(?![\d])")
-OTHER = "other"
 # A field name's unit, read from its parts: zone_gal, t_total_s, v_max_gal_at_limit, scfm_gauge_basis.
+# Only parts the kernels really use as a unit: a trailing _v there is a value, not volts, and _m is "per m".
 _NAME_UNITS = {
     "gal": "gal", "gallons": "gal", "gpm": "gpm", "psi": "psi", "psig": "psi", "scfm": "scfm",
     "s": "s", "sec": "s", "seconds": "s", "min": "min", "minutes": "min", "ft2": "ft2",
     "percent": "pct", "pct": "pct",
-    "ft": OTHER, "in": OTHER, "ft3": OTHER, "nps": OTHER, "count": OTHER, "rows": OTHER, "c": OTHER,
+    # nps is a nominal size in inches: a sentence writes "the 6 in. main" for a segment the record holds as nps 6.
+    "ft": "ft", "in": "in", "nps": "in", "ft3": "ft3", "count": "count", "rows": "count", "c": "c",
+    "ah": "ah", "lpm": "lpm", "db": "db", "hours": "h",
 }
 Quantity = tuple[str, "str | None"]
+
+# Numbers written out, for a claim that says "nine hundred gpm". Read only where a unit follows.
+_ONES = {
+    "zero": 0, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9,
+    "ten": 10, "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14, "fifteen": 15, "sixteen": 16,
+    "seventeen": 17, "eighteen": 18, "nineteen": 19,
+}
+_TENS = {"twenty": 20, "thirty": 30, "forty": 40, "fifty": 50, "sixty": 60, "seventy": 70, "eighty": 80, "ninety": 90}
+_SCALES = {"hundred": 100, "thousand": 1000}
+_WORD = "|".join(sorted([*_ONES, *_TENS, *_SCALES], key=len, reverse=True))
+# Only before one of the eight claim units. "The two zones" and "one day" are ordinary prose, not figures.
+_WORDED = re.compile(
+    r"(?<![\w-])((?:" + _WORD + r")(?:(?:[\s-]+|\s+and\s+)(?:" + _WORD + r"))*)\s+" + _CORE_UNITS + r"(?![\w²])",
+    re.IGNORECASE,
+)
 
 
 def normal(number: str) -> str:
@@ -75,9 +130,18 @@ def normal(number: str) -> str:
     return f"{value:.10g}"
 
 
+def respell(text: str | None) -> str:
+    """A sentence with the dotted and long spellings of a unit written the way the tables hold it."""
+    out = str(text or "")
+    for pattern, unit in _RESPELL:
+        out = pattern.sub(unit, out)
+    return out
+
+
 def unit_class(unit: str | None) -> str | None:
-    """The class of a unit as a claim writes it. None for a unit this module does not know."""
-    return _CLAIM_UNITS.get(re.sub(r"\s+", "", str(unit or "")).lower())
+    """The class of a unit as a sentence writes it. None for a unit this module does not know."""
+    text = re.sub(r"\s+", "", str(unit or ""))
+    return _CLAIM_UNITS.get(text.lower()) or _FAMILY_OF.get(text)
 
 
 def name_class(name: str | None) -> str | None:
@@ -89,22 +153,97 @@ def name_class(name: str | None) -> str | None:
     return next(iter(found)) if len(found) == 1 else None
 
 
+def _classed(text: str) -> list[tuple[int, str, str, str]]:
+    """Every number in text that carries a unit: (position, number, the unit as written, its class).
+
+    The eight claim units first, then the other units by family, then a
+    ratio no table knows, which is classed by its own spelling. A number is
+    read once, by the first of those that takes it.
+    """
+    found: list[tuple[int, str, str, str]] = []
+    taken: set[int] = set()
+    for match in FIGURE.finditer(text):
+        found.append((match.start(1), normal(match.group(1)), match.group(2), unit_class(match.group(2)) or ""))
+        taken.add(match.start(1))
+    for match in _FAMILY.finditer(text):
+        if match.start(1) not in taken:
+            found.append((match.start(1), normal(match.group(1)), match.group(2), _FAMILY_OF[match.group(2)]))
+            taken.add(match.start(1))
+    for match in _RATIO.finditer(text):
+        if match.start(1) not in taken:
+            found.append((match.start(1), normal(match.group(1)), match.group(2), "?" + match.group(2).lower()))
+            taken.add(match.start(1))
+    return sorted(found)
+
+
 def in_text(text: str | None) -> set[Quantity]:
     """Every number in prose with the class of the unit written after it, None where there is none."""
-    text = str(text or "")
+    text = respell(text)
     found: set[Quantity] = set()
     classed: set[int] = set()
-    for match in FIGURE.finditer(text):
-        found.add((normal(match.group(1)), unit_class(match.group(2))))
-        classed.add(match.start(1))
-    for match in _OTHER.finditer(text):
-        if match.start(1) not in classed:
-            found.add((normal(match.group(1)), OTHER))
-            classed.add(match.start(1))
+    for position, number, _unit, cls in _classed(text):
+        found.add((number, cls))
+        classed.add(position)
     for match in _ANY_NUMBER.finditer(text):
         if match.start(1) not in classed:
             found.add((normal(match.group(1)), None))
     return found
+
+
+def _worded_value(words: str) -> float | None:
+    """nine hundred, twenty-five, one thousand two hundred and fifty. None for a run that is not one number.
+
+    "One and two" and "five six" are two numbers, not one, and are not read.
+    """
+    total, current, last = 0, 0, ""
+    for word in re.split(r"[\s-]+", words.lower()):
+        if not word:
+            continue
+        if word == "and":
+            if last not in ("hundred", "thousand"):
+                return None
+            last = "and"
+        elif word in _ONES:
+            if last == "ones" or (last == "tens" and _ONES[word] >= 10):
+                return None
+            current += _ONES[word]
+            last = "ones"
+        elif word in _TENS:
+            if last in ("ones", "tens"):
+                return None
+            current += _TENS[word]
+            last = "tens"
+        elif word == "hundred":
+            if last in ("hundred", "and") or current >= 100:
+                return None
+            current = (current or 1) * 100
+            last = "hundred"
+        elif word == "thousand":
+            if last in ("thousand", "and"):
+                return None
+            total += (current or 1) * 1000
+            current = 0
+            last = "thousand"
+        else:
+            return None
+    return float(total + current) if last and last != "and" else None
+
+
+def claim_figures(text: str | None) -> list[tuple[str, str, str]]:
+    """The figures a claim states, for the trace check: (number, the unit as written, its class), in order.
+
+    Wider than FIGURE. A figure in any unit the module knows is read, in a
+    ratio it does not know, and written out in words where a unit follows
+    ("nine hundred gpm"). Each then has to be held by the rows the claim
+    cites, as that kind of quantity.
+    """
+    text = respell(text)
+    found = [(position, number, unit, cls) for position, number, unit, cls in _classed(text)]
+    for match in _WORDED.finditer(text):
+        value = _worded_value(match.group(1))
+        if value is not None:
+            found.append((match.start(1), normal(str(value)), match.group(2), unit_class(match.group(2)) or ""))
+    return [(number, unit, cls) for _position, number, unit, cls in sorted(found)]
 
 
 def _forms(value: float, loose: bool) -> set[str]:
@@ -171,9 +310,8 @@ def in_value(value: Any, name: str | None = None, *, prose: Any = None, strings:
     return found
 
 
-def has(number: str, unit: str | None, have: set[Quantity]) -> bool:
-    """Whether a figure is held: the same number with the same class, or with no class at all."""
-    cls = unit_class(unit)
+def holds(number: str, cls: str | None, have: set[Quantity]) -> bool:
+    """Whether a figure of a class is held: the same number with that class, or with no class at all."""
     number = normal(number)
     if (number, cls) in have or (number, None) in have:
         return True
@@ -185,6 +323,11 @@ def has(number: str, unit: str | None, have: set[Quantity]) -> bool:
             return False
         return (share, "pct") in have or (share, None) in have
     return False
+
+
+def has(number: str, unit: str | None, have: set[Quantity]) -> bool:
+    """holds(), for a figure given with its unit as written."""
+    return holds(number, unit_class(unit), have)
 
 
 def numbers(have: set[Quantity]) -> list[str]:

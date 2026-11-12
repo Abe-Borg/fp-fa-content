@@ -227,7 +227,7 @@ class TraceCheckTests(unittest.TestCase):
         self.assertEqual(tiers[real["id"]]["tier"], "reviewed")
         self.assertEqual(tiers[echo["id"]]["tier"], "open")
         self.assertEqual(tiers[open_cite["id"]]["tier"], "open")
-        self.assertEqual(tier_counts(snapshot), {"source": 0, "reviewed": 1, "stated": 0, "open": 3})
+        self.assertEqual(tier_counts(snapshot), {"source": 0, "checker": 0, "reviewed": 1, "stated": 0, "open": 3})
 
     def test_calc_records_project_inputs_and_other_findings_as_sources(self):
         from fpfa.calc_tools import ToolSession
