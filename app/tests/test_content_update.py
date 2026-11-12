@@ -417,29 +417,49 @@ class ContentPackBuildTests(unittest.TestCase):
         (repo / "a.txt").write_text("three\n", encoding="utf-8")
         git("commit", "-q", "-am", "three")
 
-        self.assertEqual(gate.tag_problems("content-v0.6.0", "refs/heads/main", cwd=repo), [])
-        self.assertEqual(
-            gate.tag_problems("content-v0.6.0", "refs/heads/main", actor="owner", owner="owner", cwd=repo), []
-        )
-        side = gate.tag_problems("content-v0.6.1", "refs/heads/main", cwd=repo)
+        who = {"actor": "owner", "owner": "owner", "cwd": repo}
+        self.assertEqual(gate.tag_problems("content-v0.6.0", "refs/heads/main", **who), [])
+        side = gate.tag_problems("content-v0.6.1", "refs/heads/main", **who)
         self.assertEqual(len(side), 1)
         self.assertIn("not on main", side[0])
-        self.assertTrue(any("not a content tag" in line for line in gate.tag_problems("content-beta", "refs/heads/main", cwd=repo)))
+        self.assertTrue(any("not a content tag" in line for line in gate.tag_problems("content-beta", "refs/heads/main", **who)))
         other = gate.tag_problems("content-v0.6.0", "refs/heads/main", actor="someone", owner="owner", cwd=repo)
         self.assertTrue(any("Only the repository owner" in line for line in other))
-        missing = gate.tag_problems("content-v0.6.0", "refs/remotes/origin/main", cwd=repo)
+        unnamed = gate.tag_problems("content-v0.6.0", "refs/heads/main", actor="owner", owner="", cwd=repo)
+        self.assertTrue(any("owner is not named" in line for line in unnamed))
+        missing = gate.tag_problems("content-v0.6.0", "refs/remotes/origin/main", **who)
         self.assertTrue(any("Fetch main" in line for line in missing))
+        names = ["--actor", "owner", "--owner", "owner"]
         proc = subprocess.run(
-            [sys.executable, str(spec_path), "--tag", "content-v0.6.1", "--main-ref", "refs/heads/main"],
+            [sys.executable, str(spec_path), "--tag", "content-v0.6.1", "--main-ref", "refs/heads/main", *names],
             cwd=repo, capture_output=True, text=True, check=False,
         )
         self.assertEqual(proc.returncode, 1)
         self.assertIn("::error::", proc.stdout)
         proc = subprocess.run(
-            [sys.executable, str(spec_path), "--tag", "content-v0.6.0", "--main-ref", "refs/heads/main"],
+            [sys.executable, str(spec_path), "--tag", "content-v0.6.0", "--main-ref", "refs/heads/main", *names],
             cwd=repo, capture_output=True, text=True, check=False,
         )
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        # The owner and the account that pushed are required: without them the guard does not run at all.
+        proc = subprocess.run(
+            [sys.executable, str(spec_path), "--tag", "content-v0.6.0", "--main-ref", "refs/heads/main"],
+            cwd=repo, capture_output=True, text=True, check=False,
+        )
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn("--actor", proc.stderr)
+
+        # A version not above the latest content tag on main is refused, so the feed never goes back. A tag off
+        # main sets no floor: the side branch's content-v0.6.1 is not counted, so the refusal names content-v0.6.0.
+        git("tag", "content-v0.5.9")
+        older = gate.tag_problems("content-v0.5.9", "refs/heads/main", **who)
+        self.assertEqual(older, ["The tag content-v0.5.9 is not above content-v0.6.0, which is already on main. A content "
+                                 "pack is published only with a version above every earlier one, so the feed never goes back."])
+        git("tag", "content-v0.7.0")
+        self.assertEqual(gate.tag_problems("content-v0.7.0", "refs/heads/main", **who), [])
+        git("tag", "content-v0.6.5")
+        self.assertTrue(any("is not above content-v0.7.0" in line
+                            for line in gate.tag_problems("content-v0.6.5", "refs/heads/main", **who)))
 
 
 class ContentUpdateTests(unittest.TestCase):
@@ -765,6 +785,30 @@ class ContentUpdateTests(unittest.TestCase):
             self.assertFalse((installed / "pack.json").exists())
             (seed / "pack.json").write_bytes(seed_marker("0.6.0"))
             self.assertEqual(content_root(), seed.resolve())
+
+    def test_an_unversioned_or_non_numeric_install_does_not_beat_a_numbered_seed(self):
+        from fpfa.paths import content_root, data_dir, write_config
+
+        parent, seed = self._frozen_seed("0.6.0")
+        for label, version in (("unversioned", None), ("non-numeric", "beta"), ("bundled seed label", "bundled seed")):
+            with self.subTest(label=label):
+                folder = data_dir() / "content-packs" / f"probe-{label.replace(' ', '-')}"
+                write_tree(folder, {"skills/example/SKILL.md": f"{label}\n"})
+                write_config({"content_root": str(folder.resolve()), "content_version": version or ""})
+                with self._frozen(parent):
+                    self.assertEqual(content_root(), seed.resolve())
+        # A folder the designer chose inside the install folder is theirs: it stays.
+        chosen = data_dir() / "content-packs" / "chosen"
+        write_tree(chosen, {"skills/example/SKILL.md": "chosen\n"})
+        write_config({"content_root": str(chosen.resolve()), "content_version": "custom"})
+        with self._frozen(parent):
+            self.assertEqual(content_root(), chosen.resolve())
+        # With a seed that has no number (a source checkout), an unversioned install is not passed over.
+        unnumbered_parent, _unnumbered = self._frozen_seed(None)
+        folder = data_dir() / "content-packs" / "probe-unversioned"
+        write_config({"content_root": str(folder.resolve()), "content_version": ""})
+        with self._frozen(unnumbered_parent):
+            self.assertEqual(content_root(), folder.resolve())
 
     def test_a_folder_the_designer_chose_is_not_passed_over_for_the_seed(self):
         from fpfa.content_update import remember_selected_root

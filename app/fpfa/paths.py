@@ -89,12 +89,16 @@ def _marker_numbers(root: Path) -> tuple[int, ...] | None:
 
 
 def _older_than_seed(saved: Path) -> bool:
-    """True when the saved folder is a pack the updater installed and the bundled seed is numbered higher.
+    """True when the saved folder is a pack the updater installed and the bundled seed should stand instead.
 
     After an app upgrade the new seed can be newer than the pack an earlier
     version downloaded. That pack is passed over so it does not stand in for
-    the newer seed. A folder the designer chose elsewhere is never passed
-    over, and FPFA_CONTENT_ROOT is not affected.
+    the newer seed. So is an installed pack with no number at all (no
+    pack.json and no numbered version saved for it, or a non-numeric one):
+    nothing says it is newer than a numbered seed. A folder the designer
+    chose is never passed over, inside the install folder (saved as
+    "custom") or elsewhere, and FPFA_CONTENT_ROOT is not affected. A seed
+    with no number (a source checkout) never displaces anything.
     """
     try:
         installs = (data_dir() / "content-packs").resolve()
@@ -102,25 +106,29 @@ def _older_than_seed(saved: Path) -> bool:
             return False
     except OSError:
         return False
-    installed = _marker_numbers(saved)
-    if installed is None:
-        # A pack installed from a zip with no pack.json: the version the updater saved for this folder.
-        from fpfa.content_pack import parse_version_numbers
-
-        cfg = read_config()
-        try:
-            same = bool(cfg.get("content_root")) and Path(cfg["content_root"]).resolve() == saved.resolve()
-        except OSError:
-            same = False
-        version = cfg.get("content_version") if same else None
-        installed = parse_version_numbers(version) if isinstance(version, str) else None
-    if installed is None:
-        return False
+    seed_numbers = None
     for seed in _bundled_seed_candidates():
         if is_content_pack(seed):
-            numbers = _marker_numbers(seed)
-            return numbers is not None and numbers > installed
-    return False
+            seed_numbers = _marker_numbers(seed)
+            break
+    if seed_numbers is None:
+        return False
+    from fpfa.content_pack import parse_version_numbers
+
+    cfg = read_config()
+    try:
+        same = bool(cfg.get("content_root")) and Path(cfg["content_root"]).resolve() == saved.resolve()
+    except OSError:
+        same = False
+    saved_version = cfg.get("content_version") if same else None
+    if saved_version == "custom":
+        return False
+    installed = _marker_numbers(saved)
+    if installed is None and isinstance(saved_version, str):
+        # A pack installed from a zip with no pack.json: the version the updater saved for this folder.
+        installed = parse_version_numbers(saved_version)
+    # No number at all: an unversioned or non-numeric install does not beat a numbered seed.
+    return installed is None or seed_numbers > installed
 
 
 def content_root() -> Path:

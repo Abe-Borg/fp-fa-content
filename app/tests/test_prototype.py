@@ -3363,6 +3363,10 @@ class ManagedAgentTests(unittest.TestCase):
         self.assertEqual(managed_model, "claude-opus-5-5")
         prompt = session_system()
         self.assertIn(HEAVY_TEXT_ONLY, prompt)
+        # Canada is in scope through a skill's Country gate, not refused as a path; this session cannot read one.
+        self.assertNotIn("Canadian path", HEAVY_TEXT_ONLY)
+        self.assertIn("only through a skill's Country gate", HEAVY_TEXT_ONLY)
+        self.assertIn("NEEDS HOLD", HEAVY_TEXT_ONLY)
         self.assertIn(HEAVY_NOTE, prompt)
         self.assertNotIn("Call read_role", prompt)
         self.assertNotIn("Call read_skill", prompt)
