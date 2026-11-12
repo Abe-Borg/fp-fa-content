@@ -674,8 +674,8 @@ class AnthropicMessages:
         return getattr(info, "id", self.model)
 
 
-def _unheard(_event: dict) -> None:
-    """The listener of a stream whose words nobody draws."""
+def unheard(_event: dict) -> None:
+    """The listener of a stream whose words nobody draws (streamed_create)."""
 
 
 def streamed_create(client: Any) -> Callable[..., Any]:
@@ -686,4 +686,4 @@ def streamed_create(client: Any) -> Callable[..., Any]:
     stand-in with no streaming call answers through its create().
     """
     streaming = getattr(client, "streaming", None)
-    return streaming(_unheard) if callable(streaming) else client.create
+    return streaming(unheard) if callable(streaming) else client.create

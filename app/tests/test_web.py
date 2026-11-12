@@ -62,6 +62,12 @@ class Streaming:
         return SimpleNamespace(stop_reason="end_turn", content=[SimpleNamespace(type="text", text=ANSWER)])
 
     def streaming(self, on_event):
+        from fpfa.claude_client import unheard
+
+        if on_event is unheard:
+            # A narration or a check streams with nobody drawing it. Only the chat reply is paced to be watched.
+            return self.create
+
         def create(**_kwargs):
             on_event({"type": "thinking"})
             time.sleep(0.4)
