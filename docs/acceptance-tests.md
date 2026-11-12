@@ -113,6 +113,10 @@ Automated half, already passed: `app/tests/test_usage.py` proves the events, the
 
 | What | Standing | Where |
 | --- | --- | --- |
+| Manual app-update check: numeric version ordering, content/draft/prerelease filtering, pagination, failure and retry, duplicate-click protection, and authenticated state updates | **Tested**, with fixture release responses; no model involved | `app/tests/test_app_update.py` |
+| Settings update control in Clay and Linen at 150% display scale: keyboard activation, checking state, close/reopen during a check, error and current states, download link | **Tested** in Linux Chromium with fixture release results and a stand-in download page | `app/tests/test_app_update_browser.py`; screenshot output via `FPFA_UPDATE_SCREENSHOT_DIR` |
+| App-release lookup in this connected environment | **Tested** from Linux on 2026-11-12; the 0.3.1 checkout found stable app release 0.3.2. The repository is private; this does not establish unauthenticated access from an installed copy | `fpfa.app_update.check_for_app_update()` |
+| App-update download in the installed Windows WebView2 window and running the newer installer | **Unrun** | Settings → About +Cynosure → Check for updates |
 | Calc kernels, the DH-1 figures, the pack lint (no low-air release wording, no standards text) | Tested | `calcs/fp`, `calcs/fa` |
 | The releasing truth table row by row: low air alone never releases; release needs the detection leg and P | Tested | `app/tests/test_releasing_basis.py` |
 | Inputs on the record with who supplied each; a changed input marks exactly what used it; a re-run clears it | Tested | `test_coherence.py` |
@@ -148,6 +152,7 @@ Automated half, already passed: `app/tests/test_usage.py` proves the events, the
 | The Team tab follows the record while a job on the open job works, at most every two seconds | Tested with the desk's own progress listener and a finding written mid-job | `test_acceptance_report_030.py`, `LiveTeamTests` |
 | Every rule that colours text reads at 4.5:1 on the background, the surface, and a raised card in all five schemes; the faint ink colours no text a reader needs. Text on the accent is left out: Warm Clay's white on terracotta is 3.1:1, an open decision | Tested by reading the stylesheet; the README pictures retaken | `test_acceptance_report_030.py`, `TextContrastTests` |
 | The delivery tile prints the tool's fill time alone and its margin beside the verdict; the lead's instructions follow the owner's ruling on missing inputs | Tested | `test_acceptance_report_030.py`, `FillTimeTileTests`, `MissingInputPolicyTests` |
+| Every module in the page's bundle is an npm package's, listed in `licenses.json` with its license text, or one of the page's own sources; any other, such as a helper Vite writes in, fails the page's build and is named. The committed page carries no modulepreload polyfill, which is Vite's code, while `licenses.json` lists no vite | Tested, the license plugin on stand-in bundles, and the committed page | `frontend/tests/licenses.test.ts`, `test_web.py` |
 | No Mode menu and no `/mode`: a typed question goes out in the mixed mode and a zone narration in synthesis, whatever mode an older job saved; the explosion-control starter stays in synthesis | **Simulated**: the request a scripted client receives | `test_prototype.py` (`test_a_chat_turn_is_written_in_the_mixed_mode`, `test_a_zone_narration_is_written_in_the_synthesis_mode`) |
 | A lead that plans, records what the designer said, delegates, reconciles, and checks | **Simulated** | `test_team_protocol.py`, `test_scenario.py` |
 | One specialist asking the other, objecting, and the author revising | **Simulated** | `test_team_protocol.py`, `test_scenario.py` |
