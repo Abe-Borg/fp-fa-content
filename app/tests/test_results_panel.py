@@ -93,7 +93,7 @@ class ZoneViewTests(unittest.TestCase):
     def test_the_three_labels_stay_distinct_on_the_tiles(self):
         zone = self.figures["zone_total"]
         self.assertEqual(zone["label"], "calculated, trim ASSUMED")
-        self.assertIn("5.0 gal trim ASSUMED (blank trim; 5 gal, no valve data sheet; not calculated)", zone["lines"])
+        self.assertIn("5.0 gal trim ASSUMED (blank trim; the kernel's assumption, no valve data sheet; not calculated)", zone["lines"])
         self.assertIn("276.3 gal of pipe (calculated)", zone["lines"])
         trip = self.figures["t_total"]
         self.assertEqual(trip["label"], "calculated")
@@ -109,7 +109,7 @@ class ZoneViewTests(unittest.TestCase):
         self.assertFalse(self.result["tools"]["di_trip_to_water"]["passes_screen"])
         self.assertEqual((trip["tone"], trip["verdict"]), ("warn", "The zone-total screen does not pass."))
         self.assertEqual(self.figures["size_exemption"]["value"], "yes")
-        self.assertIn("Zone total of 281.3 gal against the 500 gal cap.", self.figures["size_exemption"]["lines"])
+        self.assertIn("Zone total of 281.3 gal against the 500 gal exemption threshold (NFPA 13-2025 §8.3.2.3.1.1).", self.figures["size_exemption"]["lines"])
         # A faster fill passes the same screen: the tile follows the tool, not a number of its own.
         from fpfa.results_panel import results_view
 

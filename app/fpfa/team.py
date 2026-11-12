@@ -969,6 +969,10 @@ class TeamSession:
             given, result = converted["given"], converted["result"]
             source += (f" (given as {given['value']:g} {given['unit']}; converted by the application to "
                        f"{result['value']:.6g} {result['unit']}, convert_units [{converted.get('record_id', '')}])")
+            if converted.get("pressure_basis"):
+                # An unmarked kPa or bar on a sprinkler-pressure field: the gauge reading is an assumption.
+                source += f"; {converted['pressure_basis']}"
+                label = inputs.ASSUMED
         if self.ask_first:
             return self._propose_input(name, kind, text, label, source[:2000], why, converted)
         row = self.record.set_given(
@@ -1048,7 +1052,7 @@ class TeamSession:
         if source.dimension != target.dimension:
             raise units.UnitError(f"{name} takes {target.display}, and {value!r} is {units.kind(source.dimension)}, "
                                   f"not {units.kind(target.dimension)}.")
-        return self.tools.execute(CONVERT_TOOL, {"value": number, "from_unit": spelled, "to_unit": own})
+        return self.tools.execute(CONVERT_TOOL, {"value": number, "from_unit": spelled, "to_unit": own, "field": name})
 
     def _answer_question(self, args: dict) -> dict:
         question_id = str(args.get("id") or "").strip()

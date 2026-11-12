@@ -500,7 +500,8 @@ def designer_text(digest: dict, check_line: str = "", name: str = "", *, coverag
         lines.append("**Edition not reconciled**")
         for line in digest["edition_lines"]:
             lines.append(f"- {line}")
-        lines.append("Running the zone again does not change this: the calculation is not told the job's edition.")
+        lines.append("Running the zone again does not change this: the cite is the calculation's own, and only the "
+                     "delivery rows are told the job's edition.")
         # The same lines are coverage gaps. Said once, here.
         coverage = [gap for gap in coverage or [] if gap not in digest["edition_lines"]] or None
     if digest["interrupted"] or digest["interrupted_jobs"]:

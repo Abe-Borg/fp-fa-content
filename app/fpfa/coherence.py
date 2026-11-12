@@ -68,7 +68,8 @@ BINDINGS: dict[str, dict[str, tuple[str, Any]]] = {
         "t_release_s": ("t_release_s", None),
         "t_exhaust_s": ("t_exhaust_s", None),
         "basis": ("delivery_basis", None),
-        "system_type": ("system_type", "di"),
+        # Required: the tool refuses a call without one, and no "di" stands in for a blank.
+        "system_type": ("system_type", None),
     },
     "di_trip_to_water": {
         "q_fill_gpm": ("q_fill_gpm", None),
@@ -76,6 +77,7 @@ BINDINGS: dict[str, dict[str, tuple[str, Any]]] = {
         "t_release_s": ("t_release_s", None),
         "t_exhaust_s": ("t_exhaust_s", None),
         "basis": ("delivery_basis", None),
+        "system_type": ("system_type", None),
     },
     "density_area": {
         "density_gpm_ft2": ("density_gpm_ft2", None),
@@ -106,6 +108,13 @@ BINDINGS: dict[str, dict[str, tuple[str, Any]]] = {
 }
 # Arguments the screen only applies when the caller passes them. Left out, nothing was used.
 _ONLY_WHEN_PASSED = {"dry_delivery_screen": ("trim_gal", "fittings_percent")}
+# tool -> (argument, basis field): the delivery rows' edition follows the job's NFPA 13 field (edition_follows). A
+# call that passed no edition withheld its cites and used none, so it follows any value of the field, and a change
+# to the field still puts it out of date.
+EDITION_ARGS: dict[str, tuple[str, str]] = {
+    "dry_delivery_screen": ("edition", "nfpa_13"),
+    "di_trip_to_water": ("edition", "nfpa_13"),
+}
 # tool -> argument -> (the tool whose result it is taken from, that result's key)
 DERIVED: dict[str, dict[str, tuple[str, str]]] = {
     # The size exemption is judged on the zone total, which the screen takes from the takeoff.
@@ -266,6 +275,14 @@ def call_basis(
             depends.append(row["id"])
         else:
             varies[arg] = {"used": _plain(args.get(arg)), "project": _plain(given_value(row)), "input": arg}
+    if tool in EDITION_ARGS:
+        arg, name = EDITION_ARGS[tool]
+        row = givens.get(name)
+        if row is not None:
+            if edition_follows(args.get(arg), row):
+                depends.append(row["id"])
+            else:
+                varies[arg] = {"used": _plain(args.get(arg)), "project": _plain(given_value(row)), "input": name}
     for arg, (source_tool, _key) in (DERIVED.get(tool) or {}).items():
         if _blank(args.get(arg)):
             continue
@@ -379,6 +396,27 @@ def cited_editions(outputs: Any) -> dict[str, list[str]]:
     return {document: sorted(years) for document, years in found.items()}
 
 
+def pinned_edition(row: dict | None) -> str | None:
+    """The year a basis fact pins: None when it is blank, names no one year, is ASSUMED, or is an unconfirmed start."""
+    if not isinstance(row, dict):
+        return None
+    if str(row.get("label") or "") == inputs.ASSUMED or inputs.UNCONFIRMED_MARK in str(row.get("source") or ""):
+        return None
+    return stated_edition(given_value(row))
+
+
+def edition_follows(used: Any, row: dict | None) -> bool:
+    """Whether a delivery row's edition argument follows the job's NFPA 13 fact (EDITION_ARGS).
+
+    No edition passed: the cites were withheld and no edition was used, so it
+    follows. An edition passed: only the year the job pins.
+    """
+    if _blank(used):
+        return True
+    pinned = pinned_edition(row)
+    return pinned is not None and stated_edition(used) == pinned
+
+
 def stated_edition(value: Any) -> str | None:
     """The year a basis field states: 2022 from "2022", "NFPA 13-2022", or "2022 edition".
 
@@ -407,10 +445,11 @@ def edition_gaps(outputs: Any, basis: dict | None, assumed: Any = (), unconfirme
 
     This compares two labels and nothing else. It does not know whether the
     rule reads the same in both editions and never says it does. A
-    calculation is not run again for it, and running it again does not
-    clear it: the kernel is not told the job's edition, so its cites would
-    not change. The gap closes when the job states the edition the cites
-    carry, or when the content pack's calculation cites the job's.
+    calculation is not run again for it. The delivery rows are told the
+    job's edition (calc_tools), so their cites follow it or are withheld;
+    every other calculation's cites are its own, and running it again does
+    not change them. The gap closes when the job states the edition the
+    cites carry, or when the content pack's calculation cites the job's.
     """
     basis = basis if isinstance(basis, dict) else {}
     assumed = set(assumed or ())

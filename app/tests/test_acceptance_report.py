@@ -658,10 +658,14 @@ class EditionHoldTests(unittest.TestCase):
     HOLD = ("EDITION NOT RECONCILED. This calculation's cites are NFPA 13-2025 and the job states NFPA 13-2022. "
             "Whether the rule and the section apply in the edition the job states was not resolved here. "
             "The engineer of record confirms it.")
-    LINE = ("EDITION NOT RECONCILED. The dry_delivery_screen, di_trip_to_water, hose_duration cites are NFPA 13-2025 "
+    # PR-C: the delivery rows are told the job's edition, so only the hose row's own cite still names 2025. The
+    # delivery rows go out of date when the edition changes, and on a rerun for 2022 their cites are withheld
+    # until the kernel holds the 2022 labels.
+    LINE = ("EDITION NOT RECONCILED. The hose_duration cite is NFPA 13-2025 "
             "and the job states NFPA 13-2022. Whether the rule and the section apply in the edition the job states was "
             "not resolved here. The engineer of record confirms it.")
-    CITING = {"dry_delivery_screen", "di_trip_to_water", "hose_duration"}
+    CITING = {"hose_duration"}
+    FOLLOWING = {"dry_delivery_screen", "di_trip_to_water"}
 
     def _seeded(self):
         record = _record()
@@ -706,20 +710,29 @@ class EditionHoldTests(unittest.TestCase):
 
         record, di, basis, _result = self._seeded()
         _change(record, "nfpa_13", "2022")
-        for stage in ("before a rerun", "after a rerun"):
-            if stage == "after a rerun":
-                again = _run_plan(record, di, dict(basis, nfpa_13="2022"))
-                self.assertEqual(again["flags"][0], self.LINE, "the run says it first, ahead of the cites it qualifies")
-                self.assertEqual(again["warnings"], [])
+        # Before a rerun the delivery rows ran on the old edition: they are out of date, and the export waits.
+        snapshot = record.snapshot("job1")
+        analysis = analyze(snapshot)
+        calcs = {row["id"]: row for row in record.calcs("job1")}
+        self.assertEqual({calcs[ident]["tool"] for ident in analysis["stale"]["calcs"]}, self.FOLLOWING)
+        self.assertEqual({calcs[ident]["tool"] for ident in analysis["edition_holds"]}, self.CITING)
+        self.assertIn("out of date", checker.export_reason(snapshot))
+        for stage in ("after a rerun",):
+            again = _run_plan(record, di, dict(basis, nfpa_13="2022"))
+            self.assertEqual(again["flags"][0], self.LINE, "the run says it first, ahead of the cites it qualifies")
+            self.assertEqual(again["warnings"], [])
+            for tool in self.FOLLOWING:
+                self.assertEqual(again["tools"][tool]["edition_status"], "not held", tool)
             snapshot = record.snapshot("job1")
             analysis = analyze(snapshot)
             calcs = {row["id"]: row for row in record.calcs("job1")}
             self.assertEqual({calcs[ident]["tool"] for ident in analysis["edition_holds"]}, self.CITING, stage)
-            self.assertEqual(analysis["stale"]["calcs"], [], "the figures are not out of date; the cite is unresolved")
             self.assertEqual({analysis["calcs"][ident]["edition_hold"] for ident in analysis["edition_holds"]}, {self.HOLD})
             written = self._export(record)
             for tool in self.CITING:
                 self.assertEqual(written[tool], self.HOLD + " Its figures follow the zone inputs.", f"{tool}, {stage}")
+            for tool in self.FOLLOWING:
+                self.assertEqual(written[tool], "follows the project inputs", f"{tool}, {stage}")
             self.assertEqual(written["zone_trapped_volume"], "follows the project inputs", "a row that cites no edition")
             self.assertIn("INCOMPLETE DRAFT", written["text"])
             self.assertIn(self.LINE, written["text"])
@@ -732,7 +745,6 @@ class EditionHoldTests(unittest.TestCase):
             said = status.designer_text(digest, coverage=found["gaps"])
             self.assertEqual(said.count(self.LINE), 1, "said once, under its own heading, not again as a coverage gap")
             self.assertIn("**Edition not reconciled**", said)
-            self.assertIn("Running the zone again does not change this", said)
             self.assertIn("- " + self.LINE, checker.coverage_lines(snapshot), "the lead's status block carries it")
 
     def test_the_hold_clears_when_the_job_states_the_edition_the_cites_carry(self):

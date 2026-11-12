@@ -32,12 +32,16 @@ from typing import Any
 from docx import Document
 
 from fpfa import checker, coherence, content_use, inputs, status
+from fpfa.inputs import SUBTIMES_MISSING
 from fpfa.workflow import (
+    cite_note,
     exemption_answer,
+    fill_only,
     fmt1,
     judgment_label_line,
     releasing_logic,
     screen_limit_assumption_text,
+    threshold_words,
     trim_assumption_text,
 )
 
@@ -105,20 +109,33 @@ def key_figures(tool: str, inputs: Any, outputs: Any) -> str:
                 size = (f"size exemption: {answer}. This record is a pipe-only screen of "
                         f"{fmt1(out['volume_gal'])} gal; fittings and trim are not in it, and the exemption is "
                         "judged on the zone total")
+            if fill_only(out):
+                timing = (f"Pipe-only fill time {fmt1(out['t_fill_s'])} s against the {fmt1(out['limit_s'])} s "
+                          f"{out.get('limit_basis', '')} limit: {SUBTIMES_MISSING}. ")
+            else:
+                timing = (f"Pipe-only t_total {fmt1(out['t_total_s'])} s against the {fmt1(out['limit_s'])} s "
+                          f"{out.get('limit_basis', '')} limit (a lower bound, not the governing screen). ")
+            near = f" {out['near_threshold']}" if out.get("near_threshold") else ""
             return (
-                f"Pipe-only t_total {fmt1(out['t_total_s'])} s against the {fmt1(out['limit_s'])} s "
-                f"{out.get('limit_basis', '')} limit: {'passes' if out.get('passes_screen') else 'does not pass'}. "
-                f"NFPA size cap {float(out['nfpa_size_cap_gal']):.0f} gal; {size}. "
+                f"{timing}Exemption threshold: {threshold_words(out)}; {size}.{near} "
                 f"{out.get('nfpa_basis', '')}"
-            )
+            ).strip()
         if tool == "di_trip_to_water":
+            if fill_only(out):
+                return (
+                    f"Fill time alone {fmt1(out['t_fill_s'])} s; margin to the limit on the fill time alone "
+                    f"{fmt1(out['fill_margin_s'])} s; {SUBTIMES_MISSING}. {screen_limit_assumption_text(out)} "
+                    f"{('Kernel cite: ' + cite_note(out)) if cite_note(out) else ''}"
+                ).strip()
+            zero = f" {out['assumed_zero_note']}" if out.get("assumed_zero_note") else ""
             return (
                 f"Fill {fmt1(out['t_fill_s'])} s, t_total {fmt1(out['t_total_s'])} s, "
                 f"margin {fmt1(out['margin_s'])} s; the zone-total screen "
-                f"{'passes' if out.get('passes_screen') else 'does not pass'}. "
+                f"{'passes' if out.get('passes_screen') else 'does not pass'}.{zero} "
                 f"About {fmt1(out['v_max_gal_at_limit'])} gal meets the limit at this fill flow and these allowances. "
-                f"{screen_limit_assumption_text(out)}"
-            )
+                f"{screen_limit_assumption_text(out)} "
+                f"{('Kernel cite: ' + cite_note(out)) if cite_note(out) else ''}"
+            ).strip()
         if tool == "hose_duration":
             low, high = out["duration_range_min"]
             return (
@@ -132,6 +149,8 @@ def key_figures(tool: str, inputs: Any, outputs: Any) -> str:
             )
             if out.get("gallons") is not None:
                 text += f" Duration volume {float(out['gallons']):,.0f} gal over {float(out['duration_min']):g} min."
+            if out.get("release_status"):
+                text += f" {out.get('assumed_note') or ''} {out['release_status']}.".replace("  ", " ")
             return text
         if tool == "nitrogen_gate":
             return (
@@ -139,6 +158,7 @@ def key_figures(tool: str, inputs: Any, outputs: Any) -> str:
                 f"multiplies friction by about {float(out['friction_ratio_c100_vs_c120']):.3f}. "
                 f"Fill {float(out['scfm_gauge_basis']):.2f} scfm gauge basis, "
                 f"{float(out['scfm_abs_basis']):.2f} scfm absolute basis (calculated)."
+                + (f" {out['sizing_note']}" if out.get("sizing_note") else "")
             )
         if tool == "elect_di_trim":
             psi = out.get("supervisory_psi")

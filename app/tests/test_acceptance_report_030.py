@@ -213,7 +213,8 @@ class UnitConversionTests(unittest.TestCase):
         density = session.execute("convert_units", {"value": 12.2, "from_unit": "mm/min", "to_unit": "gpm/ft2"})
         area = session.execute("convert_units", {"value": 139, "from_unit": "m²", "to_unit": "ft²"})
         demand = session.execute("density_area", {"density_gpm_ft2": density["result"]["value"],
-                                                  "base_area_ft2": area["result"]["value"]})
+                                                  "base_area_ft2": area["result"]["value"],
+                                                  "area_increase": 0, "hose_gpm": 0})
         self.assertAlmostEqual(demand["q_spr_gpm"], 1695.8 / GALLON_L, places=9)
         metric = session.execute("convert_units", {"value": demand["q_spr_gpm"], "from_unit": "gpm", "to_unit": "L/min"})
         self.assertAlmostEqual(metric["result"]["value"], 1695.8, places=9)
@@ -251,9 +252,10 @@ class UnitConversionTests(unittest.TestCase):
                     session.execute("zone_trapped_volume", {"segments": [{"nps": 6, "length_ft": 30}]})
             session.execute("convert_units", {"value": 12.2, "from_unit": "mm/min", "to_unit": "gpm/ft2"})
         # Outside a turn, and for a figure the designer also gave in US units, nothing is refused.
-        session.execute("density_area", {"density_gpm_ft2": 12.2, "base_area_ft2": 139})
+        session.execute("density_area", {"density_gpm_ft2": 12.2, "base_area_ft2": 139, "area_increase": 0, "hose_gpm": 0})
         with designer_words("139 m² (1,496 ft²)"):
-            session.execute("density_area", {"density_gpm_ft2": 0.2, "base_area_ft2": 1496})
+            session.execute("density_area", {"density_gpm_ft2": 0.2, "base_area_ft2": 1496, "area_increase": 0,
+                                             "hose_gpm": 0})
 
     def test_a_specialist_in_the_turn_is_held_to_the_same_rule(self):
         from fpfa.everyday import run_everyday
@@ -274,7 +276,8 @@ class UnitConversionTests(unittest.TestCase):
         create = Play({
             "lead": [call(to_fp), say("Done.")],
             "fp-sprinkler": [call(as_given), convert_both,
-                             call(use("density_area", density_gpm_ft2=0.2994171183147561, base_area_ft2=1496.1835479226513)),
+                             call(use("density_area", density_gpm_ft2=0.2994171183147561, base_area_ft2=1496.1835479226513,
+                                      area_increase=0, hose_gpm=0)),
                              say("447.983 gpm, 1695.8 L/min.")],
         })
         run_everyday(REPO, create, "Canadian job: design density 12.2 mm/min over 139 m². Give demand in gpm and L/min.",
@@ -317,7 +320,7 @@ class UnitConversionTests(unittest.TestCase):
         from fpfa.calc_tools import ToolSession
 
         session = ToolSession(REPO, record=record, project_id="job1", agent="fp-sprinkler")
-        session.execute("density_area", {"density_gpm_ft2": 12.2, "base_area_ft2": 139})
+        session.execute("density_area", {"density_gpm_ft2": 12.2, "base_area_ft2": 139, "area_increase": 0, "hose_gpm": 0})
         reply = "The sprinkler demand is 1,695.8 L/min."
         self.assertEqual(audit(reply, record.snapshot("job1"))["unfound"], ["1695.8 L/min"])
         session.execute("convert_units", {"value": 447.98296638894806, "from_unit": "gpm", "to_unit": "L/min"})

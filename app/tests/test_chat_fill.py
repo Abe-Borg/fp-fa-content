@@ -336,7 +336,7 @@ class RunUsedTheOldValue(ChatFillCase):
         self.app.undo_fill(self.app.chat_log[-1]["job_id"], "q_fill_gpm")
         self.assertEqual(float(self.app.q_fill.get()), 600.0)
         self.assertEqual(self.app.run_changes(), [], "the form is back to what the run used")
-        self.assertEqual(self.app.record.givens(self.app.project["id"])["q_fill_gpm"]["source"], "sample data",
+        self.assertEqual(self.app.record.givens(self.app.project["id"])["q_fill_gpm"]["source"], "SAMPLE data",
                          "the sample's value goes back as the sample's")
         self.assertFalse(self.shown("q_fill_gpm")["stale_run"], "an undone row says nothing about the run")
 

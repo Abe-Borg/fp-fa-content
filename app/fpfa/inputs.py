@@ -48,17 +48,22 @@ SOURCE_DESIGNER = "designer"          # typed on the form
 SOURCE_CHAT = "chat"                  # stated to the lead in chat, recorded by set_input
 SOURCE_DEFAULT = "default"            # a starting value an earlier form put there, not confirmed
 SOURCE_SAMPLE = "sample"              # the sample job's data
+SOURCE_SAMPLE_UNCONFIRMED = "sample_owner"  # a sample chosen for a test that waits for the owner's confirmation
 SOURCE_ACCEPTED = "accepted"          # a hint the designer accepted: recorded ASSUMED
+SOURCE_TYPED_HINT = "typed_hint"      # typed by the designer, the same value as a hint the field showed: GIVEN
 SOURCE_TEXT = {
     SOURCE_DESIGNER: "zone form",
+    SOURCE_TYPED_HINT: "typed from form hint",
     SOURCE_CHAT: "designer, in chat",
     SOURCE_DEFAULT: "zone form (starting value, not confirmed by the designer)",
-    SOURCE_SAMPLE: "sample data",
+    SOURCE_SAMPLE: "SAMPLE data",
+    SOURCE_SAMPLE_UNCONFIRMED: "SAMPLE data, OWNER TO CONFIRM",
     SOURCE_ACCEPTED: "zone form (starting value the designer accepted; ASSUMED, not a design value)",
 }
 # A basis field is on the same Inputs tab, but the record has always called its form "job form".
 BASIS_SOURCE_TEXT = {
     SOURCE_DESIGNER: "job form",
+    SOURCE_TYPED_HINT: "typed from form hint",
     SOURCE_DEFAULT: "job form (starting value, not confirmed by the designer)",
     SOURCE_ACCEPTED: "job form (starting value the designer accepted; ASSUMED, not a design value)",
 }
@@ -256,11 +261,12 @@ POSITIVE = ("q_fill_gpm", "density_gpm_ft2", "base_area_ft2", "supervisory_psig"
 NOT_BLANK = {
     "area_increase": "Enter it as a fraction (0.30 is a 30 percent increase), or 0 when no increase applies.",
     "hose_gpm": "Enter the hose stream in gpm, or 0 when none is included.",
-    # A blank time holds the run; it is never taken as 0. The times come from the releasing design.
-    "t_detect_s": "Enter it in s from the releasing design.",
-    "t_release_s": "Enter it in s from the releasing design.",
-    "t_exhaust_s": "Enter it in s.",
 }
+# The detection, releasing, and exhaust times. A blank one is never taken as 0: the delivery rows are then the
+# fill time alone and its margin, with no pass or fail. A typed 0 is used and marked ASSUMED-ZERO (optimistic,
+# NEEDS PE REVIEW). The times come from the releasing design.
+SUB_TIMES = ("t_detect_s", "t_release_s", "t_exhaust_s")
+SUBTIMES_MISSING = "sub-times not provided; no pass or fail"
 # A choice or a yes/no the run's tools take. Blank, the run holds: no choice is made for the designer. The
 # trim medium and the prime holder are not here: blank, they go to the kernel as its own "unelected" and
 # "unknown", which say no election was made.
@@ -301,7 +307,7 @@ def run_problem(name: str, value: Any) -> str:
         return f"{label} must be a finite number."
     if name in POSITIVE and number <= 0:
         return f"{label} must be greater than 0{in_unit}."
-    if name in NOT_BLANK and number < 0:
+    if (name in NOT_BLANK or name in SUB_TIMES) and number < 0:
         return f"{label} cannot be negative."
     return ""
 
@@ -570,6 +576,21 @@ def _hint_figure(name: str, value: Any, unit: str = "") -> str:
     else:
         text = str(value)
     return f"{text} {unit}".strip()
+
+
+def typed_source(name: str, value: Any) -> str:
+    """Who supplied a value the designer typed: typed from a form hint when it is one of the field's hint values.
+
+    It is the designer's value either way, and GIVEN: typing a figure clears
+    the ASSUMED an accepted hint carries. The source only says where the
+    figure came from.
+    """
+    if _is_blank(value):
+        return SOURCE_DESIGNER
+    for hint in hints_of(name):
+        if same(canonical(name, value), canonical(name, hint.value)):
+            return SOURCE_TYPED_HINT
+    return SOURCE_DESIGNER
 
 
 def hint_text(name: str, unit: str | None = None) -> str:

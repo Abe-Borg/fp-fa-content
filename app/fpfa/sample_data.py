@@ -95,6 +95,9 @@ EXAMPLE_DI_2 = {
     ],
 }
 
+# The sample zones whose inputs wait for the owner's confirmation (docs/known-answer-dh2.md, OWNER TO CONFIRM).
+OWNER_TO_CONFIRM = frozenset({"dh2"})
+
 # The sample zones by the name a command or the evaluation runner gives them.
 SAMPLE_ZONES = {
     "dh1": ("Sample data hall DI zone", EXAMPLE_BASIS, EXAMPLE_DI),
@@ -133,7 +136,8 @@ EXAMPLE_BESS = {
     "lfl": {
         "H2": 4.0,
         "CO": 10.9,
-        "CO2": None,
+        # Named inert: a blank LFL holds the call, so an inert gas is said to be one.
+        "CO2": "inert",
         "CH4": 4.4,
         "C2H4": 2.4,
         "C2H6": 2.4,
