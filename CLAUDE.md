@@ -141,7 +141,7 @@ The window:
 | `specs/`, `corpus/` | Engineering content. Draft CSI sections, sent to the model in full; paraphrased pins and notes, searched by `search_corpus` |
 | `docs/` | Plan of record, known answers, acceptance and recovery protocols, live evaluation, releasing basis, content provenance, milestone hand-backs, the app/content hand-back for the content team. Not part of the content pack |
 | `NEXT-STEPS.md` | The reviews of the 0.2.0 and 0.3.0 acceptance reports against the source: what 0.3.1 and 0.3.2 fixed (section 0b for 0.3.2), what is still open, and the owner's decisions and open questions. Not part of the content pack |
-| `scripts/` | `build_content_pack.py` runs the strip scan (`check_pack_strip.py`), leaves out `_sources`, catalog, and the held draft, stops on a foam or clean-agent path, and refuses any file that holds an API key. `check_content_tag.py` is the content workflow's gate: a `content-v*` tag publishes only from main, only above every earlier content tag on main, and only when the owner pushed it (`--owner` and `--actor` are required) |
+| `scripts/` | `build_content_pack.py` runs the strip scan (`check_pack_strip.py`), leaves out `_sources`, catalog, and the held draft, stops on a foam or clean-agent path, and refuses any file that holds an API key. `check_content_tag.py` is the content workflow's gate: a `content-v*` tag publishes only from main, only above every content pack already published (the `content-v*` releases, passed as `--published-file`; a refused tag has no release and sets no floor), and only when the owner pushed it (`--owner`, `--actor`, and `--published-file` are required) |
 
 ## Working here
 

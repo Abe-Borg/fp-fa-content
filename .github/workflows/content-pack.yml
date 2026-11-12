@@ -1,9 +1,9 @@
 # Publish a content pack when a content-v* tag is pushed.
 # Assets: manifest.json and fp-fa-content-v<version>.zip.
 #
-# A tag publishes only when its commit is on main, its version is above every earlier content tag on main,
-# and the repository's owner pushed it (scripts/check_content_tag.py); any other tag fails this job before
-# anything is built.
+# A tag publishes only when its commit is on main, its version is above every content pack already published
+# (the content-v* releases), and the repository's owner pushed it (scripts/check_content_tag.py); any other
+# tag fails this job before anything is built. A refused tag gets no release, so it sets no floor.
 # The calc suites, the pack lint, and the app suite run before the pack is built.
 # The kernel reproduce check is a hand run attached to the release manifest: FP_KERNEL_DIR is not set here.
 
@@ -34,15 +34,20 @@ jobs:
         env:
           ACTOR: ${{ github.actor }}
           OWNER: ${{ github.repository_owner }}
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
         run: |
           git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
-          # Every earlier content tag, so the gate can refuse a version that is not above the latest on main.
-          git fetch --force --tags origin
+          # The content packs already published: the version floor. A tag the gate refused has no release, so it
+          # sets none. If the list cannot be read, this step fails (bash -e, pipefail) and nothing publishes.
+          gh release list --exclude-drafts --limit 1000 --json tagName --jq '.[].tagName' \
+            | { grep '^content-v' || true; } > "$RUNNER_TEMP/published-content-tags.txt"
           python3 scripts/check_content_tag.py \
             --tag "$GITHUB_REF_NAME" \
             --main-ref refs/remotes/origin/main \
             --actor "$ACTOR" \
-            --owner "$OWNER"
+            --owner "$OWNER" \
+            --published-file "$RUNNER_TEMP/published-content-tags.txt"
 
       - name: Install the app's dependencies
         run: python -m pip install -r app/requirements.txt
