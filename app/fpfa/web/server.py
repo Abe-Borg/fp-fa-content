@@ -94,6 +94,7 @@ ACTIONS: dict[str, Callable[[Desk, dict], Any]] = {
     "key-save": lambda d, b: d.save_key(_text(b.get("key"), 1000)),
     "key-clear": lambda d, b: d.clear_key(),
     "key-check": lambda d, b: d.check_key(_text(b.get("key"), 1000)),
+    "app-check": lambda d, b: d.check_app_updates(),
     "content-check": lambda d, b: d.check_content_updates(_text(b.get("feed"), 2000)),
     "content-root": lambda d, b: d.save_content_root(_text(b.get("folder"), 2000)),
 }
