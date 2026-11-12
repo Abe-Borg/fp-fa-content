@@ -1,8 +1,9 @@
 """The window: the local server (fpfa/web/server.py), its event stream, the built page, and the page in a browser.
 
 The server tests talk HTTP to a real server on 127.0.0.1 and need no display.
-The browser test drives the page in Chromium with Playwright (frontend/tools/e2e.mjs)
-and is skipped where Node.js or Playwright is not installed.
+The browser tests drive the page in Chromium with Playwright (frontend/tools/e2e.mjs,
+e2e_team.mjs, and the screenshot tool, shoot.mjs) and are skipped where Node.js or
+Playwright is not installed.
 """
 
 from __future__ import annotations
@@ -13,12 +14,14 @@ import json
 import os
 import re
 import shutil
+import struct
 import subprocess
 import sys
 import tempfile
 import threading
 import time
 import unittest
+from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -591,6 +594,111 @@ class BrowserTests(unittest.TestCase):
         finally:
             server.stop()
             desk.close()
+
+
+class ScreenshotToolTests(unittest.TestCase):
+    """frontend/tools/shoot.mjs, the pictures CLAUDE.md asks for after a change to the window.
+
+    The page draws the scheme the app serves, whatever its address says. A picture is never named for a
+    scheme or a device scale it was not drawn in: asked for another scheme, the tool stops and writes nothing.
+    """
+
+    TOOL = FRONTEND / "tools" / "shoot.mjs"
+
+    def _shoot(self, *arguments: str) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [shutil.which("node"), str(self.TOOL), *arguments], capture_output=True, text=True, timeout=120,
+        )
+
+    @contextmanager
+    def _serving(self, theme: str = "", panel: str = ""):
+        """The sample zone, served the way python -m fpfa --demo --serve [--theme <id>] serves it, with the window
+        left on the tab named. Yields the address that command prints."""
+        _isolate()
+        # --theme sets FPFA_THEME for its run. Nothing here saves a scheme.
+        with patch.dict(os.environ, {"FPFA_THEME": theme} if theme else {}):
+            from fpfa.desk import Desk
+            from fpfa.web.server import WindowServer
+
+            desk = Desk()
+            server = WindowServer(desk).start()
+            try:
+                desk.call(desk.load_demo)
+                desk.pump()
+                if panel:
+                    desk.call(desk.set_layout, {"panel": panel})
+                yield server.page_url(theme=desk.scheme)
+            finally:
+                server.stop()
+                desk.close()
+
+    @staticmethod
+    def _pictures(folder: Path) -> dict[str, tuple[int, int]]:
+        """Each PNG in the folder, with its width and height in pixels from its header."""
+        return {path.name: struct.unpack(">II", path.read_bytes()[16:24]) for path in sorted(folder.glob("*.png"))}
+
+    def test_an_argument_it_cannot_use_stops_it_before_a_browser_opens(self):
+        if shutil.which("node") is None:
+            self.skipTest("Node.js is not installed")
+        folder = Path(tempfile.mkdtemp(prefix="fpfa-shoot-")) / "pictures"
+        # Nothing listens at this address. Each refusal comes before a browser would ask it, and before
+        # Playwright is loaded, so this runs where Playwright is not installed.
+        address = "http://127.0.0.1:9/?token=unused"
+        cases = {
+            (): "usage:",
+            # Windows states its display scale in percent.
+            (address, str(folder), "linen", "150"): "1.5 for a display at 150%",
+            (address, str(folder), "linen", "0.5"): "from 1 to 5",
+            (address, str(folder), "linen", "2x"): "from 1 to 5",
+            (address, str(folder), "Linen"): '"Linen" is not a scheme id',
+            # A scale in the scheme's place.
+            (address, str(folder), "2"): "linen 2",
+        }
+        for arguments, said in cases.items():
+            with self.subTest(arguments=arguments):
+                run = self._shoot(*arguments)
+                self.assertEqual(run.returncode, 2, run.stdout + run.stderr)
+                self.assertIn(said, run.stderr)
+        self.assertFalse(folder.exists())
+
+    def test_asked_for_another_scheme_than_the_app_serves_it_stops_and_writes_nothing(self):
+        problem = _playwright_problem()
+        if problem:
+            self.skipTest(problem)
+        folder = Path(tempfile.mkdtemp(prefix="fpfa-shoot-")) / "pictures"
+        with self._serving() as address:
+            self.assertIn("theme=clay", address)
+            # The address can name linen. The page still draws the app's scheme once the app's state arrives.
+            run = self._shoot(address.replace("theme=clay", "theme=linen"), str(folder), "linen")
+        self.assertEqual(run.returncode, 1, run.stdout + run.stderr)
+        self.assertIn("asked for linen, but the page is drawn in clay", run.stderr)
+        self.assertIn("--theme linen", run.stderr)
+        self.assertIn("Nothing was written.", run.stderr)
+        self.assertFalse(folder.exists())
+
+    def test_the_scheme_the_app_serves_is_shot_at_the_scale_asked_for(self):
+        problem = _playwright_problem()
+        if problem:
+            self.skipTest(problem)
+        root = Path(tempfile.mkdtemp(prefix="fpfa-shoot-"))
+        # The check CLAUDE.md asks for: Linen, served with --theme linen, at a device scale above 1. The window
+        # was left on the Inputs tab, whose button closes that tab when it is pressed again.
+        with self._serving("linen", panel="inputs") as address:
+            run = self._shoot(address, str(root / "linen"), "linen", "2")
+            self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+            # Named for no scheme or scale: the names --demo --screenshot-dir has always written, at 1440 by 900.
+            plain = self._shoot(address, str(root / "plain"))
+            self.assertEqual(plain.returncode, 0, plain.stdout + plain.stderr)
+        self.assertEqual(self._pictures(root / "linen"), {
+            "di_zone_inputs-linen@2x.png": (2880, 1800),
+            "di_zone_results-linen@2x.png": (2880, 1800),
+            "thread-linen@2x.png": (2880, 1800),
+        })
+        self.assertEqual(self._pictures(root / "plain"), {
+            "di_zone_inputs.png": (1440, 900),
+            "di_zone_results.png": (1440, 900),
+            "thread.png": (1440, 900),
+        })
 
 
 if __name__ == "__main__":
