@@ -202,6 +202,30 @@ export function App() {
 
   const openTab = useCallback((tab: Tab) => changeLayout({ panel: tab }), [changeLayout]);
 
+  /** A field the chat filled in, shown: the Inputs tab opens and the field comes into view with the focus. */
+  const showField = useCallback(
+    (field: string) => {
+      setAcross(false);
+      changeLayout({ panel: "inputs" });
+      window.setTimeout(() => {
+        const node = document.getElementById(`f-${field}`);
+        node?.scrollIntoView({ block: "center", behavior: "smooth" });
+        node?.focus({ preventScroll: true });
+      }, 80);
+    },
+    [changeLayout],
+  );
+
+  // The newest fill the designer has seen on the Inputs tab. A newer one marks the tab and is highlighted when it opens.
+  const [seenFill, setSeenFill] = useState(0);
+  const marks = state?.form.marks || {};
+  const latestFill = Math.max(0, ...Object.values(marks).map((mark) => mark.fill));
+  useEffect(() => {
+    if (layout.panel !== "inputs" || latestFill <= seenFill) return;
+    const timer = window.setTimeout(() => setSeenFill(latestFill), 2600);
+    return () => window.clearTimeout(timer);
+  }, [layout.panel, latestFill, seenFill]);
+
   /** A new chat is typed into: the thread comes back if the panel had its place. */
   const newChat = useCallback(() => {
     setAcross(false);
@@ -378,6 +402,11 @@ export function App() {
                   onKeyDown={(event) => onViewKey(event, index)}
                 >
                   {item.label}
+                  {item.id === "inputs" && tab !== "inputs" && latestFill > seenFill ? (
+                    <span className="fill-dot" title="Filled in from the chat since you last looked">
+                      <span className="visually-hidden"> (filled in from the chat)</span>
+                    </span>
+                  ) : null}
                   {item.id === "team" && state.team.attention ? (
                     <span className="count" title={`${state.team.attention} waiting on someone`}>
                       {state.team.attention}
@@ -419,6 +448,13 @@ export function App() {
                 onLink={follow}
                 onType={(char) => composer.current?.type(char)}
                 onCopied={say}
+                fillActions={{
+                  onShow: showField,
+                  onUndo: (jobId, name) => void act("input-undo", { job_id: jobId, name }),
+                  onApply: (jobId, name) => void act("input-apply", { job_id: jobId, name: name || "" }),
+                  onSkip: (jobId, name) => void act("input-skip", { job_id: jobId, name }),
+                  onRun: run,
+                }}
               />
               <Composer
                 ref={composer}
@@ -446,6 +482,7 @@ export function App() {
                       return !!(reply && reply.result);
                     }}
                     onRemoveSegment={(index) => void act("segment-remove", { index })}
+                    seen={seenFill}
                   />
                 ) : null}
                 {tab === "results" ? (

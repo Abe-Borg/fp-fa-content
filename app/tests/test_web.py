@@ -595,6 +595,57 @@ class BrowserTests(unittest.TestCase):
             server.stop()
             desk.close()
 
+    def test_the_chat_filling_the_inputs_in_a_browser(self):
+        """A scripted lead fills two basis fields, then (ask first) proposes a third: the card, Show, Undo, Apply."""
+        problem = _playwright_problem()
+        if problem:
+            self.skipTest(problem)
+        _isolate()
+        from fpfa.desk import Desk
+        from fpfa.keystore import save_api_key
+        from fpfa.web.server import WindowServer
+        from test_team_protocol import Play, call, say, use
+
+        save_api_key("sk-ant-local-test")
+        play = Play({"lead": [
+            call(use("set_input", name="ahj", value="City of Irvine", why="“The AHJ is the City of Irvine”"),
+                 use("set_input", name="insurer", value="FM Global", why="“the insurer is FM Global”")),
+            say("I put the AHJ and the insurer on the Inputs tab."),
+            call(use("set_input", name="hazard_notes", value="Single-story hall, hot-aisle containment.",
+                     why="“single-story hall, hot-aisle containment”")),
+            say("The hazard notes wait for your OK."),
+        ]})
+
+        class Client:
+            def __init__(self, _key):
+                pass
+
+            def create(self, **kwargs):
+                return play(**kwargs)
+
+        with patch("fpfa.desk.AnthropicMessages", Client):
+            desk = Desk()
+            server = WindowServer(desk).start()
+            try:
+                run = subprocess.run(
+                    [shutil.which("node"), str(FRONTEND / "tools" / "e2e_fill.mjs"), server.page_url()],
+                    capture_output=True, text=True, timeout=240,
+                )
+                lines = [line for line in run.stdout.splitlines() if line.startswith("{")]
+                self.assertTrue(lines, run.stdout + run.stderr)
+                report = json.loads(lines[-1])
+                self.assertTrue(report["ok"], json.dumps(report, indent=2))
+                self.assertGreaterEqual(report["checks"], 20)
+                self.assertEqual({kind: steps for kind, steps in play.scripts.items() if steps}, {}, "the lead's script was played to its end")
+                with desk.lock:
+                    given = desk.record.givens(desk.project["id"])
+                self.assertEqual((given["hazard_notes"]["value"], given["hazard_notes"]["agent"]),
+                                 ("Single-story hall, hot-aisle containment.", "designer"))
+                self.assertEqual(given["insurer"]["value"], "FM")
+            finally:
+                server.stop()
+                desk.close()
+
 
 class ScreenshotToolTests(unittest.TestCase):
     """frontend/tools/shoot.mjs, the pictures CLAUDE.md asks for after a change to the window.

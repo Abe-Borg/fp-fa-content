@@ -7,7 +7,7 @@
  * the app (form.assumptions) and by the run.
  */
 import { useState } from "react";
-import type { Form, FormValues } from "../types";
+import type { Form, FormValues, Mark } from "../types";
 import { choiceLabel } from "../layout";
 import { Close } from "./icons";
 
@@ -98,23 +98,73 @@ const PIPE_FIELDS: FieldSpec[] = [
   { name: "trim_gal", label: "Trim", unit: "gal" },
 ];
 
-function Field({ spec, form, values, set }: { spec: FieldSpec; form: Form; values: FormValues; set: SetField }) {
+/** The mark of a field the lead filled in from the chat: a tag that opens what it came from. */
+function FromChat({ id, mark }: { id: string; mark: Mark }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <span className="from-chat-wrap">
+      <button
+        type="button"
+        className="from-chat"
+        aria-expanded={open}
+        aria-controls={`${id}-from`}
+        onClick={(event) => {
+          // Inside a checkbox's label, the press is the tag's and does not tick the box.
+          event.preventDefault();
+          setOpen(!open);
+        }}
+        onBlur={() => setOpen(false)}
+        onKeyDown={(event) => {
+          if (event.key === "Escape" && open) {
+            event.stopPropagation();
+            setOpen(false);
+          }
+        }}
+        title="Filled in from the chat. Press for where it came from."
+      >
+        <svg width="10" height="10" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M10.8 2.7l2.5 2.5-7.6 7.6-3.2.7.7-3.2z" />
+        </svg>
+        <span className="word">from chat</span>
+        <span className="visually-hidden word-short">from chat</span>
+      </button>
+      {open ? (
+        <span id={`${id}-from`} className="from-chat-pop" role="note">
+          <span className="pop-line">Filled in from the chat.</span>
+          {mark.why && mark.quoted ? <span className="pop-quote">{mark.why}</span> : null}
+          {mark.why && !mark.quoted ? <span className="pop-line dim">The lead's note: {mark.why}</span> : null}
+          {mark.was ? <span className="pop-line dim">Before: {mark.was}</span> : null}
+          <span className="pop-line dim">Type over it to make it yours; the record keeps both.</span>
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+function Field({ spec, form, values, set, seen }: { spec: FieldSpec; form: Form; values: FormValues; set: SetField; seen: number }) {
   const id = `f-${spec.name}`;
   const span = spec.span === "all" ? " span-all" : "";
+  const mark = form.marks?.[spec.name];
+  // A field filled in since the designer last looked at the tab is drawn with a moment's highlight.
+  const marked = mark ? ` filled${mark.fill > seen ? " fresh-fill" : ""}` : "";
   if (spec.kind === "flag") {
     return (
-      <label className="check field-flag">
-        <input type="checkbox" checked={!!values[spec.name]} onChange={(event) => set(spec.name, event.target.checked)} />
+      <label className={`check field-flag${marked}`}>
+        <input id={id} type="checkbox" checked={!!values[spec.name]} onChange={(event) => set(spec.name, event.target.checked)} />
         <span>{spec.label}</span>
+        {mark ? <FromChat id={id} mark={mark} /> : null}
       </label>
     );
   }
   const value = String(values[spec.name] ?? "");
   return (
-    <div className={`field${span}`} title={spec.hint}>
-      <label className="field-label" htmlFor={id}>
-        {spec.label}
-      </label>
+    <div className={`field${span}${marked}`} title={spec.hint}>
+      <span className="field-head">
+        <label className="field-label" htmlFor={id}>
+          {spec.label}
+        </label>
+        {mark ? <FromChat id={id} mark={mark} /> : null}
+      </span>
       {spec.kind === "notes" ? (
         <textarea id={id} className="input notes" rows={3} value={value} onChange={(event) => set(spec.name, event.target.value)} />
       ) : spec.kind === "choice" ? (
@@ -151,7 +201,7 @@ function Field({ spec, form, values, set }: { spec: FieldSpec; form: Form; value
   );
 }
 
-function Fields({ fields, form, values, set }: { fields: FieldSpec[]; form: Form; values: FormValues; set: SetField }) {
+function Fields({ fields, form, values, set, seen }: { fields: FieldSpec[]; form: Form; values: FormValues; set: SetField; seen: number }) {
   const flags = fields.filter((spec) => spec.kind === "flag");
   return (
     <>
@@ -159,13 +209,13 @@ function Fields({ fields, form, values, set }: { fields: FieldSpec[]; form: Form
         {fields
           .filter((spec) => spec.kind !== "flag")
           .map((spec) => (
-            <Field key={spec.name} spec={spec} form={form} values={values} set={set} />
+            <Field key={spec.name} spec={spec} form={form} values={values} set={set} seen={seen} />
           ))}
       </div>
       {flags.length ? (
         <div className="flags">
           {flags.map((spec) => (
-            <Field key={spec.name} spec={spec} form={form} values={values} set={set} />
+            <Field key={spec.name} spec={spec} form={form} values={values} set={set} seen={seen} />
           ))}
         </div>
       ) : null}
@@ -243,10 +293,13 @@ export function Inputs({
   onRun,
   onAddSegment,
   onRemoveSegment,
+  seen = 0,
 }: {
   form: Form;
   values: FormValues;
   set: SetField;
+  /** The newest fill the designer has seen on this tab; a newer one is highlighted. */
+  seen?: number;
   /** Said beside Run zone when the form has moved past the run the Results tab shows. */
   runNote: string;
   onRun: () => void;
@@ -263,18 +316,24 @@ export function Inputs({
                 <h3 id={`group-${group.id}`} className="group-title">
                   {group.title}
                 </h3>
-                <Fields fields={group.fields} form={form} values={values} set={set} />
+                <Fields fields={group.fields} form={form} values={values} set={set} seen={seen} />
                 {group.note ? <p className="small faint group-note">{group.note}</p> : null}
               </section>
             ))}
           </div>
           <div className="inputs-column">
             <section className="group" aria-labelledby="group-pipe">
-              <h3 id="group-pipe" className="group-title">
+              <h3 id="group-pipe" className="group-title field-head">
                 Pipe
+                {form.marks?.segments ? <FromChat id="f-segments" mark={form.marks.segments} /> : null}
               </h3>
-              <Fields fields={PIPE_FIELDS} form={form} values={values} set={set} />
-              <div className="card segments">
+              <Fields fields={PIPE_FIELDS} form={form} values={values} set={set} seen={seen} />
+              <div
+                id="f-segments"
+                tabIndex={-1}
+                aria-label="Pipe segments"
+                className={`card segments${form.marks?.segments ? ` filled${form.marks.segments.fill > seen ? " fresh-fill" : ""}` : ""}`}
+              >
                 <table className="grid-table">
                   <thead>
                     <tr>

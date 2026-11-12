@@ -5,6 +5,37 @@ export interface Turn {
   role: "user" | "assistant";
   text: string;
   job_id?: string;
+  /** The project inputs the lead filled in from the designer's words during this turn (Desk._note_fills). */
+  inputs?: Fill[];
+}
+
+/**
+ * One input the lead filled in from the chat, as the app writes it: the field's label, the value
+ * before and after, and the designer's words the lead gave as its reason. The page words none of it.
+ */
+export interface Fill {
+  name: string;
+  /** The Inputs tab's name for the field (its element is f-<field>). */
+  field: string;
+  label: string;
+  was: string;
+  now: string;
+  why: string;
+  /** The app found the lead's reason, as written, in the designer's own messages (Desk.said_by_designer). */
+  quoted?: boolean;
+  fill: number;
+  /** applied: on the form. undone: put back. overtaken: typed over since. proposed and skipped: the ask-first mode. */
+  state: "applied" | "undone" | "overtaken" | "proposed" | "skipped";
+  /** The last zone run used the old value, so the Results tab no longer describes the form. */
+  stale_run?: boolean;
+}
+
+/** A field of the Inputs tab whose value the lead filled in from the chat, and nobody typed over since. */
+export interface Mark {
+  why: string;
+  quoted?: boolean;
+  was: string;
+  fill: number;
 }
 
 export interface ActivityRow {
@@ -185,6 +216,7 @@ export interface Form {
   assumptions: string;
   choices: Record<string, string[]>;
   roles: string[];
+  marks?: Record<string, Mark>;
 }
 
 export interface SchemeInfo {
@@ -202,6 +234,8 @@ export interface Settings {
   schemes: SchemeInfo[];
   reduce_motion: boolean;
   reduce_motion_forced: boolean;
+  /** auto: what the designer states in chat is filled in, with Undo. ask: it waits on the card for Apply. */
+  fill_from_chat: "auto" | "ask";
   key_saved: boolean;
   key_status: string;
   key_message: string;
@@ -270,7 +304,7 @@ export interface State {
   title: string;
   narrate: boolean;
   activity: ActivityRow[];
-  pending: { label: string; detail: string } | null;
+  pending: Pending | null;
   running_here: boolean;
   chips: { label: string; action: string }[];
   welcome: Welcome | null;
@@ -289,6 +323,13 @@ export interface State {
   live_rev: number;
   thread: { rev: number; project: string | null; turns?: Turn[] };
   lives?: LiveItem[];
+}
+
+/** The working line: what the newest job on the open job is doing, and what it filled in so far. */
+export interface Pending {
+  label: string;
+  detail: string;
+  fills?: { label: string; now: string; field: string }[];
 }
 
 /** A reply still arriving, as the page keeps it. */

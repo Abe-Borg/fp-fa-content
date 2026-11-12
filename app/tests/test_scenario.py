@@ -249,8 +249,9 @@ class ScenarioTests(unittest.TestCase):
         opening = self.s.two.of("lead")[0]["user"]
         self.assertIn("A tool plan already ran for this zone.", opening, "at the start of turn two the run is still current")
         thread = self.s.after["two"]["thread"]
-        self.assertIn("input trim_gal: blank → 6.5 gal (from the chat)", thread)
-        self.assertIn("input q_fill_gpm: 600 gpm → 750 gpm (from the chat)", thread)
+        self.assertIn("Filled in on the Inputs tab", thread)
+        self.assertIn("Trim: blank → 6.5 gal", thread)
+        self.assertIn("Fill flow: 600 gpm → 750 gpm", thread)
         self.assertNotIn("could not find on the record", thread)
         self.assertNotIn("only on out-of-date calculations", thread)
 

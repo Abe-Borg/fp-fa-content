@@ -2389,3 +2389,317 @@ body.resizing .panel-edge::after {
   padding: 12px 0;
   box-shadow: 0 1px 0 var(--edge);
 }
+
+/* Inputs the lead filled in from the chat ----------------------------------- */
+
+/* The card under a reply: one row per field, the value before and after, the designer's words. */
+.fill-card {
+  margin-top: 14px;
+  border: 1px solid var(--edge);
+  border-left: 3px solid var(--accent);
+  border-radius: 10px;
+  background: var(--surface);
+  padding: 10px 14px 8px;
+  font-size: 13.5px;
+}
+.fill-card.asking {
+  border-style: dashed;
+  border-left-style: solid;
+  background: var(--banner);
+}
+.fill-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  color: color-mix(in srgb, var(--accent) 70%, var(--ink));
+  margin-bottom: 6px;
+}
+.fill-head svg {
+  align-self: center;
+}
+.fill-title {
+  font-weight: 650;
+  color: var(--ink);
+}
+.fill-sub {
+  color: var(--ink-dim);
+  font-size: 12.5px;
+  flex: 1;
+  min-width: 12em;
+}
+.fill-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.fill-row {
+  display: grid;
+  grid-template-columns: minmax(7.5em, auto) minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 2px 14px;
+  padding: 6px 0;
+  border-top: 1px solid var(--hairline);
+}
+.fill-row:first-child {
+  border-top: 0;
+}
+.fill-label {
+  color: var(--ink-dim);
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+.fill-values {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 7px;
+  min-width: 0;
+}
+.fill-was {
+  /* A long old value (a note) is one struck line; its whole text is the title. */
+  max-width: 18em;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--ink-dim);
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--ink-dim) 60%, transparent);
+}
+.fill-was.blank {
+  text-decoration: none;
+  font-style: italic;
+}
+.fill-arrow {
+  color: var(--ink-dim);
+}
+.fill-now {
+  color: var(--ink);
+  font-weight: 600;
+}
+.fill-why {
+  flex-basis: 100%;
+  color: var(--ink-dim);
+  font-size: 12.5px;
+  font-style: italic;
+}
+.fill-why-head {
+  font-style: normal;
+}
+.fill-actions {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  white-space: nowrap;
+}
+.link-button {
+  border: 0;
+  background: none;
+  padding: 2px 0;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--accent) 80%, var(--ink));
+  cursor: pointer;
+}
+.link-button:hover {
+  text-decoration: underline;
+}
+.small-button {
+  min-height: 26px;
+  padding: 2px 10px;
+  font-size: 12.5px;
+}
+.fill-state {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--warn) 55%, var(--ink));
+}
+.fill-state.done {
+  color: var(--ink-dim);
+}
+.fill-row.state-undone .fill-now,
+.fill-row.state-skipped .fill-now {
+  color: var(--ink-dim);
+  font-weight: 400;
+  text-decoration: line-through;
+}
+.fill-row.state-undone .fill-was {
+  color: var(--ink);
+  text-decoration: none;
+  font-style: normal;
+}
+.fill-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px 14px;
+  flex-wrap: wrap;
+  margin: 4px -14px -8px;
+  padding: 8px 14px;
+  border-top: 1px solid var(--hairline);
+  border-radius: 0 0 10px 0;
+  background: color-mix(in srgb, var(--warn) 9%, var(--surface));
+}
+.fill-foot-text {
+  flex: 1;
+  min-width: 14em;
+  font-size: 12.5px;
+  color: color-mix(in srgb, var(--warn) 45%, var(--ink));
+}
+
+/* Under the working line while the turn runs. */
+.fills-so-far {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  margin: 2px 0 6px 28px;
+  font-size: 12.5px;
+}
+.fills-so-far-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--ink-dim);
+}
+.fill-chip {
+  border: 1px solid var(--focus-edge);
+  background: var(--accent-soft);
+  color: var(--ink);
+  border-radius: 12px;
+  padding: 2px 10px;
+  font-size: 12.5px;
+  cursor: pointer;
+  animation: rise 240ms ease-out;
+}
+.fill-chip:hover {
+  background: var(--select);
+}
+.fill-chip-label {
+  color: var(--ink-dim);
+}
+
+/* A field the lead filled in: its label carries a tag, and the field is tinted until someone types over it. */
+.field-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+.field-head .field-label {
+  min-width: 0;
+}
+.from-chat-wrap {
+  position: relative;
+  flex: none;
+}
+/* Each field is measured on its own, so a narrow one keeps its label and shows the tag as a pen alone. */
+.inputs .field {
+  container: field / inline-size;
+}
+.from-chat .word-short {
+  display: none;
+}
+@container field (max-width: 175px) {
+  .from-chat .word {
+    display: none;
+  }
+  .from-chat .word-short {
+    display: inline;
+  }
+}
+.from-chat {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  border-radius: 9px;
+  padding: 0 7px;
+  line-height: 17px;
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  background: var(--accent-soft);
+  color: color-mix(in srgb, var(--accent) 70%, var(--ink));
+  cursor: pointer;
+}
+.from-chat:hover,
+.from-chat[aria-expanded="true"] {
+  background: var(--select);
+  color: var(--ink);
+}
+.from-chat-pop {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 6px);
+  left: -8px;
+  width: 260px;
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--edge);
+  background: var(--raised);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--bg) 60%, transparent);
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--ink);
+  white-space: normal;
+}
+.pop-quote {
+  font-style: italic;
+  border-left: 2px solid var(--accent);
+  padding-left: 8px;
+}
+.pop-line.dim {
+  color: var(--ink-dim);
+}
+.field.filled .input,
+.card.segments.filled {
+  border-color: var(--focus-edge);
+  background: color-mix(in srgb, var(--accent) 7%, var(--raised));
+}
+.card.segments.filled {
+  border: 1px solid var(--focus-edge);
+}
+.field.filled.fresh-fill .input,
+.card.segments.filled.fresh-fill {
+  animation: fill-glow 2.4s ease-out;
+}
+.radios {
+  display: grid;
+  gap: 4px;
+  margin-top: 6px;
+}
+.check.field-flag.filled {
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  padding-left: 4px;
+  padding-right: 4px;
+}
+@keyframes fill-glow {
+  0%,
+  35% {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 45%, transparent);
+    background: var(--accent-soft);
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+/* On the Inputs tab button: something was filled in since the designer last looked. */
+.fill-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-left: 6px;
+  vertical-align: 2px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+/* A field is its own stacking context (it is a container), so the one whose source is open is lifted above the rest. */
+.inputs .field:has(.from-chat[aria-expanded="true"]) {
+  position: relative;
+  z-index: 30;
+}

@@ -116,8 +116,10 @@ _LEAD_TOOLS = [
             "Record a project input the designer stated: a zone input (fill flow, a time, the trim, the pipe "
             "takeoff, a pressure) or a basis field (ahj, nfpa_13, nfpa_72, insurer, hazard_notes). It replaces "
             "the old value for the whole team and appears on the zone form. The result lists the calculations "
-            "and findings that used the old value and are now out of date. Record only what the designer "
-            "gave; never a value you chose. Inputs and what each takes: " + inputs.describe() + "."
+            "and findings that used the old value and are now out of date. When the designer has asked to approve "
+            "inputs from the chat first, the result says proposed instead: nothing changes until they apply it. "
+            "Record only what the designer gave; never a value you chose. Inputs and what each takes: "
+            + inputs.describe() + "."
         ),
         "input_schema": _obj(
             {
@@ -222,6 +224,13 @@ _CONSULT_TOOL = {
 }
 
 # The lead with the plain shell (a pack with no lead role): every tool the shell has, plus the lead's.
+# What set_input tells the lead when the designer has asked to approve inputs from the chat first.
+ASK_FIRST_NOTE = (
+    "Proposed, not recorded. The designer approves inputs from the chat first: they apply or skip this on the "
+    "card under your reply. Until they apply it, the record and the zone form keep the old value, so do not "
+    "quote the new value as current or delegate work that rests on it in this turn. Say that it waits for "
+    "their OK."
+)
 TEAM_SCHEMAS = SCHEMAS + _LEAD_TOOLS
 # The lead with its own role file. It does not read a specialist's role and answer in its place.
 LEAD_SCHEMAS = [item for item in SCHEMAS if item["name"] not in ("read_role", "list_roles")] + _LEAD_TOOLS
@@ -839,8 +848,11 @@ class TeamSession:
         max_tokens: int = MAX_OUTPUT_TOKENS,
         cancel: Any = None,
         observe: Callable[[dict], Any] | None = None,
+        ask_first: bool = False,
     ):
         self.observe = observe
+        # The designer approves an input from the chat before it is recorded: set_input proposes and writes nothing.
+        self.ask_first = ask_first
         self.root = Path(content_root)
         self.record = record
         self.project_id = project_id
@@ -853,6 +865,8 @@ class TeamSession:
         self.checks: list[dict] = []
         # What the lead did besides delegating, for the app-written block under its reply.
         self.inputs_set: list[dict] = []
+        # Inputs set_input proposed in ask-first mode: the window puts them on a card the designer applies or skips.
+        self.inputs_proposed: list[dict] = []
         self.answered: list[dict] = []
         self.resolved: list[dict] = []
         # Delegations and checks that ended on an error this turn: what, who, and the error.
@@ -955,6 +969,8 @@ class TeamSession:
             given, result = converted["given"], converted["result"]
             source += (f" (given as {given['value']:g} {given['unit']}; converted by the application to "
                        f"{result['value']:.6g} {result['unit']}, convert_units [{converted.get('record_id', '')}])")
+        if self.ask_first:
+            return self._propose_input(name, kind, text, label, source[:2000], why, converted)
         row = self.record.set_given(
             self.project_id, kind=kind, key=name, value=text, label=label, source=source[:2000], agent=LEAD,
         )
@@ -983,6 +999,30 @@ class TeamSession:
             self.inputs_set.append({"name": name, "was": shown_old, "now": shown_new})
         else:
             out["note"] = "The record already held this value. It is now marked as stated by the designer."
+        return out
+
+    def _propose_input(self, name: str, kind: str, text: str, label: str, source: str, why: str,
+                       converted: dict | None) -> dict:
+        """Ask-first: what set_input would record, held for the designer. The record and the form are not touched."""
+        current = self.record.givens(self.project_id).get(name)
+        decode = inputs.decode if kind == inputs.INPUT_KIND else (lambda value: value)
+        shown_new = inputs.show(name, decode(text))
+        if current is not None and current["value"] == text:
+            return {"name": name, "now": shown_new, "changed": False, "proposed": False,
+                    "note": "The record already holds this value. Nothing was proposed."}
+        shown_old = inputs.show(name, decode(current["value"])) if current is not None else "not on the record"
+        proposal = {"name": name, "kind": kind, "value": text, "label": label, "source": source,
+                    "why": why, "was": shown_old, "now": shown_new}
+        # One proposal per input: a later one in the same turn replaces the earlier.
+        self.inputs_proposed = [item for item in self.inputs_proposed if item["name"] != name] + [proposal]
+        out: dict[str, Any] = {"name": name, "was": shown_old, "now": shown_new, "changed": False, "proposed": True,
+                               "note": ASK_FIRST_NOTE}
+        if converted:
+            out["converted"] = {
+                "given": f"{converted['given']['value']:g} {converted['given']['unit']}",
+                "result": f"{converted['result']['value']:.6g} {converted['result']['unit']}",
+                "record_id": converted.get("record_id", ""),
+            }
         return out
 
     def _converted_input(self, name: str, value: Any) -> dict | None:
@@ -1109,11 +1149,12 @@ def team_summary(out: dict | None, audit: dict | None = None) -> str:
 
     delegations = out.get("delegations") or []
     checks = out.get("checks") or []
-    changed = out.get("inputs_set") or []
     resolved = out.get("resolved") or []
     failed = out.get("failed") or []
     figure_lines = reply_audit.lines(audit)
-    if not delegations and not checks and not changed and not resolved and not failed:
+    # An input the lead set is listed by the window, on a card under the reply that can show and undo it
+    # (Desk._note_fills). The block does not list it again.
+    if not delegations and not checks and not resolved and not failed:
         about_figures = bool((audit or {}).get("unfound") or (audit or {}).get("stale"))
         head = "**Figures in this reply**" if about_figures else "**In this reply**"
         return "\n".join([head] + figure_lines) if figure_lines else ""
@@ -1123,8 +1164,6 @@ def team_summary(out: dict | None, audit: dict | None = None) -> str:
         lines.append(f"- FAILED: the {item.get('what')}{who} ended on an error ({_clip(item.get('error'), 160)}). "
                      "What had been recorded before it is kept and may be partial. Asking again repeats that work "
                      "and is billed again; recorded calculations replay.")
-    for item in changed:
-        lines.append(f"- input {item.get('name')}: {item.get('was')} → {item.get('now')} (from the chat)")
     exchanges: list[str] = []
     # One line per specialist, however many times the lead went back to it.
     totals: dict[str, dict] = {}

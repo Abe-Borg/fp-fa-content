@@ -8,11 +8,12 @@
  * moment the move happens; coming back to the end puts it back on.
  */
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { Live, Turn, Welcome } from "../types";
+import type { Fill, Live, Pending, Turn, Welcome } from "../types";
 import { plainText } from "../markdown";
 import { ReplyText } from "./Reply";
 import { Menu, type Anchor, type MenuItem } from "./Menu";
 import { ArrowDown, ArrowRight, Star } from "./icons";
+import { FillCard, FillsSoFar } from "./Fills";
 
 const AT_END_PX = 24;
 const MOVE_KEYS = new Set(["PageUp", "PageDown", "ArrowUp", "ArrowDown", "Home", "End", " "]);
@@ -23,6 +24,17 @@ interface Item {
   text: string;
   live: boolean;
   fromStart: boolean;
+  jobId?: string;
+  fills?: Fill[];
+}
+
+/** What the thread does with a card of inputs the lead filled in. */
+export interface FillActions {
+  onShow: (field: string) => void;
+  onUndo: (jobId: string, name: string) => void;
+  onApply?: (jobId: string, name: string | null) => void;
+  onSkip?: (jobId: string, name: string) => void;
+  onRun?: () => void;
 }
 
 const Bubble = memo(function Bubble({ text, onMenu }: { text: string; onMenu: (event: React.MouseEvent, text: string) => void }) {
@@ -35,17 +47,20 @@ const Bubble = memo(function Bubble({ text, onMenu }: { text: string; onMenu: (e
   );
 });
 
-function WorkingLine({ pending, motion }: { pending: { label: string; detail: string }; motion: boolean }) {
+function WorkingLine({ pending, motion, onShow }: { pending: Pending; motion: boolean; onShow: (field: string) => void }) {
   return (
-    <div className={`working${motion ? " moving" : ""}`} role="status" aria-live="polite">
-      <span className="dots" aria-hidden="true">
-        <i />
-        <i />
-        <i />
-      </span>
-      <span className="working-label">{pending.label}</span>
-      {pending.detail ? <span className="working-detail">{pending.detail}</span> : null}
-    </div>
+    <>
+      <div className={`working${motion ? " moving" : ""}`} role="status" aria-live="polite">
+        <span className="dots" aria-hidden="true">
+          <i />
+          <i />
+          <i />
+        </span>
+        <span className="working-label">{pending.label}</span>
+        {pending.detail ? <span className="working-detail">{pending.detail}</span> : null}
+      </div>
+      {pending.fills?.length ? <FillsSoFar fills={pending.fills} onShow={onShow} /> : null}
+    </>
   );
 }
 
@@ -106,16 +121,18 @@ export function Thread({
   onLink,
   onType,
   onCopied,
+  fillActions,
 }: {
   project: string | null;
   turns: Turn[];
   lives: Live[];
   welcome: Welcome | null;
-  pending: { label: string; detail: string } | null;
+  pending: Pending | null;
   motion: boolean;
   onLink: (action: string) => void;
   onType: (char: string) => void;
   onCopied: (what: string) => void;
+  fillActions: FillActions;
 }) {
   const scroller = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLDivElement>(null);
@@ -241,6 +258,8 @@ export function Thread({
     text: turn.text,
     live: false,
     fromStart: index >= known,
+    jobId: turn.job_id,
+    fills: turn.inputs,
   }));
   const shownJobs = new Set(turns.map((turn) => turn.job_id).filter(Boolean));
   for (const live of lives) {
@@ -272,10 +291,20 @@ export function Thread({
             ) : (
               <div key={item.key} className="turn assistant">
                 <ReplyText text={item.text} motion={motion} fromStart={item.fromStart} live={item.live} />
+                {item.fills?.length ? (
+                  <FillCard
+                    fills={item.fills}
+                    onShow={fillActions.onShow}
+                    onUndo={(name) => fillActions.onUndo(item.jobId || "", name)}
+                    onApply={fillActions.onApply ? (name) => fillActions.onApply?.(item.jobId || "", name) : undefined}
+                    onSkip={fillActions.onSkip ? (name) => fillActions.onSkip?.(item.jobId || "", name) : undefined}
+                    onRun={fillActions.onRun}
+                  />
+                ) : null}
               </div>
             ),
           )}
-          {pending ? <WorkingLine pending={pending} motion={motion} /> : null}
+          {pending ? <WorkingLine pending={pending} motion={motion} onShow={fillActions.onShow} /> : null}
         </div>
       </div>
       {behind ? (
