@@ -743,6 +743,29 @@ class ContentUpdateTests(unittest.TestCase):
             # The saved pointer is left as it was; only the lookup passes it over.
             self.assertEqual(read_config()["content_version"], "0.5.0")
 
+    def test_an_older_install_with_no_marker_does_not_shadow_a_newer_seed(self):
+        """A zip with no pack.json installs; the updater saves its version in Settings only. That version counts."""
+        from fpfa.content_pack import seed_marker
+        from fpfa.content_update import check_for_content_update
+        from fpfa.paths import content_root
+
+        parent, seed = self._frozen_seed("0.4.0")
+        out = Path(tempfile.mkdtemp(prefix="fpfa-out-"))
+        blob = zip_bytes({"skills/example/SKILL.md": b"Unmarked 0.5.0.\n", "calcs/fp/formulas.py": b"# fixture\n"})
+        (out / "fp-fa-content-v0.5.0.zip").write_bytes(blob)
+        (out / "manifest.json").write_text(json.dumps({
+            "version": "0.5.0", "sha256": hashlib.sha256(blob).hexdigest(), "filename": "fp-fa-content-v0.5.0.zip",
+        }), encoding="utf-8")
+        httpd = serve(directory_handler(out))
+        self.addCleanup(stop, httpd)
+        with self._frozen(parent):
+            self.assertEqual(check_for_content_update(feed_url(httpd)).status, "updated")
+            installed = content_root()
+            self.assertEqual(installed.name, "0.5.0")
+            self.assertFalse((installed / "pack.json").exists())
+            (seed / "pack.json").write_bytes(seed_marker("0.6.0"))
+            self.assertEqual(content_root(), seed.resolve())
+
     def test_a_folder_the_designer_chose_is_not_passed_over_for_the_seed(self):
         from fpfa.content_update import remember_selected_root
         from fpfa.paths import content_root

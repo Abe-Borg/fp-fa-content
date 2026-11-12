@@ -104,6 +104,17 @@ def _older_than_seed(saved: Path) -> bool:
         return False
     installed = _marker_numbers(saved)
     if installed is None:
+        # A pack installed from a zip with no pack.json: the version the updater saved for this folder.
+        from fpfa.content_pack import parse_version_numbers
+
+        cfg = read_config()
+        try:
+            same = bool(cfg.get("content_root")) and Path(cfg["content_root"]).resolve() == saved.resolve()
+        except OSError:
+            same = False
+        version = cfg.get("content_version") if same else None
+        installed = parse_version_numbers(version) if isinstance(version, str) else None
+    if installed is None:
         return False
     for seed in _bundled_seed_candidates():
         if is_content_pack(seed):
