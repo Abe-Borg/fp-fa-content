@@ -22,10 +22,11 @@ import hashlib
 import json
 import math
 import re
+import time
 from pathlib import Path
 from typing import Any, Callable
 
-from fpfa.claude_client import MODEL_ID, incomplete_notice
+from fpfa.claude_client import MODEL_ID, incomplete_notice, safe_error
 from fpfa.paths import data_dir
 from fpfa.roles_loader import read_role
 from fpfa.spec_docx import DRAFT_SECTION
@@ -33,6 +34,8 @@ from fpfa.workflow import governing_narrative
 
 QA_ROLE = "qa-specialist"
 BLIND_CLAIM_SKILL = "blind-claim-check"
+# The event the Section export's claim check closes on, with its usage. The cost report counts it.
+SECTION_CHECK_EVENT = "section_check"
 
 VERDICT_SUPPORTED = "Supported"
 VERDICT_NOT = "Not supported"
@@ -185,6 +188,45 @@ def judge(content_root: Path, packet: dict, create: Callable[..., Any]) -> dict:
     outcome["usage"] = reply["usage"]
     outcome["stop_reason"] = reply["stop_reason"]
     return outcome
+
+
+def judge_recorded(content_root: Path, packet: dict, create: Callable[..., Any], record: Any, project_id: str) -> dict:
+    """judge(), with the check's usage written to the job's record.
+
+    The request is billed whether or not the export is then allowed, so it
+    closes on the record the way a trace check does: one section_check event
+    with the usage the API reported, or one marked failed when the request
+    did not return. A failed request reports no usage; none is guessed.
+    """
+    started = time.time()
+    try:
+        outcome = judge(content_root, packet, create)
+    except Exception as exc:
+        _log_section_check(record, project_id, {
+            "failed": True, "error": safe_error(exc)[:400], "usage": dict(getattr(exc, "usage", None) or {}),
+            "claim_count": packet.get("claim_count") or 0, "seconds": round(time.time() - started, 1),
+        })
+        raise
+    if isinstance(outcome.get("usage"), dict):
+        # A packet with no claims makes no request and carries no usage.
+        rows = outcome.get("rows") or []
+        _log_section_check(record, project_id, {
+            "usage": dict(outcome["usage"]), "stop_reason": outcome.get("stop_reason") or "",
+            "claim_count": len(rows), "supported": sum(1 for row in rows if row.get("verdict") == VERDICT_SUPPORTED),
+            "all_supported": bool(outcome.get("all_supported")), "incomplete": bool(outcome.get("incomplete")),
+            "seconds": round(time.time() - started, 1),
+        })
+    return outcome
+
+
+def _log_section_check(record: Any, project_id: str, payload: dict) -> None:
+    """Bookkeeping. A record that cannot be written never fails the check or hides its verdicts."""
+    if record is None or not project_id:
+        return
+    try:
+        record.log_event(project_id, SECTION_CHECK_EVENT, payload, agent=QA_ROLE)
+    except Exception:
+        pass
 
 
 def unanswered(packet: dict) -> dict:

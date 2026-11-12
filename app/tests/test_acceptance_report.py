@@ -305,5 +305,100 @@ class UnfinishedCheckTests(unittest.TestCase):
         self.assertIn(f"The checker returned no verdict for: {count}.", partial["block_reason"])
 
 
+class SectionCheckUsageTests(unittest.TestCase):
+    """BUG-010. The blind claim check before a Section export is a billed request. It was on no ledger."""
+
+    # What the provider returned for the report's one live Section check, and what that costs at list price.
+    LIVE = dict(fresh=7992, out=1862, read=1439)
+    LIVE_USD = 0.0694958
+
+    def _packet(self):
+        from fpfa import claim_check
+        from fpfa.sample_data import EXAMPLE_BASIS, EXAMPLE_DI
+        from fpfa.workflow import run_di_zone
+
+        return claim_check.build_packet(run_di_zone(REPO, dict(EXAMPLE_DI), dict(EXAMPLE_BASIS)))
+
+    def _answers(self, packet, **usage):
+        def create(**_kwargs):
+            text = "\n".join(f'{n}. Not supported. Cite: "row"' for n in range(1, packet["claim_count"] + 1))
+            return _reply(text, usage=_usage(**usage))
+
+        return create
+
+    def test_a_check_that_blocks_the_export_is_still_on_the_ledger(self):
+        from fpfa import claim_check
+        from fpfa.usage_report import cost, job_totals, report_text, usage_events
+
+        record = _record()
+        record.ensure_project("job1", "Sample")
+        packet = self._packet()
+        outcome = claim_check.judge_recorded(REPO, packet, self._answers(packet, **self.LIVE), record, "job1")
+        self.assertFalse(outcome["all_supported"], "the export is blocked, and the request was billed all the same")
+        self.assertEqual(outcome["usage"]["output_tokens"], 1862)
+        rows = usage_events(record, "job1")
+        self.assertEqual(len(rows), 1)
+        row = rows[0]
+        self.assertEqual((row["kind"], row["counted"], row["agent"]), ("section_check", True, "qa-specialist"))
+        self.assertEqual((row["usage"]["input_tokens"], row["usage"]["output_tokens"], row["usage"]["cache_read_input_tokens"]),
+                         (7992, 1862, 1439))
+        self.assertAlmostEqual(cost(job_totals(rows))["total"], self.LIVE_USD, places=7)
+        text = report_text(record, "job1")
+        self.assertIn("Section export claim check", text)
+        self.assertIn("Estimated cost $0.0695", text)
+
+    def test_a_check_whose_request_fails_is_on_the_ledger_as_failed_with_no_usage_guessed(self):
+        from fpfa import claim_check
+        from fpfa.usage_report import failures, report_text, usage_events
+
+        record = _record()
+        record.ensure_project("job1", "Sample")
+
+        def broken(**_kwargs):
+            raise TimeoutError("no answer in 300 s")
+
+        with self.assertRaises(TimeoutError):
+            claim_check.judge_recorded(REPO, self._packet(), broken, record, "job1")
+        rows = usage_events(record, "job1")
+        self.assertEqual([(row["kind"], row["failed"], row["usage"]["output_tokens"]) for row in rows],
+                         [("section_check", True, 0)])
+        self.assertEqual(failures(rows), {"count": 1, "kinds": ["section_check"]})
+        self.assertIn("Section export claim check, FAILED", report_text(record, "job1"))
+
+    def test_a_record_that_cannot_be_written_does_not_hide_the_verdicts(self):
+        from fpfa import claim_check
+
+        packet = self._packet()
+        outcome = claim_check.judge_recorded(REPO, packet, self._answers(packet, **self.LIVE), None, "job1")
+        self.assertEqual(len(outcome["rows"]), packet["claim_count"])
+
+    def test_the_window_writes_the_checks_usage_to_the_jobs_record(self):
+        from desk_loop import Loop
+        from test_prototype import _isolate_data
+
+        from fpfa.usage_report import usage_events
+
+        _isolate_data()
+        loop = Loop()
+        try:
+            desk = loop.open_desk()
+            loop.update()
+            desk.send_chat("/sample-di")
+            loop.update()
+            packet = self._packet()
+            with self.assertRaises(RuntimeError) as blocked:
+                desk.export_to(Path(tempfile.mkdtemp(prefix="fpfa-acceptance-")) / "section.docx",
+                               create=self._answers(packet, **self.LIVE))
+            self.assertIn("is blocked until every claim is Supported", str(blocked.exception))
+            rows = [row for row in usage_events(desk.record, desk.project["id"]) if row["kind"] == "section_check"]
+            self.assertEqual(len(rows), 1)
+            self.assertEqual((rows[0]["usage"]["input_tokens"], rows[0]["usage"]["output_tokens"]), (7992, 1862))
+            desk.send_chat("/usage")
+            loop.update()
+            self.assertIn("Section export claim check", desk.thread_text())
+        finally:
+            loop.destroy()
+
+
 if __name__ == "__main__":
     unittest.main()

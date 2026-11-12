@@ -307,7 +307,8 @@ class Runner:
 
         total = 0.0
         events = self.desk.call(self.desk.record.events_by_kind, self.project_id,
-                                ("delegation", "record_check", "check_failed", "check_incomplete", "consult"))
+                                ("delegation", "record_check", "check_failed", "check_incomplete", "section_check",
+                                 "consult"))
         closed = max((int(event.get("seq") or 0) for event in events if event["kind"] == "delegation"), default=0)
         for event in events:
             number = int(event.get("seq") or 0)
