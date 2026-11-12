@@ -303,6 +303,7 @@ export function TeamPanel({
                     Not reconciled by the app: {line}
                   </p>
                 ))}
+                {team.unconfirmed_line ? <p className="small warn-ink stand-line">{team.unconfirmed_line}</p> : null}
                 <div className="row-buttons" hidden={untouched}>
                   <button type="button" className="button on-card" onClick={onCheck} title="Check each finding against the rows it cites. It does not open the standards.">
                     Run trace check

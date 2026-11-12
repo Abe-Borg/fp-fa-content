@@ -1051,5 +1051,276 @@ class DeskInputTests(unittest.TestCase):
         self.assertEqual({"nfpa_13", "nfpa_72", "insurer"} - set(desk.record.givens(project_id)), set())
 
 
+
+# A new job's basis as fpfa.projects.new_project writes it: three starting values nobody stated.
+_NEW_JOB_BASIS = {"ahj": "", "nfpa_13": "2025", "nfpa_72": "2025", "insurer": "FM", "hazard_notes": ""}
+_STARTING_SOURCE = "job form (starting value, not confirmed by the designer)"
+
+
+class BasisStartingValueTests(unittest.TestCase):
+    """NFPA 13, NFPA 72, and the insurer start with a value. It is recorded and shown as not confirmed.
+
+    The starting values themselves are an open owner and content decision. These tests check how the
+    application labels them, whatever they are; they do not say an edition or an insurer is right.
+    """
+
+    _desk = DeskInputTests._desk
+
+    def _fresh(self):
+        """A new job the designer typed one zone field on, and saved."""
+        desk = self._desk()
+        desk.patch_form({"t_detect": "12"})
+        desk.save_current()
+        return desk, desk.project["id"]
+
+    def test_provenance_reads_a_basis_starting_value_as_not_confirmed(self):
+        from fpfa import inputs
+
+        project = {"basis": dict(_NEW_JOB_BASIS, nfpa_72="2022")}
+        self.assertEqual(inputs.provenance(project, "nfpa_13", "2025"), inputs.SOURCE_DEFAULT)
+        self.assertEqual(inputs.provenance(project, "insurer", "FM"), inputs.SOURCE_DEFAULT)
+        self.assertEqual(inputs.provenance(project, "nfpa_72", "2022"), inputs.SOURCE_DESIGNER)
+        # A blank AHJ is blank, not a starting value.
+        self.assertEqual(inputs.unconfirmed_basis(project), ["nfpa_13", "insurer"])
+        inputs.note_given(project, ["nfpa_13"], inputs.SOURCE_DESIGNER)
+        self.assertEqual(inputs.unconfirmed_basis(project), ["insurer"], "typed, the starting value is the designer's")
+        self.assertEqual(inputs.unconfirmed_basis(project, {"insurer": "FM", "nfpa_72": "2025"}), ["nfpa_72", "insurer"])
+        self.assertEqual(inputs.source_text(inputs.SOURCE_DEFAULT, "insurer"), _STARTING_SOURCE)
+        self.assertIn(inputs.UNCONFIRMED_MARK, _STARTING_SOURCE)
+        self.assertEqual(inputs.source_text(inputs.SOURCE_DESIGNER, "nfpa_13"), "job form")
+        self.assertEqual(inputs.source_text(inputs.SOURCE_CHAT, "nfpa_13"), "designer, in chat")
+        self.assertEqual(inputs.source_text(inputs.SOURCE_SAMPLE, "nfpa_13"), "sample data")
+        # The zone form's words are unchanged.
+        self.assertEqual(inputs.source_text(inputs.SOURCE_DESIGNER), "zone form")
+        self.assertEqual(inputs.source_text(inputs.SOURCE_DEFAULT, "q_fill_gpm"),
+                         "zone form (starting value, not confirmed by the designer)")
+
+    def test_a_fresh_job_records_its_basis_starting_values_as_not_confirmed(self):
+        from fpfa import inputs, status, team
+        from fpfa.projects import load_project
+        from fpfa.team_panel import team_view
+
+        desk, project_id = self._fresh()
+        self.assertEqual({key: load_project(project_id)["basis"][key] for key in inputs.BASIS_STARTING},
+                         inputs.BASIS_STARTING, "the job, the form, and fpfa.inputs hold one set of starting values")
+        rows = desk.record.givens(project_id)
+        for name, label in (("nfpa_13", "CODE"), ("nfpa_72", "CODE"), ("insurer", "OWNER")):
+            self.assertEqual(rows[name]["value"], inputs.BASIS_STARTING[name], name)
+            self.assertEqual(rows[name]["label"], label, "the label is the basis field's own; only the source says who")
+            self.assertEqual(rows[name]["source"], _STARTING_SOURCE, name)
+            self.assertEqual(rows[name]["agent"], "job form", name)
+            self.assertEqual(desk.project["given"][name], inputs.SOURCE_DEFAULT, "kept on the job")
+        self.assertNotIn("ahj", rows)
+        snapshot = desk.record.snapshot(project_id)
+        digest = status.build(snapshot)
+        unconfirmed = {row["name"]: row["text"] for row in digest["unconfirmed"]}
+        self.assertEqual({name: unconfirmed.get(name) for name in inputs.BASIS_STARTING}, inputs.BASIS_STARTING)
+        self.assertNotIn("t_detect_s", unconfirmed)
+        # The lead's status block: under the starting values, not with what the designer supplied.
+        lead = status.lead_text(digest).splitlines()
+        loose = [line for line in lead if line.startswith("- Starting values the designer has not confirmed")]
+        self.assertEqual(len(loose), 1)
+        self.assertIn("nfpa_13 2025", loose[0])
+        self.assertIn("insurer FM", loose[0])
+        self.assertEqual([line for line in lead if "nfpa_13 2025" in line], loose)
+        # /status in the thread.
+        said = status.designer_text(digest)
+        self.assertIn("**Starting values you have not confirmed**", said)
+        self.assertIn("nfpa_13 2025", said.split("**Starting values you have not confirmed**", 1)[1])
+        # The Team tab.
+        line = team_view(snapshot)["unconfirmed_line"]
+        self.assertTrue(line.startswith("Starting values you have not confirmed: nfpa_13 2025; nfpa_72 2025; insurer FM"), line)
+        self.assertIn("not your input", line)
+        # A specialist's brief and the record as a model reads it.
+        self.assertIn(f"- [{rows['nfpa_13']['id']}] nfpa_13: 2025 (starting value, not confirmed by the designer)",
+                      team._input_lines(digest))
+        self.assertIn(f"- [{rows['insurer']['id']}] basis/insurer: FM (OWNER) (starting value, not confirmed)",
+                      status.record_text(snapshot).splitlines())
+
+    def test_the_team_tab_says_nothing_when_every_value_was_supplied(self):
+        from fpfa.team_panel import team_view
+
+        desk = self._desk()
+        desk.ask_claude.set(False)
+        desk.start_sample_di()
+        desk.pump()
+        view = team_view(desk.record.snapshot(desk.project["id"]))
+        self.assertEqual(view["unconfirmed_line"], "")
+        self.assertEqual(team_view(None)["unconfirmed_line"], "")
+
+    def test_typing_or_stating_a_basis_value_confirms_it_and_emptying_one_does_not(self):
+        from fpfa import inputs, status
+        from fpfa.team import TeamSession
+
+        desk, project_id = self._fresh()
+        # Emptying the field puts the starting value back. The designer did not type 2025.
+        desk.patch_form({"nfpa_13": ""})
+        desk.save_current()
+        row = desk.record.givens(project_id)["nfpa_13"]
+        self.assertEqual((row["value"], row["source"]), ("2025", _STARTING_SOURCE))
+        self.assertEqual(desk.project["given"]["nfpa_13"], inputs.SOURCE_DEFAULT)
+        # Typing the edition makes it the designer's, the starting value included. The same value is not a change.
+        desk.patch_form({"nfpa_13": "2025"})
+        desk.save_current()
+        row = desk.record.givens(project_id)["nfpa_13"]
+        self.assertEqual((row["value"], row["source"], row["agent"]), ("2025", "job form", "job form"))
+        self.assertIsNone(desk.record.latest_event(project_id, "input_changed"))
+        desk.patch_form({"nfpa_72": "2022"})
+        desk.save_current()
+        row = desk.record.givens(project_id)["nfpa_72"]
+        self.assertEqual((row["value"], row["source"]), ("2022", "job form"))
+        # Stated in chat: the lead records it with set_input. No model is involved; the call is made directly.
+        lead = TeamSession(REPO, desk.record, project_id, lambda **_kwargs: None)
+        lead.execute("set_input", {"name": "insurer", "value": "FM", "why": "stated in chat"})
+        desk._pull_inputs_onto_form(desk.project)
+        desk.save_current()
+        row = desk.record.givens(project_id)["insurer"]
+        self.assertEqual(row["agent"], "lead")
+        self.assertTrue(row["source"].startswith("designer, in chat"), row["source"])
+        unconfirmed = {item["name"] for item in status.build(desk.record.snapshot(project_id))["unconfirmed"]}
+        self.assertFalse(unconfirmed & set(inputs.BASIS_FIELDS), unconfirmed)
+
+    def test_a_later_change_of_the_starting_value_does_not_make_an_untouched_one_typed(self):
+        """Which edition a job starts with is an open owner decision. If it moves, an untouched job still says so."""
+        from unittest import mock
+
+        from fpfa import inputs
+
+        desk, project_id = self._fresh()
+        with mock.patch.dict(inputs.BASIS_STARTING, {"nfpa_13": "2022"}):
+            desk.save_current()
+            row = desk.record.givens(project_id)["nfpa_13"]
+            self.assertEqual((row["value"], row["source"]), ("2025", _STARTING_SOURCE))
+
+    def test_correcting_an_older_jobs_basis_source_keeps_its_calcs_current(self):
+        """A job recorded before called its untouched editions 'job form'. The new source is not a change."""
+        from fpfa import inputs
+        from fpfa.coherence import analyze
+        from fpfa.record import BASIS_LABELS
+
+        record = _record()
+        di, basis = _seed_inputs(record)                       # basis rows with the source "job form"
+        _run_plan(record, di, basis)
+        shown = {key: str(basis.get(key) or "") for key, _label in BASIS_LABELS}
+        sources = {key: inputs.source_text(inputs.provenance({}, key, value), key) for key, value in shown.items()}
+        out = record.sync_form("job1", inputs.BASIS_KIND, shown, labels=dict(BASIS_LABELS), sources=sources,
+                               shown_before=shown)
+        self.assertEqual({row["key"] for row in out["written"]}, {"nfpa_13", "nfpa_72", "insurer"})
+        self.assertEqual(record.givens("job1")["nfpa_13"]["source"], _STARTING_SOURCE)
+        self.assertEqual(record.givens("job1")["ahj"]["source"], "job form")
+        self.assertIsNone(record.latest_event("job1", "input_changed"))
+        analysis = analyze(record.snapshot("job1"))
+        self.assertFalse(analysis["any_stale"])
+        self.assertEqual({item["state"] for item in analysis["calcs"].values()}, {"current"})
+
+    def test_an_edition_hold_never_says_the_job_states_a_starting_value(self):
+        from fpfa import inputs, status
+        from fpfa.coherence import EDITION_HOLD, EDITION_OPEN, EDITION_OPEN_STARTING, analyze, edition_gaps, edition_hold_text
+
+        # Synthetic cite strings: only the edition label in them is read.
+        older = {"cite": "NFPA 13-2019 section text, synthetic"}
+        stated = edition_gaps(older, {"nfpa_13": "2025"})
+        self.assertEqual(stated[0]["job"], "the job states NFPA 13-2025")
+        starting = edition_gaps(older, {"nfpa_13": "2025"}, {"nfpa_13"})
+        self.assertEqual(len(starting), 1)
+        self.assertEqual(starting[0]["job"],
+                         'the job\'s NFPA 13 edition is the form\'s starting value "2025", not confirmed by the designer')
+        self.assertTrue(edition_hold_text(starting).endswith(EDITION_OPEN_STARTING))
+        self.assertTrue(edition_hold_text(stated).endswith(EDITION_OPEN), "a stated edition keeps its wording")
+        self.assertNotIn("the job states", edition_hold_text(starting))
+        # The comparison itself is unchanged: a starting value that names the cites' edition is no gap.
+        self.assertEqual(edition_gaps({"cite": "NFPA 13-2025 synthetic"}, {"nfpa_13": "2025"}, {"nfpa_13"}), [])
+        # On the record, the mark is read from the basis row's source. The run's calcs cite NFPA 13-2025, so a
+        # starting value of 2022 (as if the owner moved it) holds them, and the hold says it is a starting value.
+        record = _record()
+        di, basis = _seed_inputs(record)
+        _run_plan(record, di, basis)
+        record.set_given("job1", kind=inputs.BASIS_KIND, key="nfpa_13", value="2022", label="CODE",
+                         source=_STARTING_SOURCE, agent="job form")
+        analysis = analyze(record.snapshot("job1"))
+        self.assertTrue(analysis["edition_holds"])
+        for ident in analysis["edition_holds"]:
+            hold = analysis["calcs"][ident]["edition_hold"]
+            self.assertTrue(hold.startswith(EDITION_HOLD), hold)
+            self.assertIn('the form\'s starting value "2022", not confirmed by the designer', hold)
+            self.assertNotIn("the job states", hold)
+        # The Team tab, /status, and the lead read the same lines.
+        lines = status.build(record.snapshot("job1"))["edition_lines"]
+        self.assertEqual(len(lines), 1)
+        self.assertTrue(lines[0].endswith(EDITION_OPEN_STARTING), lines[0])
+        self.assertNotIn("the job states", lines[0])
+
+    def test_the_zone_run_flags_never_say_the_job_states_a_starting_value(self):
+        from unittest import mock
+
+        from fpfa import desk as desk_module, inputs
+        from fpfa.coherence import EDITION_HOLD
+        from fpfa.sample_data import EXAMPLE_BASIS, EXAMPLE_DI
+        from fpfa.workflow import run_di_zone
+
+        moved = dict(EXAMPLE_BASIS, nfpa_13="2022")
+        held = [flag for flag in run_di_zone(REPO, EXAMPLE_DI, moved)["flags"] if flag.startswith(EDITION_HOLD)]
+        self.assertIn("the job states NFPA 13-2022", held[0])
+        held = [flag for flag in run_di_zone(REPO, EXAMPLE_DI, moved, unconfirmed_basis=("nfpa_13",))["flags"]
+                if flag.startswith(EDITION_HOLD)]
+        self.assertEqual(len(held), 1)
+        self.assertIn('the form\'s starting value "2022", not confirmed by the designer', held[0])
+        self.assertNotIn("the job states", held[0])
+        # The desk tells the run which basis fields are starting values.
+        desk, _project_id = self._fresh()
+        desk.ask_claude.set(False)
+        desk._apply_di(copy.deepcopy(EXAMPLE_DI))
+        with mock.patch.object(desk_module, "run_di_zone", wraps=run_di_zone) as spy:
+            desk.start_zone_run()
+            desk.pump()
+        self.assertEqual(spy.call_args.kwargs["unconfirmed_basis"], tuple(inputs.BASIS_STARTING))
+
+    def test_the_section_export_marks_a_basis_starting_value(self):
+        from fpfa import inputs
+        from fpfa.sample_data import EXAMPLE_DI
+        from fpfa.spec_docx import basis_line, write_docx
+        from fpfa.workflow import run_di_zone
+        from test_design_basis import _docx_text
+
+        project = {"name": "New job", "basis": dict(_NEW_JOB_BASIS)}
+        line = basis_line(project, project["basis"])
+        self.assertIn("AHJ: —. NFPA 13: 2025 (starting value, not confirmed by the designer). "
+                      "NFPA 72: 2025 (starting value, not confirmed by the designer). "
+                      "Insurer: FM (starting value, not confirmed by the designer).", line)
+        self.assertIn("the designer did not state it", line)
+        result = run_di_zone(REPO, EXAMPLE_DI, project["basis"])
+        path = write_docx(Path(tempfile.mkdtemp(prefix="fpfa-coherence-spec-")) / "section.docx", project, result)
+        self.assertIn(line, _docx_text(path))
+        typed = dict(project, given={name: inputs.SOURCE_DESIGNER for name in inputs.BASIS_FIELDS})
+        self.assertEqual(basis_line(typed, typed["basis"]), "AHJ: —. NFPA 13: 2025. NFPA 72: 2025. Insurer: FM.")
+        sample = dict(project, given={name: inputs.SOURCE_SAMPLE for name in inputs.BASIS_FIELDS})
+        self.assertNotIn(inputs.UNCONFIRMED_MARK, basis_line(sample, sample["basis"]))
+
+    def test_the_design_basis_export_marks_a_basis_starting_value(self):
+        from fpfa import inputs
+        from fpfa.design_basis_docx import write_design_basis
+        from fpfa.record import BASIS_LABELS
+        from test_design_basis import _docx_text
+
+        record = _record()
+        record.ensure_project("job1", "New job")
+        record.sync_form("job1", inputs.BASIS_KIND, dict(_NEW_JOB_BASIS), labels=dict(BASIS_LABELS),
+                         sources={key: inputs.source_text(inputs.provenance({}, key, value), key)
+                                  for key, value in _NEW_JOB_BASIS.items()})
+        path = Path(tempfile.mkdtemp(prefix="fpfa-coherence-basis-")) / "basis.docx"
+        text = _docx_text(write_design_basis(path, {"id": "job1", "name": "New job"}, record.snapshot("job1"),
+                                             content_root=REPO))
+        rows = record.givens("job1")
+        self.assertIn(f"nfpa_13 | 2025 | CODE | {_STARTING_SOURCE} UNCONFIRMED | {rows['nfpa_13']['id']}", text)
+        self.assertIn(f"insurer | FM | OWNER | {_STARTING_SOURCE} UNCONFIRMED | {rows['insurer']['id']}", text)
+        self.assertIn(f"Starting value not confirmed by the designer: nfpa_72 2025 [{rows['nfpa_72']['id']}]", text)
+
+    def test_the_bess_sample_basis_is_sample_data(self):
+        desk = self._desk()
+        desk._open_bess_project()
+        rows = desk.record.givens(desk.project["id"])
+        self.assertEqual({rows[name]["source"] for name in ("nfpa_13", "nfpa_72", "insurer")}, {"sample data"})
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -7,6 +7,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
+from fpfa.inputs import BASIS_STARTING
 from fpfa.paths import data_dir
 
 
@@ -21,6 +22,11 @@ def _now() -> str:
 
 
 def new_project(name: str, basis: dict | None = None) -> dict:
+    """A new job. A basis field not given here holds its starting value (fpfa.inputs.BASIS_STARTING).
+
+    Nobody stated a starting value: until the designer types or states one,
+    the record and every view say it is not confirmed (inputs.provenance).
+    """
     basis = dict(basis or {})
     data = {
         "id": uuid.uuid4().hex,
@@ -29,9 +35,9 @@ def new_project(name: str, basis: dict | None = None) -> dict:
         "updated": _now(),
         "basis": {
             "ahj": basis.get("ahj", ""),
-            "nfpa_13": basis.get("nfpa_13", "2025"),
-            "nfpa_72": basis.get("nfpa_72", "2025"),
-            "insurer": basis.get("insurer", "FM"),
+            "nfpa_13": basis.get("nfpa_13", BASIS_STARTING["nfpa_13"]),
+            "nfpa_72": basis.get("nfpa_72", BASIS_STARTING["nfpa_72"]),
+            "insurer": basis.get("insurer", BASIS_STARTING["insurer"]),
             "hazard_notes": basis.get("hazard_notes", ""),
         },
         "di": {},

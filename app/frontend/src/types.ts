@@ -114,6 +114,8 @@ export interface Team {
   tiers: { tier: string; title: string; note: string; count: number }[];
   findings: FindingRow[];
   inputs: { id: string; name: string; text: string; source: string; unconfirmed: boolean; blank: boolean }[];
+  /** The inputs still at the form's starting value, which nobody stated, in one sentence. Empty when none. */
+  unconfirmed_line: string;
   interrupted: string[];
   /** The same agents with what each had recorded when it stopped. The work is partial. */
   partial: string[];

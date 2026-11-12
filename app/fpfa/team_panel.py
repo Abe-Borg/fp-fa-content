@@ -289,7 +289,7 @@ def team_view(snapshot: dict | None, *, export_reason: str | None = None,
         view.update({
             "strip": "", "attention": 0, "plan": None, "people": [], "asks": [], "rfis": [], "answered": [],
             "stale": [], "changes": [], "disagreements": [], "conflicts": [], "alternatives": [], "settled": [],
-            "tiers": [], "findings": [], "inputs": [], "interrupted": [], "export": None,
+            "tiers": [], "findings": [], "inputs": [], "unconfirmed_line": "", "interrupted": [], "export": None,
             "not_standard": checker.NOT_STANDARD, "partial": [], "retry_line": "", "unchecked": [],
             "coverage": {"complete": False, "gaps": [], "uncovered": []}, "ladder": [], "skills_used": [], "content": {},
         })
@@ -328,6 +328,8 @@ def team_view(snapshot: dict | None, *, export_reason: str | None = None,
         "findings": findings,
         "inputs": [{"id": row["id"], "name": row["name"], "text": row["text"], "source": row["source"] or row["by"],
                     "unconfirmed": row["unconfirmed"], "blank": row["blank"]} for row in digest["inputs"]],
+        # A zone or basis input still at the form's starting value (NFPA 13 2025, insurer FM): nobody stated it.
+        "unconfirmed_line": status.unconfirmed_line(digest),
         "interrupted": [str(row["name"]) for row in digest["interrupted"]],
         # The same agents with what each had recorded when it stopped, and what asking again repeats.
         "partial": [status.partial_text(row) for row in digest["interrupted"]],
