@@ -44,6 +44,7 @@ from fpfa.about import (
     USE_NOTICE,
 )
 from fpfa import __version__
+from fpfa.app_update import AppUpdateResult, check_for_app_update
 from fpfa.bess import bess_chat_summary, bess_govern_note, run_bess_plan
 from fpfa.calc_tools import ToolSession, calc_identity, content_fingerprint
 from fpfa.chat_render import CARET, is_job_heading, plain_text, settle_inline
@@ -724,6 +725,8 @@ class Desk:
         self._key_status = ""
         self.key_message = ""
         self.content_line = ""
+        self._app_check_running = False
+        self.app_update = AppUpdateResult("idle", "Check for a newer version of the app.")
         self.changelog = format_changelog(current_changelog())
         self._settings: dict | None = None
         self._assumption_cache: tuple[tuple[str, str], str] | None = None
@@ -3332,6 +3335,30 @@ class Desk:
         note = "Heavy job saved on the project that started it."
         self.status.set(f"{heading}. {note}" if heading else note)
 
+    # Application updates ----------------------------------------------------------------
+
+    def check_app_updates(self) -> None:
+        """Read app releases on a worker; publish the result on the desk's queue."""
+        if self._app_check_running:
+            return
+        self._app_check_running = True
+        self.app_update = AppUpdateResult("checking", "Checking for app updates…")
+        self._settings_changed()
+
+        def work():
+            try:
+                result = check_for_app_update()
+            except Exception:
+                result = AppUpdateResult("error", "Couldn’t check for updates. Try again later.")
+            self.queue.put(lambda result=result: self._finish_app_check(result))
+
+        threading.Thread(target=work, daemon=True, name="fpfa-app-update").start()
+
+    def _finish_app_check(self, result: AppUpdateResult) -> None:
+        self._app_check_running = False
+        self.app_update = result
+        self._settings_changed()
+
     # Content pack ----------------------------------------------------------------------
 
     def _set_content_banner(self, text: str) -> None:
@@ -3383,7 +3410,7 @@ class Desk:
         self._settings_changed()
 
     def check_content_updates(self, feed: str) -> None:
-        """Settings, Check for updates. The typed feed is saved first."""
+        """Settings, Check for content updates. The typed feed is saved first."""
         try:
             used = remember_feed_url(str(feed or "").strip())
         except ContentUpdateError as exc:
@@ -3538,6 +3565,12 @@ class Desk:
             "feed_url": resolved_feed_url(),
             "content_root": current_root,
             "checking_content": self._content_check_running,
+            "app_update": {
+                "status": self.app_update.status,
+                "message": self.app_update.message,
+                "version": self.app_update.version,
+                "download_url": self.app_update.download_url,
+            },
         }
 
     def welcome(self) -> dict | None:

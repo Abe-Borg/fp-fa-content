@@ -102,7 +102,7 @@ def updates_on_launch() -> bool:
     """Packaged apps check on launch. A source checkout checks after a feed is saved.
 
     FPFA_CONTENT_UPDATES=0 skips the check. A folder the designer picked by
-    hand (version "custom") stays put until they press Check for updates.
+    hand (version "custom") stays put until they press Check for content updates.
     """
     flag = os.environ.get("FPFA_CONTENT_UPDATES", "").strip().lower()
     if flag in {"0", "off", "false", "no"}:

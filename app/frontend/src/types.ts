@@ -210,6 +210,12 @@ export interface Settings {
   feed_url: string;
   content_root: string;
   checking_content: boolean;
+  app_update: {
+    status: "idle" | "checking" | "available" | "current" | "unavailable" | "error";
+    message: string;
+    version: string;
+    download_url: string;
+  };
 }
 
 export interface Notice {

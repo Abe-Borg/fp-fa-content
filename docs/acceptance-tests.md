@@ -113,6 +113,10 @@ Automated half, already passed: `app/tests/test_usage.py` proves the events, the
 
 | What | Standing | Where |
 | --- | --- | --- |
+| Manual app-update check: numeric version ordering, content/draft/prerelease filtering, pagination, failure and retry, duplicate-click protection, and authenticated state updates | **Tested**, with fixture release responses; no model involved | `app/tests/test_app_update.py` |
+| Settings update control in Clay and Linen at 150% display scale: keyboard activation, checking state, close/reopen during a check, error and current states, download link | **Tested** in Linux Chromium with fixture release results and a stand-in download page | `app/tests/test_app_update_browser.py`; screenshot output via `FPFA_UPDATE_SCREENSHOT_DIR` |
+| App-release lookup in this connected environment | **Tested** from Linux on 2026-11-12; the 0.3.1 checkout found stable app release 0.3.2. The repository is private; this does not establish unauthenticated access from an installed copy | `fpfa.app_update.check_for_app_update()` |
+| App-update download in the installed Windows WebView2 window and running the newer installer | **Unrun** | Settings → About +Cynosure → Check for updates |
 | Calc kernels, the DH-1 figures, the pack lint (no low-air release wording, no standards text) | Tested | `calcs/fp`, `calcs/fa` |
 | The releasing truth table row by row: low air alone never releases; release needs the detection leg and P | Tested | `app/tests/test_releasing_basis.py` |
 | Inputs on the record with who supplied each; a changed input marks exactly what used it; a re-run clears it | Tested | `test_coherence.py` |

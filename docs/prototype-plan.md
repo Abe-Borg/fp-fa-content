@@ -31,6 +31,7 @@ The known answer for that task is `docs/known-answer-dh1.md`. The exported docum
 
 | Date | Decision | Why |
 | --- | --- | --- |
+| 2026-11-12 | Settings → About +Cynosure has a manual app-update check, separate from content updates. It reads stable `app-v*` releases and offers the release download page; installation stays manual. | The owner approved the Settings mockup. App and content releases share a repository and must be distinguished. |
 | 2026-11-09 | Orchestrate the team on the existing Messages-API tool loop in `app/fpfa/claude_client.py`. Do not adopt the Claude Agent SDK for v0. | The SDK's distinctive promise, direct peer messaging between specialists, is not available in SDK or non-interactive mode per current docs. Its remaining advantages are already built here or must be built here regardless. It would add a subprocess runtime, a packaging problem, and config isolation work with no v0 payoff. See section 9. |
 | 2026-11-11 | Keep the Messages loop. The reviews found no product limitation that an agent framework would remove. | The plan's decision of 2026-11-09 was re-examined against two reviews and stands. |
 | 2026-11-09 | Peer messaging is lead-routed through the project record in v0. Real-time specialist-to-specialist chat is a v0.2 experiment. | The outcome is inspectable handoffs and distinct contributions. A handoff row with sender, receiver, time, and content gives that whatever the transport. |
