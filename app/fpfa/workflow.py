@@ -16,7 +16,7 @@ from fpfa import coherence, inputs
 from fpfa.calc_tools import REQUIRED_DI_TOOLS, SCHEMAS, ToolSession
 from fpfa.claude_client import MODEL_ID, TurnCancelled, incomplete_notice, safe_error
 from fpfa.everyday import EVERYDAY_ROLE, SPECIALIST_ROLES, assemble_system
-from fpfa.modes_loader import MODE_SLUGS, list_modes, normalize_mode
+from fpfa.modes_loader import MODE_SLUGS, NARRATION_MODE, list_modes, normalize_mode
 from fpfa.record import Record
 from fpfa.releasing import reader_view, releasing_logic, releasing_sentence, second_leg_value  # noqa: F401  (re-exported)
 from fpfa.roles_loader import list_roles
@@ -589,7 +589,8 @@ def run_di_zone(
     repeat run with the same inputs replays the recorded figures.
     """
     basis = dict(basis or {})
-    selected = normalize_mode(mode)
+    # A zone narration is a draft after the tool plan. The app picks its mode; no menu does.
+    selected = normalize_mode(mode or NARRATION_MODE)
     session = ToolSession(content_root, record=record, project_id=project_id, agent="tool-plan")
     narrator_session = ToolSession(content_root, record=record, project_id=project_id, agent="narrator")
     tools, sent = run_tool_plan(session, di, basis)

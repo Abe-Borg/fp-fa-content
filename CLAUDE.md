@@ -115,6 +115,7 @@ The window:
 
 - The window is a web page. `desk.py` holds every rule the window follows and needs no toolkit; `web/server.py` serves the page and the API; `web/shell.py` shows it. The page draws the state and posts actions; it decides nothing about a job. Do not add a second UI stack, bring tkinter back, or move a rule into the page.
 - The window is a job list, a thread, and a job panel whose tabs are Inputs, Results, and Team. There is no "Zone details" and no drawer, so no string the app writes may send a designer to one. What is in the panel lays itself out by the panel's width (`@container panel`), never the window's.
+- The designer does not choose a mode: there is no Mode menu and no `/mode`. The app picks one per path, `modes_loader.CHAT_MODE` for a typed question and `NARRATION_MODE` for a zone narration and the explosion-control starter. A job's saved `mode` from before is not read.
 - The server stays standard library, bound to 127.0.0.1. Every `/api` request carries the launch token; a foreign Host or Origin is refused. A new action is one entry in `server.ACTIONS` that calls one `Desk` method. Nothing in the page fetches from the network.
 - `Desk` state changes only on the desk's thread: an action under `Desk.call`, or a callback a worker put on `Desk.queue`. A worker never touches a `Var`, `chat_log`, or a counter. A change bumps `revision` through `_touch()`; a change to the conversation goes through `_render_chat()`; a form change the page did not make goes through `_form_loaded()`. A native dialog never runs with `Desk.lock` held.
 - The working line names a tool or a file. It never shows a tool's inputs or its result.
@@ -135,7 +136,7 @@ The window:
 | `calcs/fp`, `calcs/fa` | Deterministic kernels and their tests. Engineering content (see Ownership). In `calcs/fp`, `formulas.py`, `run.py`, and `test_formulas.py` are staged from the kernel source (`scripts/check_fp_kernel_reproduce.py`); `di_zone.py` is pack-only |
 | `skills/`, `roles/`, `modes/` | One folder per item with one markdown file (`SKILL.md`, `ROLE.md`, `MODE.md`) and `name` and `description` frontmatter. Skills and the specialists' discipline rules are engineering content. `roles/lead` runs the team; `fp-sprinkler`, `fa-releasing`, and `spec-draft` are the specialists; `qa-specialist` is the checker; `everyday` is the shell for a turn with no record |
 | `specs/`, `corpus/` | Engineering content. Draft CSI sections, sent to the model in full; paraphrased pins and notes, searched by `search_corpus` |
-| `docs/` | Plan of record, known answers, acceptance and recovery protocols, live evaluation, releasing basis, content provenance, milestone hand-backs. Not part of the content pack |
+| `docs/` | Plan of record, known answers, acceptance and recovery protocols, live evaluation, releasing basis, content provenance, milestone hand-backs, the app/content hand-back for the content team. Not part of the content pack |
 | `NEXT-STEPS.md` | The reviews of the 0.2.0 and 0.3.0 acceptance reports against the source: what 0.3.1 and 0.3.2 fixed (section 0b for 0.3.2), what is still open, and the owner's decisions and open questions. Not part of the content pack |
 | `scripts/` | `build_content_pack.py` strips paths named foam, clean-agent, canada, catalog, and `_sources`, and refuses any file that holds an API key |
 

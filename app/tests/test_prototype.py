@@ -1495,7 +1495,7 @@ class ModeBehaviorTests(unittest.TestCase):
 
     def test_labels_stay_distinct(self):
         from fpfa.sample_data import EXAMPLE_BASIS, EXAMPLE_DI
-        from fpfa.desk import chat_request_text, describe_modes
+        from fpfa.desk import chat_request_text
         from fpfa.workflow import (
             form_assumption_lines,
             judgment_label_line,
@@ -1539,11 +1539,6 @@ class ModeBehaviorTests(unittest.TestCase):
         self.assertIn("Active mode: synthesis.", request)
         self.assertIn("Governing zone total text: 281.3.", request)
         self.assertIn(judgment, request)
-        described = describe_modes(self.root, "mixed")
-        self.assertIn("Active mode: mixed.", described)
-        self.assertIn("brainstorm", described)
-        self.assertIn("(active)", described)
-        self.assertNotIn("This mode may explore an option", described)
 
     def test_missing_mode_does_not_replace_the_tool_plan(self):
         from unittest.mock import patch
@@ -1702,14 +1697,8 @@ class UiSmokeTests(unittest.TestCase):
             self.assertEqual(links, ["settings", "sample-di"])
             self.assertIn("/sample-di", " ".join(link["text"] for link in state["welcome"]["links"]))
             self.assertIn("Add your Anthropic API key", state["welcome"]["links"][0]["text"])
-            self.assertEqual(app.mode_slug.get(), "mixed")
-            self.assertEqual(state["mode"]["slug"], "mixed")
-            for slug in ("calculator", "brainstorm", "synthesis", "mixed"):
-                self.assertIn(slug, app.mode_choices())
-            app.set_mode("calculator")
-            self.assertEqual(app.snapshot()["mode"]["slug"], "calculator")
-            app.set_mode("not-a-mode")
-            self.assertEqual(app.mode_slug.get(), "calculator")
+            # The app picks the mode for each path; the window offers no choice of one.
+            self.assertNotIn("mode", state)
             self.assertEqual(state["title"], "New chat")
             self.assertEqual(state["activity"], [])
             self.assertEqual(state["turns"] if "turns" in state else state["thread"]["turns"], [])
@@ -1880,14 +1869,15 @@ class UiSmokeTests(unittest.TestCase):
         finally:
             root.destroy()
 
-    def test_mode_menu_is_saved_and_shapes_the_request(self):
+    def test_a_chat_turn_is_written_in_the_mixed_mode(self):
+        """There is no Mode menu. A typed question gets the mixed mode, whatever an older job saved."""
         _isolate_data()
         from types import SimpleNamespace
         from unittest.mock import patch
 
         from fpfa.keystore import save_api_key
-        from fpfa.projects import load_project, new_project, save_project
-        
+        from fpfa.projects import new_project, save_project
+
         save_api_key("sk-ant-local-test")
         seen = []
 
@@ -1899,46 +1889,77 @@ class UiSmokeTests(unittest.TestCase):
                 seen.append(kwargs)
                 return SimpleNamespace(
                     stop_reason="end_turn",
-                    content=[SimpleNamespace(type="text", text="Calculator quote only.")],
+                    content=[SimpleNamespace(type="text", text="Mixed reply.")],
                 )
 
         root = Loop()
         try:
             app = root.open_desk()
             root.update()
+            self.assertNotIn("mode", app.snapshot())
+            # A job saved while the menu existed still carries the mode it was left in. Nothing reads it.
+            job = new_project("Older job")
+            job["mode"] = "brainstorm"
+            save_project(job)
+            app.open_project(job["id"])
             app.send_chat("/mode calculator")
-            self.assertEqual(app.mode_slug.get(), "calculator")
-            self.assertIn("Active mode: calculator.", app.thread_text())
-            self.assertNotIn("This mode answers with tool figures.", app.thread_text())
-            self.assertEqual(app.project["mode"], "calculator")
-            self.assertEqual(load_project(app.project["id"])["mode"], "calculator")
-            other = new_project("Other mode job")
-            other["mode"] = "brainstorm"
-            save_project(other)
-            app.open_project(other["id"])
-            self.assertEqual(app.mode_slug.get(), "brainstorm")
-            app.open_project(load_project(app.project["id"])["id"])
+            self.assertIn("/mode is not a command.", app.thread_text())
             with patch("fpfa.desk.AnthropicMessages", Fast):
-                app.mode_slug.set("synthesis")
                 app.send_chat("draft the zone")
-                self._wait_for(app, "Calculator quote only.")
-            self.assertIn("Active mode: synthesis.", seen[0]["messages"][0]["content"])
+                self._wait_for(app, "Mixed reply.")
+            self.assertIn("Active mode: mixed.", seen[0]["messages"][0]["content"])
             self.assertIn(
-                "This mode writes the draft narrative after a zone tool plan.",
+                "This mode may explore an option, quote a calc tool, and draft in the same reply.",
                 seen[0]["system"],
             )
             self.assertNotIn("This mode explores options.", seen[0]["system"])
-            self.assertEqual(app.project["mode"], "synthesis")
+            self.assertNotIn("This mode answers with tool figures.", seen[0]["system"])
         finally:
             root.destroy()
 
-    def test_mode_persists_when_optional_form_number_is_invalid(self):
-        """A bad optional-form number must not discard a mode change or the chat."""
+    def test_a_zone_narration_is_written_in_the_synthesis_mode(self):
+        """Run zone's narrator gets the mode written for a draft after a tool plan."""
         _isolate_data()
+        from types import SimpleNamespace
         from unittest.mock import patch
 
+        from fpfa.keystore import save_api_key
+
+        save_api_key("sk-ant-local-test")
+        seen = []
+
+        class Fast:
+            def __init__(self, _key):
+                pass
+
+            def create(self, **kwargs):
+                seen.append(kwargs)
+                return SimpleNamespace(
+                    stop_reason="end_turn",
+                    content=[SimpleNamespace(type="text", text="zone narrative without the governing figures")],
+                )
+
+        root = Loop()
+        try:
+            app = root.open_desk()
+            root.update()
+            app.ask_claude.set(True)
+            with patch("fpfa.desk.AnthropicMessages", Fast):
+                app.send_chat("/sample-di")
+                self._wait_for(app, "5.0 gal trim ASSUMED")
+            self.assertTrue(seen)
+            self.assertIn("This mode writes the draft narrative after a zone tool plan.", seen[0]["system"])
+            self.assertNotIn("This mode may explore an option", seen[0]["system"])
+            self.assertIn("Active mode: synthesis.", seen[0]["messages"][0]["content"])
+            self.assertEqual(app.project["last_run"]["mode"], "synthesis")
+        finally:
+            root.destroy()
+
+    def test_chat_persists_when_optional_form_number_is_invalid(self):
+        """A bad optional-form number must not discard the chat."""
+        _isolate_data()
         from fpfa.projects import load_project, new_project, save_project
-        
+
         def select_project(app, project_id: str) -> None:
             app.refresh_projects()
             app.select_project(project_id)
@@ -1947,59 +1968,45 @@ class UiSmokeTests(unittest.TestCase):
         try:
             app = root.open_desk()
             root.update()
-            job = new_project("Mode job")
-            job["mode"] = "mixed"
+            job = new_project("Form job")
             job["chat"] = [{"role": "user", "text": "keep this thread"}]
             save_project(job)
-            other = new_project("Other mode job")
-            other["mode"] = "mixed"
+            other = new_project("Other job")
             save_project(other)
             app.open_project(job["id"])
             app.density.set("not-a-number")
 
-            app.send_chat("/mode calculator")
+            app.send_chat("/help")
             chat = app.thread_text()
-            self.assertEqual(app.mode_slug.get(), "calculator")
-            self.assertIn("Active mode: calculator.", chat)
             self.assertIn("keep this thread", chat)
-            self.assertIn("/mode calculator", chat)
+            self.assertIn("/help", chat)
             saved = load_project(job["id"])
-            self.assertEqual(saved["mode"], "calculator")
             saved_text = [turn.get("text") for turn in saved["chat"]]
             self.assertIn("keep this thread", saved_text)
-            self.assertIn("/mode calculator", saved_text)
+            self.assertIn("/help", saved_text)
             self.assertNotIn("not-a-number", json.dumps(saved.get("di")))
 
             select_project(app, other["id"])
             self.assertEqual(app.project["id"], other["id"])
-            self.assertEqual(app.mode_slug.get(), "mixed")
             select_project(app, job["id"])
-            self.assertEqual(app.mode_slug.get(), "calculator")
-            self.assertEqual(load_project(job["id"])["mode"], "calculator")
             self.assertIn("keep this thread", app.thread_text())
 
             app.density.set("not-a-number")
-            app.mode_slug.set("synthesis")
             app.notices.clear()
             app.save_current()
             # The page shows the notice in a dialog of its own.
             self.assertEqual([notice["title"] for notice in app.notices], ["Save"])
             saved = load_project(job["id"])
-            self.assertEqual(saved["mode"], "synthesis")
             self.assertIn("keep this thread", [turn.get("text") for turn in saved["chat"]])
             self.assertNotIn("not-a-number", json.dumps(saved.get("di")))
 
             app.hose.set("bad-gpm")
-            app.mode_slug.set("brainstorm")
             select_project(app, other["id"])
             self.assertEqual(app.project["id"], other["id"])
-            self.assertEqual(load_project(job["id"])["mode"], "brainstorm")
             select_project(app, job["id"])
-            self.assertEqual(app.mode_slug.get(), "brainstorm")
             reopened = load_project(job["id"])
-            self.assertEqual(reopened["mode"], "brainstorm")
             self.assertIn("keep this thread", [turn.get("text") for turn in reopened["chat"]])
-            self.assertIn("/mode calculator", [turn.get("text") for turn in reopened["chat"]])
+            self.assertIn("/help", [turn.get("text") for turn in reopened["chat"]])
             self.assertIn("keep this thread", app.thread_text())
         finally:
             root.destroy()
@@ -3215,7 +3222,7 @@ class BessStarterTests(unittest.TestCase):
         try:
             app = root.open_desk()
             root.update()
-            app.send_chat("/mode calculator")
+            app.send_chat("/help")
             app.density.set("not-a-number")
             old_id = app.project["id"]
             app.send_chat("/sample-bess")
@@ -3226,8 +3233,8 @@ class BessStarterTests(unittest.TestCase):
             self.assertIn("Duration ASSUMED:", chat)
             self.assertIn("Edition year ASSUMED unpinned", chat)
             self.assertIn("| bess |", chat)
-            self.assertEqual(app.mode_slug.get(), "synthesis")
-            self.assertEqual(app.project["mode"], "synthesis")
+            self.assertEqual(app.project["bess_run"]["mode"], "synthesis")
+            self.assertNotIn("mode", app.project)
             self.assertEqual(app.project["name"], "Sample Li-ion BESS room")
             self.assertIsNone(app.project.get("last_run"))
             self.assertEqual(app.project["bess_run"]["source"], "tool-plan")
@@ -3235,7 +3242,6 @@ class BessStarterTests(unittest.TestCase):
             self.assertEqual(app.segments, [])
             self.assertIn("NFPA 69 8.3.1", app.results_text)
             saved_old = load_project(old_id)
-            self.assertEqual(saved_old["mode"], "calculator")
             self.assertNotIn("not-a-number", json.dumps(saved_old.get("di")))
             kinds = [job.kind for job in app.jobs.snapshot()]
             self.assertIn("bess", kinds)
@@ -3251,7 +3257,7 @@ class BessStarterTests(unittest.TestCase):
             chat = app.thread_text()
             self.assertIn("/sample-bess", chat)
             self.assertIn("4.11", chat)
-            self.assertEqual(app.project["mode"], "synthesis")
+            self.assertEqual(app.project["bess_run"]["mode"], "synthesis")
             self.assertIsNone(app.project.get("last_run"))
         finally:
             root.destroy()
@@ -4028,7 +4034,7 @@ class ManagedAgentTests(unittest.TestCase):
         finally:
             root.destroy()
 
-    def test_heavy_keeps_the_tool_plan_and_the_mode(self):
+    def test_heavy_keeps_the_tool_plan_and_the_chat_mode(self):
         from unittest.mock import patch
 
         from fpfa.keystore import save_api_key
@@ -4048,18 +4054,15 @@ class ManagedAgentTests(unittest.TestCase):
             app.ask_claude.set(False)
             app.send_chat("/sample-di")
             zone_gal = app.project["last_run"]["tools"]["zone_trapped_volume"]["zone_gal"]
-            app.send_chat("/mode calculator")
             app.density.set("not-a-number")
             with patch("fpfa.desk.run_heavy_job", fake_ok):
                 app.send_chat("/heavy review the zone")
                 self._wait_for(app, "HEAVY-REPLY")
-            self.assertEqual(app.mode_slug.get(), "calculator")
-            self.assertEqual(app.project["mode"], "calculator")
             self.assertEqual(app.project["last_run"]["tools"]["zone_trapped_volume"]["zone_gal"], zone_gal)
             self.assertIn("281.3", app.results_text)
             self.assertIn("Governing zone total text: 281.3.", seen["user_text"])
             self.assertIn("38.1", seen["user_text"])
-            self.assertIn("Active mode: calculator.", seen["user_text"])
+            self.assertIn("Active mode: mixed.", seen["user_text"])
             self.assertIn("already-computed zone packet", seen["user_text"])
             self.assertNotIn("Use tools for any gallons", seen["user_text"])
             from fpfa.managed import session_system

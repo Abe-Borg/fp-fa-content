@@ -70,7 +70,6 @@ ACTIONS: dict[str, Callable[[Desk, dict], Any]] = {
     "rename": lambda d, b: d.rename_job(_text(b.get("id"), 200) or None, _text(b.get("name"), 500)),
     "delete": lambda d, b: d.delete_job(_text(b.get("id"), 200) or None),
     "save": lambda d, b: d.save_current(),
-    "mode": lambda d, b: d.set_mode(_text(b.get("slug"), 80)),
     "narrate": lambda d, b: d.set_narrate(_flag(b.get("on"))),
     "sample-di": lambda d, b: d.start_sample_di(),
     "sample-bess": lambda d, b: d.start_sample_bess(),
