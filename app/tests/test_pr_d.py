@@ -406,6 +406,68 @@ class Nfpa72DesignBasisTests(unittest.TestCase):
         self.assertNotIn("HOLD: NFPA 72 edition not set", text)
         self.assertIn(self.figure, text)
 
+    def _write_with(self, nfpa_72: str, extra) -> str:
+        """A battery row, a finding on it, whatever extra(record, finding) adds, and the document's whole text."""
+        from docx import Document
+
+        from fpfa.design_basis_docx import write_design_basis
+
+        record = _record()
+        di, basis = _sample()
+        _seed_inputs(record, di=di, basis={**basis, "nfpa_72": nfpa_72})
+        session = _session("fa-releasing", record=record, project_id="job1")
+        battery = session.execute("fa_calc", {"module": "battery", "op": "ah_required", "inputs": {
+            "i_standby_a": 1.5, "i_alarm_a": 4.0, "edition": 2025}})
+        self.figure = f"{battery['req_ah']:.2f}"
+        calc = next(row for row in record.calcs("job1") if row["tool"] == "fa_calc")
+        finding = record.record_finding("job1", text=f"The panel needs {self.figure} Ah of battery",
+                                        label="calculated", agent="fa-releasing", supports=[calc["id"]])
+        extra(record, finding)
+        with tempfile.TemporaryDirectory() as tmp:
+            path = write_design_basis(Path(tmp) / "basis.docx", {"name": "t"}, record.snapshot("job1"),
+                                      content_root=REPO)
+            doc = Document(path)
+            parts = [p.text for p in doc.paragraphs]
+            for table in doc.tables:
+                for row in table.rows:
+                    parts.extend(cell.text for cell in row.cells)
+        return "\n".join(parts)
+
+    def test_a_conclusion_drawn_from_a_held_finding_is_held_too(self):
+        # Codex review of #101: the hold follows a finding or a decision that cites a held finding, not only a calc.
+        def extra(record, finding):
+            later = record.record_finding("job1", text=f"Two {self.figure} Ah strings fit the cabinet",
+                                          label="use best judgment", agent="lead", supports=[finding["id"]])
+            record.record_decision("job1", text=f"Use {self.figure} Ah batteries", decided_by="lead",
+                                   label="use best judgment", supports=[later["id"]])
+
+        held = self._write_with("", extra)
+        self.assertNotIn(self.figure, held)
+        shown = self._write_with("2025", extra)
+        self.assertIn(f"Use {self.figure} Ah batteries", shown)
+        self.assertIn(f"Two {self.figure} Ah strings", shown)
+
+    def test_the_checkers_reading_of_a_held_finding_is_held(self):
+        # Codex review of #101: the "how far it was taken" column carries the checker's reason, which can quote it.
+        from fpfa.checker import check_record
+
+        def quoting(**kwargs):
+            claims = kwargs["messages"][0]["content"].split("sources.md")[0]
+            count = len([line for line in claims.splitlines() if line[:1].isdigit()])
+            # The QA role's own line: <n>. <verdict>. Cite: "<line>" (<reason>)
+            text = "\n".join(f'{n}. Not supported. Cite: "{self.figure} Ah" (the row gives {self.figure} Ah, '
+                             'not what the claim says)' for n in range(1, count + 1))
+            return SimpleNamespace(stop_reason="end_turn", content=[SimpleNamespace(type="text", text=text)],
+                                   usage=None)
+
+        def extra(record, _finding):
+            check_record(REPO, record, "job1", quoting)
+
+        shown = self._write_with("2025", extra)
+        self.assertIn(f"the row gives {self.figure} Ah", shown, "the stand-in reply reaches the document")
+        held = self._write_with("", extra)
+        self.assertNotIn(self.figure, held)
+
     def test_which_rows_are_held(self):
         from fpfa.design_basis_docx import nfpa72_dependent
 

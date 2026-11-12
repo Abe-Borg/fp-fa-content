@@ -410,8 +410,18 @@ def write_design_basis(
     # NFPA 72 not pinned: a working draft, with every figure that depends on the edition held.
     hold72 = nfpa72_unset(snapshot)
     held_calcs = {row["id"] for row in calcs if hold72 and nfpa72_dependent(row)}
-    held_findings = {row["id"] for row in findings + decisions
-                     if held_calcs & set(row.get("supports") or [])}
+    # A finding or a decision is held when it rests on a held row, directly or through another finding or decision
+    # it cites: the closure, so a conclusion drawn from a held finding cannot carry its figure out.
+    statements = (findings + decisions + list(snapshot.get("retired_findings") or [])
+                  + list(snapshot.get("retired_decisions") or []))
+    held_findings: set[str] = set()
+    while True:
+        held = held_calcs | held_findings
+        grown = {row["id"] for row in statements if row["id"] not in held_findings
+                 and held & set(row.get("supports") or [])}
+        if not grown:
+            break
+        held_findings |= grown
 
     def finding_text(row: dict) -> str:
         return NFPA72_FINDING_HELD if row.get("id") in held_findings else row.get("text") or ""
@@ -592,7 +602,9 @@ def write_design_basis(
                 doc,
                 ["Finding", "Label", "By", "Rests on", "How far it was taken", "Agreed by", "Id"],
                 [[finding_text(row), row["label"], row.get("agent") or "unknown", _rests_on(row, rows_by_id),
-                  _checked_against(tiers[row["id"]]), ", ".join(sorted(set(agreed.get(row["id"], [])))) or "",
+                  # The check's reasons can quote the checker's reading, and with it a held figure.
+                  NFPA72_FINDING_HELD if row["id"] in held_findings else _checked_against(tiers[row["id"]]),
+                  ", ".join(sorted(set(agreed.get(row["id"], [])))) or "",
                   row["id"]] for row in rows],
             )
     else:
@@ -622,7 +634,9 @@ def write_design_basis(
                 ["Finding", "Author", "Reviewer", "Position", "Note", "How it ended"],
                 [[_clip(finding_text(all_findings.get(row["finding_id"]) or {}) or f"[{row['finding_id']}]", 220),
                   (all_findings.get(row["finding_id"]) or {}).get("agent") or "", row.get("agent") or "",
-                  "objects" if row.get("position") == "object" else "agrees", row.get("note") or "", ended(row)]
+                  "objects" if row.get("position") == "object" else "agrees",
+                  "" if row["finding_id"] in held_findings else row.get("note") or "",
+                  "" if row["finding_id"] in held_findings else ended(row)]
                  for row in reviews],
             )
         for item in digest["conflicts"]:
@@ -714,14 +728,17 @@ def write_design_basis(
     history: list[str] = []
     for item in analysis["changes"]:
         history.append(f"Input changed: {item['reason']}")
+    def retired_how(row: dict) -> str:
+        if row.get("superseded_by") != "withdrawn":
+            return f"replaced by [{row.get('superseded_by')}]"
+        return "withdrawn" if row["id"] in held_findings else f"withdrawn: {row.get('retire_note') or ''}"
+
     for row in snapshot.get("retired_findings") or []:
-        how = (f"withdrawn: {row.get('retire_note') or ''}" if row.get("superseded_by") == "withdrawn"
-               else f"replaced by [{row.get('superseded_by')}]")
-        history.append(f"Finding by {row.get('agent')}, {how}: {_clip(row.get('text'), 300)} [{row['id']}]")
+        history.append(f"Finding by {row.get('agent')}, {retired_how(row)}: "
+                       f"{_clip(finding_text(row), 300)} [{row['id']}]")
     for row in snapshot.get("retired_decisions") or []:
-        how = (f"withdrawn: {row.get('retire_note') or ''}" if row.get("superseded_by") == "withdrawn"
-               else f"replaced by [{row.get('superseded_by')}]")
-        history.append(f"Decision by {row.get('decided_by')}, {how}: {_clip(row.get('text'), 300)} [{row['id']}]")
+        history.append(f"Decision by {row.get('decided_by')}, {retired_how(row)}: "
+                       f"{_clip(finding_text(row), 300)} [{row['id']}]")
     for row in calcs:
         item = analysis["calcs"][row["id"]]
         if item["state"] == coherence.STALE:
@@ -730,7 +747,8 @@ def write_design_basis(
     for row in digest["stale"]:
         if row["kind"] in ("finding", "decision", "cite"):
             history.append(f"OUT OF DATE and still on the record as current: {row['kind']} by {row['by'] or 'the app'} "
-                           f"[{row['id']}]: {row['text']}. " + _clip("; ".join(row["reasons"]), 400))
+                           f"[{row['id']}]: {NFPA72_FINDING_HELD if row['id'] in held_findings else row['text']}. "
+                           + _clip("; ".join(row["reasons"]), 400))
     if history:
         for line in history:
             doc.add_paragraph(line, style="List Bullet")
