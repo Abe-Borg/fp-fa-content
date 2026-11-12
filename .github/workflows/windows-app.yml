@@ -2,6 +2,10 @@
 # Assets: Cynosure-Setup-<version>.exe and Cynosure-windows-<version>.zip.
 # Does not build or tag a content pack. Content stays on content-v*.
 #
+# The seed content pack carries a numbered content version from
+# app/packaging/seed_content_version.txt, which is set when the build is cut
+# (the owner confirms the number). With no number there, the build stops.
+#
 # The installer shows the license (the repository's LICENSE) and installs only
 # after the reader accepts it. Both assets carry LICENSE.txt and
 # THIRD-PARTY-NOTICES.txt; a missing license text fails the build.
@@ -203,6 +207,7 @@ jobs:
           +Cynosure for Windows, $version.
 
           Built from $($env:GITHUB_SHA). The seed content pack inside the build is the tree at this commit.
+          Its content version is the number in app/packaging/seed_content_version.txt at this commit. The app never replaces the seed with an older or equal published pack.
 
           Assets:
           - Cynosure-Setup-$version.exe is the Inno Setup installer. It shows the license and installs after you accept it.

@@ -11,8 +11,12 @@ The scan reads skills, calcs, corpus, specs, modes, and roles and reports:
     reported, so the baseline cannot drift quietly;
   * QA ids in any spelling, including those with letters between the dash and the digits, and batch
     or round-standard tags, in file text and in every path component;
-  * a path component that names clean-agent or foam content, and a path component named canada or
-    canadian, which the pack builder would otherwise drop without a message.
+  * a path component that names clean-agent or foam content (a prefix match, so a slug such as
+    clean-agent-enclosure-integrity is caught). The app's pack builder and installer refuse the same
+    prefixes (app/fpfa/content_pack.py, SCOPE_PREFIXES), and an app test holds the two lists equal.
+
+Canada is in scope through a skill's Country gate (US | Canada). The builder packs a Canada-named file
+under its own name, so the scan does not report one.
 
 This is a phrase and name guard. It is not an engineering review and it does not read meaning.
 Exit status is 0 when nothing is reported and 1 otherwise.
@@ -48,8 +52,8 @@ _TAG_PATTERNS = (
     ("QA tag", re.compile(r"(?<![A-Za-z0-9])qa-?(?:ex-?)?\d+", re.IGNORECASE)),
     ("batch or round tag", re.compile(r"\bbatch ?\d+\b|ROUND-STANDARD|BATCH-PROCESS", re.IGNORECASE)),
 )
+# The same list as app/fpfa/content_pack.py SCOPE_PREFIXES; change both together.
 _SCOPE_PREFIXES = ("clean-agent", "clean_agent", "cleanagent", "foam")
-_CANADA_NAMES = frozenset({"canada", "canadian"})
 
 
 def name_class(word: str) -> str | None:
@@ -74,7 +78,7 @@ def _pack_files(root: Path):
 
 
 def path_findings(root: Path) -> list[str]:
-    """Path components the builder or installer would drop, or that name out-of-scope content."""
+    """Path components that name out-of-scope content. The builder and the installer refuse them too."""
     found: list[str] = []
     root = Path(root)
     for top in SHIPPED_TOPS:
@@ -85,13 +89,9 @@ def path_findings(root: Path) -> list[str]:
             rel = path.relative_to(root)
             for index, part in enumerate(rel.parts):
                 lowered = part.casefold()
-                stem = lowered.rsplit(".", 1)[0] if "." in lowered else lowered
                 shown = "/".join(rel.parts[: index + 1])
                 if lowered.startswith(_SCOPE_PREFIXES):
                     found.append(f"{shown} (clean-agent or foam name; out of scope)")
-                    break
-                if lowered in _CANADA_NAMES or stem in _CANADA_NAMES:
-                    found.append(f"{shown} (the builder drops a canada-named path; gate Canada text inside a skill)")
                     break
     return found
 

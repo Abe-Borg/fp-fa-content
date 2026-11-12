@@ -9,8 +9,8 @@ What each guard covers:
   - the names the scan bans may stay only where a reviewed baseline records the exact count;
   - a banned name or a tag in a directory or a file name is a finding on its own. The per-file
     content baseline does not cover it, and the builder refuses the tree;
-  - the builder stops on an out-of-scope slug and on a Canada-named path, so nothing is
-    dropped without a message;
+  - the builder stops on an out-of-scope slug, and packs a Canada-named path under its own name
+    (Canada is in scope through a skill's Country gate), so nothing is dropped without a message;
   - the held draft folder under calcs/fp is left out of the zip.
 
 A pass shows the scripts behave as described on these trees. It is not an engineering review.
@@ -189,7 +189,7 @@ class StripScanTests(unittest.TestCase):
             findings = scan.strip_findings(root, baseline={})
         self.assertEqual(findings, [f"skills/{BATCH_DIR} (directory name carries a batch or round tag)"])
 
-    def test_scope_and_canada_names_in_a_path_are_findings(self):
+    def test_scope_names_in_a_path_are_findings_and_canada_names_are_not(self):
         scan = _scan()
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -205,9 +205,8 @@ class StripScanTests(unittest.TestCase):
         self.assertIn(OOS_A, text)
         self.assertIn(OOS_B, text)
         self.assertIn(OOS_C, text)
-        self.assertIn("corpus/canada", text)
-        self.assertIn("corpus/fp/canadian.md", text)
-        self.assertNotIn("canada-delta", text, "a longer name is not dropped by the builder, so it is not flagged")
+        # Canada is in scope through a skill's Country gate. The builder packs these under their own names.
+        self.assertNotIn("canad", text)
         self.assertNotIn("ok-skill", text)
 
 
@@ -235,15 +234,20 @@ class BuilderGuardTests(unittest.TestCase):
             self.assertIn(OOS_D, result.stderr)
             self.assertFalse((Path(tmp) / "out" / "fp-fa-content-v9.9.9.zip").exists())
 
-    def test_canada_named_path_fails_the_build_instead_of_dropping(self):
+    def test_a_canada_named_path_ships_under_its_own_name(self):
         with tempfile.TemporaryDirectory() as tmp:
             source = Path(tmp) / "src"
             _mini_pack(source)
             _write(source, "corpus/fp/canada.md")
-            result = _build(source, Path(tmp) / "out")
-            self.assertNotEqual(result.returncode, 0)
-            self.assertIn("corpus/fp/canada.md", result.stderr)
-            self.assertFalse((Path(tmp) / "out" / "fp-fa-content-v9.9.9.zip").exists())
+            _write(source, "corpus/canadian/notes.md")
+            out = Path(tmp) / "out"
+            result = _build(source, out)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertNotIn("canad", result.stderr, "nothing Canada-named is stripped or reported")
+            with zipfile.ZipFile(out / "fp-fa-content-v9.9.9.zip") as archive:
+                names = archive.namelist()
+        self.assertIn("corpus/fp/canada.md", names)
+        self.assertIn("corpus/canadian/notes.md", names)
 
     def test_a_canada_delta_file_with_a_longer_name_still_ships(self):
         with tempfile.TemporaryDirectory() as tmp:
