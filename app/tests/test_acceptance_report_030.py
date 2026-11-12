@@ -611,5 +611,161 @@ class ApiClientTests(unittest.TestCase):
         self.assertEqual(job_totals(rows)["input_tokens"], 300, "the check's tokens are still counted")
 
 
+def _damaged_copies(folder: Path) -> dict[str, Path]:
+    """A record with something on it, damaged the three ways the report's recovery test damaged one."""
+    from fpfa.record import Record
+
+    good = folder / "good.db"
+    record = Record(good)
+    record.ensure_project("job1", "Kept")
+    for index in range(40):
+        record.log_event("job1", "note", {"text": "x" * 400, "n": index}, agent="app")
+    data = good.read_bytes()
+    copies = {
+        "truncated": data[: len(data) // 3],
+        "header-zeroed": b"\0" * 100 + data[100:],
+        "text": b"This is a text file, not a database.\n" * 20,
+    }
+    out = {}
+    for name, body in copies.items():
+        path = folder / name / "fpfa.db"
+        path.parent.mkdir(parents=True)
+        path.write_bytes(body)
+        out[name] = path
+    return out
+
+
+class DamagedRecordTests(unittest.TestCase):
+    """F-004. A damaged record ended the launch on a raw traceback, with nothing to say what to do."""
+
+    def test_a_damaged_record_is_said_to_be_damaged_and_left_as_it_was(self):
+        import tempfile
+
+        from fpfa.record import Record, RecordDamaged
+
+        for name, path in _damaged_copies(Path(tempfile.mkdtemp(prefix="fpfa-damaged-"))).items():
+            before = path.read_bytes()
+            with self.assertRaises(RecordDamaged, msg=name) as caught:
+                Record(path)
+            self.assertEqual(caught.exception.path, path)
+            self.assertTrue(caught.exception.detail)
+            self.assertEqual(path.read_bytes(), before, "nothing is written to a damaged record")
+
+    def test_a_damaged_record_is_moved_aside_and_never_deleted(self):
+        import tempfile
+
+        from fpfa.record import Record, move_aside
+
+        path = _damaged_copies(Path(tempfile.mkdtemp(prefix="fpfa-damaged-")))["truncated"]
+        before = path.read_bytes()
+        (path.parent / "fpfa.db-journal").write_bytes(b"journal")
+        moved = move_aside(path)
+        self.assertFalse(path.exists())
+        self.assertEqual(moved.read_bytes(), before)
+        self.assertTrue(moved.name.startswith("fpfa.db.damaged-"))
+        self.assertEqual((moved.parent / (moved.name + "-journal")).read_bytes(), b"journal")
+        Record(path).ensure_project("job2", "New")
+        self.assertTrue(path.exists())
+
+    def test_the_window_asks_before_it_moves_the_record_and_says_where_it_went(self):
+        from unittest.mock import patch
+
+        from fpfa.desk import Shell
+        from fpfa.paths import data_dir
+        from fpfa.record import Record, RecordDamaged
+        from fpfa.web import shell as launcher
+        from test_prototype import _isolate_data
+
+        _isolate_data()
+        path = data_dir() / "fpfa.db"
+        path.write_bytes(b"This is a text file, not a database.\n" * 20)
+        try:
+            Record(path)
+        except RecordDamaged as caught:
+            damaged = caught
+        said = []
+        with patch.object(launcher, "_confirm", return_value=False), patch.object(launcher, "_show_error", said.append):
+            with self.assertRaises(SystemExit) as stopped:
+                launcher.open_with_new_record(damaged, Shell())
+        self.assertEqual(stopped.exception.code, 1)
+        self.assertIn(str(path), said[0])
+        self.assertIn(launcher.DAMAGED_FLAG, said[0])
+        self.assertTrue(path.read_bytes().startswith(b"This is a text file"), "No leaves the file as it was")
+        with patch.object(launcher, "_confirm", return_value=True):
+            desk = launcher.open_with_new_record(damaged, Shell())
+        try:
+            notice = desk.notices[-1]["message"]
+            self.assertIn("moved aside to", notice)
+            moved = [item for item in path.parent.iterdir() if item.name.startswith("fpfa.db.damaged-")]
+            self.assertEqual(len(moved), 1)
+            self.assertIn(str(moved[0]), notice)
+            self.assertTrue(moved[0].read_bytes().startswith(b"This is a text file"))
+        finally:
+            desk.close()
+
+    def test_the_data_directory_is_let_go_when_the_record_is_damaged(self):
+        from fpfa.desk import Desk
+        from fpfa.instance_lock import LOCK_NAME, InstanceLock
+        from fpfa.paths import data_dir
+        from fpfa.record import RecordDamaged
+        from test_prototype import _isolate_data
+
+        _isolate_data()
+        (data_dir() / "fpfa.db").write_bytes(b"\0" * 4096)
+        with self.assertRaises(RecordDamaged):
+            Desk()
+        lock = InstanceLock(data_dir() / LOCK_NAME)
+        try:
+            self.assertTrue(lock.acquire(), "the next window can open on this data directory")
+        finally:
+            lock.release()
+
+
+class LiveTeamTests(unittest.TestCase):
+    """F-003. During a nine-minute team turn the Team tab showed nothing the specialists were writing."""
+
+    def test_the_team_tab_follows_the_record_while_a_job_works(self):
+        from desk_loop import Loop
+        from fpfa import desk as desk_module
+        from test_prototype import _isolate_data
+
+        _isolate_data()
+        root = Loop()
+        try:
+            desk = root.open_desk()
+            desk.load_demo()
+            root.update()
+            project_id = desk.project["id"]
+            calc = desk.record.calcs(project_id)[0]["id"]
+            before = len(desk.team["findings"])
+            job = desk.jobs.record(project_id=project_id, project_name="Sample", kind="chat", title="t", status="running")
+            _on_event, observe = desk._stream_listener(job.id)
+            desk.record.record_finding(project_id, agent="fp-sprinkler", label="calculated", supports=[calc],
+                                       text="Written while the turn runs.")
+            observe({"type": "tool_start", "name": "record_finding", "agent": "fp-sprinkler"})
+            observe({"type": "tool_end", "name": "record_finding", "agent": "fp-sprinkler"})
+            desk._team_read_at = 0.0
+            desk.pump()
+            texts = [row["text"] for row in desk.team["findings"]]
+            self.assertIn("Written while the turn runs.", texts, "the tab shows it before the turn ends")
+            # Read at most every few seconds, however many tools finish.
+            desk.record.record_finding(project_id, agent="fp-sprinkler", label="calculated", supports=[calc],
+                                       text="And another.")
+            observe({"type": "tool_end", "name": "record_finding"})
+            desk.pump()
+            self.assertEqual(len(desk.team["findings"]), before + 1)
+            desk._team_read_at -= desk_module.TEAM_REFRESH_SECONDS
+            desk.pump()
+            self.assertEqual(len(desk.team["findings"]), before + 2)
+            # A job on another job's record does not set this tab reading.
+            other = desk.jobs.record(project_id="elsewhere", project_name="Other", kind="chat", title="t", status="running")
+            _on_other, observe_other = desk._stream_listener(other.id)
+            observe_other({"type": "tool_end", "name": "record_finding"})
+            desk.pump()
+            self.assertFalse(desk._team_due)
+        finally:
+            root.destroy()
+
+
 if __name__ == "__main__":
     unittest.main()

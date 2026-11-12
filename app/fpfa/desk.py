@@ -81,7 +81,7 @@ from fpfa.modes_loader import DEFAULT_MODE, MODE_SLUGS, list_modes, normalize_mo
 from fpfa.paths import content_root, data_dir, is_content_pack, read_config, write_config
 from fpfa.projects import delete_project, list_projects, load_project, new_project, save_project
 from fpfa.checker import check_line, coverage, export_reason
-from fpfa.record import ANSWERED_ON_PANEL, BASIS_LABELS, INTERRUPTED_NOTE, Record, RecordError
+from fpfa.record import ANSWERED_ON_PANEL, BASIS_LABELS, INTERRUPTED_NOTE, Record, RecordDamaged, RecordError
 from fpfa.spec_docx import DRAFT_SECTION, write_docx
 from fpfa.team import check_record, latest_check, team_summary
 from fpfa.team_panel import recovery_text, team_view
@@ -467,6 +467,10 @@ _TEAM_ACTIVITY = {
 _LISTING_TOOLS = frozenset({"list_skills", "list_roles", "list_modes"})
 
 
+# The least time between two reads of the Team tab while a job works on the open job.
+TEAM_REFRESH_SECONDS = 2.0
+
+
 def _model_client(key: str, cancel: Any = None):
     """A model client for one job, with the job's cancel event on it, so Stop also ends a wait to send again.
 
@@ -708,6 +712,10 @@ class Desk:
         self.project_rows: list[dict] = []
         self.activity_rows: list[dict] = []
         self.team: dict = team_view(None)
+        # The Team tab follows the record while a job on the open job works: a tool that finished marks it
+        # due, and pump() reads it again at most every TEAM_REFRESH_SECONDS (_refresh_team_when_due).
+        self._team_due = False
+        self._team_read_at = 0.0
         self.results_text = NO_RUN_TEXT
         # The same run as the Results tab draws it: figures, labels, flags (fpfa.results_panel).
         self.results_view: dict = results_panel.empty_view()
@@ -763,7 +771,14 @@ class Desk:
         self._apply_mode(DEFAULT_MODE)
         self.jobs = JobInbox(worker_count=2, on_change=self._on_jobs_changed)
         # The project record. Calc tools and record tools write to it by job id.
-        self.record = Record()
+        try:
+            self.record = Record()
+        except RecordDamaged:
+            # No window opens on a record SQLite cannot read. The data directory is let go, so the launcher
+            # can open the next desk once the file is moved aside (fpfa.web.shell).
+            self.jobs.close()
+            self.instance_lock.release()
+            raise
         # Cancel flags for running jobs, by job id. Set from Stop or the Team tab.
         self._cancel_events: dict[str, threading.Event] = {}
         # Last (status, error) each job was written to the record with. Desk thread only.
@@ -841,6 +856,7 @@ class Desk:
             except Exception as exc:
                 self.status.set("Update failed. " + safe_error(exc))
         self._drain_stream_events()
+        self._refresh_team_when_due()
         return ran
 
     # The old window's poll. Kept as a name for the tests and the server loop.
@@ -1518,8 +1534,21 @@ class Desk:
             for job in self.jobs.snapshot()
         )
 
+    def _refresh_team_when_due(self) -> None:
+        """Read the Team tab again while a job works on it: when a tool finished, at most every few seconds.
+
+        A team turn runs for minutes, and the specialists write the plan's steps,
+        their findings, and what passed between them to the record as they go.
+        The tab showed none of it until the turn ended. Desk thread only.
+        """
+        if not self._team_due or time.monotonic() - self._team_read_at < TEAM_REFRESH_SECONDS:
+            return
+        self._refresh_team()
+
     def _refresh_team(self) -> None:
         """Read the Team tab and the sidebar roster from the record. Cheap; called after every job."""
+        self._team_due = False
+        self._team_read_at = time.monotonic()
         project_id = (self.project or {}).get("id") if self.project else None
         snapshot = None
         if project_id:
@@ -3005,6 +3034,8 @@ class Desk:
                 depth["tools"] += 1
             elif kind == "tool_end":
                 depth["tools"] = max(0, depth["tools"] - 1)
+                # Any agent's tool may have written the record: a finding, a step, a review, a calculation.
+                inbox.put((job_id, {"type": "record_changed"}))
             elif kind == "round" and not depth["tools"] and not event.get("agent"):
                 # A new round of the lead. If it writes text, that text is the reply
                 # and replaces what an earlier round wrote, as the tool loop keeps it.
@@ -3030,6 +3061,10 @@ class Desk:
             if job is None:
                 continue
             kind = event.get("type")
+            if kind == "record_changed":
+                if job.project_id == (self.project or {}).get("id"):
+                    self._team_due = True
+                continue
             if kind == "activity":
                 if self._activity.get(job_id) != event.get("text"):
                     self._activity[job_id] = event.get("text") or ""
