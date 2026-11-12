@@ -92,9 +92,19 @@ DELIVERY_SYSTEMS = ("dry", "di")
 _ALWAYS = ("system_type", "length_basis")
 _DELIVERY_NEEDS = ("qod", "delivery_basis", "q_fill_gpm")
 _GAS_NEEDS = ("supervisory_psig", "fill_minutes")
+# The releasing table and the trim election are double-interlock only: a dry zone is not asked for either answer.
 _RELEASING_NEEDS = ("manual_station", "failsafe_on_total_power_loss")
 _DEMAND_NEEDS = ("hazard", "supervised", "density_gpm_ft2", "base_area_ft2", "area_increase", "hose_gpm")
 WET_NOTE = "A wet zone has no delivery rows, no supervisory gas fill, and no releasing table: none was run."
+DRY_RELEASING_NOTE = "The releasing table is for double-interlock zones. None was run for this dry-pipe zone."
+# What the volume rows say beside the volume when the lengths are center-to-center and no allowance is added, and the
+# friction sentence that goes with it. The section and its edition are the calc pack's own label (calcs/fp/formulas.py
+# cites "NFPA 13-2025 s28.2.3" for fitting equivalent lengths); a test reads the phrase there.
+NO_ALLOWANCE = "center-to-center, no allowance"
+FRICTION_NOTE = ("Friction still adds fitting equivalent lengths (NFPA 13-2025 §28.2.3, as the calc pack labels it, "
+                 "VERIFY).")
+FRICTION_PACK_FILE = "calcs/fp/formulas.py"
+FRICTION_PACK_PHRASE = "NFPA 13-2025 s28.2.3"
 NO_DEMAND_NOTE = ("No demand was run: the form holds no density or base area. The delivery and gas-fill screens "
                   "do not use one.")
 
@@ -102,15 +112,17 @@ NO_DEMAND_NOTE = ("No demand was run: the form holds no density or base area. Th
 def plan_rows(di: dict) -> dict[str, bool]:
     """Which rows a zone run makes. Read from the form, never defaulted.
 
-    Dry and double-interlock zones get the delivery rows, the supervisory gas
-    fill, and the releasing table; a wet zone gets none of them. The demand
-    (hose duration and density/area) runs when the form holds a density or a
-    base area, and never feeds the delivery or gas-fill screens.
+    Dry and double-interlock zones get the delivery rows and the supervisory
+    gas fill; only a double-interlock zone gets the releasing table, and only
+    it is asked for the manual station and the failsafe answer. A wet zone
+    gets none of them. The demand (hose duration and density/area) runs when
+    the form holds a density or a base area, and never feeds the delivery or
+    gas-fill screens.
     """
     system = str(di.get("system_type") or "").strip()
     wetted = system in DELIVERY_SYSTEMS
     demand = not (_blank(di.get("density_gpm_ft2")) and _blank(di.get("base_area_ft2")))
-    return {"delivery": wetted, "gas": wetted, "releasing": wetted, "demand": demand}
+    return {"delivery": wetted, "gas": wetted, "releasing": system == "di", "demand": demand}
 
 
 def planned_tools(di: dict) -> list[str]:
@@ -243,6 +255,8 @@ def run_tool_plan(session: ToolSession, di: dict, basis: dict, assumed: Any = ()
             "segments": pipe_only,
             "qod": di.get("qod"),
             "zone_gal": volume["zone_gal"],
+            # The basis the zone total was taken on, so the screen's row names it beside its answer.
+            "length_basis": di.get("length_basis"),
             "declared_interlock": "double" if system == "di" else "none",
             **common_time,
         })
@@ -419,9 +433,26 @@ def exemption_text(volume: dict | None, screen: dict) -> str:
             f"against {words}: {answer}.")
     qualifier = exemption_qualifier(volume, screen)
     text = f"{text} {qualifier}" if qualifier else text
+    if exemption_basis_text(screen):
+        text += " " + exemption_basis_text(screen)
     if screen.get("near_threshold"):
         text += " " + str(screen["near_threshold"])
     return text
+
+
+def exemption_basis_text(screen: dict | None) -> str:
+    """The length basis (and allowance) the screen's zone total was taken on, as its row records it. Empty without one."""
+    screen = screen if isinstance(screen, dict) else {}
+    basis = screen.get("exemption_length_basis")
+    if basis not in ("center_to_center", "cut"):
+        return ""
+    text = "The zone total was taken on " + ("center-to-center lengths" if basis == "center_to_center" else "cut lengths")
+    percent = screen.get("exemption_fittings_percent")
+    if isinstance(percent, (int, float)) and not isinstance(percent, bool):
+        assumed = any(isinstance(flag, str) and flag.startswith("ASSUMED fittings")
+                      for flag in screen.get("exemption_assumptions") or [])
+        text += f", fittings {float(percent):g}%" + (" ASSUMED" if assumed else "")
+    return text + "."
 
 
 def exemption_qualifier(volume: dict | None, screen: dict) -> str:
@@ -452,6 +483,37 @@ def trim_assumption_text(volume: dict) -> str:
     if volume.get("trim_assumed"):
         return f"{gallons} gal trim ASSUMED (blank trim; the kernel's assumption, no valve data sheet; not calculated)"
     return f"{gallons} gal trim (entered on the form, not assumed)"
+
+
+def volume_basis_text(volume: dict | None) -> str:
+    """The length basis a takeoff used, in words, for beside its fittings percent: "center-to-center, no allowance".
+
+    Read from the zone_trapped_volume row as recorded. An allowance the kernel
+    took for a blank one on cut lengths is marked ASSUMED, as its flag says.
+    """
+    volume = volume if isinstance(volume, dict) else {}
+    basis = str(volume.get("length_basis") or "")
+    percent = volume.get("fittings_percent")
+    number = isinstance(percent, (int, float)) and not isinstance(percent, bool)
+    if basis == "center_to_center" and number and float(percent) == 0.0:
+        return NO_ALLOWANCE
+    words = {"center_to_center": "center-to-center", "cut": "cut lengths"}.get(basis, basis or "length basis not recorded")
+    if any(isinstance(flag, str) and flag.startswith("ASSUMED fittings") for flag in volume.get("flags") or []):
+        words += ", allowance ASSUMED"
+    return words
+
+
+def allowance_text(volume: dict | None) -> str:
+    """The fittings percent and the basis beside it, as every volume line prints them: "0%; center-to-center, no allowance"."""
+    volume = volume if isinstance(volume, dict) else {}
+    percent = volume.get("fittings_percent")
+    shown = f"{float(percent):g}%; " if isinstance(percent, (int, float)) and not isinstance(percent, bool) else ""
+    return shown + volume_basis_text(volume)
+
+
+def friction_note(volume: dict | None) -> str:
+    """The friction sentence that goes beside a center-to-center volume with no allowance. Empty otherwise."""
+    return FRICTION_NOTE if volume_basis_text(volume) == NO_ALLOWANCE else ""
 
 
 def cite_note(row: dict | None) -> str:
@@ -626,7 +688,7 @@ def template_narrative(di: dict, tools: dict[str, Any], basis: dict | None = Non
         (
             f"Trapped volume is {fmt1(volume['pipe_gal'])} gal of pipe (calculated), "
             f"{fmt1(volume['fittings_gal'])} gal fittings allowance "
-            f"({volume['fittings_percent']:g}%), and {trim_assumption_text(volume)}. "
+            f"({allowance_text(volume)}), and {trim_assumption_text(volume)}. "
             f"Zone total is {fmt1(volume['zone_gal'])} gal."
         ),
     ]
@@ -634,6 +696,8 @@ def template_narrative(di: dict, tools: dict[str, Any], basis: dict | None = Non
         lines += _delivery_lines(volume, screen, trip)
     elif system == "wet":
         lines.append(WET_NOTE)
+    if system == "dry" and truth is None:
+        lines.append(DRY_RELEASING_NOTE)
     lines.append(
         f"Trim family: {family} ({trim['status']}). "
         f"{trim.get('power_loss_behavior') or 'Prime holder is unresolved, so no family is elected.'}"
@@ -715,6 +779,9 @@ def _flags(di: dict, tools: dict[str, Any], extra: list[str], basis: dict | None
     # Each other input the designer took from its hint: ASSUMED, named, until the designer types a value.
     flags.extend(inputs.assumed_lines(assumed, {**(basis or {}), **di}))
     flags.extend(tools["zone_trapped_volume"].get("flags") or [])
+    friction = friction_note(tools["zone_trapped_volume"])
+    if friction:
+        flags.append(f"Trapped volume is {NO_ALLOWANCE}. {friction}")
     flags.extend(tools["elect_di_trim"].get("flags") or [])
     screen = tools.get("dry_delivery_screen")
     trip = tools.get("di_trip_to_water")

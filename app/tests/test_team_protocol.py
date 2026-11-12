@@ -115,7 +115,7 @@ def _screen_steps(record, *, t_release: float, text: str, replaces: str = "", be
     """A sprinkler specialist's rounds: the volume, the trip-to-water screen, a finding on it, a summary."""
 
     def volume(_kwargs):
-        return call(use("zone_trapped_volume", segments=SEGMENTS))
+        return call(use("zone_trapped_volume", segments=SEGMENTS, length_basis="center_to_center"))
 
     def screen(_kwargs):
         gallons = _calc(record, "zone_trapped_volume", "fp-sprinkler")["outputs"]["zone_gal"]
@@ -496,7 +496,7 @@ class LeadToolTests(unittest.TestCase):
         self._team(record).execute("set_input", {"name": "t_release_s", "value": "5", "why": "the panel submittal"})
 
         def volume(_kwargs):
-            return call(use("zone_trapped_volume", segments=SEGMENTS))
+            return call(use("zone_trapped_volume", segments=SEGMENTS, length_basis="center_to_center"))
 
         def screen(_kwargs):
             gallons = _calc(record, "zone_trapped_volume", "fp-sprinkler")["outputs"]["zone_gal"]
@@ -721,7 +721,7 @@ class BriefAndStatusTests(unittest.TestCase):
 
         record = _record()
         _seed_inputs(record)
-        create = Play({"fp-sprinkler": [call(use("zone_trapped_volume", segments=SEGMENTS)), call(use("read_record"))]})
+        create = Play({"fp-sprinkler": [call(use("zone_trapped_volume", segments=SEGMENTS, length_basis="center_to_center")), call(use("read_record"))]})
         out = delegate(REPO, record, "job1", create, specialist="fp-sprinkler", brief="Screen DH-1.", max_rounds=2)
         self.assertIs(out["complete"], False)
         self.assertIn("did not finish", out["note"])

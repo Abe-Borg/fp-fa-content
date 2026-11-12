@@ -123,7 +123,7 @@ class ModelViewTests(unittest.TestCase):
     def test_the_tool_result_a_model_reads_names_p_and_has_no_deprecated_key(self):
         from fpfa.calc_tools import ToolSession
 
-        shown = ToolSession(REPO, agent="fa-releasing").execute("releasing_truth_table", {})
+        shown = ToolSession(REPO, agent="fa-releasing").execute("releasing_truth_table", {"manual_station": True})
         self.assertEqual(
             shown["boolean_p"], "solenoid = (detection_leg OR manual_release) AND p_second_leg AND NOT isolated"
         )
@@ -144,8 +144,8 @@ class ModelViewTests(unittest.TestCase):
         record = Record(Path(tempfile.mkdtemp(prefix="fpfa-releasing-")) / "fpfa.db")
         record.ensure_project("job1")
         session = ToolSession(REPO, record=record, project_id="job1", agent="fa-releasing")
-        first = session.execute("releasing_truth_table", {})
-        replay = session.execute("releasing_truth_table", {})
+        first = session.execute("releasing_truth_table", {"manual_station": True})
+        replay = session.execute("releasing_truth_table", {"manual_station": True})
         for shown in (first, replay):
             self.assertIn("record_id", shown)
             self.assertNotIn("boolean", shown)
@@ -158,8 +158,8 @@ class ModelViewTests(unittest.TestCase):
     def test_the_fixed_tool_plan_still_gets_the_kernel_output_unchanged(self):
         from fpfa.calc_tools import ToolSession
 
-        raw = ToolSession(REPO, agent="tool-plan").execute("releasing_truth_table", {})
-        bare = ToolSession(REPO).execute("releasing_truth_table", {})
+        raw = ToolSession(REPO, agent="tool-plan").execute("releasing_truth_table", {"manual_station": True})
+        bare = ToolSession(REPO).execute("releasing_truth_table", {"manual_station": True})
         self.assertEqual(raw, bare)
         self.assertIn("boolean_p", raw)
 

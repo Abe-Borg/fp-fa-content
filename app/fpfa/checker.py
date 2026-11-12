@@ -1089,6 +1089,9 @@ def coverage(snapshot: dict | None) -> dict:
     for line in digest.get("unpinned") or []:
         # The job states no edition of a standard, or only one taken from a hint: a HOLD on what depends on it.
         gaps.append(line)
+    for line in digest.get("holds") or []:
+        # A calculation that holds until the designer supplies a value (the charger's listed cap).
+        gaps.append(line)
     for line in digest.get("assumed") or []:
         # An input the designer took from a hint is ASSUMED, not a design value.
         gaps.append(line)

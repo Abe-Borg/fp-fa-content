@@ -249,7 +249,7 @@ class UnitConversionTests(unittest.TestCase):
             # A segment length in metres is held the same way, and a conversion itself is never refused.
             with designer_words("about 30 m of main"):
                 with self.assertRaises(units.UnitError):
-                    session.execute("zone_trapped_volume", {"segments": [{"nps": 6, "length_ft": 30}]})
+                    session.execute("zone_trapped_volume", {"length_basis": "center_to_center", "segments": [{"nps": 6, "length_ft": 30}]})
             session.execute("convert_units", {"value": 12.2, "from_unit": "mm/min", "to_unit": "gpm/ft2"})
         # Outside a turn, and for a figure the designer also gave in US units, nothing is refused.
         session.execute("density_area", {"density_gpm_ft2": 12.2, "base_area_ft2": 139, "area_increase": 0, "hose_gpm": 0})

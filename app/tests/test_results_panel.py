@@ -86,9 +86,12 @@ class ZoneViewTests(unittest.TestCase):
         self.assertIn(f"total {demand['value']} gpm", narrative)
         self.assertEqual(self.figures["trim"]["value"], tools["elect_di_trim"]["family"])
         self.assertEqual(self.figures["trim"]["label"], tools["elect_di_trim"]["status"])
-        # Every sentence under a figure is one the narrative or a tool already says.
+        # Every sentence under a figure is one the narrative or the run already says. The friction sentence beside a
+        # center-to-center volume (PR-D) is in the run's flags, not the narrative: a section number in the narrative
+        # would be read back as a claim of its own by the Section's trace check.
+        said = narrative + "\n" + "\n".join(self.result["flags"])
         for line in zone["lines"] + self.figures["size_exemption"]["lines"][1:] + self.figures["gas_fill"]["lines"]:
-            self.assertIn(line.rstrip("."), narrative, line)
+            self.assertIn(line.rstrip("."), said, line)
 
     def test_the_three_labels_stay_distinct_on_the_tiles(self):
         zone = self.figures["zone_total"]

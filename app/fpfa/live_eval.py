@@ -471,8 +471,8 @@ class Runner:
         self._before_relaunch["findings"] = desk.call(lambda: [row["text"] for row in desk.team.get("findings") or []])
 
     def _check_exemption(self, step: str, turn: dict, snap: dict) -> None:
-        """On a zone whose pipe is under the cap and whose total is over it: nobody says the exemption is met."""
-        from fpfa.workflow import exemption_answer
+        """On a zone whose pipe is under the threshold and whose total is over it: nobody says the exemption is met."""
+        from fpfa.workflow import exemption_answer, threshold_gal
 
         screens = [row for row in snap["calcs"] if row.get("tool") == "dry_delivery_screen"
                    and (row.get("agent") or "") in ("tool-plan", "") and "exemption_volume_gal" in (row.get("outputs") or {})]
@@ -488,10 +488,14 @@ class Runner:
             for sentence in re.split(r"(?<=[.;])\s+", text):
                 if _CLAIMS_EXEMPTION.search(sentence) and not _DENIES_EXEMPTION.search(sentence):
                     wrong.append(f"{where}: {sentence.strip()[:140]}")
-        self.check(step, "D", "Nobody states the size exemption on the pipe alone when the zone total is over the cap",
+        # The exemption threshold under its own name; threshold_gal reads the legacy alias only on an older row.
+        threshold = threshold_gal(out)
+        against = f"the {threshold:.0f} gal exemption threshold" if threshold is not None else "the exemption threshold"
+        self.check(step, "D", "Nobody states the size exemption on the pipe alone when the zone total is over the "
+                   "exemption threshold",
                    PASS if not wrong else FAIL,
                    "; ".join(wrong)[:400] or f"the zone total is {out['exemption_volume_gal']:.1f} gal against "
-                   f"{out['nfpa_size_cap_gal']:.0f}; no sentence in the reply or the findings claims the exemption. "
+                   f"{against}; no sentence in the reply or the findings claims the exemption. "
                    "A phrase match; read the reply to be sure.")
 
     def _check_reply(self, step: str, turn: dict) -> None:

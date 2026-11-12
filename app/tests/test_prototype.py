@@ -405,6 +405,7 @@ class WorkflowTests(unittest.TestCase):
         session = ToolSession(self.root)
         with self.assertRaises(formulas.CalcError):
             session.execute("zone_trapped_volume", {
+                "length_basis": "center_to_center",
                 "segments": [{"d_in": 4.026, "length_ft": 10}],
                 "trim_gal": "1e309",
                 "fittings_percent": 0,
@@ -504,6 +505,7 @@ class WorkflowTests(unittest.TestCase):
         segments = [{"d_in": diameter, "length_ft": 495.0 / gallons_per_foot}]
         session = ToolSession(self.root)
         volume = session.execute("zone_trapped_volume", {
+            "length_basis": "center_to_center",
             "segments": segments,
             "fittings_percent": 0,
             "trim_gal": 10,
@@ -542,6 +544,7 @@ class WorkflowTests(unittest.TestCase):
             "qod": True,
             "trim_gal": 10,
             "fittings_percent": 0,
+            "length_basis": "center_to_center",
             **times,
         })
         governed = govern_nfpa_exemption(pipe_only, volume["zone_gal"])
@@ -640,7 +643,7 @@ class ClaudeLoopTests(unittest.TestCase):
                 Block(type="text", text="I will guess the volume."),
             ]),
             SimpleNamespace(content=[
-                Block(type="tool_use", id="toolu_1", name="zone_trapped_volume", input={"segments": [{"d_in": 1, "length_ft": 1}]}),
+                Block(type="tool_use", id="toolu_1", name="zone_trapped_volume", input={"length_basis": "center_to_center", "segments": [{"d_in": 1, "length_ft": 1}]}),
             ]),
             SimpleNamespace(content=[
                 Block(type="text", text="Quoted from the tool."),
@@ -1320,7 +1323,7 @@ class EverydayPathTests(unittest.TestCase):
             def model_dump(self, exclude_none=True):
                 return {key: value for key, value in self.__dict__.items() if value is not None}
 
-        args = {"segments": [{"d_in": 1.049, "length_ft": 10}]}
+        args = {"segments": [{"d_in": 1.049, "length_ft": 10}], "length_basis": "center_to_center"}
         direct = ToolSession(self.root).execute("zone_trapped_volume", args)
         script = [
             SimpleNamespace(stop_reason="tool_use", content=[

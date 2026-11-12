@@ -392,10 +392,12 @@ class ExemptionTests(unittest.TestCase):
 
     def test_omitted_fittings_take_the_kernels_assumed_allowance(self):
         session = _session()
-        without = session.execute("dry_delivery_screen", _screen_args(trim_gal=5))
+        # PR-D: the basis is the caller's (length_basis); cut lengths take the kernel's ASSUMED allowance.
+        without = session.execute("dry_delivery_screen", _screen_args(trim_gal=5, length_basis="cut"))
         self.assertGreater(without["exemption_volume_gal"], without["volume_gal"] + 5)
         self.assertTrue(any("ASSUMED fittings" in flag for flag in without["exemption_assumptions"]))
-        explicit_zero = session.execute("dry_delivery_screen", _screen_args(trim_gal=5, fittings_percent=0))
+        explicit_zero = session.execute("dry_delivery_screen", _screen_args(trim_gal=5, fittings_percent=0,
+                                                                            length_basis="cut"))
         self.assertAlmostEqual(explicit_zero["exemption_volume_gal"], explicit_zero["volume_gal"] + 5, places=9)
 
     def test_a_zone_total_within_one_percent_of_the_threshold_is_flagged(self):
@@ -491,12 +493,17 @@ class FaCallTests(unittest.TestCase):
     """charger_ok takes the caller's listed cap; a blank LFL holds; the starter block holds by name."""
 
     def test_charger_ok_holds_without_a_listed_cap(self):
-        from fpfa.fa_calc import run_fa_calc
+        # PR-D: the HOLD is a result with one message, recorded like any calc, never a pass or a fail and never a
+        # maker cap. The installed pack's charger_ok still takes a maker key, so even a usable cap holds.
+        from fpfa.fa_calc import CHARGER_HOLD, run_fa_calc
 
         for inputs_ in ({"req_ah": 50, "maker_key": "simplex_es_ps"}, {"req_ah": 50},
-                        {"req_ah": 50, "listed_charger_max_ah": 0}, {"req_ah": 50, "listed_charger_max_ah": "110"}):
-            with self.subTest(inputs=inputs_), self.assertRaisesRegex(ValueError, "HOLD"):
-                run_fa_calc(REPO, {"module": "battery", "op": "charger_ok", "inputs": inputs_})
+                        {"req_ah": 50, "listed_charger_max_ah": 0}, {"req_ah": 50, "listed_charger_max_ah": "110"},
+                        {"req_ah": 50, "listed_charger_max_ah": 110},
+                        {"req_ah": 50, "listed_charger_max_ah": 110, "maker_key": "simplex_es_ps"}):
+            with self.subTest(inputs=inputs_):
+                out = run_fa_calc(REPO, {"module": "battery", "op": "charger_ok", "inputs": inputs_})
+                self.assertEqual((out["status"], out["message"], out["charger_ok"]), ("HOLD", CHARGER_HOLD, None))
 
     def test_charger_ok_passes_the_cap_to_a_kernel_that_takes_it(self):
         from fpfa import fa_calc
@@ -505,10 +512,13 @@ class FaCallTests(unittest.TestCase):
             return req_ah <= listed_charger_max_ah
 
         module = SimpleNamespace(charger_ok=charger_ok)
-        fa_calc._require_listed_charger_cap(module, {"req_ah": 50, "listed_charger_max_ah": 110})
-        with self.assertRaisesRegex(ValueError, "does not take the caller's listed cap"):
-            fa_calc._require_listed_charger_cap(SimpleNamespace(charger_ok=lambda req_ah, maker_key: True),
-                                                {"req_ah": 50, "listed_charger_max_ah": 110})
+        self.assertIsNone(fa_calc.charger_hold(module, {"req_ah": 50, "listed_charger_max_ah": 110}))
+        held = fa_calc.charger_hold(SimpleNamespace(charger_ok=lambda req_ah, maker_key: True),
+                                    {"req_ah": 50, "listed_charger_max_ah": 110})
+        self.assertEqual(held["message"], fa_calc.CHARGER_HOLD)
+        # A maker key is never a fallback, even beside a cap and a kernel that takes it.
+        self.assertIsNotNone(fa_calc.charger_hold(module, {"req_ah": 50, "listed_charger_max_ah": 110,
+                                                           "maker_key": "simplex_es_ps"}))
 
     def test_a_blank_missing_or_zero_lfl_holds(self):
         session = _session()

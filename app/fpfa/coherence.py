@@ -56,6 +56,7 @@ _NO_ELECTION = frozenset({"unelected", "unknown"})
 BINDINGS: dict[str, dict[str, tuple[str, Any]]] = {
     "zone_trapped_volume": {
         "segments": ("segments", None),
+        # The tool now refuses a call without one. The default describes a row recorded before that, which ran on it.
         "length_basis": ("length_basis", "center_to_center"),
         "fittings_percent": ("fittings_percent", None),
         "trim_gal": ("trim_gal", None),
@@ -102,12 +103,13 @@ BINDINGS: dict[str, dict[str, tuple[str, Any]]] = {
         "insurer": ("insurer", ""),
     },
     "releasing_truth_table": {
+        # The tool now refuses a call without one. The default describes a row recorded before that, which ran on it.
         "manual_station": ("manual_station", True),
         "insurer": ("insurer", ""),
     },
 }
 # Arguments the screen only applies when the caller passes them. Left out, nothing was used.
-_ONLY_WHEN_PASSED = {"dry_delivery_screen": ("trim_gal", "fittings_percent")}
+_ONLY_WHEN_PASSED = {"dry_delivery_screen": ("trim_gal", "fittings_percent", "length_basis")}
 # tool -> (argument, basis field): the delivery rows' edition follows the job's NFPA 13 field (edition_follows). A
 # call that passed no edition withheld its cites and used none, so it follows any value of the field, and a change
 # to the field still puts it out of date.
@@ -253,7 +255,7 @@ def call_basis(
         if _blank(project):
             # The project input is blank. A call follows it only when what the tool used is blank too: a value the
             # call passed, or a default the tool put in for one left out (hose_duration's unsupervised, the truth
-            # table's manual station), is not the project's, and no default is read into the project's blank. The
+            # table's manual station on a row recorded before it was required), is not the project's, and no default is read into the project's blank. The
             # kernel's own words for no election ("unelected", "unknown") are a blank.
             used = _effective(args.get(arg), default)
             matches = _blank(used) or (isinstance(used, str) and used in _NO_ELECTION)

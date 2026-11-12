@@ -199,7 +199,7 @@ class ResumeTests(DeskCase):
         })
         # The helpers read job1 by default; this job has its own id.
         play.scripts["fp-sprinkler"] = [
-            lambda _k: call(use("zone_trapped_volume", segments=SEGMENTS)),
+            lambda _k: call(use("zone_trapped_volume", segments=SEGMENTS, length_basis="center_to_center")),
             lambda _k: call(use("di_trip_to_water", v_gal=281.3, q_fill_gpm=600, t_detect_s=8, t_release_s=2, t_exhaust_s=0, basis="FM", system_type="di")),
             lambda _k: call(use("record_finding", text="Trip to water screens against the 30 s clock", label="calculated",
                                 supports=[_calc(app.record, "di_trip_to_water", "fp-sprinkler", project_id)["id"]])),

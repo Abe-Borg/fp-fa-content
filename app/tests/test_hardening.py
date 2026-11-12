@@ -291,7 +291,7 @@ class SizeExemptionTests(unittest.TestCase):
                   trim_gal=5.0, fittings_percent=0)
         _seed_inputs(record, di=di)
         session = ToolSession(REPO, record=record, project_id="job1", agent="fp-sprinkler")
-        takeoff = session.execute("zone_trapped_volume", {"segments": di["segments"], "fittings_percent": 0, "trim_gal": 5.0})
+        takeoff = session.execute("zone_trapped_volume", {"length_basis": "center_to_center", "segments": di["segments"], "fittings_percent": 0, "trim_gal": 5.0})
         self.assertTrue(500.0 < takeoff["zone_gal"] < 500.5, takeoff["zone_gal"])
         times = {"t_detect_s": 8, "t_release_s": 2, "t_exhaust_s": 0, "basis": "FM", "qod": False}
         screen = session.execute("dry_delivery_screen", {"segments": di["segments"], "q_fill_gpm": 600,
@@ -333,7 +333,7 @@ class SizeExemptionTests(unittest.TestCase):
                   trim_gal=5.0, fittings_percent=0, q_fill_gpm=1500, t_detect_s=8, t_release_s=2, t_exhaust_s=0)
         _seed_inputs(record, di=di)
         session = ToolSession(REPO, record=record, project_id="job1", agent="fp-sprinkler")
-        takeoff = session.execute("zone_trapped_volume", {"segments": di["segments"], "fittings_percent": 0, "trim_gal": 5.0})
+        takeoff = session.execute("zone_trapped_volume", {"length_basis": "center_to_center", "segments": di["segments"], "fittings_percent": 0, "trim_gal": 5.0})
         self.assertTrue(500.0 < takeoff["zone_gal"] < 500.5, takeoff["zone_gal"])
         times = {"q_fill_gpm": 1500, "t_detect_s": 8, "t_release_s": 2, "t_exhaust_s": 0, "basis": "FM",
                  "system_type": "di"}
@@ -642,7 +642,7 @@ class FailureAccountingTests(unittest.TestCase):
 
         record = _record()
         di, _basis = _seed_inputs(record)
-        create = self._failing([call(use("zone_trapped_volume", segments=di["segments"]))])
+        create = self._failing([call(use("zone_trapped_volume", segments=di["segments"], length_basis="center_to_center"))])
         with self.assertRaises(ConnectionError) as caught:
             team.delegate(REPO, record, "job1", create, specialist="fp-sprinkler", brief="Find the trapped volume.")
         self.assertEqual(caught.exception.usage["rounds"], 1)
@@ -665,7 +665,7 @@ class FailureAccountingTests(unittest.TestCase):
         record = _record()
         di, _basis = _seed_inputs(record)
         lead = [call(use("delegate", specialist="fp-sprinkler", brief="Find the trapped volume."))]
-        specialist = [call(use("zone_trapped_volume", segments=di["segments"])), say("The volume is on the record.")]
+        specialist = [call(use("zone_trapped_volume", segments=di["segments"], length_basis="center_to_center")), say("The volume is on the record.")]
 
         def create(**kwargs):
             script = lead if "# Team lead" in system_text(kwargs) else specialist
@@ -781,7 +781,7 @@ class FailureAccountingTests(unittest.TestCase):
         self.assertIn("is billed again; recorded calculations replay.", text)
         record = _record()
         di, _basis = _seed_inputs(record)
-        create = self._failing([call(use("zone_trapped_volume", segments=di["segments"]))])
+        create = self._failing([call(use("zone_trapped_volume", segments=di["segments"], length_basis="center_to_center"))])
         with self.assertRaises(ConnectionError):
             team.delegate(REPO, record, "job1", create, specialist="fp-sprinkler", brief="Find the trapped volume.")
         digest = status.build(record.snapshot("job1"))
@@ -902,7 +902,7 @@ class EvaluationEvidenceTests(unittest.TestCase):
         from fpfa.live_eval import collaboration
 
         record, di, fp, fa = self._two_specialists()
-        volume = fp.execute("zone_trapped_volume", {"segments": di["segments"]})
+        volume = fp.execute("zone_trapped_volume", {"length_basis": "center_to_center", "segments": di["segments"]})
         finding = fp.execute("record_finding", {"text": "Trim family is El/El.", "label": "use best judgment"})
         fa.execute("record_finding", {"text": "The sequence follows the El/El trim.", "label": "use best judgment",
                                       "supports": [finding["id"]]})
