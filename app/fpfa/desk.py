@@ -441,6 +441,33 @@ FORM_TO_INPUT = {
     "failsafe": "failsafe_on_total_power_loss", "manual_station": "manual_station",
 }
 
+# The Inputs tab's label for each project input, for what the app says about a field the lead filled in.
+# The same words the page draws beside the field (frontend/src/components/Inputs.tsx).
+INPUT_LABELS = {
+    "ahj": "AHJ", "insurer": "Insurer", "nfpa_13": "NFPA 13 edition", "nfpa_72": "NFPA 72 edition",
+    "hazard_notes": "Hazard notes", "zone_id": "Zone", "system_type": "System", "hazard": "Hazard",
+    "delivery_basis": "Time basis", "density_gpm_ft2": "Density", "base_area_ft2": "Base area",
+    "area_increase": "Area increase", "hose_gpm": "Hose", "supervised": "Supervised waterflow",
+    "q_fill_gpm": "Fill flow", "t_detect_s": "Detection time", "t_release_s": "Releasing time",
+    "t_exhaust_s": "Exhaust time", "qod": "Quick-opening device", "medium": "Medium",
+    "prime_held_by": "Prime held by", "supervisory_psi": "Low-air supervisory", "supervisory_psig": "Supervisory fill",
+    "fill_minutes": "Fill time", "manual_station": "Manual station",
+    "failsafe_on_total_power_loss": "Failsafe on total power loss", "length_basis": "Lengths",
+    "fittings_percent": "Fittings", "trim_gal": "Trim", "segments": "Pipe segments",
+}
+INPUT_TO_FORM = {value: key for key, value in FORM_TO_INPUT.items()}
+# What a fill keeps for the app alone: the values an Undo puts back and checks against. The page is not sent them.
+_FILL_PRIVATE = ("was_raw", "now_raw")
+
+def _fill_text(name: str, value) -> str:
+    """An input's value in the words its field shows: a choice by its label, anything else as inputs.show() writes it."""
+    if name == "system_type":
+        return next((label for label, code in SYSTEM_CHOICES if code == value), inputs.show(name, value))
+    if name == "length_basis":
+        return next((label for label, code in LENGTHS if code == value), inputs.show(name, value))
+    return inputs.show(name, value)
+
+
 _INLINE_HEADING = re.compile(r"\s*Job [0-9a-f]{6,} \| .*$")
 # What the working line says for a job that is not a chat turn.
 KIND_ACTIVITY = {
@@ -715,6 +742,11 @@ class Desk:
         # due, and pump() reads it again at most every TEAM_REFRESH_SECONDS (_refresh_team_when_due).
         self._team_due = False
         self._team_read_at = 0.0
+        # Inputs the lead filled in from the chat on the open job, by input name: what the Inputs tab marks.
+        self._fills: dict[str, dict] = {}
+        # Per chat job, what the lead filled in during it, in order: the card under its reply.
+        self._job_fills: dict[str, list[dict]] = {}
+        self._fill_seq = 0
         self.results_text = NO_RUN_TEXT
         # The same run as the Results tab draws it: figures, labels, flags (fpfa.results_panel).
         self.results_view: dict = results_panel.empty_view()
@@ -1258,6 +1290,7 @@ class Desk:
         self._render_chat()
         self._show_saved_run(project.get("last_run") or project.get("bess_run"))
         self._open_record(project)
+        self._load_fills(project)
         self._post_recovery_note(project.get("id"))
         self._refresh_team()
 
@@ -1340,13 +1373,15 @@ class Desk:
                 pass
         return pulled
 
-    def _pull_inputs_onto_form(self, project: dict) -> list[str]:
+    def _pull_inputs_onto_form(self, project: dict, job_id: str | None = None) -> list[str]:
         """Sync the job with the record and, when the record put an input on it and it is the open job, redraw the form.
 
         The form has to show what the sync pulled before it is read again: a
         field still showing the old value would be captured as the designer's
-        change and would overrule what the lead recorded.
+        change and would overrule what the lead recorded. job_id is the chat
+        turn that recorded them, when one did: its reply carries the card.
         """
+        before = copy.deepcopy(project.get("synced")) if isinstance(project.get("synced"), dict) else {}
         try:
             pulled = self._sync_inputs(project)
         except Exception as exc:
@@ -1354,7 +1389,121 @@ class Desk:
             return []
         if pulled and self.project is not None and self.project.get("id") == project.get("id"):
             self._show_pulled(project, pulled)
+            self._note_fills(project, pulled, before, job_id)
         return pulled
+
+    def _note_fills(self, project: dict, pulled: list[str], before: dict, job_id: str | None) -> None:
+        """What the lead filled in from the chat: the Inputs tab marks the field, and the turn's card lists it.
+
+        Every word here is the app's: the field's label, the value before and
+        after as inputs.show() writes them, and the designer's words the lead
+        gave as its reason (set_input's why), read off the record row.
+        """
+        try:
+            rows = self.record.givens(project["id"])
+        except Exception:
+            rows = {}
+        shown_basis = (before or {}).get("basis") or {}
+        shown_zone = (before or {}).get("zone") or {}
+        changed = set(self.run_changes())
+        for name in pulled:
+            basis = name in inputs.BASIS_FIELDS
+            was_raw = shown_basis.get(name, "") if basis else inputs.decode(shown_zone.get(name))
+            now_raw = (project.get("basis") or {}).get(name, "") if basis else (project.get("di") or {}).get(name)
+            source = str((rows.get(name) or {}).get("source") or "")
+            why = source.split(":", 1)[1].strip() if source.startswith(inputs.SOURCE_TEXT[inputs.SOURCE_CHAT] + ":") else ""
+            self._fill_seq += 1
+            entry = {
+                "name": name,
+                "field": INPUT_TO_FORM.get(name, name),
+                "label": INPUT_LABELS.get(name, name),
+                "was": _fill_text(name, was_raw),
+                "now": _fill_text(name, now_raw),
+                "why": why[:300],
+                "fill": self._fill_seq,
+                "state": "applied",
+                "stale_run": name in changed,
+                "was_raw": was_raw,
+                "now_raw": now_raw,
+            }
+            self._fills[name] = entry
+            if job_id:
+                listed = self._job_fills.setdefault(job_id, [])
+                earlier = next((item for item in listed if item["name"] == name), None)
+                if earlier is not None:
+                    # Filled twice in one turn: one line, from the first value to the last.
+                    entry["was"], entry["was_raw"] = earlier["was"], earlier["was_raw"]
+                    listed[listed.index(earlier)] = entry
+                else:
+                    listed.append(entry)
+
+    def _load_fills(self, project: dict) -> None:
+        """The marks of a job just opened: each input the job's note says the lead filled in from the chat."""
+        self._fills = {}
+        noted = project.get("given") if isinstance(project.get("given"), dict) else {}
+        names = [name for name, source in noted.items() if source == inputs.SOURCE_CHAT]
+        if not names:
+            return
+        # The newest card that names an input still filled in says what it was before.
+        for turn in self.chat_log:
+            for item in turn.get("inputs") or []:
+                if item.get("name") in names and item.get("state") == "applied":
+                    self._fills[item["name"]] = dict(item)
+        for name in names:
+            self._fills.setdefault(name, {"name": name, "field": INPUT_TO_FORM.get(name, name),
+                                          "label": INPUT_LABELS.get(name, name), "was": "", "why": "", "fill": 0})
+
+    def form_marks(self) -> dict:
+        """The Inputs tab's marks: each field whose value the lead filled in from the chat and nobody typed over since."""
+        if not self.project:
+            return {}
+        noted = self.project.get("given") if isinstance(self.project.get("given"), dict) else {}
+        marks = {}
+        for name, entry in self._fills.items():
+            if noted.get(name) != inputs.SOURCE_CHAT or name in self._typed:
+                continue
+            marks[entry.get("field") or name] = {
+                "why": entry.get("why", ""), "was": entry.get("was", ""), "fill": entry.get("fill", 0),
+            }
+        return marks
+
+    def undo_fill(self, job_id: str, name: str) -> None:
+        """Put back what a field held before the lead filled it in from the chat, as the designer's own edit.
+
+        The record keeps both rows: the lead's, and the designer's that
+        replaces it. A field typed over since is left alone and said so.
+        """
+        if not self.project:
+            return
+        turn = next((turn for turn in reversed(self.chat_log)
+                     if turn.get("job_id") == job_id and turn.get("inputs")), None)
+        entry = next((item for item in (turn or {}).get("inputs") or []
+                      if item.get("name") == name and item.get("state") == "applied"), None)
+        if entry is None:
+            return
+        label = entry.get("label") or name
+        basis = name in inputs.BASIS_FIELDS
+        try:
+            shown = self.collect_basis() if basis else self.collect_di()
+        except ValueError as exc:
+            self.notify("Undo", f"The form cannot be read, so {label} was not changed. {exc}", kind="error")
+            return
+        if not inputs.same(inputs.canonical(name, shown.get(name)), inputs.canonical(name, entry.get("now_raw"))):
+            self.status.set(f"{label} was changed after the chat filled it in, so it was left as it is.")
+            entry["state"] = "overtaken"
+            self._render_chat()
+            return
+        shown[name] = entry.get("was_raw")
+        if basis:
+            self._apply_basis(shown)
+        else:
+            self._apply_di(shown)
+        self._typed.add(name)
+        entry["state"] = "undone"
+        self._fills.pop(name, None)
+        self.save_current()
+        self._render_chat()
+        self.status.set(f"Undone: {label} is back to {entry.get('was') or 'blank'}.")
 
     def _show_pulled(self, project: dict, pulled: list[str]) -> None:
         """Put the inputs the record supplied on the open form. The other fields stay as the designer has them.
@@ -2907,6 +3056,13 @@ class Desk:
                 parts.append("You\n" + text)
             else:
                 parts.append(plain_text(text))
+                if turn.get("inputs"):
+                    # The card under the reply, in its own words.
+                    parts.append("\n".join(["Filled in on the Inputs tab"] + [
+                        f"{item.get('label')}: {item.get('was') or 'blank'} → {item.get('now')}"
+                        + {"undone": " (undone)", "overtaken": " (changed since)"}.get(item.get("state"), "")
+                        for item in turn["inputs"]
+                    ]))
         for live in self.live_items():
             # A reply still arriving, as the page draws it: a half-written span closed, a caret after it.
             parts.append(plain_text(settle_inline(live["text"])) + CARET)
@@ -2929,7 +3085,9 @@ class Desk:
             return None
         newest = running[-1]
         detail = self._activity.get(newest.id) or KIND_ACTIVITY.get(newest.kind, "")
-        return {"label": PENDING_LABEL, "detail": detail}
+        fills = [{"label": item["label"], "now": item["now"], "field": item["field"]}
+                 for item in self._job_fills.get(newest.id, [])]
+        return {"label": PENDING_LABEL, "detail": detail, "fills": fills}
 
     def _stream_listener(self, job_id: str):
         """What a chat worker reports while its turn runs: (on_event, observe).
@@ -2960,6 +3118,9 @@ class Desk:
                 depth["tools"] = max(0, depth["tools"] - 1)
                 # Any agent's tool may have written the record: a finding, a step, a review, a calculation.
                 inbox.put((job_id, {"type": "record_changed"}))
+                if event.get("name") == "set_input" and not event.get("is_error") and not event.get("agent"):
+                    # The lead recorded an input the designer stated: it goes on the form now, not when the reply ends.
+                    inbox.put((job_id, {"type": "input_set"}))
             elif kind == "round" and not depth["tools"] and not event.get("agent"):
                 # A new round of the lead. If it writes text, that text is the reply
                 # and replaces what an earlier round wrote, as the tool loop keeps it.
@@ -2988,6 +3149,12 @@ class Desk:
             if kind == "record_changed":
                 if job.project_id == (self.project or {}).get("id"):
                     self._team_due = True
+                continue
+            if kind == "input_set":
+                if self.project is not None and job.project_id == self.project.get("id"):
+                    if self._pull_inputs_onto_form(self.project, job_id=job_id):
+                        save_project(self.project)
+                        activity_changed = True
                 continue
             if kind == "activity":
                 if self._activity.get(job_id) != event.get("text"):
@@ -3282,7 +3449,11 @@ class Desk:
             self._render_chat()
             form_error = self._save_form_or_chat(self.project)
             # An input the lead recorded from the chat goes onto the form before anything reads the form again.
-            pulled = self._pull_inputs_onto_form(self.project)
+            pulled = self._pull_inputs_onto_form(self.project, job_id=job_id)
+            fills = self._job_fills.pop(job_id, []) if job_id else []
+            if fills:
+                self.chat_log[-1]["inputs"] = fills
+                self._render_chat()
             save_project(self.project)
             if self.project.get("last_run"):
                 note = f"Chat updated. Tables and Section {DRAFT_SECTION} stay on the tool plan."
@@ -3295,6 +3466,8 @@ class Desk:
             self.status.set(form_error or self._with_job_label(job_id, note))
             self._refresh_team()
             return
+        # A job the designer left mid-turn: its inputs are on the record, and the Inputs tab marks them when it opens.
+        self._job_fills.pop(job_id or "", None)
         try:
             project = load_project(origin_id)
         except (OSError, json.JSONDecodeError):
@@ -3631,6 +3804,7 @@ class Desk:
                 "assumptions": self._assumption_cache[1] if self._assumption_cache else "",
                 "choices": {name: list(choices) for name, (_value, choices) in _CHOICE_FIELDS.items()},
                 "roles": list(SEGMENT_ROLES),
+                "marks": self.form_marks(),
             },
             "results": self.results_text,
             "results_view": self.results_view,
@@ -3646,6 +3820,8 @@ class Desk:
         if thread:
             state["thread"]["turns"] = [
                 {key: turn[key] for key in ("role", "text", "job_id") if key in turn}
+                | ({"inputs": [{key: value for key, value in item.items() if key not in _FILL_PRIVATE}
+                               for item in turn["inputs"]]} if turn.get("inputs") else {})
                 for turn in self.chat_log
             ]
         return state

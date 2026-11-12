@@ -1109,11 +1109,12 @@ def team_summary(out: dict | None, audit: dict | None = None) -> str:
 
     delegations = out.get("delegations") or []
     checks = out.get("checks") or []
-    changed = out.get("inputs_set") or []
     resolved = out.get("resolved") or []
     failed = out.get("failed") or []
     figure_lines = reply_audit.lines(audit)
-    if not delegations and not checks and not changed and not resolved and not failed:
+    # An input the lead set is listed by the window, on a card under the reply that can show and undo it
+    # (Desk._note_fills). The block does not list it again.
+    if not delegations and not checks and not resolved and not failed:
         about_figures = bool((audit or {}).get("unfound") or (audit or {}).get("stale"))
         head = "**Figures in this reply**" if about_figures else "**In this reply**"
         return "\n".join([head] + figure_lines) if figure_lines else ""
@@ -1123,8 +1124,6 @@ def team_summary(out: dict | None, audit: dict | None = None) -> str:
         lines.append(f"- FAILED: the {item.get('what')}{who} ended on an error ({_clip(item.get('error'), 160)}). "
                      "What had been recorded before it is kept and may be partial. Asking again repeats that work "
                      "and is billed again; recorded calculations replay.")
-    for item in changed:
-        lines.append(f"- input {item.get('name')}: {item.get('was')} → {item.get('now')} (from the chat)")
     exchanges: list[str] = []
     # One line per specialist, however many times the lead went back to it.
     totals: dict[str, dict] = {}

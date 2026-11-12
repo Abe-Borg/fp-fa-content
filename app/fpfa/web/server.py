@@ -86,6 +86,7 @@ ACTIONS: dict[str, Callable[[Desk, dict], Any]] = {
         _text(b.get("role"), 40), _text(b.get("nps"), 40), _text(b.get("schedule"), 40), _text(b.get("length"), 40)
     ),
     "segment-remove": lambda d, b: d.remove_segment(int(b.get("index", -1))),
+    "input-undo": lambda d, b: d.undo_fill(_text(b.get("job_id"), 80), _text(b.get("name"), 80)),
     "notice-dismiss": lambda d, b: d.dismiss_notice(int(b.get("id", 0))),
     "banner-dismiss": lambda d, b: d.dismiss_banner(),
     "scheme": lambda d, b: d.set_scheme(_text(b.get("id"), 40)),
