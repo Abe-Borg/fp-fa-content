@@ -170,7 +170,7 @@ class TurnCacheTests(unittest.TestCase):
                 Block(type="tool_use", id="toolu_skill", name="read_skill", input={"slug": "sprinkler-system-volume-takeoff"}),
             ], usage=SimpleNamespace(input_tokens=400, output_tokens=40, cache_creation_input_tokens=21000, cache_read_input_tokens=0)),
             SimpleNamespace(stop_reason="tool_use", content=[
-                Block(type="tool_use", id="toolu_vol", name="zone_trapped_volume", input={"segments": [{"d_in": 1.049, "length_ft": 100}]}),
+                Block(type="tool_use", id="toolu_vol", name="zone_trapped_volume", input={"length_basis": "center_to_center", "segments": [{"d_in": 1.049, "length_ft": 100}]}),
             ], usage=SimpleNamespace(input_tokens=30, output_tokens=60, cache_creation_input_tokens=5000, cache_read_input_tokens=21400)),
             SimpleNamespace(stop_reason="end_turn", content=[
                 Block(type="text", text="Quoted from the tool."),

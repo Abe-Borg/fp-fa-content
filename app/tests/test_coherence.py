@@ -358,7 +358,7 @@ class CallBasisTests(unittest.TestCase):
         session = ToolSession(REPO, record=record, project_id="job1", agent="fp-sprinkler")
         longer = copy.deepcopy(di["segments"])
         longer[1]["length_ft"] = 420                     # 200 ft more 2 in branch than the project inputs hold
-        takeoff = session.execute("zone_trapped_volume", {"segments": longer})
+        takeoff = session.execute("zone_trapped_volume", {"length_basis": "center_to_center", "segments": longer})
         own = "segments 4 segments where the project input segments is 4 segments"
         self.assertIn(own, takeoff["differs_from_project_inputs"])
         self.assertGreater(takeoff["zone_gal"], design["outputs"]["zone_gal"])
@@ -411,7 +411,7 @@ class CallBasisTests(unittest.TestCase):
         design = next(row for row in record.calcs("job1") if row["tool"] == "zone_trapped_volume")
         session = ToolSession(REPO, record=record, project_id="job1", agent="fp-sprinkler")
         # The same pipe with a zero fittings allowance, where the project leaves the allowance blank.
-        twin = session.execute("zone_trapped_volume", {"segments": di["segments"], "fittings_percent": 0})
+        twin = session.execute("zone_trapped_volume", {"length_basis": "center_to_center", "segments": di["segments"], "fittings_percent": 0})
         self.assertIn("fittings_percent 0 where the project input fittings_percent is blank",
                       twin["differs_from_project_inputs"])
         self.assertEqual(twin["zone_gal"], design["outputs"]["zone_gal"])

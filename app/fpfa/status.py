@@ -17,6 +17,7 @@ from __future__ import annotations
 from typing import Any
 
 from fpfa import coherence, inputs
+from fpfa.fa_calc import standing_holds
 from fpfa.releasing import reader_view
 
 PLAN_EVENT = "plan"
@@ -224,6 +225,9 @@ def build(snapshot: dict | None, *, export_reason: str | None = None) -> dict:
             {row["name"] for row in rows if row["label"] == inputs.ASSUMED and not row["blank"]},
             {row["name"] for row in rows if row["unconfirmed"] and not row["blank"]},
         ),
+        # A calculation that holds on the job until a value only the designer can supply is given (fa_calc's
+        # charger check without the listed cap). One line each, never a pass or a fail.
+        "holds": standing_holds(list(snap.get("calcs") or []), set(analysis["stale"]["calcs"])),
         # Every other input the designer took from a hint, one line each, until the designer types a value.
         "assumed": inputs.assumed_lines(
             [row["name"] for row in rows if row["label"] == inputs.ASSUMED and not row["blank"]],
@@ -353,6 +357,7 @@ def lead_text(digest: dict, check_line: str = "") -> str:
         lines.append("Plan: none set on this job yet.")
     lines.extend(_input_lines(digest, full=False))
     lines.extend(digest.get("unpinned") or [])
+    lines.extend(digest.get("holds") or [])
     if digest["changes"]:
         lines.append("Inputs changed after work was done on them:")
         for item in digest["changes"]:
@@ -489,6 +494,12 @@ def designer_text(digest: dict, check_line: str = "", name: str = "", *, coverag
             lines.append(f"- {line}")
         lines.append("Type the edition on the Inputs tab, or tell the lead. A hint you used does not pin it.")
         coverage = [gap for gap in coverage or [] if gap not in digest["unpinned"]] or None
+    if digest.get("holds"):
+        lines.append("")
+        lines.append("**HOLD**")
+        for line in digest["holds"]:
+            lines.append(f"- {line}")
+        coverage = [gap for gap in coverage or [] if gap not in digest["holds"]] or None
     if digest.get("assumed"):
         lines.append("")
         lines.append("**ASSUMED inputs**")

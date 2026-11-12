@@ -31,13 +31,15 @@ from typing import Any
 
 from docx import Document
 
-from fpfa import checker, coherence, content_use, inputs, status
+from fpfa import checker, coherence, content_use, fa_calc, inputs, status
 from fpfa.inputs import SUBTIMES_MISSING
 from fpfa.workflow import (
+    allowance_text,
     cite_note,
     exemption_answer,
     fill_only,
     fmt1,
+    friction_note,
     judgment_label_line,
     releasing_logic,
     screen_limit_assumption_text,
@@ -62,6 +64,24 @@ DRAFT_LINE = (
     "This is a draft for the engineer of record. It is not cleared for issue. The team that wrote it is one "
     "AI model in several roles; the trace check is a second pass by the same model on a blind packet."
 )
+# A job whose NFPA 72 edition is not pinned (blank, ASSUMED, or an unconfirmed starting value) is exported only as a
+# working draft: the cover says so, and every figure that depends on the edition prints as HOLD.
+NFPA72_HOLD = "HOLD: NFPA 72 edition not set"
+NFPA72_COVER = (
+    NFPA72_HOLD + ". This is a working draft, not for issue and not for a client. Every figure on this record that "
+    "depends on the NFPA 72 edition prints as HOLD until the designer types the job's NFPA 72 edition on the Inputs "
+    "tab. No edition is taken for it."
+)
+NFPA72_FIGURES_HELD = (
+    NFPA72_HOLD + ". This row's figures depend on the NFPA 72 edition and are not printed. The application cannot tell "
+    "which fire-alarm kernel reads the edition, so every one is held."
+)
+NFPA72_FINDING_HELD = (
+    NFPA72_HOLD + ". This finding rests on a row whose figures depend on the NFPA 72 edition; its text is not printed "
+    "until the edition is set."
+)
+# The fire-alarm kernel modules that are not NFPA 72 calculations: the LFL screens follow the gas-detection basis.
+_NOT_NFPA72_MODULES = frozenset({"lfl"})
 _MAX_JSON = 600
 _PLAN = status.PLAN_AGENTS
 
@@ -91,12 +111,16 @@ def key_figures(tool: str, inputs: Any, outputs: Any) -> str:
     """One sentence of the figures that matter from a calc record, with their labels."""
     out = outputs if isinstance(outputs, dict) else {}
     inp = inputs if isinstance(inputs, dict) else {}
+    if out.get("status") == fa_calc.HOLD_STATUS and out.get("message"):
+        # A calculation that held (the charger check without its listed cap): its one message, no pass or fail.
+        return str(out["message"])
     try:
         if tool == "zone_trapped_volume":
             return (
                 f"Pipe {fmt1(out['pipe_gal'])} gal (calculated). "
-                f"Fittings {fmt1(out['fittings_gal'])} gal at {float(out['fittings_percent']):g}%. "
+                f"Fittings {fmt1(out['fittings_gal'])} gal ({allowance_text(out)}). "
                 f"{trim_assumption_text(out)}. Zone total {fmt1(out['zone_gal'])} gal (calculated)."
+                + (f" {friction_note(out)}" if friction_note(out) else "")
             )
         if tool == "dry_delivery_screen":
             answer = exemption_answer(out)
@@ -197,6 +221,27 @@ def key_figures(tool: str, inputs: Any, outputs: Any) -> str:
     return f"Inputs {_compact(inp, 240)}. Outputs {_compact(out, 360)}."
 
 
+def nfpa72_unset(snapshot: dict | None) -> bool:
+    """Whether the job pins no NFPA 72 edition: blank, not one year, ASSUMED, or an unconfirmed starting value."""
+    fact = next((row for row in (snapshot or {}).get("facts") or []
+                 if row.get("kind") == inputs.BASIS_KIND and row.get("key") == "nfpa_72"), None)
+    return coherence.pinned_edition(fact) is None
+
+
+def nfpa72_dependent(row: dict) -> bool:
+    """Whether a calc row's figures depend on the NFPA 72 edition, as far as the application can tell.
+
+    A fire-alarm kernel row (fa_calc), except the LFL screens, and any row whose
+    own cites name an NFPA 72 edition. Which kernel reads the edition is the
+    content's; the application holds every one it cannot rule out.
+    """
+    if row.get("tool") == "fa_calc":
+        module = str((row.get("inputs") or {}).get("module") or "").strip().removesuffix(".py")
+        if module not in _NOT_NFPA72_MODULES:
+            return True
+    return "NFPA 72" in coherence.cited_editions(row.get("outputs"))
+
+
 def _who(row: dict) -> str:
     agent = row.get("agent") or ""
     return "tool plan" if agent in _PLAN else agent
@@ -237,23 +282,28 @@ def elections_from_calcs(calcs: list[dict], analysis: dict | None = None) -> lis
     return rows
 
 
-def assumption_lines(snapshot: dict) -> list[str]:
-    """Every ASSUMED row and every ASSUMED flag a calc returned."""
+def assumption_lines(snapshot: dict, held: Any = ()) -> list[str]:
+    """Every ASSUMED row and every ASSUMED flag a calc returned. A held row's flags are HOLD, not printed."""
+    held = set(held or ())
     lines: list[str] = []
     for row in snapshot.get("facts") or []:
         if row.get("label") == "ASSUMED":
             lines.append(f"{row['kind']}/{row['key']}: {row['value']} [{row['id']}]")
     for row in snapshot.get("findings") or []:
         if row.get("label") == "ASSUMED":
-            lines.append(f"{row['agent']}: {row['text']} [{row['id']}]")
+            text = NFPA72_FINDING_HELD if row["id"] in held else row["text"]
+            lines.append(f"{row['agent']}: {text} [{row['id']}]")
     for row in snapshot.get("decisions") or []:
         if row.get("label") == "ASSUMED":
-            lines.append(f"{row['decided_by']}: {row['text']} [{row['id']}]")
+            text = NFPA72_FINDING_HELD if row["id"] in held else row["text"]
+            lines.append(f"{row['decided_by']}: {text} [{row['id']}]")
     states = coherence.analyze(snapshot)["calcs"]
     for row in snapshot.get("calcs") or []:
         if states.get(row["id"], {}).get("state") == coherence.STALE:
             continue
         out = row.get("outputs") if isinstance(row.get("outputs"), dict) else {}
+        if row["id"] in held:
+            continue
         for flag in out.get("flags") or []:
             if isinstance(flag, str) and "ASSUMED" in flag:
                 lines.append(f"{row['tool']}: {flag} [{row['id']}]")
@@ -357,10 +407,21 @@ def write_design_basis(
     for row in list(snapshot.get("decisions") or []) + list(snapshot.get("retired_decisions") or []):
         rows_by_id[row["id"]] = dict(row, _kind="decision")
 
+    # NFPA 72 not pinned: a working draft, with every figure that depends on the edition held.
+    hold72 = nfpa72_unset(snapshot)
+    held_calcs = {row["id"] for row in calcs if hold72 and nfpa72_dependent(row)}
+    held_findings = {row["id"] for row in findings + decisions
+                     if held_calcs & set(row.get("supports") or [])}
+
+    def finding_text(row: dict) -> str:
+        return NFPA72_FINDING_HELD if row.get("id") in held_findings else row.get("text") or ""
+
     doc = Document()
     doc.core_properties.title = DESIGN_BASIS_TITLE
     doc.core_properties.subject = "Design basis, calculation records, findings, and open questions"
     doc.add_heading(DESIGN_BASIS_TITLE, level=1)
+    if hold72:
+        doc.add_paragraph(NFPA72_COVER)
     doc.add_paragraph(
         f"Project: {project.get('name') or 'Untitled job'}. "
         "Draft for the engineer of record. Every line is read from the project record; nothing is typed by hand. "
@@ -461,7 +522,8 @@ def write_design_basis(
         stale = " OUT OF DATE: " + "; ".join(standing.get("reasons") or [])[:300] if standing.get("state") == coherence.STALE else ""
         election_rows.append([
             "Decision",
-            row["text"] + (f" Basis: {row['basis']}" if row.get("basis") else "") + stale,
+            (NFPA72_FINDING_HELD if row["id"] in held_findings
+             else row["text"] + (f" Basis: {row['basis']}" if row.get("basis") else "")) + stale,
             f"{row['decided_by']} ({row['label']})",
             row["id"],
         ])
@@ -495,7 +557,8 @@ def write_design_basis(
             doc,
             ["Tool", "By", "Recorded", "Replays", "Figures", "Standing", "Id"],
             [[row["tool"], row.get("agent") or "", row.get("created") or "", row.get("replay_count", 0),
-              key_figures(row["tool"], row.get("inputs"), row.get("outputs")), standing_of(row), row["id"]]
+              NFPA72_FIGURES_HELD if row["id"] in held_calcs
+              else key_figures(row["tool"], row.get("inputs"), row.get("outputs")), standing_of(row), row["id"]]
              for row in current_calcs],
         )
         doc.add_paragraph(
@@ -528,7 +591,7 @@ def write_design_basis(
             _table(
                 doc,
                 ["Finding", "Label", "By", "Rests on", "How far it was taken", "Agreed by", "Id"],
-                [[row["text"], row["label"], row.get("agent") or "unknown", _rests_on(row, rows_by_id),
+                [[finding_text(row), row["label"], row.get("agent") or "unknown", _rests_on(row, rows_by_id),
                   _checked_against(tiers[row["id"]]), ", ".join(sorted(set(agreed.get(row["id"], [])))) or "",
                   row["id"]] for row in rows],
             )
@@ -557,7 +620,7 @@ def write_design_basis(
             _table(
                 doc,
                 ["Finding", "Author", "Reviewer", "Position", "Note", "How it ended"],
-                [[_clip((all_findings.get(row["finding_id"]) or {}).get("text") or f"[{row['finding_id']}]", 220),
+                [[_clip(finding_text(all_findings.get(row["finding_id"]) or {}) or f"[{row['finding_id']}]", 220),
                   (all_findings.get(row["finding_id"]) or {}).get("agent") or "", row.get("agent") or "",
                   "objects" if row.get("position") == "object" else "agrees", row.get("note") or "", ended(row)]
                  for row in reviews],
@@ -569,7 +632,7 @@ def write_design_basis(
         doc.add_paragraph("No contributor has reviewed another's finding on this record.")
 
     doc.add_heading("6. Assumptions", level=2)
-    assumed = assumption_lines(snapshot)
+    assumed = assumption_lines(snapshot, held_calcs | held_findings)
     if assumed:
         for line in assumed:
             doc.add_paragraph(line, style="List Bullet")
@@ -636,7 +699,9 @@ def write_design_basis(
     rows = (check or {}).get("rows") if isinstance(check, dict) else None
     if rows:
         _table(doc, ["Claim", "Verdict", "Cite", "Why"],
-               [[row.get("n"), row.get("verdict"), _clip(row.get("cite"), 900), row.get("reason") or ""] for row in rows])
+               [[row.get("n"), row.get("verdict"),
+                 NFPA72_FINDING_HELD if row.get("finding_id") in held_findings else _clip(row.get("cite"), 900),
+                 "" if row.get("finding_id") in held_findings else row.get("reason") or ""] for row in rows])
         if not (check or {}).get("all_supported"):
             doc.add_paragraph(
                 "Not every finding is supported by the rows it cites. Those are listed in section 4 under "

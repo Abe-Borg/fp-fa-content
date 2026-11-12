@@ -120,13 +120,21 @@ def run_fa_calc(content_root: Path, args: dict | None) -> dict:
         inputs = {}
     if not isinstance(inputs, dict):
         raise ValueError("inputs must be an object")
+    # A copy: what the caller passed is what the record keeps, and the checks below may clean a value for the kernel.
+    inputs = dict(inputs)
     module = _fa_module(content_root, module_name)
     if op_name not in FA_OPS[module_name] or not _is_public_function(module, op_name):
         raise KeyError(f"unknown op {op_name!r} for module {module_name!r}")
     if module_name == "battery" and op_name == "split_supplies":
         _require_split_capacity(inputs)
     if module_name == "battery" and op_name == "charger_ok":
-        _require_listed_charger_cap(module, inputs)
+        held = charger_hold(module, inputs)
+        if held is not None:
+            # Returned, not raised, so the call is recorded and the HOLD stands on the job until a charger_ok
+            # runs on the listed cap. The kernel is not called: no maker key and no remembered cap stands in.
+            return held
+    if module_name == "lfl":
+        _require_lfl(op_name, inputs)
     return _as_dict(getattr(module, op_name)(**inputs))
 
 
@@ -166,36 +174,119 @@ def _require_split_capacity(inputs: dict) -> None:
 
 
 CHARGER_CAP = "listed_charger_max_ah"
+# The one message a charger check holds on, whatever the cause. It is never a PASS or a FAIL.
+CHARGER_HOLD = "HOLD: listed_charger_max_ah required from the listed charger datasheet"
+HOLD_STATUS = "HOLD"
 
 
-def _require_listed_charger_cap(module, inputs: dict) -> None:
-    """charger_ok takes the charger's listed maximum Ah from the caller, and nothing else.
+def charger_hold(module, inputs: dict) -> dict | None:
+    """The HOLD result for a charger_ok call that cannot run on the caller's listed cap, or None when it can.
 
-    No maker table or remembered cap stands in: a maker key is refused, and a
-    missing, non-numeric, non-finite, or non-positive cap holds the check. A
-    pack whose charger_ok still takes a maker key holds too, until the pack
-    that takes the caller's cap is installed.
+    charger_ok takes the charger's listed maximum Ah from the caller, and
+    nothing else. A maker key, a missing, non-numeric, non-finite, or
+    non-positive cap, and a pack whose charger_ok does not take the caller's
+    cap all hold, with one message (CHARGER_HOLD). No maker table or remembered
+    cap stands in, and the result carries no pass or fail.
     """
-    if "maker_key" in inputs:
-        raise ValueError(
-            "HOLD: charger_ok takes the charger's listed maximum Ah from its listing (listed_charger_max_ah), not a "
-            "maker key. The application holds no charger cap."
-        )
     cap = inputs.get(CHARGER_CAP)
-    if isinstance(cap, bool) or not isinstance(cap, (int, float)) or not math.isfinite(cap) or cap <= 0:
-        raise ValueError(
-            f"HOLD: charger_ok needs {CHARGER_CAP}, the charger's listed maximum Ah, as a number greater than 0 "
-            f"(got {cap!r}). The application holds no charger cap."
-        )
+    usable = not isinstance(cap, bool) and isinstance(cap, (int, float)) and math.isfinite(cap) and cap > 0
     try:
         takes = CHARGER_CAP in inspect.signature(getattr(module, "charger_ok")).parameters
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, AttributeError):
         takes = False
-    if not takes:
+    if "maker_key" not in inputs and usable and takes:
+        return None
+    return {"module": "battery", "op": "charger_ok", "status": HOLD_STATUS, "message": CHARGER_HOLD,
+            "charger_ok": None}
+
+
+def standing_holds(calcs: list[dict] | None, stale: set[str] | None = None) -> list[str]:
+    """The HOLD lines that stand on a job's record: a charger check whose latest current row is a HOLD.
+
+    A charger_ok that later ran on the listed cap ends it. A row out of date
+    (stale) does not count either way.
+    """
+    stale = stale or set()
+    latest = None
+    for row in calcs or []:
+        inp = row.get("inputs") if isinstance(row.get("inputs"), dict) else {}
+        if row.get("tool") != "fa_calc" or row.get("id") in stale:
+            continue
+        if _module_name_or_blank(inp.get("module")) == "battery" and str(inp.get("op") or "").strip() == "charger_ok":
+            latest = row
+    out = (latest or {}).get("outputs")
+    if isinstance(out, dict) and out.get("status") == HOLD_STATUS:
+        return [CHARGER_HOLD]
+    return []
+
+
+def _module_name_or_blank(value) -> str:
+    text = str(value or "").strip()
+    return text[:-3] if text.endswith(".py") else text
+
+
+# The LFL ops and the arguments each reads an LFL from: a table of component LFLs, or one LFL figure.
+_LFL_TABLE_OPS = {"lfl_mix", "lfl_with_diluent", "setpoints_for"}
+_LFL_FIGURE_OPS = {"pct_of_lfl": "lfl_vol_pct", "setpoint": "lfl_vol_pct", "trigger_paths": "lfl_vol_pct"}
+INERT = "inert"
+
+
+def clean_lfl_table(tool: str, mix, table) -> dict:
+    """The component LFL table a mix runs on, or a HOLD naming every gas without a usable LFL.
+
+    Every gas in the mix has an LFL greater than 0 that the caller gave, or is
+    written "inert" (passed on as None, which the kernel reads as inert). A
+    blank, missing, zero, negative, or non-finite LFL holds the call: the
+    kernel would read a gas with no LFL as inert, and the application picks no
+    LFL for it.
+    """
+    if not isinstance(mix, dict) or not isinstance(table, dict):
+        raise ValueError(f"HOLD: {tool} needs mix and lfl as objects: gas name to percent, and gas name to its "
+                         "component LFL vol% or \"inert\".")
+    clean: dict[str, float | None] = {}
+    holds = []
+    for key, value in table.items():
+        if isinstance(value, str) and value.strip().lower() == INERT:
+            clean[str(key)] = None
+            continue
+        number = _finite_number(value)
+        if number is None or number <= 0:
+            holds.append(f"{key} (LFL {value!r})")
+            continue
+        clean[str(key)] = number
+    holds.extend(f"{key} (no LFL given)" for key in mix if str(key) not in clean
+                 and not any(item.startswith(f"{key} (LFL") for item in holds))
+    if holds:
         raise ValueError(
-            "HOLD: the installed content pack's charger_ok does not take the caller's listed cap "
-            f"({CHARGER_CAP}). The check waits for the pack that does; no maker cap is used."
+            f"HOLD: {tool} needs a component LFL vol% greater than 0 for every gas in mix, or \"inert\": "
+            + ", ".join(holds) + ". The application picks no LFL and no percent."
         )
+    return clean
+
+
+def _require_lfl(op: str, inputs: dict) -> None:
+    """The LFL ops reached through fa_calc hold on an LFL as lfl_setpoints does. The table is cleaned in place."""
+    if op in _LFL_TABLE_OPS:
+        inputs["lfl"] = clean_lfl_table(f"fa_calc lfl.{op}", inputs.get("mix"), inputs.get("lfl"))
+        return
+    key = _LFL_FIGURE_OPS.get(op)
+    if key is None:
+        return
+    value = inputs.get(key)
+    number = _finite_number(value)
+    if number is None or number <= 0:
+        raise ValueError(f"HOLD: fa_calc lfl.{op} needs {key}, an LFL vol% greater than 0 (got {value!r}). "
+                         "The application picks no LFL.")
+
+
+def _finite_number(value) -> float | None:
+    if isinstance(value, bool) or value is None or (isinstance(value, str) and not value.strip()):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
 
 
 def _op_name(value) -> str:

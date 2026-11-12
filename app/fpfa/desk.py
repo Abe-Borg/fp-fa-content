@@ -3162,7 +3162,7 @@ class Desk:
         if changed:
             raise RuntimeError(EXPORT_STALE_RUN.format(names=", ".join(changed), section=DRAFT_SECTION))
         snapshot = copy.deepcopy(self.project["last_run"])
-        problem = section_problem(snapshot, self.project)
+        problem = section_problem(snapshot, self.project, self._record_assumed())
         if problem:
             # Before the claim check, which is a billed request: this run is not written as the section at all.
             raise RuntimeError(problem)
@@ -3183,6 +3183,22 @@ class Desk:
         if not outcome["all_supported"]:
             raise RuntimeError(outcome["block_reason"])
         return self._write_export(Path(path), outcome, snapshot)
+
+    def _record_assumed(self) -> set[str]:
+        """The inputs the open job's record labels ASSUMED (an accepted hint, an unmarked kPa read as gauge).
+
+        The Section export holds on each one by name (spec_docx.section_problem). A record that cannot be read
+        adds none here: the run's own ASSUMED inputs and the job's accepted hints still hold it.
+        """
+        if not self.project or not self.project.get("id"):
+            return set()
+        try:
+            givens = self.record.givens(self.project["id"])
+        except Exception:
+            return set()
+        return {name for name, row in givens.items()
+                if str(row.get("label") or "") == inputs.ASSUMED and str(row.get("value") or "").strip()
+                and str(row.get("value")) != "null"}
 
     def export_docx(self) -> None:
         if not self.project or not self.project.get("last_run"):
@@ -3270,7 +3286,7 @@ class Desk:
             self.notify("Export", EXPORT_STALE_RUN.format(names=", ".join(changed), section=DRAFT_SECTION))
             return
         snapshot = copy.deepcopy(self.project["last_run"])
-        problem = section_problem(snapshot, self.project)
+        problem = section_problem(snapshot, self.project, self._record_assumed())
         if problem:
             # A dry or wet zone, an unpinned NFPA 13 edition, or an ASSUMED demand: no check is run or billed.
             self.notify("Export", problem)
@@ -3344,7 +3360,8 @@ class Desk:
 
     def _write_export(self, path: Path, outcome: dict, result=None, project: dict | None = None) -> Path:
         project = project or self.project
-        written = write_docx(path, project, result if result is not None else project["last_run"])
+        assumed = self._record_assumed() if project is self.project else set()
+        written = write_docx(path, project, result if result is not None else project["last_run"], assumed)
         write_packet_files(written.parent, outcome)
         return written
 

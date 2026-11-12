@@ -140,7 +140,8 @@ class DelegateTests(unittest.TestCase):
         return [
             _turn("tool_use",
                   Block(type="tool_use", id="t1", name="zone_trapped_volume",
-                        input={"segments": [{"nps": 1, "schedule": "sch40", "length_ft": 100, "role": "branch"}]}),
+                        input={"segments": [{"nps": 1, "schedule": "sch40", "length_ft": 100, "role": "branch"}],
+                               "length_basis": "center_to_center"}),
                   usage=_usage(input_tokens=900, output_tokens=40, cache_creation_input_tokens=3000)),
             _turn("tool_use",
                   Block(type="tool_use", id="t2", name="record_finding",

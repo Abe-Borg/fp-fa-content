@@ -7,16 +7,19 @@ and is not this export.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from docx import Document
 
 from fpfa import inputs
 from fpfa.workflow import (
+    allowance_text,
     cite_note,
     exemption_answer,
     exemption_qualifier,
     fill_only,
     fmt1,
+    friction_note,
     governing_narrative,
     judgment_label_line,
     releasing_sentence,
@@ -40,36 +43,88 @@ EDITION_EXPORT_HOLD = (
     "(EDITION NOT SET — cites withheld, VERIFY), so {document} is not exported. Type the job's NFPA 13 edition on "
     "the Inputs tab and run the zone again."
 )
+# An edition the job pins and the calc pack holds no labels for (2022 and 2024 today): the rows ran with their cites
+# withheld, and a section with no cites is not issued.
+EDITION_NOT_HELD_HOLD = (
+    "HOLD: {why}. The delivery rows ran with every NFPA 13 cite withheld, so {document} is not exported until the "
+    "calc pack labels that edition."
+)
+SECTION_HOLD_HEAD = "Section {section} is not exported. Each of these holds it:"
 
 
-def section_problem(result: dict | None, project: dict | None = None) -> str:
+def _form_name(name: str) -> str:
+    label = inputs.FORM_LABELS.get(name, (name, ""))[0]
+    return f"{label} ({name})" if label != name else name
+
+
+def section_problem(result: dict | None, project: dict | None = None, assumed: Any = ()) -> str:
     """Why a run cannot be written as Section 21 13 19, or "". The section is double-interlock only.
 
     Dry pipe is a different section and a wet zone has no delivery rows,
-    so neither is written here. A run whose demand is built on
-    an ASSUMED density or area is not for release. A run whose NFPA 13 edition
-    is not pinned (blank, or ASSUMED from its hint) carries no cites and is
-    not exported.
+    so neither is written here. Otherwise every hold is named at once:
+
+    - an NFPA 13 edition that is not pinned (blank, or ASSUMED from its hint),
+      or one the delivery rows ran on with their cites withheld (an edition the
+      calc pack holds no labels for);
+    - an NFPA 72 edition that is not pinned: the section specifies the
+      detection and releasing;
+    - every input the run used that is ASSUMED (a hint the designer used, or a
+      value the record labels ASSUMED), named;
+    - an insurer that is blank or ASSUMED (an earlier form's starting value on
+      an older job is marked in the basis line, as before, not held);
+    - a row built on an ASSUMED input (its release_status).
+
+    assumed names further inputs the record labels ASSUMED (the desk reads them
+    from the record); the run's own and the job's accepted hints are read here.
     """
     result = result if isinstance(result, dict) else {}
     basis = result.get("basis") if isinstance(result.get("basis"), dict) else (project or {}).get("basis") or {}
-    assumed = inputs.accepted_inputs(project) if project is not None else set()
     tools = result.get("tools") if isinstance(result.get("tools"), dict) else {}
-    # The job's edition as it stands, and the edition the run's own rows ran on: a run made before the designer
-    # typed the edition still has its cites withheld, and is run again first.
-    unset = any(isinstance(row, dict) and row.get("edition_status") == "not set" for row in tools.values())
-    if "NFPA 13" in inputs.unpinned_editions(basis, assumed) or unset:
-        return EDITION_EXPORT_HOLD.format(document=f"Section {DRAFT_SECTION}")
     system = str((result.get("inputs") or {}).get("system_type") or "")
     if system != "di" or "dry_delivery_screen" not in tools or "di_trip_to_water" not in tools:
         named = {"dry": "a dry-pipe zone, which is a section of its own", "wet": "a wet zone"}.get(system, "this zone")
         return (f"Section {DRAFT_SECTION} is double-interlock preaction. This run is {named}, so it is not written "
                 "as this section.")
+    taken = set(inputs.accepted_inputs(project) if project is not None else set())
+    taken |= set(result.get("assumed") or ()) | set(assumed or ())
+    document = f"Section {DRAFT_SECTION}"
+    holds: list[str] = []
+    # The job's edition as it stands, and the edition the run's own rows ran on: a run made before the designer
+    # typed the edition still has its cites withheld, and is run again first.
+    rows = [row for row in tools.values() if isinstance(row, dict)]
+    unset = any(row.get("edition_status") == "not set" for row in rows)
+    unpinned = inputs.unpinned_editions(basis, taken)
+    if "NFPA 13" in unpinned or unset:
+        holds.append(EDITION_EXPORT_HOLD.format(document=document))
+    else:
+        withheld = next((row for row in rows if row.get("edition_status") == "not held"), None)
+        if withheld is not None:
+            holds.append(EDITION_NOT_HELD_HOLD.format(why=withheld.get("cites_withheld") or "cites withheld",
+                                                      document=document))
+    if "NFPA 72" in unpinned:
+        holds.append(f"HOLD: NFPA 72 {inputs.EDITION_NOT_PINNED}. The section specifies the detection and releasing, "
+                     "so it is not issued until the designer types the job's NFPA 72 edition.")
+    editions = {field for field, _document in inputs.EDITION_FIELDS}
+    values = {**basis, **(result.get("inputs") or {})}
+    for name in sorted(taken - editions - {"insurer"},
+                       key=lambda item: inputs.INPUT_NAMES.index(item) if item in inputs.INPUT_NAMES else 999):
+        shown = inputs.show(name, values[name]) if name in values else "its value"
+        holds.append(f"{_form_name(name)} is ASSUMED ({shown}): type the job's own value.")
+    insurer = str(basis.get("insurer") or "").strip()
+    if not insurer:
+        holds.append("Insurer (insurer) is blank: type the job's insurer.")
+    elif "insurer" in taken:
+        holds.append(f"Insurer (insurer) is ASSUMED ({insurer}): type the job's insurer.")
     for name, row in tools.items():
         if isinstance(row, dict) and row.get("release_status"):
-            return (f"The {name} row is built on an ASSUMED input: {row['release_status']}. Type the job's own "
-                    "value and run the zone again before this section is exported.")
-    return ""
+            holds.append(f"The {name} row is built on an ASSUMED input: {row['release_status']}.")
+    if not holds:
+        return ""
+    if len(holds) == 1 and holds[0].startswith("HOLD: NFPA 13"):
+        return holds[0]
+    return " ".join([SECTION_HOLD_HEAD.format(section=DRAFT_SECTION)] + [f"({n}) {text}" for n, text in
+                                                                         enumerate(holds, start=1)]
+                    + ["Run the zone again once each is settled."])
 
 
 def _yn(value) -> str:
@@ -127,8 +182,8 @@ def _table(doc: Document, headers: list[str], rows: list[list]) -> None:
             table.rows[r_index].cells[c_index].text = "" if value is None else str(value)
 
 
-def write_docx(path: Path | str, project: dict, result: dict) -> Path:
-    problem = section_problem(result, project)
+def write_docx(path: Path | str, project: dict, result: dict, assumed: Any = ()) -> Path:
+    problem = section_problem(result, project, assumed)
     if problem:
         raise ValueError(problem)
     path = Path(path)
@@ -190,9 +245,10 @@ def write_docx(path: Path | str, project: dict, result: dict) -> Path:
     )
     doc.add_paragraph(
         f"Pipe {fmt1(volume['pipe_gal'])} gal (calculated). "
-        f"Fittings {fmt1(volume['fittings_gal'])} gal at {volume['fittings_percent']:g}%. "
+        f"Fittings {fmt1(volume['fittings_gal'])} gal ({allowance_text(volume)}). "
         f"{trim_assumption_text(volume)}. "
         f"Zone total {fmt1(volume['zone_gal'])} gal."
+        + (f" {friction_note(volume)}" if friction_note(volume) else "")
     )
 
     doc.add_heading("Water-delivery screen", level=2)
@@ -240,7 +296,8 @@ def write_docx(path: Path | str, project: dict, result: dict) -> Path:
         )
     elif trip.get("assumed_zero_note"):
         doc.add_paragraph(str(trip["assumed_zero_note"]))
-    doc.add_paragraph(f"Size exemption judged against {threshold_words(screen)}.")
+    doc.add_paragraph(f"Size exemption judged against {threshold_words(screen)}"
+                      + (f", on {screen['exemption_volume_basis']}." if screen.get("exemption_volume_basis") else "."))
     qualifier = exemption_qualifier(volume, screen)
     if qualifier:
         doc.add_paragraph(qualifier)

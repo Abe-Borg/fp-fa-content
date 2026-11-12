@@ -23,11 +23,14 @@ from typing import Any
 from fpfa.claude_client import MODEL_ID
 from fpfa.releasing import TRUTH_TABLE_TOOL, releasing_logic
 from fpfa.workflow import (
+    allowance_text,
     cite_note,
     exemption_answer,
+    exemption_basis_text,
     exemption_qualifier,
     fill_only,
     fmt1,
+    friction_note,
     format_transcript,
     judgment_label_line,
     screen_limit_assumption_text,
@@ -89,9 +92,10 @@ def zone_figures(tools: dict[str, Any]) -> list[dict]:
         if "pipe_gal" in volume:
             lines.append(f"{fmt1(volume['pipe_gal'])} gal of pipe ({CALCULATED})")
         if "fittings_gal" in volume:
-            percent = volume.get("fittings_percent")
-            allowance = f" ({percent:g}%)" if isinstance(percent, (int, float)) else ""
-            lines.append(f"{fmt1(volume['fittings_gal'])} gal fittings allowance{allowance}")
+            # The basis beside the allowance, not only in the flags: "0%; center-to-center, no allowance".
+            lines.append(f"{fmt1(volume['fittings_gal'])} gal fittings allowance ({allowance_text(volume)})")
+            if friction_note(volume):
+                lines.append(friction_note(volume))
         lines.append(trim_assumption_text(volume))
         figures.append(_figure(
             "zone_total", "Zone total", fmt1(volume["zone_gal"]), "gal",
@@ -140,6 +144,9 @@ def zone_figures(tools: dict[str, Any]) -> list[dict]:
             f"Zone total of {fmt1(judged_on)} gal against {threshold_words(screen)}."
             if judged_on is not None else "Pipe-only screen. Fittings and trim are not in it.",
         ]
+        if judged_on is not None and exemption_basis_text(screen):
+            # Which basis the screen's zone total was taken on, as the screen's own row says.
+            lines.append(exemption_basis_text(screen))
         qualifier = exemption_qualifier(volume, screen) if judged_on is not None else ""
         if qualifier:
             lines.append(qualifier)

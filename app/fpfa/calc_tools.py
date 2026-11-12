@@ -15,7 +15,7 @@ from typing import Any, Iterator
 
 from fpfa import coherence, quantities, units
 from fpfa.corpus_search import search_corpus
-from fpfa.fa_calc import run_fa_calc
+from fpfa.fa_calc import clean_lfl_table, run_fa_calc
 from fpfa.modes_loader import list_modes, read_mode
 from fpfa.inputs import BASIS_FIELDS, BASIS_KIND, GIVEN, INPUT_KIND
 from fpfa.record import CALC_TOOLS, CONVERT_TOOL, LABELS, SKILL_READ, Record, RecordError
@@ -115,6 +115,8 @@ BASIS_NOTE = ("Delivery time basis: FM, NFPA-LH, NFPA-OH, NFPA-EH, NFPA-HP, or N
               "chosen for you, and a blank one is not taken as FM.")
 SYSTEM_NOTE = ("dry or di. Required: no system type is taken for you. A wet zone has no delivery rows, so this tool "
                "refuses wet.")
+LENGTH_BASIS_NOTE = ("center_to_center or cut. Required: no basis is taken for you. It sets the fittings allowance "
+                     "a blank one takes (0% center-to-center, an ASSUMED 5% cut).")
 EDITION_NOTE = ("The job's own NFPA 13 edition year, as the job states it. Leave it out when the job has not pinned "
                 "one: the figures still run and every cite is withheld (EDITION NOT SET). No edition is taken for you.")
 # The delivery inputs a call must give. Missing or blank, the tool refuses and names them (_missing). The
@@ -195,11 +197,11 @@ SCHEMAS = [
         "input_schema": _obj(
             {
                 "segments": {"type": "array", "description": "Each item has length_ft and either d_in or nps plus optional schedule and role."},
-                "length_basis": {"type": "string", "description": "center_to_center or cut"},
+                "length_basis": {"type": "string", "description": LENGTH_BASIS_NOTE},
                 "fittings_percent": {"type": "number"},
                 "trim_gal": {"type": "number"},
             },
-            ["segments"],
+            ["segments", "length_basis"],
         ),
     },
     {
@@ -209,7 +211,8 @@ SCHEMAS = [
             "Not a listed water-delivery calculation. Timing stays on pipe volume. Each segment has length_ft and "
             "either d_in or nps with an optional schedule, as zone_trapped_volume takes them. The size exemption is judged on the zone total (pipe + fittings + trim), never on pipe "
             "alone: pass zone_gal, the zone total from zone_trapped_volume, and nfpa_delivery_time_exempt is then "
-            "the zone-total answer. Without zone_gal (or trim_gal and fittings_percent) the result is a pipe-only "
+            "the zone-total answer. Without zone_gal, trim_gal or fittings_percent with length_basis gives the "
+            "kernel's takeoff of these segments on that basis; with none of them the result is a pipe-only "
             "screen: nfpa_delivery_time_exempt is null, exemption_status says it was not determined, and you must "
             "not state the exemption from it. The threshold is the result's nfpa_size_threshold_gal, an exemption "
             "threshold and not a cap; on double-interlock a quick-opening device does not raise it. Quote the "
@@ -228,9 +231,10 @@ SCHEMAS = [
                 "system_type": {"type": "string", "description": SYSTEM_NOTE},
                 "edition": {"type": "string", "description": EDITION_NOTE},
                 "declared_interlock": {"type": "string", "description": "double or none. Left out, double for di and none for dry."},
-                "zone_gal": {"type": "number", "description": "Zone total gallons from zone_trapped_volume (zone_gal). The size exemption is judged on it."},
+                "zone_gal": {"type": "number", "description": "Zone total gallons from zone_trapped_volume (zone_gal), greater than 0. The size exemption is judged on it."},
+                "length_basis": {"type": "string", "description": "center_to_center or cut, the lengths the zone total was taken on. Required with trim_gal or fittings_percent when zone_gal is not passed; with zone_gal, the row names it."},
                 "trim_gal": {"type": "number", "description": "Trim gallons, when zone_gal is not passed. Omit both for a pipe-only screen."},
-                "fittings_percent": {"type": "number", "description": "Fittings allowance percent. Used with trim_gal when zone_gal is not passed; left out, the kernel's ASSUMED allowance for cut lengths applies, never 0."},
+                "fittings_percent": {"type": "number", "description": "Fittings allowance percent. Used with trim_gal when zone_gal is not passed; left out, the kernel's allowance for the length_basis passed applies (0% center-to-center, an ASSUMED 5% cut), never a basis taken for you."},
             },
             ["segments", "q_fill_gpm", "system_type", "basis"],
         ),
@@ -350,9 +354,11 @@ SCHEMAS = [
             "release input. Quote boolean_p. A second smoke zone must not change the result."
         ),
         "input_schema": _obj(
-            {"manual_station": {"type": "boolean"},
+            {"manual_station": {"type": "boolean",
+                                "description": "Whether a manual release station is in the detection leg. Required: "
+                                               "a blank one holds the table and is not taken as on."},
              "insurer": {"type": "string", "description": "The job's insurer. Blank stays blank; it is not taken as FM."}},
-            [],
+            ["manual_station"],
         ),
     },
     {
@@ -965,7 +971,8 @@ class ToolSession:
                 "the job's edition, and the sub-times by the application's rules."
             )
         if canonical == "density_area":
-            _check_density_area(payload, require_increase_and_hose=False)
+            # The same checks as the density_area tool: an area increase or a hose left out is refused, never run as 0.
+            _check_density_area(payload)
         missing = _elevation_missing(canonical, payload)
         if missing:
             raise ValueError(
@@ -1102,9 +1109,12 @@ class ToolSession:
         if name == "resolve_pipe_id":
             return self.di.pipe_ids.resolve(args.get("nps"), args.get("schedule"), args.get("role"))
         if name == "zone_trapped_volume":
+            # The length basis decides the fittings allowance the kernel takes for a blank one (0% center-to-center,
+            # 5% ASSUMED cut), so a blank one is refused: no basis is taken for it.
+            _missing(name, args, ("length_basis",))
             return self.di.zone_trapped_volume(
                 args.get("segments"),
-                args.get("length_basis") or "center_to_center",
+                _length_basis(name, args.get("length_basis")),
                 args.get("fittings_percent"),
                 args.get("trim_gal"),
             )
@@ -1134,8 +1144,10 @@ class ToolSession:
                 insurer=args.get("insurer") or "",
             )
         if name == "releasing_truth_table":
+            # A blank manual station holds the table: it is not taken as on.
+            _missing(name, args, ("manual_station",))
             return self.di.releasing_truth_table(
-                manual_station=args.get("manual_station", True),
+                manual_station=args["manual_station"],
                 insurer=args.get("insurer") or "",
             )
         if name == "lfl_setpoints":
@@ -1165,27 +1177,11 @@ def _lfl_setpoints(content_root: Path, args: dict) -> dict:
         raise ValueError("mix and lfl must be objects")
     if not isinstance(screens, list):
         raise ValueError("screens must be a list")
-    # Every gas in the mix has an LFL the caller gave, or is named inert. A blank, a missing one, a 0, or a negative
-    # one holds the call: the kernel reads a gas with no LFL as inert, and the application picks no LFL for it.
-    clean_lfl: dict[str, float | None] = {}
-    holds = []
-    for key, value in table.items():
-        if isinstance(value, str) and value.strip().lower() == INERT:
-            clean_lfl[str(key)] = None
-            continue
-        number = None if _blank(value) else _finite(value)
-        if number is None or number <= 0:
-            holds.append(f"{key} (LFL {value!r})")
-            continue
-        clean_lfl[str(key)] = number
+    # Every gas in the mix has an LFL the caller gave, or is named inert. A blank, a missing one, a 0, a negative, or
+    # a non-finite one holds the call: the kernel reads a gas with no LFL as inert, and the application picks no LFL
+    # for it. fa_calc's LFL ops hold the same way (fa_calc.clean_lfl_table).
+    clean_lfl = clean_lfl_table("lfl_setpoints", mix, table)
     clean_mix = {str(key): float(value) for key, value in mix.items()}
-    holds.extend(f"{key} (no LFL given)" for key in clean_mix if key not in clean_lfl
-                 and not any(f"{key} (LFL" in item for item in holds))
-    if holds:
-        raise ValueError(
-            "HOLD: lfl_setpoints needs a component LFL vol% greater than 0 for every gas in mix, or \"inert\": "
-            + ", ".join(holds) + ". The application picks no LFL and no percent."
-        )
     clean_screens = []
     for screen in screens:
         if not isinstance(screen, dict):
@@ -1264,6 +1260,20 @@ def _elevation_missing(op: str, payload: dict) -> list[str]:
             if isinstance(tapered, dict):
                 walk(tapered.get("segments"), f"branches[{index}].tapered.segments")
     return missing
+
+
+_LENGTH_BASES = {"center_to_center": "center_to_center", "cut": "cut", "cut_lengths": "cut", "pipe_cut": "cut"}
+# How the volume rows name each length basis, in the words the designer reads.
+LENGTH_BASIS_WORDS = {"center_to_center": "center-to-center", "cut": "cut lengths"}
+
+
+def _length_basis(tool: str, value: Any) -> str:
+    """center_to_center or cut, as given. Anything else is refused: the kernel would read it as center-to-center."""
+    text = str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
+    if text not in _LENGTH_BASES:
+        raise ValueError(f"{tool} takes length_basis center_to_center or cut, not {value!r}. No basis is taken for "
+                         "you: it sets the fittings allowance a blank one takes.")
+    return _LENGTH_BASES[text]
 
 
 def _delivery_system(tool: str, value: Any) -> str:
@@ -1445,41 +1455,68 @@ def _govern_delivery_exemption(formulas, screen: dict, args: dict, di=None, segm
     stays until the kernel returns the zone-total exemption itself.
 
     - zone_gal passed: the exemption is that zone total against the threshold
-      (the tool plan passes the takeoff's own zone_gal).
+      (the tool plan passes the takeoff's own zone_gal, and its length basis).
+      A zone total of 0 or less describes no zone and is refused.
     - trim_gal or fittings_percent passed: the zone total is the kernel's own
-      takeoff of these segments with those allowances. One left out takes the
-      kernel's ASSUMED value (its cut-length fittings allowance, its trim), never
-      0.
+      takeoff of these segments with those allowances, on the length_basis the
+      call passes. Without one the call is refused: no basis is taken for it.
+      An allowance left out takes the kernel's value for that basis (0%
+      center-to-center, an ASSUMED 5% cut; its ASSUMED trim), never 0.
     - neither: the result is a pipe-only screen. It says "no" only when the
       pipe alone is already over the threshold, which settles it. Otherwise
       nfpa_delivery_time_exempt is None and exemption_status says why.
 
-    Timing on the pipe-only screen stays in every case.
+    The row names the length basis and the fittings allowance its zone total
+    was taken on (exemption_length_basis, exemption_fittings_percent) where
+    the call gave them. Timing on the pipe-only screen stays in every case.
     """
     # Local import: workflow imports this module at load time.
     from fpfa.workflow import govern_nfpa_exemption, pipe_only_screen
 
+    basis_passed = _number_was_passed(args, "length_basis")
+    length_basis = _length_basis("dry_delivery_screen", args["length_basis"]) if basis_passed else None
     if _number_was_passed(args, "zone_gal"):
-        zone_gal = formulas._require_non_negative("zone_gal", args["zone_gal"])
-        return govern_nfpa_exemption(screen, zone_gal, "the zone total passed as zone_gal (pipe + fittings + trim)")
+        zone_gal = _finite(args["zone_gal"])
+        if zone_gal is None or zone_gal <= 0:
+            raise ValueError(f"dry_delivery_screen: zone_gal must be a number greater than 0, not {args['zone_gal']!r}. "
+                             "A zone total of 0 describes no zone; pass zone_trapped_volume's zone_gal.")
+        words = "the zone total passed as zone_gal (pipe + fittings + trim)"
+        if length_basis:
+            words += f", on {LENGTH_BASIS_WORDS[length_basis]}"
+        governed = govern_nfpa_exemption(screen, zone_gal, words)
+        if length_basis:
+            governed["exemption_length_basis"] = length_basis
+        return governed
     trim_passed = _number_was_passed(args, "trim_gal")
     fittings_passed = _number_was_passed(args, "fittings_percent")
     if not trim_passed and not fittings_passed:
         return pipe_only_screen(screen)
+    if length_basis is None:
+        raise ValueError(
+            "dry_delivery_screen needs length_basis (center_to_center or cut) with trim_gal or fittings_percent, or "
+            "zone_gal from zone_trapped_volume. The fittings allowance a blank one takes depends on it, and no basis "
+            "is taken for you.")
     if di is None or segments is None:
         raise ValueError("dry_delivery_screen: the zone total needs the kernel's takeoff of the segments.")
-    # The kernel's takeoff, cut lengths: an allowance left out is its ASSUMED one, and its flags say so.
+    # The kernel's takeoff on the caller's basis: an allowance left out is the kernel's for that basis, and its flags
+    # say when that is ASSUMED.
     takeoff = di.zone_trapped_volume(
-        segments, "cut",
+        segments, length_basis,
         args["fittings_percent"] if fittings_passed else None,
         args["trim_gal"] if trim_passed else None,
     )
-    parts = [f"fittings {float(takeoff['fittings_percent']):g}%"
-             + ("" if fittings_passed else " (left out; the kernel's ASSUMED allowance)"),
+    fittings_note = ""
+    if not fittings_passed:
+        fittings_note = (" (left out; the kernel's ASSUMED allowance for cut lengths)" if length_basis == "cut"
+                         else " (left out; no allowance on center-to-center lengths)")
+    parts = [LENGTH_BASIS_WORDS[length_basis],
+             f"fittings {float(takeoff['fittings_percent']):g}%" + fittings_note,
              f"trim {float(takeoff['trim_gal']):g} gal"
              + ("" if trim_passed else " (left out; the kernel's ASSUMED trim)")]
     governed = govern_nfpa_exemption(screen, float(takeoff["zone_gal"]),
                                      "pipe plus the allowances on this call: " + ", ".join(parts))
+    governed["exemption_length_basis"] = length_basis
+    governed["exemption_fittings_percent"] = float(takeoff["fittings_percent"])
     assumed = [flag for flag in takeoff.get("flags") or [] if isinstance(flag, str) and flag.startswith("ASSUMED")]
     if assumed:
         governed["exemption_assumptions"] = assumed
