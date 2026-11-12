@@ -326,7 +326,7 @@ class CallBasisTests(unittest.TestCase):
         session = ToolSession(REPO, record=record, project_id="job1", agent="fp-sprinkler")
         zone_gal = next(row["outputs"]["zone_gal"] for row in record.calcs("job1") if row["tool"] == "zone_trapped_volume")
         shown = session.execute("di_trip_to_water", {
-            "v_gal": zone_gal, "q_fill_gpm": 750, "t_detect_s": 8, "t_release_s": 2, "basis": "FM",
+            "v_gal": zone_gal, "q_fill_gpm": 750, "t_detect_s": 8, "t_release_s": 2, "t_exhaust_s": 0, "basis": "FM",
         })
         self.assertIn("differs_from_project_inputs", shown)
         self.assertIn("q_fill_gpm 750 where the project input q_fill_gpm is 600", shown["differs_from_project_inputs"])
@@ -443,11 +443,42 @@ class CallBasisTests(unittest.TestCase):
         # The project says supervised waterflow. Leaving it out runs the tool's own default, unsupervised.
         shown = session.execute("hose_duration", {"hazard": "ordinary"})
         self.assertIn("supervised False where the project input supervised is True", shown["differs_from_project_inputs"])
-        # The detection time is 8 s on the project. A call that leaves it out used 0.
-        shown = session.execute("di_trip_to_water", {"v_gal": 281.3, "q_fill_gpm": 600})
+        # The detection time is 8 s on the project. A call that leaves a time or the basis out is refused, naming
+        # them: no 0 and no FM is put in their place.
+        with self.assertRaises(ValueError) as caught:
+            session.execute("di_trip_to_water", {"v_gal": 281.3, "q_fill_gpm": 600})
+        self.assertIn("di_trip_to_water needs t_detect_s, t_release_s, t_exhaust_s, basis.", str(caught.exception))
+        shown = session.execute("di_trip_to_water", {"v_gal": 281.3, "q_fill_gpm": 600, "t_detect_s": 0,
+                                                     "t_release_s": 2, "t_exhaust_s": 0, "basis": "FM"})
         note = shown["differs_from_project_inputs"]
         self.assertIn("t_detect_s 0 where the project input t_detect_s is 8", note)
         self.assertIn("v_gal 281.3: no zone_trapped_volume result is on the record", note)
+
+    def test_a_blank_project_input_is_never_read_as_a_default(self):
+        """A job whose time basis is blank: a call on FM does not follow it, and a call that names none cannot run."""
+        from fpfa import inputs
+        from fpfa.calc_tools import ToolSession
+
+        record = _record()
+        record.ensure_project("job1", "Blank basis")
+        record.sync_form("job1", inputs.INPUT_KIND, {"delivery_basis": inputs.encode("delivery_basis", None),
+                                                     "t_detect_s": inputs.encode("t_detect_s", 8)})
+        session = ToolSession(REPO, record=record, project_id="job1", agent="fp-sprinkler")
+        shown = session.execute("di_trip_to_water", {"v_gal": 281.3, "q_fill_gpm": 600, "t_detect_s": 8,
+                                                     "t_release_s": 2, "t_exhaust_s": 0, "basis": "FM"})
+        self.assertIn("basis FM where the project input delivery_basis is", shown["differs_from_project_inputs"])
+        row = record.calc("job1", shown["record_id"])
+        self.assertEqual(row["varies"]["basis"]["project"], None)
+        # A tool's own default for an argument left out is not the project's blank either: hose_duration runs
+        # unsupervised when supervised is left out, and that is a departure, not the designer's choice.
+        record.sync_form("job1", inputs.INPUT_KIND, {"supervised": inputs.encode("supervised", None),
+                                                     "medium": inputs.encode("medium", None)})
+        hose = session.execute("hose_duration", {"hazard": "ordinary"})
+        self.assertIn("supervised False where the project input supervised is", hose["differs_from_project_inputs"])
+        self.assertEqual(record.calc("job1", hose["record_id"])["varies"]["supervised"]["used"], False)
+        # The kernel's own word for no election is a blank: a trim election with no medium follows a blank medium.
+        trim = session.execute("elect_di_trim", {"system_type": "di"})
+        self.assertNotIn("medium", record.calc("job1", trim["record_id"]).get("varies") or {})
 
     def test_a_rounded_figure_still_chains_and_an_invented_one_does_not(self):
         from fpfa.calc_tools import ToolSession
@@ -766,7 +797,7 @@ class StalenessTests(unittest.TestCase):
         # plan's row: the rounded volume is run as the takeoff's figure, so the call replays.
         loose = fp.execute("nitrogen_gate", {"v_gal": 281.3, "p_psig": 40, "t_min": 20})
         self.assertNotIn(loose["record_id"], {row["id"] for row in record.calcs("job1") if row["agent"] == "tool-plan"})
-        screen = fp.execute("di_trip_to_water", {"v_gal": 281.3, "q_fill_gpm": 600, "t_detect_s": 8, "t_release_s": 2, "basis": "FM"})
+        screen = fp.execute("di_trip_to_water", {"v_gal": 281.3, "q_fill_gpm": 600, "t_detect_s": 8, "t_release_s": 2, "t_exhaust_s": 0, "basis": "FM"})
         used = fp.execute("record_evidence", {"document": "NFPA 13", "edition": "2025", "section": "8.3.2.3.1.1"})
         unused = fp.execute("record_evidence", {"document": "NFPA 13", "edition": "2025", "section": "8.3.2.3.2"})
         finding = fp.execute("record_finding", {"text": "The FM screen misses.", "label": "calculated", "supports": [screen["record_id"]]})
@@ -794,7 +825,7 @@ class StalenessTests(unittest.TestCase):
 
         # Bring it up to date: run the zone again, replace the two findings on fresh rows.
         _run_plan(record, dict(di, q_fill_gpm=750, supervisory_psig=30), dict(basis, nfpa_13="2022"))
-        again = fp.execute("di_trip_to_water", {"v_gal": 281.3, "q_fill_gpm": 750, "t_detect_s": 8, "t_release_s": 2, "basis": "FM"})
+        again = fp.execute("di_trip_to_water", {"v_gal": 281.3, "q_fill_gpm": 750, "t_detect_s": 8, "t_release_s": 2, "t_exhaust_s": 0, "basis": "FM"})
         fp.execute("record_finding", {"text": "The FM screen still misses.", "label": "calculated",
                                       "supports": [again["record_id"]], "replaces": finding["id"]})
         newer = fp.execute("record_evidence", {"document": "NFPA 13", "edition": "2022", "section": "8.3.2.3.1.1"})
@@ -917,18 +948,140 @@ class DeskInputTests(unittest.TestCase):
         self.assertEqual(trip["inputs"]["q_fill_gpm"], 750.0)
         self.assertEqual(len(analysis["stale"]["calcs"]), 2)        # the two old rows, kept as history
 
-    def test_a_fresh_job_says_its_starting_values_were_not_confirmed(self):
-        from fpfa import inputs
+    def test_a_fresh_job_holds_blanks_and_an_accepted_hint_is_assumed(self):
+        """FA Lead's ruling (2026-11-12): a hint is never an input until the designer accepts it, and then ASSUMED."""
+        from fpfa import inputs, status
 
         desk = self._desk()
+        state = desk.snapshot()["form"]
+        # Every field starts blank. A hint shows a value the pack pins, with its cite and edition, to VERIFY.
+        self.assertTrue(all(value in ("", None) for value in state["values"].values()), state["values"])
+        self.assertEqual(state["hints"]["density"],
+                         "0.20 gpm/ft² (ordinary hazard group 2; NFPA 13-2025 Table 19.2.3.1.1) VERIFY")
+        for name in ("q_fill", "supervisory_psig", "supervisory_psi", "t_detect", "t_release", "t_exhaust",
+                     "insurer", "hazard", "supervised", "system_label"):
+            self.assertNotIn(name, state["hints"], name)
         desk.patch_form({"t_detect": "12"})
         desk.save_current()
         project_id = desk.project["id"]
         rows = desk.record.givens(project_id)
         self.assertEqual(rows["t_detect_s"]["source"], "zone form")
-        self.assertIn("not confirmed by the designer", rows["q_fill_gpm"]["source"])
-        self.assertEqual(rows["q_fill_gpm"]["label"], "GIVEN")
+        self.assertEqual((rows["t_detect_s"]["label"], inputs.decode(rows["t_detect_s"]["value"])), ("GIVEN", 12.0))
+        # A blank stays blank on the record. Nothing nobody entered is an input.
+        for name in ("q_fill_gpm", "t_release_s", "delivery_basis", "supervised", "hazard", "density_gpm_ft2"):
+            self.assertIsNone(inputs.decode(rows[name]["value"]), name)
+        for name in ("nfpa_13", "nfpa_72", "insurer"):
+            self.assertNotIn(name, rows)
         self.assertEqual(inputs.decode(rows["segments"]["value"]), [])
+        # Use hints fills a field with one hint. Base area has two (NFPA 13's and FM's), and the fill flow none.
+        filled = desk.accept_hints(["density", "base_area", "q_fill", "t_release", "hose"])
+        self.assertEqual(filled, ["density", "hose"])
+        self.assertEqual(desk.snapshot()["form"]["assumed"], ["density", "hose"])
+        self.assertNotIn("base_area", desk.snapshot()["form"]["accept"])
+        desk.save_current()
+        rows = desk.record.givens(project_id)
+        self.assertEqual((rows["hose_gpm"]["label"], inputs.decode(rows["hose_gpm"]["value"])), ("ASSUMED", 250.0))
+        self.assertIn(inputs.ACCEPTED_MARK, rows["hose_gpm"]["source"])
+        self.assertEqual(rows["density_gpm_ft2"]["label"], "ASSUMED")
+        self.assertEqual(rows["t_detect_s"]["label"], "GIVEN")
+        # Each ASSUMED input has its own line, with the cite of the hint it came from, in every status view.
+        snapshot = desk.record.snapshot(project_id)
+        digest = status.build(snapshot)
+        line = next(line for line in digest["assumed"] if line.startswith("hose_gpm ASSUMED:"))
+        self.assertIn("NFPA 13-2025 Table 19.2.3.1.2, VERIFY", line)
+        self.assertIn("until the designer types a value", line)
+        self.assertIn("- density_gpm_ft2 ASSUMED: 0.2 gpm/ft2 is a hint the designer used", status.lead_text(digest))
+        self.assertIn("**ASSUMED inputs**", status.designer_text(digest))
+        from fpfa.checker import coverage
+
+        self.assertTrue(any(gap.startswith("hose_gpm ASSUMED:") for gap in coverage(snapshot)["gaps"]))
+        # Typing a value, even the hint's own, makes it the designer's: GIVEN, and its ASSUMED line goes.
+        desk.patch_form({"hose": "250"})
+        desk.save_current()
+        rows = desk.record.givens(project_id)
+        self.assertEqual((rows["hose_gpm"]["label"], rows["hose_gpm"]["source"]), ("GIVEN", "zone form"))
+        self.assertNotIn("hose", desk.snapshot()["form"]["assumed"])
+        digest = status.build(desk.record.snapshot(project_id))
+        self.assertFalse(any(line.startswith("hose_gpm ASSUMED") for line in digest["assumed"]))
+        self.assertTrue(any(line.startswith("density_gpm_ft2 ASSUMED") for line in digest["assumed"]))
+
+    def test_an_accepted_edition_hint_never_clears_the_hold(self):
+        """The edition sets the battery factor (1.20 or 1.25) and the cites. A hint used for it is not a pin."""
+        from fpfa import inputs, status
+        from fpfa.checker import coverage
+        from fpfa.coherence import analyze
+
+        desk = self._desk()
+        desk.start_sample_di()
+        desk.pump()
+        project_id = desk.project["id"]
+        # The sample states 2025 for both: pinned, so no HOLD. Then the designer clears NFPA 13 and uses its hint.
+        self.assertEqual(status.build(desk.record.snapshot(project_id))["unpinned"], [])
+        desk.patch_form({"nfpa_13": ""})
+        desk.accept_hints(["nfpa_13"])
+        self.assertEqual(desk.nfpa_13.get(), "2025")
+        desk.save_current()
+        row = desk.record.givens(project_id)["nfpa_13"]
+        self.assertEqual((row["label"], row["value"]), ("ASSUMED", "2025"))
+        snapshot = desk.record.snapshot(project_id)
+        digest = status.build(snapshot)
+        self.assertEqual(len(digest["unpinned"]), 1)
+        hold = digest["unpinned"][0]
+        self.assertTrue(hold.startswith("HOLD: NFPA 13 edition not pinned. 2025 is ASSUMED, a hint the designer used"))
+        self.assertIn(hold, status.lead_text(digest))
+        self.assertIn(hold, coverage(snapshot)["gaps"])
+        # The calculations whose cites name NFPA 13-2025 hold too: an ASSUMED 2025 is not the job's stated edition.
+        analysis = analyze(snapshot)
+        self.assertTrue(analysis["edition_holds"])
+        gap = analysis["calcs"][analysis["edition_holds"][0]]["edition_gaps"][0]
+        self.assertIn("is ASSUMED, a hint the designer used (edition not pinned)", gap["job"])
+        # A run on it keeps the HOLD in its flags.
+        desk.start_zone_run()
+        desk.pump()
+        flags = "\n".join(desk.project["last_run"]["flags"])
+        self.assertIn("EDITION NOT RECONCILED", flags)
+        self.assertIn("ASSUMED, a hint the designer used", flags)
+        # The designer types the edition: now it is pinned, and the HOLD goes.
+        desk.patch_form({"nfpa_13": "2025"})
+        desk.save_current()
+        self.assertEqual(desk.record.givens(project_id)["nfpa_13"]["label"], "CODE")
+        snapshot = desk.record.snapshot(project_id)
+        self.assertEqual(status.build(snapshot)["unpinned"], [])
+        self.assertEqual(analyze(snapshot)["edition_holds"], [])
+
+    def test_a_run_names_each_input_taken_from_a_hint(self):
+        from fpfa.sample_data import EXAMPLE_BASIS, EXAMPLE_DI
+        from fpfa.workflow import run_di_zone
+
+        result = run_di_zone(REPO, dict(EXAMPLE_DI), dict(EXAMPLE_BASIS), assumed=["density_gpm_ft2", "nfpa_72"])
+        flags = result["flags"]
+        self.assertTrue(any(flag.startswith("density_gpm_ft2 ASSUMED: 0.2 gpm/ft2 is a hint the designer used")
+                            for flag in flags), flags)
+        self.assertFalse(any(flag.startswith("nfpa_72 ASSUMED") for flag in flags), "an edition is a HOLD of its own")
+        plain = run_di_zone(REPO, dict(EXAMPLE_DI), dict(EXAMPLE_BASIS))
+        self.assertFalse(any("ASSUMED: " in flag and "hint the designer used" in flag for flag in plain["flags"]))
+
+    def test_an_earlier_versions_unconfirmed_starting_values_leave_the_job(self):
+        from fpfa import inputs
+        from fpfa.projects import load_project, new_project, save_project
+
+        desk = self._desk()
+        project = new_project("Saved by 0.3.2", {"nfpa_13": "2025", "nfpa_72": "2025", "insurer": "FM"})
+        project["di"] = {"q_fill_gpm": 600.0, "density_gpm_ft2": 0.25, "t_detect_s": 0.0, "hazard": "ordinary"}
+        project["given"] = {"density_gpm_ft2": inputs.SOURCE_DESIGNER}
+        save_project(project)
+        self.assertEqual(sorted(inputs.unconfirmed_starting_values(project)),
+                         ["hazard", "insurer", "nfpa_13", "nfpa_72", "q_fill_gpm"])
+        desk.refresh_projects()
+        desk.open_project(project["id"])
+        # The typed density stays. The rest nobody entered: blank, with their hints, and said in the status line.
+        self.assertEqual((desk.density.get(), desk.q_fill.get(), desk.hazard.get(), desk.nfpa_72.get()),
+                         ("0.25", "", "", ""))
+        # A 0 time was the old form's placeholder, not a hint: it was a value and is kept for the designer to see.
+        self.assertEqual(desk.t_detect.get(), "0.0")
+        self.assertIn("hints now", desk.status.get())
+        saved = load_project(project["id"])
+        self.assertEqual((saved["di"]["q_fill_gpm"], saved["basis"]["nfpa_72"]), (None, ""))
 
     def test_an_input_the_lead_recorded_is_put_on_the_form_and_survives_a_relaunch(self):
         from fpfa import inputs
@@ -1047,8 +1200,8 @@ class DeskInputTests(unittest.TestCase):
         self.assertEqual(desk.ahj.get(), "")
         self.assertNotIn("ahj", desk.record.givens(project_id))
         self.assertEqual(load_project(project_id)["basis"]["ahj"], "")
-        # The editions and the insurer never leave: the tab always holds a value for them.
-        self.assertEqual({"nfpa_13", "nfpa_72", "insurer"} - set(desk.record.givens(project_id)), set())
+        # A blank edition or insurer is not on the record either: no 2025 and no FM is put in its place.
+        self.assertEqual({"nfpa_13", "nfpa_72", "insurer"} & set(desk.record.givens(project_id)), set())
 
 
 
@@ -1058,10 +1211,11 @@ _STARTING_SOURCE = "job form (starting value, not confirmed by the designer)"
 
 
 class BasisStartingValueTests(unittest.TestCase):
-    """NFPA 13, NFPA 72, and the insurer start with a value. It is recorded and shown as not confirmed.
+    """A new job's NFPA 13, NFPA 72, and insurer start blank (FA Lead's ruling, 2026-11-12). An earlier version
+    started them at 2025, 2025, and FM; where an older record still holds one, it is shown as a starting value
+    not confirmed by the designer, and an edition that is one pins nothing.
 
-    The starting values themselves are an open owner and content decision. These tests check how the
-    application labels them, whatever they are; they do not say an edition or an insurer is right.
+    These tests check how the application labels values; they do not say an edition or an insurer is right.
     """
 
     _desk = DeskInputTests._desk
@@ -1095,48 +1249,51 @@ class BasisStartingValueTests(unittest.TestCase):
         self.assertEqual(inputs.source_text(inputs.SOURCE_DEFAULT, "q_fill_gpm"),
                          "zone form (starting value, not confirmed by the designer)")
 
-    def test_a_fresh_job_records_its_basis_starting_values_as_not_confirmed(self):
-        from fpfa import inputs, status, team
+    def test_a_fresh_job_records_no_basis_starting_value_and_holds_its_editions(self):
+        from fpfa import inputs, status
         from fpfa.projects import load_project
-        from fpfa.team_panel import team_view
 
         desk, project_id = self._fresh()
-        self.assertEqual({key: load_project(project_id)["basis"][key] for key in inputs.BASIS_STARTING},
-                         inputs.BASIS_STARTING, "the job, the form, and fpfa.inputs hold one set of starting values")
+        self.assertEqual({key: load_project(project_id)["basis"][key] for key in ("nfpa_13", "nfpa_72", "insurer")},
+                         {"nfpa_13": "", "nfpa_72": "", "insurer": ""})
         rows = desk.record.givens(project_id)
-        for name, label in (("nfpa_13", "CODE"), ("nfpa_72", "CODE"), ("insurer", "OWNER")):
-            self.assertEqual(rows[name]["value"], inputs.BASIS_STARTING[name], name)
-            self.assertEqual(rows[name]["label"], label, "the label is the basis field's own; only the source says who")
-            self.assertEqual(rows[name]["source"], _STARTING_SOURCE, name)
-            self.assertEqual(rows[name]["agent"], "job form", name)
-            self.assertEqual(desk.project["given"][name], inputs.SOURCE_DEFAULT, "kept on the job")
-        self.assertNotIn("ahj", rows)
-        snapshot = desk.record.snapshot(project_id)
+        for name in ("nfpa_13", "nfpa_72", "insurer", "ahj"):
+            self.assertNotIn(name, rows, "a blank basis field has no fact: nothing is put in its place")
+        digest = status.build(desk.record.snapshot(project_id))
+        self.assertEqual(digest["unconfirmed"], [])
+        self.assertEqual([line.split(".")[0] for line in digest["unpinned"]],
+                         ["HOLD: NFPA 13 edition not pinned", "HOLD: NFPA 72 edition not pinned"])
+        self.assertNotIn(inputs.UNCONFIRMED_MARK, status.lead_text(digest))
+
+    def test_an_older_records_starting_values_are_shown_as_not_confirmed(self):
+        """An older record can still hold 2025, 2025, and FM as starting values. Every view says what they are."""
+        from fpfa import inputs, status, team
+        from fpfa.team_panel import team_view
+
+        record = _record()
+        record.ensure_project("job1", "Older job")
+        for name, value, label in (("nfpa_13", "2025", "CODE"), ("nfpa_72", "2025", "CODE"), ("insurer", "FM", "OWNER")):
+            record.set_given("job1", kind=inputs.BASIS_KIND, key=name, value=value, label=label,
+                             source=_STARTING_SOURCE, agent="job form")
+        rows = record.givens("job1")
+        snapshot = record.snapshot("job1")
         digest = status.build(snapshot)
         unconfirmed = {row["name"]: row["text"] for row in digest["unconfirmed"]}
-        self.assertEqual({name: unconfirmed.get(name) for name in inputs.BASIS_STARTING}, inputs.BASIS_STARTING)
-        self.assertNotIn("t_detect_s", unconfirmed)
-        # The lead's status block: under the starting values, not with what the designer supplied.
+        self.assertEqual(unconfirmed, {"nfpa_13": "2025", "nfpa_72": "2025", "insurer": "FM"})
+        # A starting value pins no edition: both editions hold.
+        self.assertEqual(len(digest["unpinned"]), 2)
         lead = status.lead_text(digest).splitlines()
         loose = [line for line in lead if line.startswith("- Starting values the designer has not confirmed")]
         self.assertEqual(len(loose), 1)
-        self.assertIn("nfpa_13 2025", loose[0])
         self.assertIn("insurer FM", loose[0])
-        self.assertEqual([line for line in lead if "nfpa_13 2025" in line], loose)
-        # /status in the thread.
         said = status.designer_text(digest)
         self.assertIn("**Starting values you have not confirmed**", said)
-        self.assertIn("nfpa_13 2025", said.split("**Starting values you have not confirmed**", 1)[1])
-        # The Team tab.
         line = team_view(snapshot)["unconfirmed_line"]
         self.assertTrue(line.startswith("Starting values you have not confirmed: nfpa_13 2025; nfpa_72 2025; insurer FM"), line)
-        self.assertIn("not your input", line)
-        # A specialist's brief and the record as a model reads it.
         self.assertIn(f"- [{rows['nfpa_13']['id']}] nfpa_13: 2025 (starting value, not confirmed by the designer)",
                       team._input_lines(digest))
         self.assertIn(f"- [{rows['insurer']['id']}] basis/insurer: FM (OWNER) (starting value, not confirmed)",
                       status.record_text(snapshot).splitlines())
-
     def test_the_team_tab_says_nothing_when_every_value_was_supplied(self):
         from fpfa.team_panel import team_view
 
@@ -1148,27 +1305,23 @@ class BasisStartingValueTests(unittest.TestCase):
         self.assertEqual(view["unconfirmed_line"], "")
         self.assertEqual(team_view(None)["unconfirmed_line"], "")
 
-    def test_typing_or_stating_a_basis_value_confirms_it_and_emptying_one_does_not(self):
+    def test_typing_or_stating_a_basis_value_records_it_and_emptying_one_leaves_it_blank(self):
         from fpfa import inputs, status
         from fpfa.team import TeamSession
 
         desk, project_id = self._fresh()
-        # Emptying the field puts the starting value back. The designer did not type 2025.
-        desk.patch_form({"nfpa_13": ""})
-        desk.save_current()
-        row = desk.record.givens(project_id)["nfpa_13"]
-        self.assertEqual((row["value"], row["source"]), ("2025", _STARTING_SOURCE))
-        self.assertEqual(desk.project["given"]["nfpa_13"], inputs.SOURCE_DEFAULT)
-        # Typing the edition makes it the designer's, the starting value included. The same value is not a change.
+        # Typing the edition makes it the designer's, a value equal to the hint included.
         desk.patch_form({"nfpa_13": "2025"})
         desk.save_current()
         row = desk.record.givens(project_id)["nfpa_13"]
-        self.assertEqual((row["value"], row["source"], row["agent"]), ("2025", "job form", "job form"))
-        self.assertIsNone(desk.record.latest_event(project_id, "input_changed"))
-        desk.patch_form({"nfpa_72": "2022"})
+        self.assertEqual((row["value"], row["source"], row["agent"], row["label"]), ("2025", "job form", "job form", "CODE"))
+        # Emptying it leaves it blank: no starting value comes back, and the HOLD returns.
+        desk.patch_form({"nfpa_13": ""})
         desk.save_current()
-        row = desk.record.givens(project_id)["nfpa_72"]
-        self.assertEqual((row["value"], row["source"]), ("2022", "job form"))
+        self.assertNotIn("nfpa_13", desk.record.givens(project_id))
+        self.assertEqual(desk.project["basis"]["nfpa_13"], "")
+        self.assertTrue(any(line.startswith("HOLD: NFPA 13 edition not pinned")
+                            for line in status.build(desk.record.snapshot(project_id))["unpinned"]))
         # Stated in chat: the lead records it with set_input. No model is involved; the call is made directly.
         lead = TeamSession(REPO, desk.record, project_id, lambda **_kwargs: None)
         lead.execute("set_input", {"name": "insurer", "value": "FM", "why": "stated in chat"})
@@ -1179,19 +1332,20 @@ class BasisStartingValueTests(unittest.TestCase):
         self.assertTrue(row["source"].startswith("designer, in chat"), row["source"])
         unconfirmed = {item["name"] for item in status.build(desk.record.snapshot(project_id))["unconfirmed"]}
         self.assertFalse(unconfirmed & set(inputs.BASIS_FIELDS), unconfirmed)
-
-    def test_a_later_change_of_the_starting_value_does_not_make_an_untouched_one_typed(self):
-        """Which edition a job starts with is an open owner decision. If it moves, an untouched job still says so."""
-        from unittest import mock
-
+    def test_a_starting_value_noted_on_an_older_job_leaves_it_whatever_its_value(self):
+        """An older job noted an untouched field as a starting value. That note, not today's list, says so."""
         from fpfa import inputs
+        from fpfa.projects import load_project, new_project, save_project
 
-        desk, project_id = self._fresh()
-        with mock.patch.dict(inputs.BASIS_STARTING, {"nfpa_13": "2022"}):
-            desk.save_current()
-            row = desk.record.givens(project_id)["nfpa_13"]
-            self.assertEqual((row["value"], row["source"]), ("2025", _STARTING_SOURCE))
-
+        desk = self._desk()
+        project = new_project("Older job", {"nfpa_13": "2022", "nfpa_72": "2019", "insurer": "XL"})
+        project["given"] = {"nfpa_13": inputs.SOURCE_DEFAULT, "nfpa_72": inputs.SOURCE_DESIGNER}
+        save_project(project)
+        self.assertEqual(sorted(inputs.unconfirmed_starting_values(project)), ["nfpa_13"])
+        desk.refresh_projects()
+        desk.open_project(project["id"])
+        self.assertEqual((desk.nfpa_13.get(), desk.nfpa_72.get(), desk.insurer.get()), ("", "2019", "XL"))
+        self.assertEqual(load_project(project["id"])["basis"]["nfpa_13"], "")
     def test_correcting_an_older_jobs_basis_source_keeps_its_calcs_current(self):
         """A job recorded before called its untouched editions 'job form'. The new source is not a change."""
         from fpfa import inputs
@@ -1221,17 +1375,20 @@ class BasisStartingValueTests(unittest.TestCase):
         older = {"cite": "NFPA 13-2019 section text, synthetic"}
         stated = edition_gaps(older, {"nfpa_13": "2025"})
         self.assertEqual(stated[0]["job"], "the job states NFPA 13-2025")
-        starting = edition_gaps(older, {"nfpa_13": "2025"}, {"nfpa_13"})
+        starting = edition_gaps(older, {"nfpa_13": "2025"}, unconfirmed={"nfpa_13"})
         self.assertEqual(len(starting), 1)
-        self.assertEqual(starting[0]["job"],
-                         'the job\'s NFPA 13 edition is the form\'s starting value "2025", not confirmed by the designer')
+        self.assertEqual(starting[0]["job"], 'the job\'s NFPA 13 edition is the form\'s starting value "2025", '
+                                             "not confirmed by the designer (edition not pinned)")
         self.assertTrue(edition_hold_text(starting).endswith(EDITION_OPEN_STARTING))
         self.assertTrue(edition_hold_text(stated).endswith(EDITION_OPEN), "a stated edition keeps its wording")
         self.assertNotIn("the job states", edition_hold_text(starting))
-        # The comparison itself is unchanged: a starting value that names the cites' edition is no gap.
-        self.assertEqual(edition_gaps({"cite": "NFPA 13-2025 synthetic"}, {"nfpa_13": "2025"}, {"nfpa_13"}), [])
-        # On the record, the mark is read from the basis row's source. The run's calcs cite NFPA 13-2025, so a
-        # starting value of 2022 (as if the owner moved it) holds them, and the hold says it is a starting value.
+        # A starting value pins nothing: even one that names the cites' edition holds (the owner's review,
+        # 2026-11-12), and so does an ASSUMED one taken from a hint.
+        self.assertEqual(len(edition_gaps({"cite": "NFPA 13-2025 synthetic"}, {"nfpa_13": "2025"}, unconfirmed={"nfpa_13"})), 1)
+        assumed = edition_gaps({"cite": "NFPA 13-2025 synthetic"}, {"nfpa_13": "2025"}, assumed={"nfpa_13"})
+        self.assertIn("is ASSUMED, a hint the designer used (edition not pinned)", assumed[0]["job"])
+        self.assertTrue(edition_hold_text(assumed).endswith(EDITION_OPEN_STARTING))
+        # On the record, the mark is read from the basis row's source.
         record = _record()
         di, basis = _seed_inputs(record)
         _run_plan(record, di, basis)
@@ -1244,16 +1401,14 @@ class BasisStartingValueTests(unittest.TestCase):
             self.assertTrue(hold.startswith(EDITION_HOLD), hold)
             self.assertIn('the form\'s starting value "2022", not confirmed by the designer', hold)
             self.assertNotIn("the job states", hold)
-        # The Team tab, /status, and the lead read the same lines.
         lines = status.build(record.snapshot("job1"))["edition_lines"]
         self.assertEqual(len(lines), 1)
         self.assertTrue(lines[0].endswith(EDITION_OPEN_STARTING), lines[0])
         self.assertNotIn("the job states", lines[0])
-
-    def test_the_zone_run_flags_never_say_the_job_states_a_starting_value(self):
+    def test_the_zone_run_flags_never_say_the_job_states_an_assumed_edition(self):
         from unittest import mock
 
-        from fpfa import desk as desk_module, inputs
+        from fpfa import desk as desk_module
         from fpfa.coherence import EDITION_HOLD
         from fpfa.sample_data import EXAMPLE_BASIS, EXAMPLE_DI
         from fpfa.workflow import run_di_zone
@@ -1261,20 +1416,20 @@ class BasisStartingValueTests(unittest.TestCase):
         moved = dict(EXAMPLE_BASIS, nfpa_13="2022")
         held = [flag for flag in run_di_zone(REPO, EXAMPLE_DI, moved)["flags"] if flag.startswith(EDITION_HOLD)]
         self.assertIn("the job states NFPA 13-2022", held[0])
-        held = [flag for flag in run_di_zone(REPO, EXAMPLE_DI, moved, unconfirmed_basis=("nfpa_13",))["flags"]
+        held = [flag for flag in run_di_zone(REPO, EXAMPLE_DI, EXAMPLE_BASIS, assumed=("nfpa_13",))["flags"]
                 if flag.startswith(EDITION_HOLD)]
-        self.assertEqual(len(held), 1)
-        self.assertIn('the form\'s starting value "2022", not confirmed by the designer', held[0])
+        self.assertEqual(len(held), 1, "an ASSUMED 2025 holds even though the cites name 2025")
+        self.assertIn("is ASSUMED, a hint the designer used (edition not pinned)", held[0])
         self.assertNotIn("the job states", held[0])
-        # The desk tells the run which basis fields are starting values.
+        # The desk tells the run which inputs the designer took from a hint.
         desk, _project_id = self._fresh()
         desk.ask_claude.set(False)
         desk._apply_di(copy.deepcopy(EXAMPLE_DI))
+        desk.accept_hints(["nfpa_13", "nfpa_72"])
         with mock.patch.object(desk_module, "run_di_zone", wraps=run_di_zone) as spy:
             desk.start_zone_run()
             desk.pump()
-        self.assertEqual(spy.call_args.kwargs["unconfirmed_basis"], tuple(inputs.BASIS_STARTING))
-
+        self.assertEqual(sorted(spy.call_args.kwargs["assumed"]), ["nfpa_13", "nfpa_72"])
     def test_the_section_export_marks_a_basis_starting_value(self):
         from fpfa import inputs
         from fpfa.sample_data import EXAMPLE_DI
@@ -1282,7 +1437,9 @@ class BasisStartingValueTests(unittest.TestCase):
         from fpfa.workflow import run_di_zone
         from test_design_basis import _docx_text
 
-        project = {"name": "New job", "basis": dict(_NEW_JOB_BASIS)}
+        # An older job that still holds the earlier version's starting values, noted as such.
+        project = {"name": "Older job", "basis": dict(_NEW_JOB_BASIS),
+                   "given": {name: inputs.SOURCE_DEFAULT for name in ("nfpa_13", "nfpa_72", "insurer")}}
         line = basis_line(project, project["basis"])
         self.assertIn("AHJ: —. NFPA 13: 2025 (starting value, not confirmed by the designer). "
                       "NFPA 72: 2025 (starting value, not confirmed by the designer). "
@@ -1295,6 +1452,15 @@ class BasisStartingValueTests(unittest.TestCase):
         self.assertEqual(basis_line(typed, typed["basis"]), "AHJ: —. NFPA 13: 2025. NFPA 72: 2025. Insurer: FM.")
         sample = dict(project, given={name: inputs.SOURCE_SAMPLE for name in inputs.BASIS_FIELDS})
         self.assertNotIn(inputs.UNCONFIRMED_MARK, basis_line(sample, sample["basis"]))
+        # A new job's blank editions are not pinned; an edition taken from a hint is ASSUMED and not pinned either.
+        blank = {"name": "New job", "basis": {"ahj": "", "nfpa_13": "", "nfpa_72": "", "insurer": "", "hazard_notes": ""}}
+        self.assertEqual(basis_line(blank, blank["basis"]),
+                         "AHJ: —. NFPA 13: — (edition not pinned). NFPA 72: — (edition not pinned). Insurer: —.")
+        hinted = {"name": "New job", "basis": dict(blank["basis"], nfpa_72="2025"),
+                  "given": {"nfpa_72": inputs.SOURCE_ACCEPTED}}
+        line = basis_line(hinted, hinted["basis"])
+        self.assertIn("NFPA 72: 2025 (ASSUMED, a hint the designer used; edition not pinned).", line)
+        self.assertIn("An ASSUMED value is a hint the designer used, not a design value.", line)
 
     def test_the_design_basis_export_marks_a_basis_starting_value(self):
         from fpfa import inputs

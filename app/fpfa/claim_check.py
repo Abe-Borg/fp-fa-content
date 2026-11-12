@@ -417,9 +417,58 @@ def verdict_rows(text: str) -> dict[int, dict]:
     return found
 
 
+# The QA role's own line after the verdict (roles/qa-specialist/ROLE.md): Cite: "<short source line>" (<reason>).
+_ROLE_CITE = re.compile(r'(?i)^cite\s*:\s*(?P<open>["“])(?P<body>.*)$')
+_CLOSE = {'"': '"', "“": "”"}
+
+
+def _role_form(rest: str) -> tuple[str, str] | None:
+    """The cite and the reason of a line written as the QA role asks, or None when it is not in that form.
+
+    The line is read from both ends: the reason is the bracketed clause that
+    closes the line, matched bracket for bracket, and the cite is everything
+    between the opening quote and the quote just before it. So a reason that
+    quotes the claim, or a cite that holds a quote or a bracket, is read whole.
+    """
+    found = _ROLE_CITE.match(rest)
+    if not found:
+        return None
+    body = found.group("body").rstrip(" .;")
+    close = _CLOSE[found.group("open")]
+    reason = ""
+    if body.endswith(")"):
+        depth = 0
+        for index in range(len(body) - 1, -1, -1):
+            char = body[index]
+            if char == ")":
+                depth += 1
+            elif char == "(":
+                depth -= 1
+                if depth == 0:
+                    break
+        else:
+            return None
+        head = body[:index].rstrip()
+        if not head.endswith(close):
+            return None
+        reason, body = body[index + 1:-1], head
+    if not body.endswith(close):
+        return None
+    return body[: -len(close)], reason
+
+
 def _cite_and_reason(rest: str) -> tuple[str, str]:
-    """The checker's quoted cite and its reason, from what follows the verdict on one line."""
+    """The checker's quoted cite and its reason, from what follows the verdict on one line.
+
+    The QA role's form is read first and exactly (_role_form). A line in
+    another form a model writes anyway (a "Reason:" label, a dash, no quotes)
+    is read as before.
+    """
     rest = (rest or "").strip().strip("*_`").strip()
+    exact = _role_form(rest)
+    if exact is not None:
+        cite, reason = exact
+        return _clip(cite.strip(" .;"), CHECKER_CITE_LIMIT), _clip(reason.strip(" .;"), CHECKER_REASON_LIMIT)
     reason = ""
     labelled = re.search(r"(?i)\breason\s*:\s*(.+)$", rest)
     if labelled:

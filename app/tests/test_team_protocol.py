@@ -119,7 +119,7 @@ def _screen_steps(record, *, t_release: float, text: str, replaces: str = "", be
 
     def screen(_kwargs):
         gallons = _calc(record, "zone_trapped_volume", "fp-sprinkler")["outputs"]["zone_gal"]
-        return call(use("di_trip_to_water", v_gal=gallons, q_fill_gpm=600, t_detect_s=8, t_release_s=t_release, basis="FM"))
+        return call(use("di_trip_to_water", v_gal=gallons, q_fill_gpm=600, t_detect_s=8, t_release_s=t_release, t_exhaust_s=0, basis="FM"))
 
     def finding(_kwargs):
         args = {"text": text, "label": "calculated", "supports": [_calc(record, "di_trip_to_water", "fp-sprinkler")["id"]]}
@@ -500,7 +500,7 @@ class LeadToolTests(unittest.TestCase):
 
         def screen(_kwargs):
             gallons = _calc(record, "zone_trapped_volume", "fp-sprinkler")["outputs"]["zone_gal"]
-            return call(use("di_trip_to_water", v_gal=gallons, q_fill_gpm=600, t_detect_s=8, t_release_s=5, basis="FM"))
+            return call(use("di_trip_to_water", v_gal=gallons, q_fill_gpm=600, t_detect_s=8, t_release_s=5, t_exhaust_s=0, basis="FM"))
 
         def replace(_kwargs):
             calc = [row for row in record.calcs("job1") if row["tool"] == "di_trip_to_water"][-1]

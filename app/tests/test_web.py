@@ -641,7 +641,8 @@ class BrowserTests(unittest.TestCase):
                     given = desk.record.givens(desk.project["id"])
                 self.assertEqual((given["hazard_notes"]["value"], given["hazard_notes"]["agent"]),
                                  ("Single-story hall, hot-aisle containment.", "designer"))
-                self.assertEqual(given["insurer"]["value"], "FM")
+                # Undo put the insurer back to blank, as a new job's insurer starts: the record holds none.
+                self.assertFalse((given.get("insurer") or {}).get("value"))
             finally:
                 server.stop()
                 desk.close()

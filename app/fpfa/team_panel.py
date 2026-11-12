@@ -337,7 +337,7 @@ def team_view(snapshot: dict | None, *, export_reason: str | None = None,
         # The page prints each of these after "Not reconciled by the app:". An edition the calculations cite
         # and the job does not state is one of them, said once for the tools that share it.
         "unchecked": [f"{row['tool']} by {row['by'] or 'the app'}: {row['note']}" for row in digest["unchecked"]]
-        + list(digest.get("edition_lines") or []),
+        + list(digest.get("unpinned") or []) + list(digest.get("assumed") or []) + list(digest.get("edition_lines") or []),
         "export": digest["export"],
         "not_standard": checker.NOT_STANDARD,
         # What a design basis exported now would be missing, and the kinds of assurance with the two never performed.

@@ -322,6 +322,18 @@ class ContentPackBuildTests(unittest.TestCase):
         self.assertNotEqual(proc.returncode, 0)
         self.assertFalse(dest.exists(), "nothing is written for a seed with no numbered version")
 
+    def test_the_committed_seed_version_is_numbered(self):
+        """The owner set it (0.6.0 on 2026-11-12, for the next content tag). A build reads it; it must stay numbered."""
+        import importlib.util
+
+        from fpfa.content_pack import canonical_version
+
+        spec = importlib.util.spec_from_file_location("fpfa_build_app_committed", APP_DIR / "packaging" / "build_app.py")
+        build_app = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(build_app)
+        version = build_app.seed_version()
+        self.assertEqual(canonical_version(version), version)
+
     def test_seed_with_an_out_of_scope_slug_is_refused(self):
         from fpfa.content_pack import ContentPackError, copy_pack
 

@@ -198,7 +198,18 @@ The third has a sibling this change did not touch. `di_trip_to_water` and `nitro
 
 **Qualified review.** None recorded. The acceptance gate is in `docs/releasing-basis.md`, section 8.
 
-**Content provenance.** Content fingerprint `784fb6c7ccfcb0bb`, calc code `fb2dabb140405a17`, for this tree as a source checkout. About and versions prints both on any install; a built pack strips some paths and has its own fingerprint. The packaged content was changed in the ways listed in `docs/content-provenance.md`, section 2. Its relation to the team's live content is unmeasured from here.
+**Content provenance.** Content fingerprint `784fb6c7ccfcb0bb`, calc code `fb2dabb140405a17`, for this tree (`89522fe`) as a source checkout. About and versions prints both on any install; a built pack leaves some paths out and has its own fingerprint. The packaged content was changed in the ways listed in `docs/content-provenance.md`, section 2. Its relation to the team's live content is unmeasured from here.
+
+Those values are this milestone's and are no longer current: the fingerprint moves with every change to a pack file, and it has moved since. Recomputed on 2026-11-12 with the application's own `calc_tools.content_fingerprint` and `calc_identity`, on line-feed exports of each commit:
+
+| Point | Commit | Content fingerprint | Calc code |
+| --- | --- | --- | --- |
+| This milestone, 0.3.0 | `89522fe` | `784fb6c7ccfcb0bb` | `fb2dabb140405a17` |
+| 0.3.1 | `3ae0758` | `405014962b492f2e` | `d9cb09ea552f6150` |
+| 0.3.2 | `2f87462` | `f5f7a87e6d4fa718` | `d9cb09ea552f6150` |
+| Release 1 on `main` (pull request #93) | `c4eff88` | `8f24afcc60e2a026` | `19b23b2b9d2922f2` |
+
+The values identify content; they do not show it is correct. The one that matters for an evaluation is the one its report prints.
 
 ## 6. Your decisions, and later work
 

@@ -110,16 +110,22 @@ class ZoneInputTests(unittest.TestCase):
         from fpfa.calc_tools import ToolSession
 
         session = ToolSession(REPO)
-        for args in ({"v_gal": 280, "p_psig": 0}, {"v_gal": 280, "t_min": 0}):
+        for args in ({"v_gal": 280, "p_psig": 0, "t_min": 30}, {"v_gal": 280, "p_psig": 40, "t_min": 0}):
             with self.assertRaises(session.formulas.CalcError, msg=args):
                 session.execute("nitrogen_gate", args)
-        # Left out, they are the form's starting values, as the tool's description now says.
-        omitted = session.execute("nitrogen_gate", {"v_gal": 280})
-        stated = session.execute("nitrogen_gate", {"v_gal": 280, "p_psig": 40, "t_min": 30})
-        self.assertEqual(omitted, stated)
+        # Left out, they are refused, naming each: a starting value is a hint, never an input (FA Lead's ruling,
+        # 2026-11-12). The tool's description says so, and the schema asks for both.
+        for args, named in (({"v_gal": 280}, "p_psig, t_min"), ({"v_gal": 280, "p_psig": 40}, "t_min"),
+                            ({"v_gal": 280, "t_min": None, "p_psig": 40}, "t_min")):
+            with self.assertRaises(ValueError, msg=args) as caught:
+                session.execute("nitrogen_gate", args)
+            self.assertIn(f"nitrogen_gate needs {named}.", str(caught.exception))
+        self.assertTrue(session.execute("nitrogen_gate", {"v_gal": 280, "p_psig": 40, "t_min": 30}))
         schema = next(item for item in __import__("fpfa.calc_tools", fromlist=["SCHEMAS"]).SCHEMAS
                       if item["name"] == "nitrogen_gate")
-        self.assertIn("40 psig and 30 min", schema["description"])
+        self.assertNotIn("40 psig", schema["description"])
+        self.assertIn("Both are required", schema["description"])
+        self.assertEqual(schema["input_schema"]["required"], ["v_gal", "p_psig", "t_min"])
 
     def test_the_form_keeps_a_zero_and_a_blank_as_typed(self):
         from desk_loop import Loop
@@ -136,12 +142,13 @@ class ZoneInputTests(unittest.TestCase):
             di = desk.collect_di()
             self.assertEqual((di["area_increase"], di["hose_gpm"], di["supervisory_psig"], di["fill_minutes"]),
                              (None, 0.0, 0.0, None))
-            # A saved blank comes back blank. A job saved before the fields existed starts from the form's values.
+            # A saved blank comes back blank. So does a field a job saved before it existed does not hold: the
+            # form shows its hint and puts nothing in it.
             desk._apply_di(dict(di))
             self.assertEqual((desk.supervisory_psig.get(), desk.fill_minutes.get()), ("0.0", ""))
             older = {key: value for key, value in di.items() if key not in ("supervisory_psig", "fill_minutes")}
             desk._apply_di(older)
-            self.assertEqual((desk.supervisory_psig.get(), desk.fill_minutes.get()), ("40", "30"))
+            self.assertEqual((desk.supervisory_psig.get(), desk.fill_minutes.get()), ("", ""))
         finally:
             root.destroy()
 
@@ -370,6 +377,37 @@ class CheckerReasonTests(unittest.TestCase):
             return _reply(answer(_claim_lines(kwargs)))
 
         return checker.check_record(REPO, record, "job1", create, **options)
+
+    def test_the_parse_reads_the_qa_roles_own_line_exactly(self):
+        """The brief of 2026-11-12 (PR-B 3, ruled): the parse matches roles/qa-specialist/ROLE.md, line 18, with
+        its (<reason>) clause. The line is taken from the role file itself, so a change there shows here."""
+        import re
+
+        from fpfa.claim_check import verdict_rows
+
+        role = (REPO / "roles" / "qa-specialist" / "ROLE.md").read_text(encoding="utf-8").splitlines()
+        lines = [line.strip().strip("`") for line in role if line.strip().startswith("`<n>.")]
+        self.assertEqual(len(lines), 1, "the role states one verdict line")
+        form = lines[0]
+        self.assertEqual(form, '<n>. Supported | Not supported | Source not found. Cite: "<short source line>" (<reason>)')
+        self.assertEqual(role.index("`" + form + "`") + 1, 18, "the verdict line is line 18 of the role")
+        words = re.search(r"<n>\. (.+?)\. Cite:", form).group(1).split(" | ")
+        cases = (
+            ("NFPA 13-2025 s8.2.4.2", "the cite states the 60 s limit"),
+            # A reason that quotes the claim, and one with a bracket of its own.
+            ("500 gal cap", 'the claim says "600 gal", the cite says 500'),
+            ("NOT PULLED", "no passage was retrieved (the row says NOT PULLED)"),
+            # A cite that holds a quote or a bracket of its own.
+            ('the "DI" cap is 500 gal', "states it"),
+            ("the cap (DI) is 500 gal", "the claim says 600"),
+        )
+        for number, (word, (cite, reason)) in enumerate(((w, c) for w in words for c in cases), start=1):
+            line = (form.replace("<n>", str(number)).replace("Supported | Not supported | Source not found", word)
+                    .replace("<short source line>", cite).replace("<reason>", reason))
+            with self.subTest(line=line):
+                self.assertEqual(verdict_rows(line), {number: {"word": word, "cite": cite, "reason": reason}})
+        # With the reason left off, the verdict and the cite still read, and no reason is made up.
+        self.assertEqual(verdict_rows('3. Supported. Cite: "x"'), {3: {"word": "Supported", "cite": "x", "reason": ""}})
 
     def test_the_checkers_reason_is_kept_apart_from_the_applications(self):
         from fpfa import checker, team_panel

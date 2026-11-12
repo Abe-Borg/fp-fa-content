@@ -86,11 +86,14 @@ def _float(value: Any, label: str) -> float:
 def validate_di(di: dict) -> None:
     """Refuse a zone run its tools cannot make on what the form holds, naming every problem at once.
 
-    A blank stays blank here as everywhere: the run does not put a 0 or a
-    starting value in its place, and a 0 is not replaced either. A fill
+    A blank stays blank here as everywhere: the run does not put a 0, a hint,
+    or a starting value in its place, and a 0 is not replaced either. A fill
     flow, a density, a base area, a supervisory fill, and a fill time must be
-    greater than 0. An area increase and a hose allowance may be 0, which says
-    none on purpose, but not blank (inputs.POSITIVE, inputs.NOT_BLANK).
+    greater than 0. An area increase, a hose allowance, and the detection,
+    releasing, and exhaust times may be 0 but not blank (inputs.POSITIVE,
+    inputs.NOT_BLANK). The system, hazard, time basis, length basis, and the
+    yes/no inputs must be chosen (inputs.CHOSEN). A blank of any of these
+    holds the run.
     """
     segments = di.get("segments") or []
     if not isinstance(segments, list) or not segments:
@@ -100,8 +103,8 @@ def validate_di(di: dict) -> None:
             raise ValueError(f"Segment {index} needs a length in feet.")
         if _blank(segment.get("d_in")) and _blank(segment.get("nps")):
             raise ValueError(f"Segment {index} needs a nominal size or an inside diameter.")
-    problems = [problem for problem in (inputs.run_problem(name, di.get(name))
-                                        for name in inputs.POSITIVE + tuple(inputs.NOT_BLANK)) if problem]
+    names = inputs.CHOSEN + inputs.POSITIVE + tuple(inputs.NOT_BLANK)
+    problems = [problem for problem in (inputs.run_problem(name, di.get(name)) for name in names) if problem]
     if problems:
         raise ValueError(" ".join(problems))
 
@@ -131,9 +134,13 @@ def run_tool_plan(session: ToolSession, di: dict, basis: dict) -> tuple[dict[str
         sent[name] = arguments
         return session.execute(name, arguments)
 
+    # Every value below is the form's own, as validate_di accepted it: no 0, hint, or starting value stands in
+    # for a blank. The trim medium, the prime holder, the low-air setting, the fittings allowance, and the trim
+    # volume may be blank; the first two then reach the kernel as its own words for no election ("unelected",
+    # "unknown", calc_tools), and the record keeps them blank.
     volume = call("zone_trapped_volume", {
         "segments": di.get("segments"),
-        "length_basis": di.get("length_basis") or "center_to_center",
+        "length_basis": di.get("length_basis"),
         "fittings_percent": _opt_float(di.get("fittings_percent"), "Fittings percent"),
         "trim_gal": _opt_float(di.get("trim_gal"), "Trim"),
     })
@@ -143,18 +150,18 @@ def run_tool_plan(session: ToolSession, di: dict, basis: dict) -> tuple[dict[str
     ]
     common_time = {
         "q_fill_gpm": di.get("q_fill_gpm"),
-        "t_detect_s": di.get("t_detect_s") or 0,
-        "t_release_s": di.get("t_release_s") or 0,
-        "t_exhaust_s": di.get("t_exhaust_s") or 0,
-        "basis": di.get("delivery_basis") or "FM",
+        "t_detect_s": di.get("t_detect_s"),
+        "t_release_s": di.get("t_release_s"),
+        "t_exhaust_s": di.get("t_exhaust_s"),
+        "basis": di.get("delivery_basis"),
     }
     # The kernel screen compares pipe volume with the threshold. The size exemption is judged on the zone
     # total, so the screen is handed the takeoff's own zone_gal and the recorded row carries that answer.
     # What is recorded is then what the narrative, the tiles, and both documents print.
     screen = call("dry_delivery_screen", {
         "segments": pipe_only,
-        "qod": bool(di.get("qod")),
-        "system_type": di.get("system_type") or "di",
+        "qod": di.get("qod"),
+        "system_type": di.get("system_type"),
         "zone_gal": volume["zone_gal"],
         **common_time,
     })
@@ -163,8 +170,8 @@ def run_tool_plan(session: ToolSession, di: dict, basis: dict) -> tuple[dict[str
         **common_time,
     })
     hose = call("hose_duration", {
-        "hazard": di.get("hazard") or "ordinary",
-        "supervised": bool(di.get("supervised")),
+        "hazard": di.get("hazard"),
+        "supervised": di.get("supervised"),
     })
     # The form's own values, as validate_di accepted them. A 0 stays 0 and nothing blank reaches here.
     density = call("density_area", {
@@ -180,16 +187,17 @@ def run_tool_plan(session: ToolSession, di: dict, basis: dict) -> tuple[dict[str
         "t_min": di.get("fill_minutes"),
     })
     trim = call("elect_di_trim", {
-        "system_type": di.get("system_type") or "di",
-        "prime_held_by": di.get("prime_held_by") or "unknown",
-        "failsafe_on_total_power_loss": bool(di.get("failsafe_on_total_power_loss")),
+        "system_type": di.get("system_type"),
+        "prime_held_by": di.get("prime_held_by"),
+        "failsafe_on_total_power_loss": di.get("failsafe_on_total_power_loss"),
         "supervisory_psi": _opt_float(di.get("supervisory_psi"), "Supervisory pressure"),
-        "medium": di.get("medium") or "unelected",
+        "medium": di.get("medium"),
         "insurer": (basis or {}).get("insurer") or "",
     })
+    # A blank insurer stays blank. It is not taken as FM.
     truth = call("releasing_truth_table", {
-        "manual_station": bool(di.get("manual_station", True)),
-        "insurer": (basis or {}).get("insurer") or "FM",
+        "manual_station": di.get("manual_station"),
+        "insurer": (basis or {}).get("insurer") or "",
     })
     tools = {
         "zone_trapped_volume": volume,
@@ -349,9 +357,11 @@ def screen_limit_assumption_text(trip: dict) -> str:
 
 def lookup_screen_limit(content_root: Path, basis: str) -> dict[str, Any]:
     """Read the screen-limit table from the calc pack. Do not copy the seconds here."""
+    if _blank(basis):
+        raise ValueError("No time basis is chosen. The screen limit is not looked up until one is.")
     session = ToolSession(content_root)
     table = session.formulas.DI_LIMITS_S
-    key = str(basis or "FM").strip().upper()
+    key = str(basis).strip().upper()
     if key == "NFPA":
         key = "NFPA-OH"
     if key not in table:
@@ -365,6 +375,9 @@ def form_assumption_lines(trim_text: str, basis: str, content_root: Path) -> lis
         trim_line = "Trim: ASSUMED 5 gal when Trim gal is blank (no valve data sheet). Not calculated."
     else:
         trim_line = f"Trim: {str(trim_text).strip()} gal entered on the form. Not assumed."
+    if _blank(basis):
+        # No basis is taken in place of a blank one: the run holds until the designer chooses.
+        return [trim_line, "Screen limit: no time basis is chosen. A run holds until one is.", judgment_label_line()]
     limit = lookup_screen_limit(content_root, basis)
     limit_line = (
         f"Screen limit: {fmt1(limit['limit_s'])} s ASSUMED from time basis {limit['limit_basis']}. "
@@ -407,7 +420,8 @@ def template_narrative(di: dict, tools: dict[str, Any], basis: dict | None = Non
     screen_word = "passes" if trip["passes_screen"] else "does not pass"
     family = trim.get("family") or "unresolved"
     manual = "on" if truth["manual_station"] else "off"
-    user_hose = _float(di.get("hose_gpm") or 0, "Hose")
+    # validate_di held the run on a blank hose, so the form's own value is here: a typed 0 is 0.
+    user_hose = _float(di.get("hose_gpm"), "Hose")
     lines = [
         (
             f"Zone {di.get('zone_id') or '(unnumbered)'} double-interlock preaction. "
@@ -488,12 +502,14 @@ def governing_narrative(text: str) -> str:
 
 
 def _flags(di: dict, tools: dict[str, Any], extra: list[str], basis: dict | None = None,
-           unconfirmed_basis: Any = ()) -> list[str]:
+           assumed: Any = ()) -> list[str]:
     flags: list[str] = []
     # First, because it qualifies every cite below it: the calculations name one edition of a standard and
     # the job states another. The kernel is not told the job's edition, so a rerun does not change this.
-    # A basis field still at the form's starting value is said to be one, never an edition the job states.
-    flags.extend(coherence.edition_flags(tools, basis, unconfirmed_basis))
+    # An edition the designer took from its hint is ASSUMED and not pinned.
+    flags.extend(coherence.edition_flags(tools, basis, assumed))
+    # Each other input the designer took from its hint: ASSUMED, named, until the designer types a value.
+    flags.extend(inputs.assumed_lines(assumed, {**(basis or {}), **di}))
     flags.extend(tools["zone_trapped_volume"].get("flags") or [])
     flags.extend(tools["elect_di_trim"].get("flags") or [])
     screen = tools["dry_delivery_screen"]
@@ -509,7 +525,7 @@ def _flags(di: dict, tools: dict[str, Any], extra: list[str], basis: dict | None
         flags.append("Zone-total delivery screen does not pass.")
     flags.append("Delivery times are an optimistic screen, not a listed water-delivery-time calculation.")
     flags.append(judgment_label_line())
-    user_hose = float(di.get("hose_gpm") or 0)
+    user_hose = _float(di.get("hose_gpm"), "Hose")
     table_hose = float(tools["hose_duration"]["hose_total_gpm"])
     if abs(user_hose - table_hose) > 0.01:
         flags.append(
@@ -583,16 +599,15 @@ def run_di_zone(
     *,
     record: Record | None = None,
     project_id: str | None = None,
-    unconfirmed_basis: Any = (),
+    assumed: Any = (),
 ) -> dict[str, Any]:
     """Run the fixed tool plan, then the optional narrative.
 
     With record and project_id, the plan's eight calls are written to that
     job's record as tool-plan, and a narrator's own calls as narrator. A
-    repeat run with the same inputs replays the recorded figures.
-    unconfirmed_basis names the basis fields that hold the job form's
-    starting value (inputs.unconfirmed_basis): the flags do not say the job
-    states those.
+    repeat run with the same inputs replays the recorded figures. assumed
+    names the inputs the designer took from a hint: the run's flags keep an
+    ASSUMED edition's HOLD and name every other ASSUMED input.
     """
     basis = dict(basis or {})
     # A zone narration is a draft after the tool plan. The app picks its mode; no menu does.
@@ -687,7 +702,7 @@ def run_di_zone(
         "narrative": narrative,
         "narrative_checks": checks,
         "warnings": warnings,
-        "flags": _flags(di, tools, warnings, basis, unconfirmed_basis),
+        "flags": _flags(di, tools, warnings, basis, assumed),
         "inputs": di,
         "basis": basis,
         "mode": selected,

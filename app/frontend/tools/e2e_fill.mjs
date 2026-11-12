@@ -64,10 +64,10 @@ try {
   await page.keyboard.press("Escape");
   check("Escape closes it", (await page.$(".from-chat-pop")) === null);
 
-  // Undo puts the insurer back.
+  // Undo puts the insurer back: blank, as a new job's insurer starts.
   await row("Insurer").getByRole("button", { name: "Undo" }).click();
   await page.waitForSelector(".fill-row.state-undone");
-  await page.waitForFunction(() => document.querySelector("#f-insurer")?.value === "FM");
+  await page.waitForFunction(() => document.querySelector("#f-insurer")?.value === "");
   check("Undo puts the old value back on the form", true);
   check("the undone field is no longer marked", (await page.$(".field.filled #f-insurer")) === null);
   check("the row says it was undone", (await row("Insurer").textContent()).includes("Undone"));

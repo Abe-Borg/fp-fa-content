@@ -115,7 +115,8 @@ class FilledAsRecorded(ChatFillCase):
         turn = self.turn()
         ahj, insurer = self.row("ahj"), self.row("insurer")
         self.assertEqual((ahj["label"], ahj["was"], ahj["now"], ahj["state"]), ("AHJ", "blank", "City of Irvine", "applied"))
-        self.assertEqual((insurer["label"], insurer["was"], insurer["now"]), ("Insurer", "FM (starting value)", "FM Global"))
+        # A new job's insurer starts blank: no insurer is remembered or defaulted.
+        self.assertEqual((insurer["label"], insurer["was"], insurer["now"]), ("Insurer", "blank", "FM Global"))
         self.assertTrue(ahj["quoted"], "the lead's reason is found in the designer's message")
         shown = self.app.snapshot()["thread"]["turns"][-1]["inputs"]
         for item in shown:
@@ -124,7 +125,7 @@ class FilledAsRecorded(ChatFillCase):
         # The Team block no longer lists the inputs: the card does.
         self.assertNotIn("input ahj", turn["text"])
         text = self.app.thread_text()
-        self.assertIn("Filled in on the Inputs tab\nAHJ: blank → City of Irvine\nInsurer: FM (starting value) → FM Global", text)
+        self.assertIn("Filled in on the Inputs tab\nAHJ: blank → City of Irvine\nInsurer: blank → FM Global", text)
 
     def test_a_reason_not_found_in_the_designers_words_is_the_leads_note(self):
         self.play(call(use("set_input", name="ahj", value="City of Irvine", why="AHJ given as Irvine")), say("Done."))
@@ -167,7 +168,7 @@ class FilledAsRecorded(ChatFillCase):
         self.turn("Thanks. What next?")
         opening = play.of("lead")[-1]["user"]
         self.assertIn("[Inputs card under that reply, written by the application: AHJ: blank -> City of Irvine "
-                      "(on the form); Insurer: FM (starting value) -> FM Global (undone by the designer)]", opening)
+                      "(on the form); Insurer: blank -> FM Global (undone by the designer)]", opening)
 
 
 class TypingDuringTheTurn(ChatFillCase):
@@ -271,21 +272,39 @@ class UndoTests(ChatFillCase):
         self.turn()
         job = self.app.chat_log[-1]["job_id"]
         self.app.undo_fill(job, "insurer")
-        self.assertEqual(self.app.insurer.get(), "FM")
+        # A new job's insurer starts blank, so it goes back to blank, supplied by nobody.
+        self.assertEqual(self.app.insurer.get(), "")
         self.assertEqual(self.row("insurer")["state"], "undone")
         self.assertNotIn("insurer", self.app.form_marks())
         project = self.app.project["id"]
-        given = self.app.record.givens(project)["insurer"]
-        self.assertEqual(given["value"], "FM")
-        # It goes back as what it was: the form's starting value, which the designer has not confirmed.
-        self.assertEqual(given["source"], "job form (starting value, not confirmed by the designer)")
+        self.assertNotIn("insurer", self.app.project.get("given") or {})
+        given = self.app.record.givens(project).get("insurer")
+        self.assertFalse((given or {}).get("value"), "the record holds no insurer after the undo")
         history = [row["value"] for row in self.app.record.facts(project, "basis", include_superseded=True)
                    if row["key"] == "insurer"]
         self.assertIn("FM Global", history, "the lead's row stays as history")
-        self.assertIn("Undone: Insurer is back to FM (starting value).", self.app.status.get())
+        self.assertIn("Undone: Insurer is back to blank.", self.app.status.get())
         # Twice is once.
         self.app.undo_fill(job, "insurer")
-        self.assertEqual(self.app.insurer.get(), "FM")
+        self.assertEqual(self.app.insurer.get(), "")
+
+    def test_undo_puts_back_an_accepted_hint_as_assumed_and_its_hold_stays(self):
+        from fpfa import inputs
+
+        self.assertEqual(self.app.accept_hints(["nfpa_13"]), ["nfpa_13"])
+        self.app.save_current()
+        self.assertIn("nfpa_13", inputs.accepted_inputs(self.app.project))
+        self.play(call(use("set_input", name="nfpa_13", value="2022", why="“the AHJ enforces NFPA 13-2022”")),
+                  say("Done."))
+        self.turn("The AHJ enforces NFPA 13-2022.")
+        self.assertEqual(self.row("nfpa_13")["was"], "2025 (hint accepted, ASSUMED)")
+        self.app.undo_fill(self.app.chat_log[-1]["job_id"], "nfpa_13")
+        self.assertEqual(self.app.nfpa_13.get(), "2025")
+        # It goes back as what it was: a hint the designer accepted, ASSUMED, which pins no edition.
+        self.assertEqual(self.app.project["given"]["nfpa_13"], inputs.SOURCE_ACCEPTED)
+        self.assertIn("nfpa_13", inputs.accepted_inputs(self.app.project))
+        holds = inputs.edition_hold_lines(self.app.project["basis"], inputs.accepted_inputs(self.app.project))
+        self.assertTrue(any("NFPA 13" in line and "not pinned" in line for line in holds), holds)
 
     def test_a_field_typed_over_since_is_left_alone(self):
         self.play(call(INSURER), say("Done."))

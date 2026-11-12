@@ -2,3 +2,5 @@
 # It is set when an app build is cut, and the owner confirms the number. packaging/build_app.py writes it into the
 # seed's pack.json, and the updater never replaces a seed with an older or equal published pack.
 # Until a number is on a line below, packaging/build_app.py stops, and so does the Windows app workflow.
+# 0.6.0: confirmed by the owner on 2026-11-12 for the next content tag.
+0.6.0

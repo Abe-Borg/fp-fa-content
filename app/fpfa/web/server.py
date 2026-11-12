@@ -65,6 +65,9 @@ def _flag(value: Any) -> bool:
 ACTIONS: dict[str, Callable[[Desk, dict], Any]] = {
     "send": lambda d, b: d.send_chat(_text(b.get("text"), 200000)),
     "form": lambda d, b: d.patch_form(b.get("values") if isinstance(b.get("values"), dict) else {}),
+    "accept-hints": lambda d, b: d.accept_hints(
+        [_text(name, 80) for name in b.get("names")] if isinstance(b.get("names"), list) else None
+    ),
     "open": lambda d, b: d.select_project(_text(b.get("id"), 200)),
     "new": lambda d, b: d.new_job(),
     "rename": lambda d, b: d.rename_job(_text(b.get("id"), 200) or None, _text(b.get("name"), 500)),

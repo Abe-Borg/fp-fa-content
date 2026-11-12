@@ -414,6 +414,7 @@ class WorkflowTests(unittest.TestCase):
                 "segments": [{"d_in": 4.026, "length_ft": 10}],
                 "q_fill_gpm": "1e309",
                 "system_type": "di",
+                "t_detect_s": 8, "t_release_s": 2, "t_exhaust_s": 0, "basis": "FM",
             })
         with self.assertRaises(formulas.CalcError):
             formulas._require_positive("q_fill_gpm", 0)
@@ -510,11 +511,14 @@ class WorkflowTests(unittest.TestCase):
         self.assertAlmostEqual(volume["pipe_gal"], 495, delta=0.05)
         self.assertAlmostEqual(volume["zone_gal"], 505, delta=0.05)
 
+        # The times and the basis are the caller's: the tool takes none for granted.
+        times = {"t_detect_s": 8, "t_release_s": 2, "t_exhaust_s": 0, "basis": "FM"}
         pipe_only = session.execute("dry_delivery_screen", {
             "segments": segments,
             "q_fill_gpm": 500,
             "system_type": "di",
             "qod": True,
+            **times,
         })
         # A pipe-only screen never says the exemption is met: 495 gal of pipe is under the cap and the zone
         # total is not. The kernel's own flag is kept under its true name.
@@ -526,6 +530,7 @@ class WorkflowTests(unittest.TestCase):
         # Handed the takeoff's zone total, the same screen answers, and the answer is no.
         on_zone = session.execute("dry_delivery_screen", {
             "segments": segments, "q_fill_gpm": 500, "system_type": "di", "qod": True, "zone_gal": volume["zone_gal"],
+            **times,
         })
         self.assertIs(on_zone["nfpa_delivery_time_exempt"], False)
         self.assertAlmostEqual(on_zone["exemption_volume_gal"], volume["zone_gal"], places=6)
@@ -537,6 +542,7 @@ class WorkflowTests(unittest.TestCase):
             "qod": True,
             "trim_gal": 10,
             "fittings_percent": 0,
+            **times,
         })
         governed = govern_nfpa_exemption(pipe_only, volume["zone_gal"])
         self.assertFalse(chat["nfpa_delivery_time_exempt"])
@@ -2264,6 +2270,15 @@ class UiSmokeTests(unittest.TestCase):
                 "length_ft": 10,
                 "d_in": 1.049,
             })
+            # Nothing on a new form is an input until the designer gives it. What has no hint is typed; the
+            # hints are used (recorded ASSUMED).
+            app.patch_form({
+                "t_detect": "8", "t_release": "2", "t_exhaust": "0", "q_fill": "600", "base_area": "1500",
+                "supervisory_psig": "40", "system_label": "Double-interlock", "hazard": "ordinary",
+                "supervised": "yes", "qod": "no", "manual_station": "yes", "failsafe": "no",
+                "length_label": "Center to center",
+            })
+            app.accept_hints()
             app.send_chat("/run")
             chat = app.thread_text()
             self.assertEqual(app.zone_id.get(), "KEEP-1")
