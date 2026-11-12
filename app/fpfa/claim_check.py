@@ -25,7 +25,7 @@ import re
 from pathlib import Path
 from typing import Any, Callable
 
-from fpfa.claude_client import MODEL_ID
+from fpfa.claude_client import MODEL_ID, incomplete_notice
 from fpfa.paths import data_dir
 from fpfa.roles_loader import read_role
 from fpfa.spec_docx import DRAFT_SECTION
@@ -37,6 +37,12 @@ BLIND_CLAIM_SKILL = "blind-claim-check"
 VERDICT_SUPPORTED = "Supported"
 VERDICT_NOT = "Not supported"
 VERDICT_OPEN = "Source not found"
+# The checker's reply holds no verdict line for this claim. It is not a "no": nothing was said about it.
+VERDICT_NONE = "No verdict"
+# The ceiling for one checker request. It caps the model's thinking and its reply together, and this model's
+# thinking cannot be turned off: at 4,000 a packet of sixteen claims spent all of it thinking and returned
+# no text at all. Every tool-loop request in the application sends this much.
+CHECK_MAX_TOKENS = 16000
 OPEN_MARK = "NOT PULLED"
 PACKAGE_MARK = "PACKAGE ASSERTION (not a retrieved standard passage)"
 PACKAGE_STATUS = (
@@ -173,8 +179,12 @@ def judge(content_root: Path, packet: dict, create: Callable[..., Any]) -> dict:
         return _empty(packet)
     system = checker_system(content_root)
     user_text = checker_request(packet["claims"], packet["sources"])
-    model_text = _ask(create, system, user_text)
-    return _from_model(packet, model_text)
+    reply = ask(create, system, user_text)
+    outcome = _from_model(packet, reply["text"], reply["stop_reason"])
+    # The request was billed whatever the verdicts were. The caller writes this to the job's record.
+    outcome["usage"] = reply["usage"]
+    outcome["stop_reason"] = reply["stop_reason"]
+    return outcome
 
 
 def unanswered(packet: dict) -> dict:
@@ -221,7 +231,13 @@ def _empty(packet: dict) -> dict:
     return outcome
 
 
-def _from_model(packet: dict, model_text: str) -> dict:
+def _from_model(packet: dict, model_text: str, stop_reason: str = "") -> dict:
+    """The checker's reply turned into verdict rows, with the application's own rules applied.
+
+    A claim the reply holds no verdict line for is VERDICT_NONE, never Not
+    supported: a reply that was cut off, or that skipped a claim, said nothing
+    about it. The export stays blocked either way, and the reason says which.
+    """
     words = _verdict_words(model_text)
     claims = numbered_bodies(packet["claims"])
     sources = numbered_bodies(packet["sources"])
@@ -233,8 +249,10 @@ def _from_model(packet: dict, model_text: str) -> dict:
             word = VERDICT_OPEN
         elif _echoes(requirement, source):
             word = VERDICT_NOT
+        elif number not in words:
+            word = VERDICT_NONE
         else:
-            word = words.get(number, VERDICT_NOT)
+            word = words[number]
             if word not in _VERDICTS:
                 word = VERDICT_NOT
             if word == VERDICT_SUPPORTED and not _package_supports(requirement, source):
@@ -260,11 +278,24 @@ def _from_model(packet: dict, model_text: str) -> dict:
         )
     else:
         open_claims = ", ".join(str(row["n"]) for row in rows if row["verdict"] != VERDICT_SUPPORTED)
-        reason = (
-            f"Export of Section {DRAFT_SECTION} is blocked until every claim is Supported. "
-            f"Open claims: {open_claims}. "
-            "A tool-package assertion is not a passage from the standard."
-        )
+        unjudged = [row["n"] for row in rows if row["verdict"] == VERDICT_NONE]
+        cut_off = incomplete_notice(stop_reason)
+        if unjudged and cut_off:
+            # The reply did not finish. Say that, not that the claims failed.
+            outcome["incomplete"] = True
+            reason = (
+                f"Export of Section {DRAFT_SECTION} is blocked. The claim check did not finish "
+                f"(stop_reason {stop_reason}): {len(unjudged)} of {len(rows)} claims have no verdict. "
+                "Nothing was judged against them. Run the check again."
+            )
+        else:
+            reason = (
+                f"Export of Section {DRAFT_SECTION} is blocked until every claim is Supported. "
+                f"Open claims: {open_claims}. "
+                "A tool-package assertion is not a passage from the standard."
+            )
+            if unjudged:
+                reason += (" The checker returned no verdict for: " + ", ".join(str(n) for n in unjudged) + ".")
         outcome["block_reason"] = reason
         outcome["status_line"] = reason
         outcome["thread"] = (
@@ -309,24 +340,39 @@ def _verdict_words(text: str) -> dict[int, str]:
     return found
 
 
-def _ask(create: Callable[..., Any], system: str, user_text: str) -> str:
-    """One Messages call. No tools, so the checker cannot fetch the draft."""
-    return _ask_usage(create, system, user_text)[0]
+def ask(create: Callable[..., Any], system: str, user_text: str) -> dict:
+    """One Messages call. No tools, so the checker cannot fetch the draft.
 
-
-def _ask_usage(create: Callable[..., Any], system: str, user_text: str) -> tuple[str, dict]:
-    """The same call, returning the text and the call's usage totals."""
+    Returns {"text", "usage", "stop_reason"}. The stop reason is kept: a
+    reply that ran into the output ceiling may hold no text at all, and what
+    it did not say is not a verdict.
+    """
     from fpfa.claude_client import add_usage, empty_usage
 
     response = create(
         model=MODEL_ID,
-        max_tokens=4000,
+        max_tokens=CHECK_MAX_TOKENS,
         system=system,
         messages=[{"role": "user", "content": user_text}],
     )
     usage = empty_usage()
     add_usage(usage, getattr(response, "usage", None))
-    return _scrub(_response_text(response)), usage
+    return {
+        "text": _scrub(_response_text(response)),
+        "usage": usage,
+        "stop_reason": str(getattr(response, "stop_reason", None) or ""),
+    }
+
+
+def _ask(create: Callable[..., Any], system: str, user_text: str) -> str:
+    """The reply text alone."""
+    return ask(create, system, user_text)["text"]
+
+
+def _ask_usage(create: Callable[..., Any], system: str, user_text: str) -> tuple[str, dict]:
+    """The reply text and the call's usage totals."""
+    reply = ask(create, system, user_text)
+    return reply["text"], reply["usage"]
 
 
 def _response_text(response: Any) -> str:

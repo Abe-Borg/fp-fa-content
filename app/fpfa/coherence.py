@@ -447,6 +447,7 @@ def analyze(snapshot: dict | None) -> dict:
     evidence = {row["id"]: row for row in snap.get("evidence") or []}
     findings = {row["id"]: row for row in snap.get("findings") or []}
     retired = {row["id"]: row for row in snap.get("retired_findings") or []}
+    retired_decisions = {row["id"]: row for row in snap.get("retired_decisions") or []}
     decisions = {row["id"]: row for row in snap.get("decisions") or []}
     calc_state: dict[str, dict] = {}
     code_now = str((snap.get("context") or {}).get("calc_identity") or "")
@@ -530,6 +531,9 @@ def analyze(snapshot: dict | None) -> dict:
             elif ident in retired:
                 how = "withdrawn" if retired[ident].get("superseded_by") == WITHDRAWN else "replaced"
                 reasons.append(f"it rests on finding [{ident}], which was {how}")
+            elif ident in retired_decisions:
+                how = "withdrawn" if retired_decisions[ident].get("superseded_by") == WITHDRAWN else "replaced"
+                reasons.append(f"it rests on decision [{ident}], which was {how}")
             elif ident in findings and ident != own_id and ident not in trail:
                 upstream = finding_standing(ident, trail + (own_id,))
                 if upstream["state"] == STALE:

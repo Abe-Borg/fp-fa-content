@@ -307,7 +307,7 @@ class Runner:
 
         total = 0.0
         events = self.desk.call(self.desk.record.events_by_kind, self.project_id,
-                                ("delegation", "record_check", "check_failed", "consult"))
+                                ("delegation", "record_check", "check_failed", "check_incomplete", "consult"))
         closed = max((int(event.get("seq") or 0) for event in events if event["kind"] == "delegation"), default=0)
         for event in events:
             number = int(event.get("seq") or 0)
@@ -704,7 +704,8 @@ class Runner:
                 except Exception as exc:  # noqa: BLE001 - a probe left behind is said, not hidden
                     self.notes.append(f"A planted probe finding [{ident}] could not be withdrawn: {exc}. "
                                       "It is still on this run's record under the name evaluation-probe.")
-        if not all(ident in verdicts for ident in ids.values()):
+        if not all(ident in verdicts and verdicts[ident].get("verdict") != "No verdict" for ident in ids.values()):
+            # A check that was cut off, or that skipped a planted claim, tested nothing. Silence is not a rejection.
             self.check("probe", "D", "The trace check was tested with planted wrong claims", NOT_SEEN,
                        "the check did not return a verdict for the planted claims")
             return

@@ -68,6 +68,14 @@ CHECKER_ROLE = "qa-specialist"
 CHECK_EVENT = "record_check"
 # A trace check whose request failed. Kept apart from CHECK_EVENT so the last good check stays the latest one.
 CHECK_FAILED_EVENT = "check_failed"
+# A trace check whose reply was cut off before every claim had a verdict. Its requests were billed and its
+# usage is on the event. No finding was changed by it, and it is never the latest check.
+CHECK_INCOMPLETE_EVENT = "check_incomplete"
+# Claims sent to the checker in one request. On a live job a packet of sixteen claims was about 30,000
+# input tokens, and the reply's ceiling covers the model's thinking as well as its verdict lines. A cut-off
+# then loses one batch's claims, not the whole check's.
+CLAIMS_PER_REQUEST = 8
+NO_VERDICT_REASON = "the checker returned no verdict for this claim; it stays not checked"
 
 TIER_SOURCE = "source"
 TIER_REVIEWED = "reviewed"
@@ -294,6 +302,16 @@ def _cite_for(content_root: Path | None, rows: dict[str, dict], finding: dict, a
             author_only = True
             author_notes.append(str(row["text"]))
             sources.append({"id": ident, "kind": "finding", "text": f"finding by {row['agent']}"})
+        elif kind == "decision":
+            # An election or a judgment the team recorded. Like a finding it is the team's own statement:
+            # it is on the record, so the claim is not without a source, and it adds no independent one.
+            basis = f" Basis: {row['basis']}" if row.get("basis") else ""
+            pieces.append(f"DECISION by {row.get('decided_by') or 'the team'}: {row['text']}{basis} [{row.get('label') or ''}]")
+            numbers |= _numbers_in(_strip_cites(row["text"]))
+            held |= _text_quantities(row["text"])
+            author_only = True
+            author_notes.append(str(row["text"]))
+            sources.append({"id": ident, "kind": "decision", "text": f"decision by {row.get('decided_by') or 'the team'}"})
     if not pieces:
         return {"cite": claim_check.OPEN_MARK, "open": True, "basis": "none", "numbers": set(), "held": set(),
                 "sources": sources, "author_notes": []}
@@ -317,6 +335,9 @@ def build_record_packet(record: Record, project_id: str, content_root: Path | No
         rows[row["id"]] = dict(row, _kind="fact")
     for row in findings:
         rows[row["id"]] = dict(row, _kind="finding")
+    for row in snapshot.get("decisions") or []:
+        # A finding may rest on a decision. Left out of this index it read as "not on the record".
+        rows[row["id"]] = dict(row, _kind="decision")
     claims: list[str] = []
     sources: list[str] = []
     meta: list[dict] = []
@@ -421,43 +442,61 @@ def check_record(content_root: Path, record: Record, project_id: str, create: Ca
         }
         record.log_event(project_id, CHECK_EVENT, outcome, agent=CHECKER_ROLE)
         return outcome
-    system = claim_check.checker_system(content_root)
-    try:
-        model_text, usage = claim_check._ask_usage(
-            create, system, claim_check.checker_request(packet["claims"], packet["sources"])
-        )
-    except Exception as exc:
-        if type(exc).__name__ == "TurnCancelled":
-            raise
-        from fpfa.claude_client import safe_error
+    from fpfa.claude_client import attach_usage, empty_usage, incomplete_notice, safe_error
 
-        # One request, and it failed. It returned no usage, so none is known. The failure is still a fact
-        # about the job: nothing was judged, and the last good check stands as it was.
-        record.log_event(project_id, CHECK_FAILED_EVENT, {
-            "failed": True, "error": safe_error(exc)[:400], "usage": dict(getattr(exc, "usage", None) or {}),
-            "claim_count": packet["claim_count"], "seconds": round(time.time() - started, 1),
-        }, agent=CHECKER_ROLE)
+    system = claim_check.checker_system(content_root)
+    usage = empty_usage()
+    # By claim number: what the checker said. A claim it said nothing about has no entry, and no entry is
+    # never read as a verdict.
+    words: dict[int, str] = {}
+    cut_off: dict | None = None
+    try:
+        for batch in _batches(packet["meta"]):
+            reply = claim_check.ask(create, system, _batch_request(claim_check, batch))
+            for field, value in reply["usage"].items():
+                usage[field] = int(usage.get(field, 0)) + int(value or 0)
+            said_here = claim_check._verdict_words(reply["text"])
+            for position, item in enumerate(batch, start=1):
+                if position in said_here:
+                    words[item["n"]] = said_here[position]
+            silent = [item["n"] for item in batch
+                      if item["n"] not in words and _without_checker(claim_check, item) is None]
+            if silent and (incomplete_notice(reply["stop_reason"]) or not reply["text"].strip()):
+                # The reply ran into its ceiling, was declined, or held no text. What it did not say about
+                # these claims is not a verdict, and the batches after it are not sent: the check as a
+                # whole cannot speak for the findings now.
+                cut_off = {"stop_reason": reply["stop_reason"], "claims": silent}
+                break
+    except Exception as exc:
+        # The batches that finished were billed, whatever ended this one. The request that failed returned
+        # no usage. Nothing was judged, and the last good check stands as it was.
+        attach_usage(exc, usage)
+        spent = dict(getattr(exc, "usage", None) or {})
+        cancelled = type(exc).__name__ == "TurnCancelled"
+        if not cancelled or spent.get("rounds"):
+            record.log_event(project_id, CHECK_FAILED_EVENT, {
+                "failed": not cancelled, "cancelled": cancelled, "error": safe_error(exc)[:400], "usage": spent,
+                "claim_count": packet["claim_count"], "seconds": round(time.time() - started, 1),
+            }, agent=CHECKER_ROLE)
         raise
-    words = claim_check._verdict_words(model_text)
+    if cut_off is not None:
+        return _incomplete(record, project_id, packet, usage, cut_off, words, started, claim_check)
     rows: list[dict] = []
     # Where the application's own rules set aside what the checker said. A checker that approves a claim
     # the rules catch is a checker to distrust on the claims no rule covers.
     overruled: list[dict] = []
     for item in packet["meta"]:
         reason = ""
-        if item["stale"]:
-            verdict = claim_check.VERDICT_OPEN
-            reason = "its basis changed; it is out of date"
-        elif item["open"]:
-            verdict = claim_check.VERDICT_OPEN
-            reason = "no source on the record, or the cite was not pulled"
-        elif any(claim_check._echoes(item["requirement"], note) for note in item["author_notes"]):
-            # Only a note the claim's own author wrote can be the claim said back. A pack note
-            # that states the claim word for word is what support looks like.
-            verdict = claim_check.VERDICT_NOT
-            reason = "its author's note only repeats the claim"
+        decided = _without_checker(claim_check, item)
+        if decided is not None:
+            verdict, reason = decided
+        elif item["n"] not in words:
+            # The reply finished and skipped this claim. It is not a "no": the finding goes back to not
+            # checked, and the row says why.
+            verdict = claim_check.VERDICT_NONE
+            reason = NO_VERDICT_REASON
         else:
-            verdict = words.get(item["n"], claim_check.VERDICT_NOT)
+            verdict = words[item["n"]]
             if verdict not in (claim_check.VERDICT_SUPPORTED, claim_check.VERDICT_NOT, claim_check.VERDICT_OPEN):
                 verdict = claim_check.VERDICT_NOT
             said = verdict
@@ -480,12 +519,17 @@ def check_record(content_root: Path, record: Record, project_id: str, create: Ca
             "cite": item["cite"].replace('"', "'"), "basis": item["basis"] if verdict == claim_check.VERDICT_SUPPORTED else "",
             "sources": item["sources"], "reason": reason,
         })
-        record.set_finding_status(project_id, item["finding_id"], status=verdict, by=CHECKER_ROLE)
+        # A finding the checker said nothing about goes back to "open", which is where it started: an
+        # earlier check's verdict must not stand in for this one's silence.
+        record.set_finding_status(
+            project_id, item["finding_id"],
+            status="open" if verdict == claim_check.VERDICT_NONE else verdict, by=CHECKER_ROLE)
     supported = [row for row in rows if row["verdict"] == claim_check.VERDICT_SUPPORTED]
     on_source = sum(1 for row in supported if row["basis"] == "source")
     on_author = len(supported) - on_source
-    not_ok = [row for row in rows if row["verdict"] != claim_check.VERDICT_SUPPORTED]
-    all_supported = bool(rows) and not not_ok
+    no_word = [row for row in rows if row["verdict"] == claim_check.VERDICT_NONE]
+    not_ok = [row for row in rows if row["verdict"] not in (claim_check.VERDICT_SUPPORTED, claim_check.VERDICT_NONE)]
+    all_supported = bool(rows) and not not_ok and not no_word
     split = (f"{on_source} against a calculation record, a content-pack note, or a project input, "
              f"{on_author} against a cite their author wrote")
     if overruled:
@@ -498,11 +542,13 @@ def check_record(content_root: Path, record: Record, project_id: str, create: Ca
         )
         block_reason = ""
     else:
-        listed = ", ".join(str(row["n"]) for row in not_ok)
-        status_line = (
-            f"Trace check: {len(supported)} of {len(rows)} findings are consistent with the rows they cite ({split}). "
-            f"Not supported or without a source: {listed}. " + NOT_STANDARD
-        )
+        status_line = f"Trace check: {len(supported)} of {len(rows)} findings are consistent with the rows they cite ({split}). "
+        if not_ok:
+            status_line += "Not supported or without a source: " + ", ".join(str(row["n"]) for row in not_ok) + ". "
+        if no_word:
+            status_line += ("The checker returned no verdict for: " + ", ".join(str(row["n"]) for row in no_word)
+                            + "; they stay not checked. ")
+        status_line += NOT_STANDARD
         block_reason = status_line
     outcome = {
         "usage": usage,
@@ -525,6 +571,63 @@ def check_record(content_root: Path, record: Record, project_id: str, create: Ca
         ),
     }
     record.log_event(project_id, CHECK_EVENT, outcome, agent=CHECKER_ROLE)
+    return outcome
+
+
+def _batches(meta: list[dict]) -> list[list[dict]]:
+    """The claims in the order they stand, CLAIMS_PER_REQUEST to a request."""
+    return [meta[start:start + CLAIMS_PER_REQUEST] for start in range(0, len(meta), CLAIMS_PER_REQUEST)]
+
+
+def _batch_request(claim_check, batch: list[dict]) -> str:
+    """The checker's two files for one batch, numbered from 1 so every request reads the same way.
+
+    A record with one batch sends exactly the claims and cites build_record_packet numbered.
+    """
+    claims = "\n".join(f"{position}. {item['requirement'].rstrip('.')}." for position, item in enumerate(batch, start=1))
+    sources = "\n".join(f"{position}. {item['cite']}" for position, item in enumerate(batch, start=1))
+    return claim_check.checker_request(claims, sources)
+
+
+def _without_checker(claim_check, item: dict) -> tuple[str, str] | None:
+    """The verdict the application gives a claim itself, whatever the checker says. None when it gives none."""
+    if item["stale"]:
+        return claim_check.VERDICT_OPEN, "its basis changed; it is out of date"
+    if item["open"]:
+        return claim_check.VERDICT_OPEN, "no source on the record, or the cite was not pulled"
+    if any(claim_check._echoes(item["requirement"], note) for note in item["author_notes"]):
+        # Only a note the claim's own author wrote can be the claim said back. A pack note
+        # that states the claim word for word is what support looks like.
+        return claim_check.VERDICT_NOT, "its author's note only repeats the claim"
+    return None
+
+
+def _incomplete(record: Record, project_id: str, packet: dict, usage: dict, cut_off: dict, words: dict,
+                started: float, claim_check) -> dict:
+    """Close a trace check whose reply was cut off. Nothing is written to a finding.
+
+    The check speaks for the findings it saw or for none of them: a verdict
+    on half the record beside an older check's on the rest would read as one
+    check. So the verdict lines that did come back are counted and dropped,
+    the usage is kept, and the last complete check stays the latest one.
+    """
+    waiting = [item["n"] for item in packet["meta"]
+               if item["n"] not in words and _without_checker(claim_check, item) is None]
+    stop_reason = str(cut_off.get("stop_reason") or "")
+    why = f"stop_reason {stop_reason}" if stop_reason and stop_reason != "end_turn" else "the reply held no text"
+    count = packet["claim_count"]
+    status_line = (
+        f"Trace check did not finish: the checker's reply was cut off ({why}) with no verdict on "
+        f"{len(waiting)} of {count} finding{'s' if count != 1 else ''}. No finding was changed, and the last complete "
+        "check, if there was one, stands as it was. Run the trace check again."
+    )
+    outcome = {
+        "incomplete": True, "usage": usage, "seconds": round(time.time() - started, 1), "rows": [],
+        "all_supported": False, "claim_count": count, "unjudged": waiting, "cut_off_at": list(cut_off.get("claims") or []),
+        "stop_reason": stop_reason, "token": packet["token"], "status_line": status_line, "block_reason": status_line,
+        "checked_against_standard": False,
+    }
+    record.log_event(project_id, CHECK_INCOMPLETE_EVENT, outcome, agent=CHECKER_ROLE)
     return outcome
 
 
@@ -556,10 +659,49 @@ def check_is_current(snapshot: dict | None) -> bool:
     return not (was and now and was != now)
 
 
+def _newest(snapshot: dict | None, kind: str) -> dict | None:
+    """The newest event of one kind a snapshot carries: from its latest table, else from its recent window."""
+    found = ((snapshot or {}).get("latest") or {}).get(kind)
+    if found is None:
+        for row in (snapshot or {}).get("events") or []:
+            if row.get("kind") == kind:
+                found = row
+    return found
+
+
+def unfinished_check(snapshot: dict | None) -> str:
+    """Why the newest trace check gave no verdicts, when it came after the last complete one. Else "".
+
+    A check that was cut off, or whose request failed, changed nothing. A
+    view that only knew the last complete check would say "not run" or "run
+    it again" with no word on why the run just made left nothing behind.
+    """
+    done = _newest(snapshot, CHECK_EVENT)
+    done_seq = int((done or {}).get("seq") or 0)
+    newest: dict | None = None
+    for kind in (CHECK_INCOMPLETE_EVENT, CHECK_FAILED_EVENT):
+        event = _newest(snapshot, kind)
+        if event is not None and int(event.get("seq") or 0) > max(done_seq, int((newest or {}).get("seq") or 0)):
+            newest = event
+    if newest is None:
+        return ""
+    payload = newest.get("payload") or {}
+    if newest.get("kind") == CHECK_INCOMPLETE_EVENT:
+        stop_reason = str(payload.get("stop_reason") or "")
+        why = f"stop_reason {stop_reason}" if stop_reason and stop_reason != "end_turn" else "the reply held no text"
+        return f"the last run did not finish: the checker's reply was cut off ({why})"
+    if payload.get("cancelled"):
+        return "the last run was cancelled before it finished"
+    return "the last run failed before it returned (" + _clip(payload.get("error") or "no reason recorded", 160) + ")"
+
+
 def check_line(snapshot: dict | None) -> str:
     """One line on the trace check for the panel and the lead. It speaks for the findings the check saw."""
     snap = snapshot or {}
     payload = _latest_check_in(snap)
+    unfinished = "" if check_is_current(snap) else unfinished_check(snap)
+    if unfinished and snap.get("findings"):
+        return f"Trace check: {unfinished}. No finding was changed. Run it again."
     if payload is None:
         if snap.get("findings"):
             return "Trace check: not run on the current findings."
@@ -576,6 +718,10 @@ def check_line(snapshot: dict | None) -> str:
 
 def summary_line(outcome: dict | None) -> str:
     """The check in a few words for the block under a lead reply."""
+    if (outcome or {}).get("incomplete"):
+        stop_reason = str(outcome.get("stop_reason") or "")
+        why = f" (stop_reason {stop_reason})" if stop_reason and stop_reason != "end_turn" else ""
+        return f"trace check: did not finish{why}; no finding was changed. Run it again."
     rows = (outcome or {}).get("rows") or []
     if not rows:
         return "trace check: nothing to check"
@@ -641,6 +787,8 @@ def assurance(snapshot: dict | None, check: dict | None = None) -> dict[str, dic
                                "the engineer of record confirms it.")
         else:
             tier = TIER_STATED
+            if seen.get("verdict") == "No verdict":
+                reasons.append("The trace check returned no verdict for it, so it stays not checked.")
             if finding.get("label") in _JUDGMENT_LABELS:
                 tier = TIER_OPEN
                 kind = "an assumption" if finding["label"] == "ASSUMED" else "a judgment the tools did not return"
@@ -818,6 +966,11 @@ def export_reason(snapshot: dict | None) -> str:
     if not findings:
         return ""
     check = _latest_check_in(snapshot)
+    unfinished = "" if check_is_current(snapshot) else unfinished_check(snapshot)
+    if unfinished:
+        # The run that was just made left nothing behind. Say why, not only that a check is wanted.
+        return (f"The trace check has not judged the findings as they are now: {unfinished}. "
+                "Ask the lead to run it again, or press Run trace check.")
     if not check:
         return "The record has findings that no trace check has judged. Ask the lead to run it, or press Run trace check."
     if check.get("token") != check_token(findings):

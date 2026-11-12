@@ -55,7 +55,9 @@ def scripted(runner, probe_checker=discerning):
                    for kind in ("lead", "fp-sprinkler", "fa-releasing", "checker")}
         # The cancelled turn gets one round in before the cancel lands. The turn after it answers.
         scripts["lead"] += [slow, say("The design basis stands as recorded. One question is open for the engineer.")]
-        scripts["checker"] += [probe_checker, supported_by_default]
+        # The trace check sends eight claims to a request. With the four planted claims the record holds
+        # eleven findings, so the probe's check is two requests; the export's, over seven, is one.
+        scripts["checker"] += [probe_checker, probe_checker, supported_by_default]
         return Players(scripts)
 
     def play(**kwargs):

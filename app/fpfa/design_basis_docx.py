@@ -261,6 +261,8 @@ def _rests_on(finding: dict, rows: dict[str, dict]) -> str:
         elif row["_kind"] == "fact":
             word = "input" if row.get("kind") in (inputs.INPUT_KIND, inputs.BASIS_KIND) else "fact"
             parts.append(f"{word} {row['key']} [{ident}]")
+        elif row["_kind"] == "decision":
+            parts.append(f"decision [{ident}]")
         else:
             parts.append(f"finding [{ident}]")
     return "; ".join(parts) or "nothing cited"
@@ -272,6 +274,7 @@ _SOURCE_WORDS = {
     "author": "its author's own note; the section is not in the content pack",
     "input": "project input",
     "finding": "another finding",
+    "decision": "a decision the team recorded",
     "missing": "a row that is not on the record",
 }
 
@@ -330,6 +333,8 @@ def write_design_basis(
         rows_by_id[row["id"]] = dict(row, _kind="fact")
     for row in findings + list(snapshot.get("retired_findings") or []):
         rows_by_id[row["id"]] = dict(row, _kind="finding")
+    for row in list(snapshot.get("decisions") or []) + list(snapshot.get("retired_decisions") or []):
+        rows_by_id[row["id"]] = dict(row, _kind="decision")
 
     doc = Document()
     doc.core_properties.title = DESIGN_BASIS_TITLE

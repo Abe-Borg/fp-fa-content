@@ -57,7 +57,9 @@ HANDOFF_STATUSES = ("pending", "delivered", "returned", "cancelled")
 # answered inside the asker's turn.
 HANDOFF_KINDS = ("delegation", "handoff", "consult")
 # Event kinds whose newest row a snapshot always carries: the lead's plan and the last trace check.
-LATEST_KINDS = ("plan", "record_check")
+# check_incomplete and check_failed are the trace checks that left no verdicts: a view says so when one of
+# them is newer than the last complete check.
+LATEST_KINDS = ("plan", "record_check", "check_incomplete", "check_failed")
 # Written when a lead turn has read the job's status, so the next one can tell what is new since.
 TURN_START = "turn_start"
 # One event each time an agent reads a skill body on a job: who, which skill, and a hash of the text it got.

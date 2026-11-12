@@ -156,6 +156,7 @@ _SOURCE_WORD = {
     "author": "its author's own note (not in the content pack)",
     "input": "project input",
     "finding": "another finding",
+    "decision": "a decision the team recorded",
     "missing": "a row that is not on the record",
 }
 
@@ -178,6 +179,8 @@ def _rests_on(row: dict, rows: dict[str, dict]) -> list[str]:
                 out.append(f"project input {found['key']}: {_short(value, 80)} [{ident}]")
             else:
                 out.append(f"fact {found.get('kind')}/{found.get('key')}: {_short(found.get('value'), 80)} [{ident}]")
+        elif found["_kind"] == "decision":
+            out.append(f"decision by {found.get('decided_by')}: {_short(found.get('text'), 100)} [{ident}]")
         else:
             out.append(f"finding by {found.get('agent')}: {_short(found.get('text'), 100)} [{ident}]")
     return out
@@ -210,6 +213,8 @@ def finding_rows(snapshot: dict | None) -> list[dict]:
         rows[row["id"]] = dict(row, _kind="fact")
     for row in findings + list(snap.get("retired_findings") or []):
         rows[row["id"]] = dict(row, _kind="finding")
+    for row in list(snap.get("decisions") or []) + list(snap.get("retired_decisions") or []):
+        rows[row["id"]] = dict(row, _kind="decision")
     reviews: dict[str, list[dict]] = {}
     for row in snap.get("reviews") or []:
         reviews.setdefault(row["finding_id"], []).append(row)

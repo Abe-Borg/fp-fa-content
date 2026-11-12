@@ -145,8 +145,9 @@ class RecordStoreTests(unittest.TestCase):
                                      "retired_findings", "reviews", "questions", "decisions", "handoffs",
                                      "retired_decisions", "tasks", "agents", "jobs", "events", "latest",
                                      "unseen_answers", "skill_reads", "row_seq", "context"})
-        # The newest plan and trace-check rows ride with the snapshot whatever the event window holds.
-        self.assertEqual(set(snap["latest"]), {"plan", "record_check"})
+        # The newest plan and trace-check rows ride with the snapshot whatever the event window holds: the
+        # last complete check, and the last one that was cut off or failed, so a view can say which is newer.
+        self.assertEqual(set(snap["latest"]), {"plan", "record_check", "check_incomplete", "check_failed"})
         self.assertEqual(snap["project"]["name"], "Sample")
         text = record.summary_text("p1")
         self.assertIn("basis/insurer: FM (OWNER)", text)

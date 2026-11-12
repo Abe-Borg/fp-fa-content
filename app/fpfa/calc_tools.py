@@ -313,6 +313,7 @@ SCHEMAS = [
         "description": (
             "Write one finding to the project record with its label and the ids of the calc records, "
             "evidence rows, or facts that support it. A figure with no calc record id is not calculated. "
+            "An earlier finding or a decision may be named too: it is the team's own statement and adds no source. "
             "One statement per finding, so each can be checked and reviewed on its own. To revise a finding "
             "you wrote earlier, pass its id in replaces: the old one is kept as history and leaves the current set."
         ),
@@ -658,7 +659,7 @@ class ToolSession:
             out = {"id": row["id"], "label": row["label"]}
             if row.get("replaces"):
                 out["replaces"] = row["replaces"]
-            return out
+            return self._flag_unknown_supports(out, args.get("supports"), "finding")
         if name == "withdraw_finding":
             ident = str(args.get("id") or "").strip()
             is_lead = (self.agent or LEAD) == LEAD
@@ -695,7 +696,7 @@ class ToolSession:
             out = {"id": row["id"], "label": row["label"]}
             if row.get("replaces"):
                 out["replaces"] = row["replaces"]
-            return out
+            return self._flag_unknown_supports(out, args.get("supports"), "decision")
         if name == "handoff":
             payload = args.get("payload")
             if payload is not None and not isinstance(payload, dict):
@@ -706,6 +707,38 @@ class ToolSession:
             )
             return {"id": row["id"], "to": row["to_agent"], "status": row["status"]}
         raise KeyError(f"unknown tool {name}")
+
+    def _flag_unknown_supports(self, out: dict, supports, what: str) -> dict:
+        """Say in the tool result which support ids are on no table of this job's record.
+
+        The row is written either way: the record never edits what a model
+        wrote. But a mistyped id reads later as "not on the record", and the
+        model that wrote it is the one that can put it right, in this turn.
+        """
+        if not isinstance(supports, (list, tuple)):
+            return out
+        ids = [str(item).strip() for item in supports if str(item or "").strip()]
+        if not ids:
+            return out
+        try:
+            record, project_id = self.record, self.project_id
+            known = {row["id"] for row in record.calcs(project_id)}
+            known |= {row["id"] for row in record.evidence(project_id)}
+            known |= {row["id"] for row in record.facts(project_id, include_superseded=True)}
+            known |= {row["id"] for row in record.findings(project_id, include_retired=True)}
+            known |= {row["id"] for row in record.decisions(project_id, include_retired=True)}
+        except Exception:
+            # Bookkeeping. A failure here never fails the write that already happened.
+            return out
+        unknown = [ident for ident in ids if ident not in known]
+        if unknown:
+            out["not_on_the_record"] = unknown
+            out["note"] = (
+                "These ids are on no table of this job's record: " + ", ".join(unknown) + f". A {what} that rests "
+                "on one has no source there, and the trace check will say so. Look the id up with read_record "
+                f"and replace this {what} with one that names the right row."
+            )
+        return out
 
     def _no_given(self, label, what: str) -> None:
         if str(label or "").strip().upper() == GIVEN:
