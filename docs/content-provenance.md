@@ -21,27 +21,43 @@ Neither side is the master. Which one should be is your decision, and this page 
 
 Each of these is a correction to a packaged copy. If the live copy does not have it, a sync from live would undo it. The last column names the test that fails if it is lost; those tests are now run on every pull request (section 5).
 
-A read-only review on 2026-11-12 (`docs/app-content-handback.md`, sections 2 and 5) found that this section is incomplete. It leaves out the role additions of the team milestone (`3f6e07b`): the lead role, the "Working with the team" sections, and the QA role's kinds of cite. And some guards named below test behaviour, not the file's text, so they would not notice a lost sentence. This page has not been corrected yet; until it is, that page's manifest is the fuller list.
+A read-only review on 2026-11-12 (`docs/app-content-handback.md`, sections 2 and 5) found that this section was incomplete: it left out the role additions of the team milestone (`3f6e07b`), it overstated the guard on the QA reason line, and several guards it named test behaviour, not the file's text, so they would not notice a lost sentence. Those gaps are closed below (section 2b-0, the 2b-2 QA row, and the text guards in `app/tests/test_content_provenance.py`). A *text guard* is a test that reads the packaged file itself. The text guards check a phrase each correction introduced; they do not restate or rewrite the engineering sentence, and they are not a review of whether it is right. They live in `app/tests`, outside the pack, so adding them did not move the content fingerprint.
 
 ### 2a. From pull request #75 (`bc14eae`, 2026-11-10): the second release leg is P
 
 The second leg of the double-interlock release was written as low air in these files and now reads P, the pressure drop from sprinkler operation, with low air named as supervisory only.
 
+The scan (`calcs/fp/test_pack_content_lowair.py`) fails on a sentence that puts the old wording back; it does not notice a corrected sentence that was dropped outright. Each file now also has a text guard, `test_section_2a_files_still_name_p_as_the_second_leg` in `app/tests/test_content_provenance.py`, which fails when the file stops naming P as the pressure drop from sprinkler operation.
+
 | File | Guard |
 | --- | --- |
-| `skills/dry-preaction-water-delivery-screen/SKILL.md` | `calcs/fp/test_pack_content_lowair.py` scans every sentence |
-| `skills/fa-asd-vewfd-data-hall-sampling-layout/SKILL.md` | the same |
-| `skills/fa-double-interlock-releasing-cause-and-effect/SKILL.md` | the same, plus `test_the_releasing_skills_name_p_as_the_second_leg` |
-| `skills/fa-fire-pump-and-preaction-supervisory-points/SKILL.md` | the scan |
-| `skills/fa-hvac-door-and-lock-interfaces/SKILL.md` | the scan |
-| `skills/fa-integrated-systems-test-matrix/SKILL.md` | the scan |
-| `skills/fa-pathway-survivability-election/SKILL.md` | the scan |
-| `skills/fa-supervising-station-signal-schedule/SKILL.md` | the scan |
-| `skills/fa-two-level-detection-stagger-and-fm-mapping/SKILL.md` | the scan |
-| `skills/nitrogen-inerting-and-c-factor-gate/SKILL.md` | the scan |
-| `skills/preaction-el-el-trim-election/SKILL.md` | the scan |
-| `skills/preaction-releasing-c-and-e-soo/SKILL.md` | the scan, plus `test_the_releasing_skills_name_p_as_the_second_leg` |
-| `roles/fa-releasing/ROLE.md`, `roles/fp-sprinkler/ROLE.md` | the scan |
+| `skills/dry-preaction-water-delivery-screen/SKILL.md` | the scan; the text guard |
+| `skills/fa-asd-vewfd-data-hall-sampling-layout/SKILL.md` | the scan; the text guard |
+| `skills/fa-double-interlock-releasing-cause-and-effect/SKILL.md` | the scan; the text guard; `test_the_releasing_skills_name_p_as_the_second_leg` |
+| `skills/fa-fire-pump-and-preaction-supervisory-points/SKILL.md` | the scan; the text guard |
+| `skills/fa-hvac-door-and-lock-interfaces/SKILL.md` | the scan; the text guard |
+| `skills/fa-integrated-systems-test-matrix/SKILL.md` | the scan; the text guard |
+| `skills/fa-pathway-survivability-election/SKILL.md` | the scan; the text guard |
+| `skills/fa-supervising-station-signal-schedule/SKILL.md` | the scan; the text guard |
+| `skills/fa-two-level-detection-stagger-and-fm-mapping/SKILL.md` | the scan; the text guard |
+| `skills/nitrogen-inerting-and-c-factor-gate/SKILL.md` | the scan; the text guard |
+| `skills/preaction-el-el-trim-election/SKILL.md` | the scan; the text guard |
+| `skills/preaction-releasing-c-and-e-soo/SKILL.md` | the scan; the text guard; `test_the_releasing_skills_name_p_as_the_second_leg` |
+| `roles/fa-releasing/ROLE.md`, `roles/fp-sprinkler/ROLE.md` | the scan; the text guard |
+
+### 2b-0. From the team milestone (`3f6e07b`, 2026-11-11): the lead role and how the team works
+
+This milestone added to the role files the part of each that is the application's contract with the team: who the lead is, what each specialist owns and reviews, and how the checker reads a cite on the record. It changed no skill, corpus note, specification, or calculation.
+
+| File | What changed | Why | Guard |
+| --- | --- | --- | --- |
+| `roles/lead/ROLE.md` | New (76 lines): the lead plans, records the designer's inputs with `set_input`, delegates, makes the specialists reconcile, runs the trace check, and answers. It does not compute and does not answer in a specialist's place | The designer talks to one lead; the team milestone | `app/tests/test_team_protocol.py`, `test_the_lead_role_is_content_and_says_how_the_team_is_run` (phrases); the scripted harnesses also find the lead by its `# Team lead` heading |
+| `roles/fp-sprinkler/ROLE.md` | A `## Working with the team` section: the sprinkler specialist owns the system family, the volume, the delivery screen, density and hose, the nitrogen fill, the trim family, and the pressures; the detection and release times are project inputs the releasing specialist confirms; it does not pick a time | The two specialists reason from one record | `test_list_specialists_says_what_each_owns_needs_and_reviews` (heading and keywords); the text guard `test_the_team_milestone_role_additions_are_still_there` |
+| `roles/fa-releasing/ROLE.md` | A `## Working with the team` section: the releasing specialist owns detection, releasing, supervision, and the panel; it takes the trim family from the record ("Do not assume electric/electric"); an unsupported time is ASSUMED | The same | the same two |
+| `roles/qa-specialist/ROLE.md` | The "Kinds of cite on a project record" block (PACKAGE ASSERTION, CONTENT-PACK NOTE, AUTHOR'S NOTE, PROJECT INPUT, FINDING, OUT OF DATE), and the rule that a figure in a claim has to be in the cite | The trace check builds each cite from the record and marks where its words came from | `app/tests/test_checker.py` (the heading); the text guard `test_the_team_milestone_role_additions_are_still_there` (each mark of this milestone and the figure rule) |
+| `roles/README.md` | How the application uses the roles: the lead's system text, a specialist's own context, the shell for a chat with no record | So whoever edits a role keeps the section the team runs on | the text guard `test_the_team_milestone_role_additions_are_still_there` |
+
+Every skill a role names is in the pack: `test_every_skill_a_role_names_is_in_the_pack` (`app/tests/test_content_provenance.py`) reads each skill slug a role writes in backticks and fails when the pack does not hold it. On 2026-11-12 all sixteen resolve.
 
 ### 2b. From this milestone (2026-11-11)
 
@@ -76,10 +92,10 @@ Four packaged role files changed, each only in a part that is the application's 
 
 | File | What changed | Why | Guard |
 | --- | --- | --- | --- |
-| `roles/lead/ROLE.md` | Step 3: a figure the designer gave in other units goes in with `set_input` with its unit. The math rule: a change of unit comes from `convert_units`. Step 4: stop only when nothing assumed can stand in for what is missing (no pipe data at all for a volume, a delivery screen, or a gas fill); everything else goes on with stated, labeled assumptions, a request the designer says to answer from what they gave included | F-008: the live specialist ran SI figures as US ones. F-009: the owner ruled on 2026-11-12 that "that's all I have" is answered with a labeled, preliminary screen | `app/tests/test_acceptance_report_030.py`, `MissingInputPolicyTests`; the tools under it, `UnitConversionTests` |
-| `roles/fp-sprinkler/ROLE.md` | `convert_units` in the list of tools that own the numbers | F-008 | `UnitConversionTests.test_a_specialist_in_the_turn_is_held_to_the_same_rule`: the application refuses the designer's SI figure in a US field whatever a role says |
-| `roles/fa-releasing/ROLE.md` | One sentence: an op takes the units its arguments name; an SI length or pressure goes through `convert_units` first | F-008 | none; one sentence of guidance |
-| `roles/qa-specialist/ROLE.md` | The verdict line ends with the checker's reason in brackets, one clause | F-007: the live checker already wrote one, and the application threw it away. The application now keeps it as the checker's reading, apart from its own | `CheckerReasonTests` |
+| `roles/lead/ROLE.md` | Step 3: a figure the designer gave in other units goes in with `set_input` with its unit. The math rule: a change of unit comes from `convert_units`. Step 4: stop only when nothing assumed can stand in for what is missing (no pipe data at all for a volume, a delivery screen, or a gas fill); everything else goes on with stated, labeled assumptions, a request the designer says to answer from what they gave included | F-008: the live specialist ran SI figures as US ones. F-009: the owner ruled on 2026-11-12 that "that's all I have" is answered with a labeled, preliminary screen | `app/tests/test_acceptance_report_030.py`, `MissingInputPolicyTests`; the tools under it, `UnitConversionTests`; the text guard `test_the_roles_still_send_a_change_of_unit_to_convert_units` |
+| `roles/fp-sprinkler/ROLE.md` | `convert_units` in the list of tools that own the numbers | F-008 | `UnitConversionTests.test_a_specialist_in_the_turn_is_held_to_the_same_rule`: the application refuses the designer's SI figure in a US field whatever a role says; the text guard `test_the_roles_still_send_a_change_of_unit_to_convert_units` |
+| `roles/fa-releasing/ROLE.md` | One sentence: an op takes the units its arguments name; an SI length or pressure goes through `convert_units` first | F-008 | the text guard `test_the_roles_still_send_a_change_of_unit_to_convert_units` |
+| `roles/qa-specialist/ROLE.md` | The verdict line ends with the checker's reason in brackets, one clause: `<n>. Supported \| Not supported \| Source not found. Cite: "<short source line>" (<reason>)` | F-007: the live checker already wrote one, and the application threw it away. The application now keeps it as the checker's reading, apart from its own | `test_the_parse_reads_the_qa_roles_own_line_exactly` (`app/tests/test_acceptance_report_030.py`) reads line 18 of the role, fails if it is not that line, and parses lines built from it. `CheckerReasonTests` otherwise tests what the application does with a reason; it does not read the role |
 
 What the report raised that is engineering content, and was **not** changed here. Each is a proposal for the content team, routed through the FP/FA App Grok Bot:
 
@@ -87,13 +103,13 @@ What the report raised that is engineering content, and was **not** changed here
 - **A claim about what a result depends on (F-006).** The live team twice said the failing screen did not depend on its assumed detection and release times, when the tool's own `t_fill_s` (28.1 s) was inside the 30 s limit. The application now prints `t_fill_s` and `margin_s` beside the delivery verdict. Proposal: a discipline rule in the specialist roles that a statement that a result does, or does not, depend on an assumed input rests on a recorded what-if run with that input changed.
 - **The NAC voltage-drop expectation (GT-FA-01).** At 12 AWG the computed end voltage is 16.98 V against a 16 V minimum, and the pack's method holds that thin margin as failing pending listed data; the acceptance regimen expected a pass. The method and the regimen need one ruling.
 - **Figures the kernels do not return (GT-FA-02, and the hydrant case).** The battery calculation returns the required ampere-hours and the margin as a percent, not the spare in ampere-hours; the hydrant curve returns the available pressure, not the deficit. Since a model may not subtract, the team could not state them. Proposal: the kernels return those figures, with their meaning, rather than the application adding a general subtraction tool.
-- **The `blind-claim-check` skill's reply line.** It still shows the line without the reason. The QA role, which is what the checker reads, now asks for one; the skill should match it.
+- **The `blind-claim-check` skill's reply line.** It still shows the line without the reason. The QA role, which is what the checker reads, now asks for one; the skill should match it. FA Lead ruled on 2026-11-12 that the Grok team adds `(<reason>)` to the skill and a text guard that the skill's line equals the role's; the application's parse matches the role's line (`claim_check._role_form`).
 - **Units in the content.** The application converts by the definitions alone (`app/fpfa/units.py`). It does not convert cubic feet while the gallons constant is open, a K-factor (the kernel's `k_si` uses its own 14.4 convention), or a gauge pressure to an absolute one. Where a skill or a kernel states a conversion factor of its own, the content team should say whether it agrees with the definitions.
 
 ### 2c. Not changed, and why
 
 - **`calcs/fp/di_zone.py`** is pack-only. It is not in the kernel reproduce set, so no kernel sync overwrites it. It no longer returns a `low_air` row key, a `low_air_note` or a `deprecated` block, and its `boolean` string equals `boolean_p`. See `docs/releasing-basis.md`, section 6.
-- **`calcs/fp/draft/`** (the held electric/pneumatic release draft and its test) ships in a built pack and is imported by nothing. It is held work and was left as it is.
+- **`calcs/fp/draft/`** (the held electric/pneumatic release draft and its test) is imported by nothing. It is held work and was left as it is. Since release 1 the pack-build script leaves it out of a built pack; the application's own builder and the seed copy leave it out too once the PR-A pull request of 2026-11-12 lands.
 - **The 34 skills no role names.** They are reachable only if a model finds them in the skill index. Giving each an owner is content work for the team and is not needed by the bounded workflow.
 
 ## 3. Identifying the content a result came from
@@ -105,7 +121,7 @@ A version label says what somebody called a pack. It does not say what is in it.
 
 Both are printed by **About and versions** (`python -m fpfa --versions`), in section 12 of every Design Basis, on every trace check, and at the top of every evaluation report. Section 12 also lists which contributor read which skill, with a hash of the exact text it was given, so a finding can be traced to the method text that was in front of its author. A trace check made against one fingerprint has to be run again when the fingerprint changes.
 
-The fingerprint of this tree at the commit that added this page is recorded in `docs/milestone-hardening-handback.md`. A built pack strips some paths and so has a fingerprint of its own, and a source checkout that converts line endings hashes differently from one that does not. So compare fingerprints between like installs. The one that matters for an evaluation is the one its report prints.
+The fingerprint of this tree at the commit that added this page is recorded in `docs/milestone-hardening-handback.md`, with the later ones beside it; the fingerprint moves with every change to a pack file, so a recorded value is the value at that commit, not the current one. A built pack leaves some paths out and so has a fingerprint of its own. The fingerprint hashes a file with its line endings set aside, so a Windows checkout and a Linux one of the same commit agree. The one that matters for an evaluation is the one its report prints.
 
 ## 4. The decision, and a recommendation
 

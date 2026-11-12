@@ -1086,6 +1086,12 @@ def coverage(snapshot: dict | None) -> dict:
         count = len(digest["unchecked"])
         gaps.append(f"{count} calculation{'s' if count != 1 else ''} the application cannot reconcile after an "
                     "input change: the tool is not tied to the project inputs. Check by hand or run again.")
+    for line in digest.get("unpinned") or []:
+        # The job states no edition of a standard, or only one taken from a hint: a HOLD on what depends on it.
+        gaps.append(line)
+    for line in digest.get("assumed") or []:
+        # An input the designer took from a hint is ASSUMED, not a design value.
+        gaps.append(line)
     for line in digest.get("edition_lines") or []:
         # The cites of a calculation name another edition of a standard than the job states.
         gaps.append(line)

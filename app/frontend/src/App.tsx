@@ -477,6 +477,7 @@ export function App() {
                     set={setField}
                     runNote={state.results_note}
                     onRun={run}
+                    onAcceptHints={(names) => void act("accept-hints", { names })}
                     onAddSegment={async (row) => {
                       const reply = await act("segment-add", row);
                       return !!(reply && reply.result);

@@ -47,7 +47,12 @@ from typing import Any, Callable
 from fpfa import inputs
 from fpfa.record import WITHDRAWN
 
-# tool -> argument -> (project input it is filled from, what the tool uses when it is left out)
+# What the kernels write for a choice that was not made. A blank project input is matched by these.
+_NO_ELECTION = frozenset({"unelected", "unknown"})
+# tool -> argument -> (project input it is filled from, what the tool uses when it is left out). None where the
+# tool refuses a call that leaves the argument out (calc_tools._missing): no time, basis, hazard, fill pressure,
+# or fill time is put in its place. A default here describes the call only, never the project input: a blank
+# project input is matched only by a call that left the argument blank too (call_basis).
 BINDINGS: dict[str, dict[str, tuple[str, Any]]] = {
     "zone_trapped_volume": {
         "segments": ("segments", None),
@@ -59,18 +64,18 @@ BINDINGS: dict[str, dict[str, tuple[str, Any]]] = {
         "segments": ("segments", None),
         "q_fill_gpm": ("q_fill_gpm", None),
         "qod": ("qod", False),
-        "t_detect_s": ("t_detect_s", 0),
-        "t_release_s": ("t_release_s", 0),
-        "t_exhaust_s": ("t_exhaust_s", 0),
-        "basis": ("delivery_basis", "FM"),
+        "t_detect_s": ("t_detect_s", None),
+        "t_release_s": ("t_release_s", None),
+        "t_exhaust_s": ("t_exhaust_s", None),
+        "basis": ("delivery_basis", None),
         "system_type": ("system_type", "di"),
     },
     "di_trip_to_water": {
         "q_fill_gpm": ("q_fill_gpm", None),
-        "t_detect_s": ("t_detect_s", 0),
-        "t_release_s": ("t_release_s", 0),
-        "t_exhaust_s": ("t_exhaust_s", 0),
-        "basis": ("delivery_basis", "FM"),
+        "t_detect_s": ("t_detect_s", None),
+        "t_release_s": ("t_release_s", None),
+        "t_exhaust_s": ("t_exhaust_s", None),
+        "basis": ("delivery_basis", None),
     },
     "density_area": {
         "density_gpm_ft2": ("density_gpm_ft2", None),
@@ -79,12 +84,12 @@ BINDINGS: dict[str, dict[str, tuple[str, Any]]] = {
         "hose_gpm": ("hose_gpm", 0),
     },
     "hose_duration": {
-        "hazard": ("hazard", "ordinary"),
+        "hazard": ("hazard", None),
         "supervised": ("supervised", False),
     },
     "nitrogen_gate": {
-        "p_psig": ("supervisory_psig", 40),
-        "t_min": ("fill_minutes", 30),
+        "p_psig": ("supervisory_psig", None),
+        "t_min": ("fill_minutes", None),
     },
     "elect_di_trim": {
         "system_type": ("system_type", ""),
@@ -96,7 +101,7 @@ BINDINGS: dict[str, dict[str, tuple[str, Any]]] = {
     },
     "releasing_truth_table": {
         "manual_station": ("manual_station", True),
-        "insurer": ("insurer", "FM"),
+        "insurer": ("insurer", ""),
     },
 }
 # Arguments the screen only applies when the caller passes them. Left out, nothing was used.
@@ -235,12 +240,20 @@ def call_basis(
         row = givens.get(name)
         if row is None:
             continue
-        used = _effective(args.get(arg), default)
-        project = _effective(given_value(row), default)
-        if name == "segments":
-            matches = _segments_same(used, project, resolve_id)
+        project = given_value(row)
+        if _blank(project):
+            # The project input is blank. A call follows it only when what the tool used is blank too: a value the
+            # call passed, or a default the tool put in for one left out (hose_duration's unsupervised, the truth
+            # table's manual station), is not the project's, and no default is read into the project's blank. The
+            # kernel's own words for no election ("unelected", "unknown") are a blank.
+            used = _effective(args.get(arg), default)
+            matches = _blank(used) or (isinstance(used, str) and used in _NO_ELECTION)
         else:
-            matches = inputs.same(used, project)
+            used = _effective(args.get(arg), default)
+            if name == "segments":
+                matches = _segments_same(used, project, resolve_id)
+            else:
+                matches = inputs.same(used, project)
         if matches:
             depends.append(row["id"])
         else:
@@ -375,21 +388,22 @@ def stated_edition(value: Any) -> str | None:
     return years[0] if len(years) == 1 else None
 
 
-def edition_gaps(outputs: Any, basis: dict | None, unconfirmed: Any = ()) -> list[dict]:
+def edition_gaps(outputs: Any, basis: dict | None, assumed: Any = (), unconfirmed: Any = ()) -> list[dict]:
     """Where a calc output's cites name an edition of a standard that is not the edition the job states.
 
     basis maps a basis field to its value ({"nfpa_13": "2022"}). Returns
     [{"document", "cited", "job", "starting"}]: cited is the cites' own edition
-    in words ("NFPA 13-2025"), job is what the job states, as a clause. unconfirmed
-    names the basis fields that hold the job form's starting value, which
-    nobody stated: the clause says so and never says the job states it, and
-    "starting" is True.
-    Whether such a field is compared at all is unchanged: it is compared like
-    any other, and an edition that matches the cites is no gap.
+    in words ("NFPA 13-2025"), job is what the job states, as a clause, and
+    "starting" is True when the designer has not stated the edition at all.
 
-    A basis field that is not on the job at all is not compared: nothing is
-    stated to differ from. A field that is blank, or that does not name one
-    year, is a gap, because the cites then name an edition the job does not.
+    A field that is blank or not on the job at all is a gap: the edition is
+    not pinned (the record keeps no fact for a blank field, so the two are
+    one case). A field that does not name one year is a gap too. So is a
+    field in assumed (an edition the designer took from its hint, ASSUMED)
+    or in unconfirmed (an earlier form's starting value left on an older
+    record): neither pins an edition, whatever year it names, so even an
+    edition that matches the cites is a gap. In every case the cites name an
+    edition the job does not state, and no edition is taken in its place.
 
     This compares two labels and nothing else. It does not know whether the
     rule reads the same in both editions and never says it does. A
@@ -399,29 +413,33 @@ def edition_gaps(outputs: Any, basis: dict | None, unconfirmed: Any = ()) -> lis
     carry, or when the content pack's calculation cites the job's.
     """
     basis = basis if isinstance(basis, dict) else {}
+    assumed = set(assumed or ())
     unconfirmed = set(unconfirmed or ())
     cited = cited_editions(outputs)
     gaps: list[dict] = []
     for document, field, _pattern in _CITED_EDITION:
         years = cited.get(document)
-        if not years or field not in basis:
+        if not years:
             continue
         job = stated_edition(basis.get(field))
-        if job is not None and years == [job]:
+        if field not in assumed and field not in unconfirmed and job is not None and years == [job]:
             continue
         raw = " ".join(str(basis.get(field) or "").split())
-        if raw and field in unconfirmed:
-            # The form's own starting value. The designer has not stated an edition, so the job does not either.
+        if field in assumed:
+            states = (f"the job's {document} edition {raw[:60] or ''} is ASSUMED, a hint the designer used "
+                      f"({inputs.EDITION_NOT_PINNED})").replace("  ", " ")
+        elif raw and field in unconfirmed:
+            # An earlier form's starting value left on an older record. Nobody stated it, so it pins nothing.
             states = (f"the job's {document} edition is the form's starting value \"{raw[:60]}\", "
-                      "not confirmed by the designer")
+                      f"not confirmed by the designer ({inputs.EDITION_NOT_PINNED})")
         elif job is not None:
             states = f"the job states {document}-{job}"
         elif raw:
             states = f'the job\'s {document} edition reads "{raw[:60]}", which does not name one edition'
         else:
-            states = f"the job states no {document} edition"
+            states = f"the job states no {document} edition ({inputs.EDITION_NOT_PINNED})"
         gaps.append({"document": document, "cited": " and ".join(f"{document}-{year}" for year in years), "job": states,
-                     "starting": bool(raw and field in unconfirmed)})
+                     "starting": field in assumed or bool(raw and field in unconfirmed)})
     return gaps
 
 
@@ -440,11 +458,11 @@ def edition_hold_text(gaps: list[dict], subject: str = "This calculation's cites
     return f"{EDITION_HOLD}. {parts}. {edition_open(gaps)}"
 
 
-def edition_flags(outputs_by_tool: dict | None, basis: dict | None, unconfirmed: Any = ()) -> list[str]:
+def edition_flags(outputs_by_tool: dict | None, basis: dict | None, assumed: Any = (), unconfirmed: Any = ()) -> list[str]:
     """The same hold for a zone run's flags: one line for the tools that share a gap, naming them."""
     grouped: dict[tuple[str, str, bool], list[str]] = {}
     for tool, outputs in (outputs_by_tool or {}).items():
-        for gap in edition_gaps(outputs, basis, unconfirmed):
+        for gap in edition_gaps(outputs, basis, assumed, unconfirmed):
             grouped.setdefault((gap["cited"], gap["job"], gap["starting"]), []).append(str(tool))
     lines = []
     for (cited, job, starting), tools in grouped.items():
@@ -581,7 +599,10 @@ def analyze(snapshot: dict | None) -> dict:
     # The basis fields as the job states them now, for the edition a calculation's cites are held to.
     stated_basis = {row.get("key"): row.get("value") for row in snap.get("facts") or []
                     if row.get("kind") == inputs.BASIS_KIND}
-    # The basis fields that hold the form's starting value: the job has not stated those.
+    # A basis field the designer took from its hint is ASSUMED, and one an earlier form put there is a starting
+    # value nobody stated. Neither pins an edition: both hold, whatever year they name.
+    assumed_basis = {row.get("key") for row in snap.get("facts") or []
+                     if row.get("kind") == inputs.BASIS_KIND and row.get("label") == inputs.ASSUMED}
     starting_basis = {row.get("key") for row in snap.get("facts") or []
                       if row.get("kind") == inputs.BASIS_KIND
                       and inputs.UNCONFIRMED_MARK in str(row.get("source") or "")}
@@ -628,7 +649,7 @@ def analyze(snapshot: dict | None) -> dict:
             if later:
                 unchecked = UNCHECKED_NOTE
         # An out-of-date row is not read for its cites: it is waiting to be run again as it is.
-        gaps = edition_gaps(row.get("outputs"), stated_basis, starting_basis) if state != STALE else []
+        gaps = edition_gaps(row.get("outputs"), stated_basis, assumed_basis, starting_basis) if state != STALE else []
         calc_state[calc_id] = {
             "state": state, "reasons": reasons, "note": note, "tracked": tracked, "unchecked": unchecked,
             "edition_gaps": gaps, "edition_hold": edition_hold_text(gaps),

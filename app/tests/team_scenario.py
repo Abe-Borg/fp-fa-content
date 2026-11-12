@@ -224,7 +224,7 @@ def turn_one(record, project_id: str) -> Players:
 
     def fp_screen(_k):
         gallons = at.calc("zone_trapped_volume")["outputs"]["zone_gal"]
-        return call(use("di_trip_to_water", v_gal=gallons, q_fill_gpm=600, t_detect_s=8, t_release_s=2, basis="FM"))
+        return call(use("di_trip_to_water", v_gal=gallons, q_fill_gpm=600, t_detect_s=8, t_release_s=2, t_exhaust_s=0, basis="FM"))
 
     def fp_record(_k):
         trip = at.calc("di_trip_to_water")
@@ -343,7 +343,7 @@ def turn_two(record, project_id: str) -> Players:
 
     def fp_screen(_k):
         gallons = at.calc("zone_trapped_volume", trim_gal=6.5)["outputs"]["zone_gal"]
-        return call(use("di_trip_to_water", v_gal=gallons, q_fill_gpm=750, t_detect_s=8, t_release_s=2, basis="FM"))
+        return call(use("di_trip_to_water", v_gal=gallons, q_fill_gpm=750, t_detect_s=8, t_release_s=2, t_exhaust_s=0, basis="FM"))
 
     def fp_replace(_k):
         volume = at.calc("zone_trapped_volume", trim_gal=6.5)

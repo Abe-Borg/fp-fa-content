@@ -761,10 +761,13 @@ class EditionHoldTests(unittest.TestCase):
         self.assertIsNone(stated_edition(""))
         # The same edition, however the field writes it: no gap.
         self.assertEqual(edition_gaps(outputs, {"nfpa_13": "NFPA 13-2025", "nfpa_72": "2025"}), [])
-        # A field that is not on the job at all is not compared. A blank one, or one that names two years, is.
-        self.assertEqual(edition_gaps(outputs, {}), [])
+        # A blank edition, or one not on the job at all (the record keeps no fact for a blank), is not pinned:
+        # a gap that says so. No edition is read into the blank (FA Lead's ruling, 2026-11-12).
+        self.assertEqual([gap["job"] for gap in edition_gaps(outputs, {})],
+                         ["the job states no NFPA 13 edition (edition not pinned)",
+                          "the job states no NFPA 72 edition (edition not pinned)"])
         self.assertEqual([gap["job"] for gap in edition_gaps(outputs, {"nfpa_13": "", "nfpa_72": "2025"})],
-                         ["the job states no NFPA 13 edition"])
+                         ["the job states no NFPA 13 edition (edition not pinned)"])
         self.assertEqual([gap["job"] for gap in edition_gaps(outputs, {"nfpa_13": "2019 or 2022", "nfpa_72": "2025"})],
                          ['the job\'s NFPA 13 edition reads "2019 or 2022", which does not name one edition'])
         both = edition_gaps(outputs, {"nfpa_13": "2022", "nfpa_72": "2022"})
@@ -775,15 +778,31 @@ class EditionHoldTests(unittest.TestCase):
         self.assertNotRegex(text.lower(), r"\bsame\b|equivalent|identical|does not apply|verified|complies")
         self.assertEqual(edition_hold_text([]), "")
 
-    def test_a_record_with_no_basis_on_it_is_not_judged(self):
+    def test_a_record_with_no_edition_on_it_holds_with_edition_not_pinned(self):
+        """A job that states no edition is not one whose cites follow it. Its edition is not pinned: a HOLD."""
+        from fpfa import status
         from fpfa.calc_tools import ToolSession
+        from fpfa.checker import coverage
         from fpfa.coherence import analyze
 
         record = _record()
         record.ensure_project("job1", "Bare")
         session = ToolSession(REPO, record=record, project_id="job1", agent="fp-sprinkler")
-        session.execute("hose_duration", {"hazard": "ordinary", "supervised": True})
-        self.assertEqual(analyze(record.snapshot("job1"))["edition_holds"], [])
+        row = session.execute("hose_duration", {"hazard": "ordinary", "supervised": True})
+        snapshot = record.snapshot("job1")
+        self.assertEqual(analyze(snapshot)["edition_holds"], [row["record_id"]])
+        digest = status.build(snapshot)
+        self.assertEqual(len(digest["unpinned"]), 2)
+        self.assertTrue(all("edition not pinned" in line and line.startswith("HOLD: NFPA") for line in digest["unpinned"]))
+        lead = status.lead_text(digest)
+        self.assertIn("HOLD: NFPA 72 edition not pinned.", lead)
+        self.assertIn("No edition is taken for it.", lead)
+        self.assertIn("HOLD: NFPA 13 edition not pinned.", "\n".join(coverage(snapshot)["gaps"]))
+        # Pinned, the HOLD goes, and the cites follow the job's edition.
+        record.sync_form("job1", "basis", {"nfpa_13": "2025", "nfpa_72": "2025"})
+        snapshot = record.snapshot("job1")
+        self.assertEqual(status.build(snapshot)["unpinned"], [])
+        self.assertEqual(analyze(snapshot)["edition_holds"], [])
 
 
 if __name__ == "__main__":

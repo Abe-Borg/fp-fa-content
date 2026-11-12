@@ -217,6 +217,18 @@ def build(snapshot: dict | None, *, export_reason: str | None = None) -> dict:
                            "note": analysis["calcs"][ident]["edition_hold"]}
                           for ident in analysis.get("edition_holds") or [] if ident in calcs],
         "edition_lines": _edition_lines(analysis, calcs),
+        # An edition the job does not state at all, whether or not a calculation cites one yet: a HOLD on
+        # anything that depends on it (fpfa.inputs.edition_hold_lines). No edition is taken in its place.
+        "unpinned": inputs.edition_hold_lines(
+            {row.get("key"): row.get("value") for row in snap.get("facts") or [] if row.get("kind") == inputs.BASIS_KIND},
+            {row["name"] for row in rows if row["label"] == inputs.ASSUMED and not row["blank"]},
+            {row["name"] for row in rows if row["unconfirmed"] and not row["blank"]},
+        ),
+        # Every other input the designer took from a hint, one line each, until the designer types a value.
+        "assumed": inputs.assumed_lines(
+            [row["name"] for row in rows if row["label"] == inputs.ASSUMED and not row["blank"]],
+            {row["name"]: row["value"] for row in rows},
+        ),
         "interrupted_jobs": [{"id": row["id"], "kind": row.get("kind"), "title": _short(row.get("title"), 80)}
                              for row in interrupted_jobs],
         "export": {"ready": export_reason == "", "reason": export_reason or ""} if export_reason is not None else None,
@@ -308,7 +320,9 @@ def _input_lines(digest: dict, *, full: bool) -> list[str]:
     if not rows:
         return ["Project inputs: none on the record. The zone form has not been filled in or saved."]
     lines = ["Project inputs (GIVEN: what the designer supplied; the team works from these):"]
-    given = [row for row in rows if not row["blank"] and not row["unconfirmed"]]
+    assumed = [row for row in rows if not row["blank"] and row["label"] == inputs.ASSUMED]
+    given = [row for row in rows if not row["blank"] and not row["unconfirmed"] and row not in assumed]
+    # The ASSUMED ones are said line by line below (digest["assumed"], and an edition's HOLD).
     loose = [row for row in rows if not row["blank"] and row["unconfirmed"]]
     blank = [row for row in rows if row["blank"]]
     if full:
@@ -316,6 +330,8 @@ def _input_lines(digest: dict, *, full: bool) -> list[str]:
             lines.append(f"- {row['name']}: {row['text']} [{row['id']}] ({row['source'] or row['by']})")
     else:
         lines.append("- " + "; ".join(f"{row['name']} {row['text']}" for row in given) if given else "- none confirmed")
+    for line in digest.get("assumed") or []:
+        lines.append(f"- {line} Say so wherever it is used.")
     if loose:
         lines.append("- Starting values the designer has not confirmed (not their input until they say so): "
                      + "; ".join(f"{row['name']} {row['text']}" for row in loose))
@@ -336,6 +352,7 @@ def lead_text(digest: dict, check_line: str = "") -> str:
     else:
         lines.append("Plan: none set on this job yet.")
     lines.extend(_input_lines(digest, full=False))
+    lines.extend(digest.get("unpinned") or [])
     if digest["changes"]:
         lines.append("Inputs changed after work was done on them:")
         for item in digest["changes"]:
@@ -465,6 +482,19 @@ def designer_text(digest: dict, check_line: str = "", name: str = "", *, coverag
         lines.append("**The application cannot reconcile these**")
         for row in digest["unchecked"]:
             lines.append(f"- {row['tool']} by {row['by'] or 'the app'}: {row['note']}")
+    if digest.get("unpinned"):
+        lines.append("")
+        lines.append("**Edition not pinned**")
+        for line in digest["unpinned"]:
+            lines.append(f"- {line}")
+        lines.append("Type the edition on the Inputs tab, or tell the lead. A hint you used does not pin it.")
+        coverage = [gap for gap in coverage or [] if gap not in digest["unpinned"]] or None
+    if digest.get("assumed"):
+        lines.append("")
+        lines.append("**ASSUMED inputs**")
+        for line in digest["assumed"]:
+            lines.append(f"- {line}")
+        coverage = [gap for gap in coverage or [] if gap not in digest["assumed"]] or None
     if digest.get("edition_lines"):
         lines.append("")
         lines.append("**Edition not reconciled**")

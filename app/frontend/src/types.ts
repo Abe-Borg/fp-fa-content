@@ -217,6 +217,12 @@ export interface Form {
   choices: Record<string, string[]>;
   roles: string[];
   marks?: Record<string, Mark>;
+  /** A value the content pack pins for a field, with its cite and edition and VERIFY, shown while the field is blank. */
+  hints: Record<string, string>;
+  /** The fields Use hints may fill: those with one hint. A field with two (base area) is typed. */
+  accept: string[];
+  /** Fields that hold a hint the designer accepted: recorded ASSUMED. */
+  assumed: string[];
 }
 
 export interface SchemeInfo {

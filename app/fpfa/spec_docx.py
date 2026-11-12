@@ -46,16 +46,29 @@ def basis_line(project: dict, basis: dict) -> str:
     still holds the values the run used.
     """
     unconfirmed = set(inputs.unconfirmed_basis(project, basis))
+    # A hint the designer used is ASSUMED, and an edition that is ASSUMED or blank is not pinned.
+    assumed = inputs.accepted_inputs(project) & set(inputs.BASIS_FIELDS)
+    editions = {name for name, _document in inputs.EDITION_FIELDS}
 
     def field(name: str) -> str:
-        value = str(basis.get(name) or "").strip() or "—"
-        return f"{value} {inputs.UNCONFIRMED_NOTE}" if name in unconfirmed else value
+        raw = str(basis.get(name) or "").strip()
+        value = raw or "—"
+        if raw and name in unconfirmed:
+            return f"{value} {inputs.UNCONFIRMED_NOTE}"
+        if raw and name in assumed:
+            pinned = f"; {inputs.EDITION_NOT_PINNED}" if name in editions else ""
+            return f"{value} (ASSUMED, a hint the designer used{pinned})"
+        if not raw and name in editions:
+            return f"{value} ({inputs.EDITION_NOT_PINNED})"
+        return value
 
     line = (f"AHJ: {field('ahj')}. NFPA 13: {field('nfpa_13')}. "
             f"NFPA 72: {field('nfpa_72')}. Insurer: {field('insurer')}.")
     if unconfirmed:
         line += (" A starting value is the job form's own; the designer did not state it. "
                  "Confirm it before this section is relied on.")
+    if assumed & {name for name in inputs.BASIS_FIELDS if str(basis.get(name) or "").strip()}:
+        line += " An ASSUMED value is a hint the designer used, not a design value. Confirm it before this section is relied on."
     return line
 
 

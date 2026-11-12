@@ -262,14 +262,15 @@ class SizeExemptionTests(unittest.TestCase):
 
         session = ToolSession(REPO, agent="fp-sprinkler")
         under = [{"role": "main", "nps": "6", "schedule": "sch10", "length_ft": 288}]   # about 475 gal, by nominal size
-        got = session.execute("dry_delivery_screen", {"segments": under, "q_fill_gpm": 600, "system_type": "di"})
+        times = {"t_detect_s": 8, "t_release_s": 2, "t_exhaust_s": 0, "basis": "FM"}
+        got = session.execute("dry_delivery_screen", {"segments": under, "q_fill_gpm": 600, "system_type": "di", **times})
         self.assertIsNone(got["nfpa_delivery_time_exempt"])
         self.assertTrue(got["pipe_only_nfpa_delivery_time_exempt"])
         self.assertEqual(got["exemption_status"], "not determined")
         self.assertEqual(exemption_answer(got), "not determined")
         self.assertIn("size exemption: not determined. This record is a pipe-only screen", key_figures("dry_delivery_screen", {}, got))
         over = [{"d_in": 6.357, "length_ft": 320}]                                         # about 528 gal of pipe alone
-        got = session.execute("dry_delivery_screen", {"segments": over, "q_fill_gpm": 600, "system_type": "di"})
+        got = session.execute("dry_delivery_screen", {"segments": over, "q_fill_gpm": 600, "system_type": "di", **times})
         self.assertIs(got["nfpa_delivery_time_exempt"], False, "the pipe alone is over the cap, which settles it")
         self.assertEqual(exemption_answer(got), "no")
         # A row recorded before the screen was handed the zone total holds only the kernel's pipe-only flag.
@@ -955,6 +956,139 @@ class EvaluationEvidenceTests(unittest.TestCase):
         self.assertEqual(len(live_eval.OWNER_GATES), 3)
         self.assertTrue(any("OWNER TO CONFIRM" in gate for gate in live_eval.OWNER_GATES))
         self.assertTrue(any("qualified" in gate for gate in live_eval.OWNER_GATES))
+
+
+class BlankInputHoldTests(unittest.TestCase):
+    """A blank input stays blank and holds what needs it (FA Lead's ruling, 2026-11-12; app-content hand-back 5.2).
+
+    A desk probe found the form sending a blank detection, releasing, or exhaust time as 0, a blank time basis
+    and a blank insurer as FM, and a blank edition as 2025, and the tool plan doing the same again.
+    """
+
+    def _desk(self):
+        import os
+
+        from desk_loop import Loop
+
+        _isolate_data()
+        os.environ["FPFA_CONTENT_UPDATES"] = "0"
+        loop = Loop()
+        self.addCleanup(loop.destroy)
+        return loop.open_desk()
+
+    def test_the_form_sends_a_blank_as_blank(self):
+        desk = self._desk()
+        di, basis = desk.collect_di(), desk.collect_basis()
+        for name in ("t_detect_s", "t_release_s", "t_exhaust_s", "delivery_basis", "system_type", "hazard",
+                     "supervised", "qod", "manual_station", "failsafe_on_total_power_loss", "length_basis",
+                     "q_fill_gpm", "density_gpm_ft2", "supervisory_psig", "fill_minutes"):
+            self.assertIsNone(di[name], name)
+        self.assertEqual((basis["nfpa_13"], basis["nfpa_72"], basis["insurer"]), ("", "", ""))
+        # A typed 0 is a 0, and a yes or a no is that answer.
+        desk.patch_form({"t_detect": "0", "qod": "no", "supervised": True})
+        di = desk.collect_di()
+        self.assertEqual((di["t_detect_s"], di["qod"], di["supervised"]), (0.0, False, True))
+        # The form names no basis for a screen limit it has not got.
+        self.assertIn("no time basis is chosen", desk.snapshot()["form"]["assumptions"])
+        self.assertNotIn("FM", desk.snapshot()["form"]["assumptions"].split("Screen limit")[1].split("\n")[0])
+
+    def test_a_run_holds_on_each_blank_and_names_it(self):
+        import copy as _copy
+
+        from fpfa.calc_tools import ToolSession
+        from fpfa.sample_data import EXAMPLE_DI
+        from fpfa.workflow import run_tool_plan, validate_di
+
+        for name, label in (("t_detect_s", "Detection time is blank."), ("t_release_s", "Releasing time is blank."),
+                            ("t_exhaust_s", "Exhaust time is blank."), ("delivery_basis", "Time basis is blank."),
+                            ("hazard", "Hazard is blank."), ("supervised", "Supervised waterflow is blank."),
+                            ("system_type", "System is blank."), ("length_basis", "Lengths is blank."),
+                            ("manual_station", "Manual station is blank."), ("qod", "Quick-opening device is blank.")):
+            di = _copy.deepcopy(EXAMPLE_DI)
+            di[name] = None
+            with self.assertRaises(ValueError, msg=name) as caught:
+                validate_di(di)
+            self.assertIn(label, str(caught.exception))
+        di = _copy.deepcopy(EXAMPLE_DI)
+        di.update(t_detect_s=None, delivery_basis="")
+        with self.assertRaises(ValueError) as caught:
+            run_tool_plan(ToolSession(REPO), di, {"insurer": "FM"})
+        self.assertIn("Detection time is blank.", str(caught.exception))
+        self.assertIn("Time basis is blank.", str(caught.exception))
+        # A typed 0 runs as 0. The trim medium and the prime holder may be blank: the kernel says no election.
+        di = _copy.deepcopy(EXAMPLE_DI)
+        di.update(t_detect_s=0, medium=None, prime_held_by=None)
+        tools, sent = run_tool_plan(ToolSession(REPO), di, {"insurer": "FM"})
+        self.assertEqual(sent["di_trip_to_water"]["t_detect_s"], 0)
+        self.assertIsNone(sent["elect_di_trim"]["medium"])
+
+    def test_a_blank_insurer_stays_blank(self):
+        from fpfa.calc_tools import ToolSession
+        from fpfa.sample_data import EXAMPLE_DI
+        from fpfa.workflow import run_tool_plan
+
+        tools, sent = run_tool_plan(ToolSession(REPO), dict(EXAMPLE_DI), {"insurer": ""})
+        self.assertEqual((sent["releasing_truth_table"]["insurer"], sent["elect_di_trim"]["insurer"]), ("", ""))
+        self.assertEqual(tools["releasing_truth_table"]["insurer"], "")
+        self.assertFalse(tools["releasing_truth_table"]["fm_no_cross_zone"])
+        # The model's own call: a blank insurer is not taken as FM either.
+        truth = ToolSession(REPO).execute("releasing_truth_table", {"manual_station": True})
+        self.assertEqual(truth["insurer"], "")
+
+    def test_the_delivery_tools_refuse_a_time_or_a_basis_left_out(self):
+        from fpfa.calc_tools import SCHEMAS, ToolSession
+
+        session = ToolSession(REPO)
+        full = {"v_gal": 281.3, "q_fill_gpm": 600, "t_detect_s": 8, "t_release_s": 2, "t_exhaust_s": 0, "basis": "FM"}
+        for left_out in ("t_detect_s", "t_release_s", "t_exhaust_s", "basis"):
+            args = {key: value for key, value in full.items() if key != left_out}
+            with self.assertRaises(ValueError, msg=left_out) as caught:
+                session.execute("di_trip_to_water", args)
+            self.assertIn(f"di_trip_to_water needs {left_out}.", str(caught.exception))
+            with self.assertRaises(ValueError):
+                session.execute("di_trip_to_water", dict(full, **{left_out: ""}))
+        self.assertEqual(session.execute("di_trip_to_water", dict(full, t_exhaust_s=0))["t_total_s"],
+                         session.execute("di_trip_to_water", full)["t_total_s"])
+        for name in ("dry_delivery_screen", "di_trip_to_water"):
+            required = next(item for item in SCHEMAS if item["name"] == name)["input_schema"]["required"]
+            for key in ("t_detect_s", "t_release_s", "t_exhaust_s", "basis"):
+                self.assertIn(key, required, (name, key))
+        with self.assertRaises(ValueError):
+            session.execute("hose_duration", {"hazard": "", "supervised": True})
+
+    def test_a_new_job_states_no_edition_and_the_lead_is_told_it_holds(self):
+        from fpfa import status
+        from fpfa.projects import new_project
+
+        project = new_project("Fresh")
+        self.assertEqual((project["basis"]["nfpa_13"], project["basis"]["nfpa_72"], project["basis"]["insurer"]),
+                         ("", "", ""))
+        desk = self._desk()
+        desk.patch_form({"zone_id": "Z-1"})
+        desk.save_current()
+        digest = status.build(desk.record.snapshot(desk.project["id"]))
+        lead = status.lead_text(digest)
+        self.assertIn("HOLD: NFPA 13 edition not pinned.", lead)
+        self.assertIn("HOLD: NFPA 72 edition not pinned.", lead)
+        self.assertIn("Edition not pinned", status.designer_text(digest))
+        desk.patch_form({"nfpa_72": "2022"})
+        desk.save_current()
+        digest = status.build(desk.record.snapshot(desk.project["id"]))
+        self.assertEqual([line.split(".")[0] for line in digest["unpinned"]], ["HOLD: NFPA 13 edition not pinned"])
+
+    def test_no_starting_value_is_written_into_app_code_outside_the_hints(self):
+        """The starting values live in one place, fpfa.inputs.HINTS, and only as hints."""
+        import re
+
+        from fpfa import inputs
+
+        self.assertEqual(inputs.default_of("q_fill_gpm"), None)
+        self.assertEqual(inputs.default_of("nfpa_13"), "")
+        for name in ("t_detect_s", "t_release_s", "t_exhaust_s"):
+            self.assertIsNone(inputs.hint_of(name))
+        for path in ("desk.py", "workflow.py", "projects.py"):
+            text = (APP_DIR / "fpfa" / path).read_text(encoding="utf-8")
+            self.assertIsNone(re.search(r'or "(?:FM|2025)"|or 0,|get\("t_(?:detect|release|exhaust)_s"\) or', text), path)
 
 
 class SecondJobTests(unittest.TestCase):

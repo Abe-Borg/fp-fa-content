@@ -105,6 +105,13 @@ FINDING_LABELS = tuple(label for label in LABELS if label != GIVEN)
 LEAD = "lead"
 # Said on every calc tool whose fields carry a unit. A metric figure passed as it stands is a wrong number
 # with a right-looking record; the acceptance run of 0.3.0 saw 12.2 mm/min run as 12.2 gpm/ft².
+# What the delivery tools say of a time and a basis: the application puts nothing in place of one not given.
+TIME_NOTE = ("Seconds, from the releasing design. Required: a time not given is not taken as 0. Pass the job's "
+             "own, or a value you state as ASSUMED with its reason.")
+BASIS_NOTE = ("Delivery time basis: FM, NFPA-LH, NFPA-OH, NFPA-EH, NFPA-HP, or NFPA-DU. Required: no basis is "
+              "chosen for you, and a blank one is not taken as FM.")
+# The delivery inputs a call must give. Missing or blank, the tool refuses and names them (_missing).
+_DELIVERY_REQUIRED = ("t_detect_s", "t_release_s", "t_exhaust_s", "basis")
 US_UNITS_NOTE = (
     " Every number is in the US unit its field name states. Convert an SI figure with convert_units first, "
     "and never put another unit on the result."
@@ -184,16 +191,16 @@ SCHEMAS = [
                 "segments": {"type": "array"},
                 "q_fill_gpm": {"type": "number"},
                 "qod": {"type": "boolean"},
-                "t_detect_s": {"type": "number"},
-                "t_release_s": {"type": "number"},
-                "t_exhaust_s": {"type": "number"},
-                "basis": {"type": "string", "description": "FM or NFPA-OH"},
+                "t_detect_s": {"type": "number", "description": TIME_NOTE},
+                "t_release_s": {"type": "number", "description": TIME_NOTE},
+                "t_exhaust_s": {"type": "number", "description": TIME_NOTE},
+                "basis": {"type": "string", "description": BASIS_NOTE},
                 "system_type": {"type": "string", "description": "dry or di"},
                 "zone_gal": {"type": "number", "description": "Zone total gallons from zone_trapped_volume (zone_gal). The size exemption is judged on it."},
                 "trim_gal": {"type": "number", "description": "Trim gallons, when zone_gal is not passed. Omit both for a pipe-only screen."},
                 "fittings_percent": {"type": "number", "description": "Fittings allowance percent. Used with trim_gal when zone_gal is not passed."},
             },
-            ["segments", "q_fill_gpm", "system_type"],
+            ["segments", "q_fill_gpm", "system_type", "t_detect_s", "t_release_s", "t_exhaust_s", "basis"],
         ),
     },
     {
@@ -203,12 +210,12 @@ SCHEMAS = [
             {
                 "v_gal": {"type": "number"},
                 "q_fill_gpm": {"type": "number"},
-                "t_detect_s": {"type": "number"},
-                "t_release_s": {"type": "number"},
-                "t_exhaust_s": {"type": "number"},
-                "basis": {"type": "string"},
+                "t_detect_s": {"type": "number", "description": TIME_NOTE},
+                "t_release_s": {"type": "number", "description": TIME_NOTE},
+                "t_exhaust_s": {"type": "number", "description": TIME_NOTE},
+                "basis": {"type": "string", "description": BASIS_NOTE},
             },
-            ["v_gal", "q_fill_gpm"],
+            ["v_gal", "q_fill_gpm", "t_detect_s", "t_release_s", "t_exhaust_s", "basis"],
         ),
     },
     {
@@ -239,12 +246,12 @@ SCHEMAS = [
             "Design C is 100. Fill scfm is formulas.air_fill_scfm. "
             "The result states the gauge-basis rate and the absolute-basis rate. Quote both. "
             "Do not emit C=120 as the design value. p_psig is the supervisory fill pressure and t_min the fill "
-            "time; omitted, they are the zone form's starting values, 40 psig and 30 min, so say so. A value "
-            "passed is used as passed, a 0 included."
+            "time. Both are required: the application supplies neither. Pass the job's own, or a value you state "
+            "as ASSUMED with its reason. A value passed is used as passed, a 0 included."
         ),
         "input_schema": _obj(
             {"v_gal": {"type": "number"}, "p_psig": {"type": "number"}, "t_min": {"type": "number"}},
-            ["v_gal"],
+            ["v_gal", "p_psig", "t_min"],
         ),
     },
     {
@@ -291,7 +298,8 @@ SCHEMAS = [
             "release input. Quote boolean_p. A second smoke zone must not change the result."
         ),
         "input_schema": _obj(
-            {"manual_station": {"type": "boolean"}, "insurer": {"type": "string"}},
+            {"manual_station": {"type": "boolean"},
+             "insurer": {"type": "string", "description": "The job's insurer. Blank stays blank; it is not taken as FM."}},
             [],
         ),
     },
@@ -935,25 +943,27 @@ class ToolSession:
                 # diameters are the kernel's (pipe_ids), not a figure worked out here.
                 rows, _flags = self.di._segments(segments)
                 segments = [{"d_in": row["d_in"], "length_ft": row["length_ft"]} for row in rows]
+            _missing(name, args, _DELIVERY_REQUIRED)
             screen = self.formulas.dry_delivery_screen(
                 segments,
                 args.get("q_fill_gpm"),
                 qod=args.get("qod", False),
-                t_detect_s=args.get("t_detect_s", 0),
-                t_release_s=args.get("t_release_s", 0),
-                t_exhaust_s=args.get("t_exhaust_s", 0),
-                basis=args.get("basis") or "FM",
+                t_detect_s=args.get("t_detect_s"),
+                t_release_s=args.get("t_release_s"),
+                t_exhaust_s=args.get("t_exhaust_s"),
+                basis=args.get("basis"),
                 system_type=args.get("system_type") or "di",
             )
             return _govern_delivery_exemption(self.formulas, screen, args)
         if name == "di_trip_to_water":
+            _missing(name, args, _DELIVERY_REQUIRED)
             return self.formulas.di_trip_to_water(
                 args.get("v_gal"),
                 args.get("q_fill_gpm"),
-                t_detect_s=args.get("t_detect_s", 0),
-                t_release_s=args.get("t_release_s", 0),
-                t_exhaust_s=args.get("t_exhaust_s", 0),
-                basis=args.get("basis") or "FM",
+                t_detect_s=args.get("t_detect_s"),
+                t_release_s=args.get("t_release_s"),
+                t_exhaust_s=args.get("t_exhaust_s"),
+                basis=args.get("basis"),
             )
         if name == "density_area":
             return self.formulas.density_area(
@@ -964,13 +974,13 @@ class ToolSession:
                 duration_min=args.get("duration_min"),
             )
         if name == "hose_duration":
-            return self.formulas.hose_duration(args.get("hazard") or "ordinary", args.get("supervised", False))
+            _missing(name, args, ("hazard",))
+            return self.formulas.hose_duration(args.get("hazard"), args.get("supervised", False))
         if name == "nitrogen_gate":
-            # Omitted, the pressure and the time are the zone form's starting values, as the tool says. A
-            # figure that was passed goes to the kernel as passed: a 0 is refused there, never replaced.
-            p_psig = args.get("p_psig") if _number_was_passed(args, "p_psig") else 40
-            t_min = args.get("t_min") if _number_was_passed(args, "t_min") else 30
-            return self.di.nitrogen_gate(args.get("v_gal"), p_psig, t_min)
+            # The pressure and the time are the caller's. A figure that was passed goes to the kernel as passed:
+            # a 0 is refused there, never replaced. One not passed is refused here: no starting value stands in.
+            _missing(name, args, ("p_psig", "t_min"))
+            return self.di.nitrogen_gate(args.get("v_gal"), args.get("p_psig"), args.get("t_min"))
         if name == CONVERT_TOOL:
             return units.convert(args.get("value"), args.get("from_unit"), args.get("to_unit"))
         if name == "elect_di_trim":
@@ -985,7 +995,7 @@ class ToolSession:
         if name == "releasing_truth_table":
             return self.di.releasing_truth_table(
                 manual_station=args.get("manual_station", True),
-                insurer=args.get("insurer") or "FM",
+                insurer=args.get("insurer") or "",
             )
         if name == "lfl_setpoints":
             return _lfl_setpoints(self.root, args)
@@ -1034,6 +1044,22 @@ def _lfl_setpoints(content_root: Path, args: dict) -> dict:
 
 def dumps(payload) -> str:
     return json.dumps(payload, indent=2, default=str)
+
+
+def _missing(tool: str, args: dict, keys: tuple[str, ...]) -> None:
+    """Refuse a call that leaves out an input the application will not supply, naming each one.
+
+    Nothing is put in its place: no 0 for a time, no FM for a basis, no
+    starting value for a fill pressure or a time (inputs.HINTS are hints,
+    never inputs). A 0 that was passed is a value and goes on as passed.
+    """
+    gone = [key for key in keys if not _number_was_passed(args, key)]
+    if gone:
+        raise ValueError(
+            f"{tool} needs {', '.join(gone)}. The application does not put a 0, FM, or a starting value in place "
+            "of one that was not given. Pass the job's own value, or ask the designer, or pass a value you state "
+            "as ASSUMED with its reason."
+        )
 
 
 def _number_was_passed(args: dict, key: str) -> bool:

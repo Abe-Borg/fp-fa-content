@@ -524,10 +524,13 @@ def _is_blank_value(value) -> bool:
 
 
 def _was_text(name: str, value, given: str) -> str:
-    """The value a field held before the chat filled it, saying so when it was the form's starting value."""
+    """The value a field held before the chat filled it, saying so when it was an earlier form's starting value or
+    a hint the designer accepted (an ASSUMED input)."""
     text = _fill_text(name, value)
     if given == inputs.SOURCE_DEFAULT and not _is_blank_value(value):
         return f"{text} (starting value)"
+    if given == inputs.SOURCE_ACCEPTED and not _is_blank_value(value):
+        return f"{text} (hint accepted, ASSUMED)"
     return text
 
 
@@ -777,26 +780,91 @@ class Shell:
         return None
 
 
-# Text fields of the form, with the value a blank form shows.
+# Text fields of the form. A new form is blank: what earlier versions put here is a hint now (FORM_HINTS).
 _TEXT_FIELDS = {
-    # Basis. The three starting values are fpfa.inputs.BASIS_STARTING; nobody stated them.
-    "ahj": "", "nfpa_13": inputs.BASIS_STARTING["nfpa_13"], "nfpa_72": inputs.BASIS_STARTING["nfpa_72"],
-    "insurer": inputs.BASIS_STARTING["insurer"], "hazard_notes": "",
+    # Basis
+    "ahj": "", "nfpa_13": "", "nfpa_72": "", "insurer": "", "hazard_notes": "",
     # Zone
-    "zone_id": "", "density": "0.20", "base_area": "1500", "area_increase": "0.30", "hose": "250",
-    "q_fill": "600", "t_detect": "0", "t_release": "0", "t_exhaust": "0", "supervisory_psi": "15",
-    "fittings": "", "trim_gal": "", "supervisory_psig": "40", "fill_minutes": "30",
+    "zone_id": "", "density": "", "base_area": "", "area_increase": "", "hose": "",
+    "q_fill": "", "t_detect": "", "t_release": "", "t_exhaust": "", "supervisory_psi": "",
+    "fittings": "", "trim_gal": "", "supervisory_psig": "", "fill_minutes": "",
 }
+# A choice starts blank (""), which is one of its choices: no choice is made for the designer.
 _CHOICE_FIELDS = {
-    "system_label": ("Double-interlock", tuple(label for label, _ in SYSTEM_CHOICES)),
-    "hazard": ("ordinary", HAZARDS),
-    "delivery_basis": ("FM", BASES),
-    "medium": ("nitrogen", MEDIA),
-    "prime": ("nc_solenoid", PRIMES),
-    "length_label": ("Center to center", tuple(label for label, _ in LENGTHS)),
+    "system_label": ("", ("",) + tuple(label for label, _ in SYSTEM_CHOICES)),
+    "hazard": ("", ("",) + HAZARDS),
+    "delivery_basis": ("", ("",) + BASES),
+    "medium": ("", ("",) + MEDIA),
+    "prime": ("", ("",) + PRIMES),
+    "length_label": ("", ("",) + tuple(label for label, _ in LENGTHS)),
 }
-_BOOL_FIELDS = {"supervised": True, "qod": False, "failsafe": False, "manual_station": True}
+# A yes/no input is a choice of yes, no, or blank. A blank one is not taken as either.
+FLAG_CHOICES = ("", "yes", "no")
+_BOOL_FIELDS = {"supervised": "", "qod": "", "failsafe": "", "manual_station": ""}
 FORM_FIELDS = tuple(_TEXT_FIELDS) + tuple(_CHOICE_FIELDS) + tuple(_BOOL_FIELDS)
+# How a hint is written beside its field: as the earlier form wrote the starting value.
+_HINT_FORMAT = {"density": "{:.2f}", "area_increase": "{:.2f}"}
+
+
+def _flag_text(value: Any) -> str:
+    """A yes/no input as the form holds it: "yes", "no", or "" for blank."""
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return "yes" if value else "no"
+    text = str(value).strip().lower()
+    if text in ("yes", "true", "on", "1"):
+        return "yes"
+    if text in ("no", "false", "off", "0"):
+        return "no"
+    return ""
+
+
+def _flag_value(text: Any) -> bool | None:
+    """The form's yes/no as the input holds it: True, False, or None for blank."""
+    word = _flag_text(text)
+    return True if word == "yes" else False if word == "no" else None
+
+
+def _form_choice(name: str, code: Any) -> str:
+    """A choice input's value as its form field shows it: the label for a system or a length basis."""
+    if code in (None, ""):
+        return ""
+    if name == "system_label":
+        return next((label for label, value in SYSTEM_CHOICES if value == code), "")
+    if name == "length_label":
+        return next((label for label, value in LENGTHS if value == code), "")
+    return str(code)
+
+
+def form_hint_value(name: str) -> str:
+    """What Use hints puts in a blank form field, in the form's own words. "" when it puts nothing there.
+
+    A field with no hint, or with two (base area: NFPA 13's and FM's), is
+    left for the designer to type.
+    """
+    hint = inputs.hint_of(FORM_TO_INPUT.get(name, name))
+    if hint is None:
+        return ""
+    if name in _BOOL_FIELDS:
+        return _flag_text(hint)
+    if name in _CHOICE_FIELDS:
+        return _form_choice(name, hint)
+    if isinstance(hint, (int, float)):
+        return _HINT_FORMAT.get(name, "{:g}").format(hint)
+    return str(hint)
+
+
+def form_hint(name: str) -> str:
+    """The hint a blank form field shows: each value with what it is for, its cite and edition, and VERIFY."""
+    input_name = FORM_TO_INPUT.get(name, name)
+    unit = inputs.FORM_LABELS.get(input_name, ("", inputs.unit_of(input_name)))[1]
+    return inputs.hint_text(input_name, unit)
+
+
+# What a blank field shows, and what Use hints puts in it. A hint is never an input until the designer uses it.
+FORM_HINTS = {name: form_hint(name) for name in FORM_FIELDS if form_hint(name)}
+FORM_HINT_VALUES = {name: form_hint_value(name) for name in FORM_FIELDS if form_hint_value(name)}
 
 
 class Desk:
@@ -876,6 +944,8 @@ class Desk:
         for name, value in _BOOL_FIELDS.items():
             setattr(self, name, Var(value, touch))
         self.segments: list[dict] = []
+        # Inputs whose hint the designer accepted since the form was last written to a job. Recorded ASSUMED.
+        self._accepted: set[str] = set()
 
         self.scheme = palette.saved_scheme()
         self.layout = saved_layout()
@@ -1095,7 +1165,7 @@ class Desk:
         """Fields the designer typed in the page. Unknown names are ignored."""
         for name, value in (values or {}).items():
             if name in _BOOL_FIELDS:
-                getattr(self, name).set(bool(value))
+                getattr(self, name).set(_flag_text(value))
             elif name in _CHOICE_FIELDS:
                 if value in _CHOICE_FIELDS[name][1]:
                     getattr(self, name).set(value)
@@ -1105,7 +1175,31 @@ class Desk:
                 continue
             # The designer supplied this input. The record says so beside its value.
             self._typed.add(FORM_TO_INPUT.get(name, name))
+            self._accepted.discard(FORM_TO_INPUT.get(name, name))
         self._refresh_assumptions()
+
+    def accept_hints(self, names: list | None = None) -> list[str]:
+        """Put a hint in each named blank field, or in every blank field that has one. Returns the fields filled.
+
+        Only the designer does this, from the form. An accepted hint is an
+        input recorded ASSUMED, with its source saying it was a starting value
+        the designer accepted (inputs.SOURCE_ACCEPTED). A field that holds a
+        value is left as it is.
+        """
+        wanted = [name for name in (names or FORM_HINT_VALUES) if name in FORM_HINT_VALUES]
+        filled = []
+        for name in wanted:
+            var = getattr(self, name)
+            if str(var.get() or "").strip():
+                continue
+            var.set(FORM_HINT_VALUES[name])
+            input_name = FORM_TO_INPUT.get(name, name)
+            self._accepted.add(input_name)
+            self._typed.discard(input_name)
+            filled.append(name)
+        if filled:
+            self._form_loaded()
+        return filled
 
     def _form_loaded(self) -> None:
         """The form changed under the page (a job opened, a segment added). The page reloads it."""
@@ -1115,7 +1209,7 @@ class Desk:
 
     def _refresh_assumptions(self) -> None:
         trim = self.trim_gal.get()
-        basis = self.delivery_basis.get() or "FM"
+        basis = self.delivery_basis.get()
         key = (str(trim), str(basis))
         if self._assumption_cache is not None and self._assumption_cache[0] == key:
             return
@@ -1139,25 +1233,18 @@ class Desk:
         return Var(self._assumption_cache[1] if self._assumption_cache else "")
 
     def collect_basis(self) -> dict:
-        # An emptied NFPA 13, NFPA 72, or insurer field goes back to its starting value. That value is not the
-        # designer's: _write_form notes it as a starting value, and the record says it is not confirmed.
-        # Whether an emptied field should stay blank instead is the owner's question (the releasing table is
-        # given an insurer either way); until it is answered the form keeps the starting value.
-        starting = inputs.BASIS_STARTING
+        """The basis fields as typed. A blank stays blank: no edition and no insurer is put in its place."""
         return {
             "ahj": str(self.ahj.get()).strip(),
-            "nfpa_13": str(self.nfpa_13.get()).strip() or starting["nfpa_13"],
-            "nfpa_72": str(self.nfpa_72.get()).strip() or starting["nfpa_72"],
-            "insurer": str(self.insurer.get()).strip() or starting["insurer"],
+            "nfpa_13": str(self.nfpa_13.get()).strip(),
+            "nfpa_72": str(self.nfpa_72.get()).strip(),
+            "insurer": str(self.insurer.get()).strip(),
             "hazard_notes": str(self.hazard_notes.get()).strip(),
         }
 
-    def _refilled_basis(self) -> set[str]:
-        """The basis fields that are empty on the form, so collect_basis put their starting value back."""
-        return {name for name in inputs.BASIS_STARTING if not str(getattr(self, name).get()).strip()}
-
     def collect_di(self) -> dict:
-        code = next((value for name, value in SYSTEM_CHOICES if name == self.system_label.get()), "di")
+        """The zone inputs as the form holds them. A blank is None; a run names the blanks it cannot use."""
+        code = next((value for name, value in SYSTEM_CHOICES if name == self.system_label.get()), None)
         segments = []
         for row in self.segments:
             length = row.get("length_ft")
@@ -1178,8 +1265,8 @@ class Desk:
         return {
             "zone_id": str(self.zone_id.get()).strip(),
             "system_type": code,
-            "hazard": self.hazard.get(),
-            "supervised": bool(self.supervised.get()),
+            "hazard": self.hazard.get() or None,
+            "supervised": _flag_value(self.supervised.get()),
             "density_gpm_ft2": num(self.density.get()),
             "base_area_ft2": num(self.base_area.get()),
             # What the designer typed, a 0 as 0 and a blank as blank. The run names a blank it needs
@@ -1187,20 +1274,18 @@ class Desk:
             "area_increase": num(self.area_increase.get()),
             "hose_gpm": num(self.hose.get()),
             "q_fill_gpm": num(self.q_fill.get()),
-            "t_detect_s": num(self.t_detect.get()) or 0,
-            "t_release_s": num(self.t_release.get()) or 0,
-            "t_exhaust_s": num(self.t_exhaust.get()) or 0,
-            "qod": bool(self.qod.get()),
-            "delivery_basis": self.delivery_basis.get() or "FM",
-            "medium": self.medium.get(),
-            "prime_held_by": self.prime.get(),
-            "failsafe_on_total_power_loss": bool(self.failsafe.get()),
+            # A blank time is None, never 0: the run holds on it (workflow.validate_di).
+            "t_detect_s": num(self.t_detect.get()),
+            "t_release_s": num(self.t_release.get()),
+            "t_exhaust_s": num(self.t_exhaust.get()),
+            "qod": _flag_value(self.qod.get()),
+            "delivery_basis": self.delivery_basis.get() or None,
+            "medium": self.medium.get() or None,
+            "prime_held_by": self.prime.get() or None,
+            "failsafe_on_total_power_loss": _flag_value(self.failsafe.get()),
             "supervisory_psi": _blank_to_none(self.supervisory_psi.get()),
-            "manual_station": bool(self.manual_station.get()),
-            "length_basis": next(
-                (value for name, value in LENGTHS if name == self.length_label.get()),
-                "center_to_center",
-            ),
+            "manual_station": _flag_value(self.manual_station.get()),
+            "length_basis": next((value for name, value in LENGTHS if name == self.length_label.get()), None),
             "fittings_percent": _blank_to_none(self.fittings.get()),
             "trim_gal": _blank_to_none(self.trim_gal.get()),
             "supervisory_psig": num(self.supervisory_psig.get()),
@@ -1209,45 +1294,41 @@ class Desk:
         }
 
     def _apply_basis(self, basis: dict) -> None:
-        starting = inputs.BASIS_STARTING
         self.ahj.set(basis.get("ahj") or "")
-        self.nfpa_13.set(basis.get("nfpa_13") or starting["nfpa_13"])
-        self.nfpa_72.set(basis.get("nfpa_72") or starting["nfpa_72"])
-        self.insurer.set(basis.get("insurer") or starting["insurer"])
+        self.nfpa_13.set(basis.get("nfpa_13") or "")
+        self.nfpa_72.set(basis.get("nfpa_72") or "")
+        self.insurer.set(basis.get("insurer") or "")
         self.hazard_notes.set(basis.get("hazard_notes") or "")
 
     def _apply_di(self, di: dict) -> None:
         def text(value, blank=""):
             return blank if value is None else str(value)
 
+        # What the job holds, and nothing else: a blank or a field the job does not have is blank on the form.
         self.zone_id.set(di.get("zone_id") or "")
-        code = di.get("system_type") or "di"
-        self.system_label.set(next((name for name, value in SYSTEM_CHOICES if value == code), "Double-interlock"))
-        self.hazard.set(di.get("hazard") or "ordinary")
-        self.supervised.set(bool(di.get("supervised", True)))
+        self.system_label.set(_form_choice("system_label", di.get("system_type")))
+        self.hazard.set(di.get("hazard") if di.get("hazard") in HAZARDS else "")
+        self.supervised.set(_flag_text(di.get("supervised")))
         self.density.set(text(di.get("density_gpm_ft2")))
         self.base_area.set(text(di.get("base_area_ft2")))
         self.area_increase.set(text(di.get("area_increase")))
         self.hose.set(text(di.get("hose_gpm")))
         self.q_fill.set(text(di.get("q_fill_gpm")))
-        self.t_detect.set(text(di.get("t_detect_s"), "0"))
-        self.t_release.set(text(di.get("t_release_s"), "0"))
-        self.t_exhaust.set(text(di.get("t_exhaust_s"), "0"))
-        self.qod.set(bool(di.get("qod")))
-        self.delivery_basis.set(di.get("delivery_basis") or "FM")
-        self.medium.set(di.get("medium") or "nitrogen")
-        self.prime.set(di.get("prime_held_by") or "nc_solenoid")
-        self.failsafe.set(bool(di.get("failsafe_on_total_power_loss")))
+        self.t_detect.set(text(di.get("t_detect_s")))
+        self.t_release.set(text(di.get("t_release_s")))
+        self.t_exhaust.set(text(di.get("t_exhaust_s")))
+        self.qod.set(_flag_text(di.get("qod")))
+        self.delivery_basis.set(di.get("delivery_basis") if di.get("delivery_basis") in BASES else "")
+        self.medium.set(di.get("medium") if di.get("medium") in MEDIA else "")
+        self.prime.set(di.get("prime_held_by") if di.get("prime_held_by") in PRIMES else "")
+        self.failsafe.set(_flag_text(di.get("failsafe_on_total_power_loss")))
         self.supervisory_psi.set(text(di.get("supervisory_psi")))
-        self.manual_station.set(bool(di.get("manual_station", True)))
-        length_code = di.get("length_basis") or "center_to_center"
-        self.length_label.set(next((name for name, value in LENGTHS if value == length_code), "Center to center"))
+        self.manual_station.set(_flag_text(di.get("manual_station")))
+        self.length_label.set(_form_choice("length_label", di.get("length_basis")))
         self.fittings.set(text(di.get("fittings_percent")))
         self.trim_gal.set(text(di.get("trim_gal")))
-        # A job saved before these fields existed starts from the form's own starting values. A blank the
-        # designer saved stays blank.
-        self.supervisory_psig.set(text(di.get("supervisory_psig"), "") if "supervisory_psig" in di else "40")
-        self.fill_minutes.set(text(di.get("fill_minutes"), "") if "fill_minutes" in di else "30")
+        self.supervisory_psig.set(text(di.get("supervisory_psig")))
+        self.fill_minutes.set(text(di.get("fill_minutes")))
         self.segments = []
         for segment in di.get("segments") or []:
             self._insert_segment(segment, loaded=False)
@@ -1325,11 +1406,13 @@ class Desk:
         project["di"] = self.collect_di()
         project["chat"] = self.chat_log
         if self._typed:
-            # A basis field the designer emptied holds its starting value again. They did not type that value.
-            refilled = self._typed & self._refilled_basis()
-            inputs.note_given(project, self._typed - refilled, inputs.SOURCE_DESIGNER)
-            inputs.note_given(project, refilled, inputs.SOURCE_DEFAULT)
+            # An emptied basis field stays blank: what the designer typed, a blank included, is theirs.
+            inputs.note_given(project, self._typed, inputs.SOURCE_DESIGNER)
             self._typed = set()
+        if self._accepted:
+            # Hints the designer accepted: inputs now, recorded ASSUMED.
+            inputs.note_given(project, self._accepted, inputs.SOURCE_ACCEPTED)
+            self._accepted = set()
 
     def _capture_form(self, project: dict) -> str | None:
         """Copy the form onto project. A bad number does not drop the chat."""
@@ -1373,12 +1456,22 @@ class Desk:
 
     def open_project(self, project_id: str) -> None:
         self.project = load_project(project_id)
-        self._apply_project(self.project)
+        dropped = self._apply_project(self.project)
+        if dropped:
+            self.status.set(
+                f"Opened {self.project.get('name')}. Starting values an earlier version put on its form are hints "
+                "now, because nobody entered or accepted them: " + ", ".join(dropped)
+                + ". Enter a value, or use the hint (recorded ASSUMED)."
+            )
+            return
         self.status.set(f"Opened {self.project.get('name')}. {self._key_status}")
 
-    def _apply_project(self, project: dict) -> None:
+    def _apply_project(self, project: dict) -> list[str]:
+        """Put a job on the form and the panel. Returns the earlier version's starting values taken off it."""
         # What was typed on the last job's form does not follow the designer to this one.
         self._typed = set()
+        self._accepted = set()
+        dropped = self._drop_unconfirmed(project)
         self._apply_basis(project.get("basis") or {})
         self._apply_di(project.get("di") or {})
         self.chat_log = list(project.get("chat") or [])
@@ -1389,6 +1482,37 @@ class Desk:
         self._load_fills(project)
         self._post_recovery_note(project.get("id"))
         self._refresh_team()
+        return dropped
+
+    def _assumed_fields(self) -> list[str]:
+        """The form fields that hold a hint the designer accepted, so the page marks them ASSUMED."""
+        noted = (self.project or {}).get("given") if isinstance((self.project or {}).get("given"), dict) else {}
+        found = []
+        for name in FORM_FIELDS:
+            input_name = FORM_TO_INPUT.get(name, name)
+            if input_name in self._typed or not str(getattr(self, name).get() or "").strip():
+                continue
+            if input_name in self._accepted or noted.get(input_name) == inputs.SOURCE_ACCEPTED:
+                found.append(name)
+        return found
+
+    @staticmethod
+    def _drop_unconfirmed(project: dict) -> list[str]:
+        """Take an earlier version's unconfirmed starting values off a job. Returns their input names.
+
+        A value nobody entered or accepted is not an input (inputs.HINTS). Its
+        field goes blank and shows the hint; the record's row for it leaves
+        the current set when the job is synced, and what used it is out of date.
+        """
+        names = inputs.unconfirmed_starting_values(project)
+        for name in names:
+            if name in inputs.BASIS_FIELDS:
+                project.setdefault("basis", {})[name] = ""
+            else:
+                project.setdefault("di", {})[name] = None
+        if names:
+            save_project(project)
+        return names
 
     def _open_record(self, project: dict | None) -> None:
         """Make sure the job is in the project record. An older JSON job is imported once.
@@ -1434,22 +1558,22 @@ class Desk:
         basis_now = {key: str(basis.get(key) or "").strip() for key, _label in BASIS_LABELS} if basis is not None else {}
         zone = inputs.zone_values(project)
         zone_now = {name: inputs.encode(name, value) for name, value in zone.items()}
-        sources = {name: inputs.source_text(inputs.provenance(project, name, zone[name])) for name in zone}
-        # NFPA 13, NFPA 72, and the insurer start with a value (inputs.BASIS_STARTING) that nobody stated. One the
-        # job holds no note on and that still equals it is recorded as a starting value not confirmed by the
-        # designer, as an untouched zone field is; any other value with no note was typed on the Inputs tab.
-        starting = inputs.unconfirmed_basis(project, basis_now)
-        if starting:
-            # Kept on the job, so a later change of the starting values cannot turn this one into a typed one.
-            inputs.note_given(project, starting, inputs.SOURCE_DEFAULT)
-        basis_sources = {key: inputs.source_text(inputs.provenance(project, key, basis_now[key]), key)
+        zone_from = {name: inputs.provenance(project, name, zone[name]) for name in zone}
+        sources = {name: inputs.source_text(origin) for name, origin in zone_from.items()}
+        # A hint the designer accepted is ASSUMED; anything the designer gave is GIVEN.
+        zone_labels = {name: inputs.label_for(origin) for name, origin in zone_from.items()}
+        # A basis field the job holds no note on was typed on the Inputs tab. An earlier version's unconfirmed
+        # starting value was taken off the job when it opened (_drop_unconfirmed).
+        noted = project.get("given") if isinstance(project.get("given"), dict) else {}
+        basis_sources = {key: inputs.source_text(noted.get(key) if noted.get(key) in inputs.SOURCE_TEXT else "", key)
                          for key in basis_now}
+        basis_labels = {key: inputs.label_for(noted.get(key) or "", label) for key, label in BASIS_LABELS}
         from_basis = self.record.sync_form(
-            project_id, inputs.BASIS_KIND, basis_now, labels=dict(BASIS_LABELS),
+            project_id, inputs.BASIS_KIND, basis_now, labels=basis_labels,
             sources=basis_sources, shown_before=shown.get("basis"),
         )
         from_zone = self.record.sync_form(
-            project_id, inputs.INPUT_KIND, zone_now, labels=inputs.GIVEN, sources=sources,
+            project_id, inputs.INPUT_KIND, zone_now, labels=zone_labels, sources=sources,
             shown_before=shown.get("zone"),
         )
         pulled: list[str] = []
@@ -1754,6 +1878,7 @@ class Desk:
             self._apply_basis(basis)
             self._apply_di(di)
             self._typed = set()
+            self._accepted = set()
             return
         for name in pulled:
             if name in held:
@@ -1764,8 +1889,9 @@ class Desk:
                 shown_di[name] = di[name]
         self._apply_basis(shown_basis)
         self._apply_di(shown_di)
-        # Putting the record's values on the form is not the designer typing them.
+        # Putting the record's values on the form is not the designer typing them, or accepting a hint.
         self._typed -= set(pulled) - set(held)
+        self._accepted -= set(pulled)
 
     def save_current(self) -> None:
         self._ensure_project()
@@ -2465,26 +2591,25 @@ class Desk:
             return
         di = copy.deepcopy(self.project["di"])
         basis = copy.deepcopy(self.project["basis"])
+        # The inputs the designer took from a hint. The run's flags keep their HOLD and name them ASSUMED.
+        assumed = sorted(inputs.accepted_inputs(self.project))
         try:
             pack = content_root()
         except FileNotFoundError as exc:
             self._report_run_problem(origin_id, str(exc), announce=announce)
             return
         self._open_record(self.project)
-        # The basis fields still at the form's starting value. A run's flags never say the job states them.
-        starting = tuple(inputs.unconfirmed_basis(self.project, basis))
         key = self._api_key()
         use_claude = bool(self.ask_claude.get()) and bool(key)
         if use_claude:
             self._enqueue_zone(
-                origin_id, project_name, pack, di, basis, key, announce=announce, seed=seed, starting=starting
+                origin_id, project_name, pack, di, basis, key, announce=announce, seed=seed, assumed=assumed
             )
             return
-        self._run_zone_here(origin_id, project_name, pack, di, basis, announce=announce, seed=seed, starting=starting)
+        self._run_zone_here(origin_id, project_name, pack, di, basis, announce=announce, seed=seed, assumed=assumed)
 
     def _run_zone_here(
-        self, origin_id, project_name, pack, di, basis, *, announce: bool = False, seed: str = "",
-        starting: tuple = (),
+        self, origin_id, project_name, pack, di, basis, *, announce: bool = False, seed: str = "", assumed=()
     ) -> None:
         """Tool plan with no model call. It finishes before the action returns."""
         job = self.jobs.record(
@@ -2499,7 +2624,7 @@ class Desk:
             self._remember_seed(job.id, seed)
         try:
             result = run_di_zone(
-                pack, di, basis, narrator=None, record=self.record, project_id=origin_id, unconfirmed_basis=starting
+                pack, di, basis, narrator=None, record=self.record, project_id=origin_id, assumed=assumed
             )
         except Exception as exc:
             self.jobs.mark(job.id, "error", safe_error(exc))
@@ -2509,8 +2634,7 @@ class Desk:
         self._finish_run(origin_id, result, None, job_id=job.id)
 
     def _enqueue_zone(
-        self, origin_id, project_name, pack, di, basis, key, *, announce: bool = False, seed: str = "",
-        starting: tuple = (),
+        self, origin_id, project_name, pack, di, basis, key, *, announce: bool = False, seed: str = "", assumed=()
     ) -> None:
         """Queue a zone run that calls the model. The composer stays usable."""
 
@@ -2541,8 +2665,7 @@ class Desk:
 
             try:
                 result = run_di_zone(
-                    pack, di, basis, narrator=narrator, record=self.record, project_id=origin_id,
-                    unconfirmed_basis=starting,
+                    pack, di, basis, narrator=narrator, record=self.record, project_id=origin_id, assumed=assumed
                 )
                 error = None
                 if result.get("cancelled"):
@@ -4070,7 +4193,16 @@ class Desk:
                 "values": self.form_values(),
                 "segments": [dict(row) for row in self.segments],
                 "assumptions": self._assumption_cache[1] if self._assumption_cache else "",
-                "choices": {name: list(choices) for name, (_value, choices) in _CHOICE_FIELDS.items()},
+                "choices": {
+                    **{name: list(choices) for name, (_value, choices) in _CHOICE_FIELDS.items()},
+                    **{name: list(FLAG_CHOICES) for name in _BOOL_FIELDS},
+                },
+                # What an earlier form put in each field, shown beside it while it is blank. Never an input
+                # until the designer accepts it (accept_hints), which records it ASSUMED.
+                "hints": dict(FORM_HINTS),
+                # The fields Use hints may fill: those with one hint. The others the designer types.
+                "accept": sorted(FORM_HINT_VALUES),
+                "assumed": self._assumed_fields(),
                 "roles": list(SEGMENT_ROLES),
                 "marks": self.form_marks(),
             },

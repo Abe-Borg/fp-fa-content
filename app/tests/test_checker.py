@@ -237,7 +237,7 @@ class TraceCheckTests(unittest.TestCase):
         di, basis = _seed_inputs(record)
         _run_plan(record, di, basis)
         fp = ToolSession(REPO, record=record, project_id="job1", agent="fp-sprinkler")
-        screen = fp.execute("di_trip_to_water", {"v_gal": 281.3, "q_fill_gpm": 600, "t_detect_s": 8, "t_release_s": 2, "basis": "FM"})
+        screen = fp.execute("di_trip_to_water", {"v_gal": 281.3, "q_fill_gpm": 600, "t_detect_s": 8, "t_release_s": 2, "t_exhaust_s": 0, "basis": "FM"})
         givens = record.givens("job1")
         on_calc = record.record_finding("job1", agent="fp-sprinkler", label="calculated", supports=[screen["record_id"]],
                                         text="Fill takes 28.1 s at 600 gpm and t_total is 38.1 s against a 30 s limit")
@@ -278,7 +278,7 @@ class TraceCheckTests(unittest.TestCase):
         di, basis = _seed_inputs(record)
         _run_plan(record, di, basis)
         fp = ToolSession(REPO, record=record, project_id="job1", agent="fp-sprinkler")
-        screen = fp.execute("di_trip_to_water", {"v_gal": 281.3, "q_fill_gpm": 600, "t_detect_s": 8, "t_release_s": 2, "basis": "FM"})
+        screen = fp.execute("di_trip_to_water", {"v_gal": 281.3, "q_fill_gpm": 600, "t_detect_s": 8, "t_release_s": 2, "t_exhaust_s": 0, "basis": "FM"})
         finding = record.record_finding("job1", agent="fp-sprinkler", label="calculated", supports=[screen["record_id"]],
                                         text="t_total is 38.1 s against a 30 s limit")
         self.assertIn("no trace check has judged", export_gate(record, "job1"))
@@ -301,7 +301,7 @@ class TraceCheckTests(unittest.TestCase):
 
         # Run the zone again and replace the finding on the new screen: the gate asks for a check, then opens.
         _run_plan(record, dict(di, q_fill_gpm=750), basis)
-        fresh = fp.execute("di_trip_to_water", {"v_gal": 281.3, "q_fill_gpm": 750, "t_detect_s": 8, "t_release_s": 2, "basis": "FM"})
+        fresh = fp.execute("di_trip_to_water", {"v_gal": 281.3, "q_fill_gpm": 750, "t_detect_s": 8, "t_release_s": 2, "t_exhaust_s": 0, "basis": "FM"})
         record.record_finding("job1", agent="fp-sprinkler", label="calculated", supports=[fresh["record_id"]],
                               text="t_total is 32.5 s against a 30 s limit", replaces=finding["id"])
         self.assertEqual(export_gate(record, "job1"), "Findings changed after the last trace check. Run it again.")
@@ -317,7 +317,7 @@ class TraceCheckTests(unittest.TestCase):
         _run_plan(record, di, basis)
         fp = ToolSession(REPO, record=record, project_id="job1", agent="fp-sprinkler")
         fa = ToolSession(REPO, record=record, project_id="job1", agent="fa-releasing")
-        screen = fp.execute("di_trip_to_water", {"v_gal": 281.3, "q_fill_gpm": 600, "t_detect_s": 8, "t_release_s": 2, "basis": "FM"})
+        screen = fp.execute("di_trip_to_water", {"v_gal": 281.3, "q_fill_gpm": 600, "t_detect_s": 8, "t_release_s": 2, "t_exhaust_s": 0, "basis": "FM"})
         finding = fp.execute("record_finding", {"text": "t_total is 38.1 s against a 30 s limit", "label": "calculated",
                                                 "supports": [screen["record_id"]]})
         check_record(REPO, record, "job1", yes_to_everything)
@@ -370,8 +370,8 @@ class DesignBasisTierTests(unittest.TestCase):
         fp = ToolSession(REPO, record=record, project_id="job1", agent="fp-sprinkler")
         fa = ToolSession(REPO, record=record, project_id="job1", agent="fa-releasing")
         lead = ToolSession(REPO, record=record, project_id="job1", agent="lead")
-        screen = fp.execute("di_trip_to_water", {"v_gal": 281.3, "q_fill_gpm": 600, "t_detect_s": 8, "t_release_s": 2, "basis": "FM"})
-        what_if = fp.execute("di_trip_to_water", {"v_gal": 281.3, "q_fill_gpm": 900, "t_detect_s": 8, "t_release_s": 2, "basis": "FM"})
+        screen = fp.execute("di_trip_to_water", {"v_gal": 281.3, "q_fill_gpm": 600, "t_detect_s": 8, "t_release_s": 2, "t_exhaust_s": 0, "basis": "FM"})
+        what_if = fp.execute("di_trip_to_water", {"v_gal": 281.3, "q_fill_gpm": 900, "t_detect_s": 8, "t_release_s": 2, "t_exhaust_s": 0, "basis": "FM"})
         cap = fp.execute("record_evidence", {"document": "NFPA 13", "edition": "2025", "section": "8.3.2.3.1.1",
                                              "note": "DI at or under 500 gal needs no delivery-time proof"})
         owner = fp.execute("record_evidence", {"document": "Owner standard", "edition": "2024", "section": "4.3.7",

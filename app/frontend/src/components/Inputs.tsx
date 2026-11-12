@@ -1,10 +1,13 @@
 /**
  * The Inputs tab: the project basis, the zone, and its pipe, in the groups a
  * designer thinks in, with Run zone always in reach under them. Every field
- * is optional and travels to the app as it is typed; the form keeps its
- * values when the panel closes. A unit sits inside its field. The page labels
- * and groups the fields and nothing more: what a blank one means is said by
- * the app (form.assumptions) and by the run.
+ * starts blank and travels to the app as it is typed; the form keeps its
+ * values when the panel closes. A unit sits inside its field. A blank field
+ * shows the app's hint for it (form.hints), labeled as a hint; a hint is an
+ * input only when the designer accepts it with Use hints, and the app records
+ * it ASSUMED (form.assumed marks those fields). The page labels and groups the
+ * fields and nothing more: what a blank one means is said by the app
+ * (form.assumptions) and by the run.
  */
 import { useState } from "react";
 import type { Form, FormValues, Mark } from "../types";
@@ -12,6 +15,7 @@ import { choiceLabel } from "../layout";
 import { Close } from "./icons";
 
 type SetField = (name: string, value: string | boolean) => void;
+type AcceptHints = (names: string[]) => void;
 
 interface FieldSpec {
   name: string;
@@ -63,7 +67,7 @@ const GROUPS: Group[] = [
       { name: "base_area", label: "Base area", unit: "ft²" },
       { name: "area_increase", label: "Area increase", unit: "fraction", hint: "A fraction: 0.30 is a 30 percent increase." },
       { name: "hose", label: "Hose", unit: "gpm" },
-      { name: "supervised", label: "Supervised waterflow", kind: "flag" },
+      { name: "supervised", label: "Supervised waterflow", kind: "choice" },
     ],
   },
   {
@@ -74,7 +78,7 @@ const GROUPS: Group[] = [
       { name: "t_detect", label: "Detection time", unit: "s" },
       { name: "t_release", label: "Releasing time", unit: "s" },
       { name: "t_exhaust", label: "Exhaust time", unit: "s" },
-      { name: "qod", label: "Quick-opening device", kind: "flag" },
+      { name: "qod", label: "Quick-opening device", kind: "choice" },
     ],
   },
   {
@@ -86,8 +90,8 @@ const GROUPS: Group[] = [
       { name: "supervisory_psi", label: "Low-air supervisory", unit: "psi" },
       { name: "supervisory_psig", label: "Supervisory fill", unit: "psig" },
       { name: "fill_minutes", label: "Fill time", unit: "min" },
-      { name: "manual_station", label: "Manual station", kind: "flag" },
-      { name: "failsafe", label: "Failsafe on total power loss", kind: "flag" },
+      { name: "manual_station", label: "Manual station", kind: "choice" },
+      { name: "failsafe", label: "Failsafe on total power loss", kind: "choice" },
     ],
   },
 ];
@@ -141,12 +145,32 @@ function FromChat({ id, mark }: { id: string; mark: Mark }) {
   );
 }
 
+/** The blank fields of a list that show a hint. */
+function hinted(fields: FieldSpec[], form: Form, values: FormValues): string[] {
+  return fields
+    .filter((spec) => (form.hints || {})[spec.name] && !String(values[spec.name] ?? "").trim())
+    .map((spec) => spec.name);
+}
+
+/** The blank fields of a list Use hints would fill: one hint each. */
+export function hintable(fields: FieldSpec[], form: Form, values: FormValues): string[] {
+  return hinted(fields, form, values).filter((name) => (form.accept || []).includes(name));
+}
+
 function Field({ spec, form, values, set, seen }: { spec: FieldSpec; form: Form; values: FormValues; set: SetField; seen: number }) {
   const id = `f-${spec.name}`;
   const span = spec.span === "all" ? " span-all" : "";
   const mark = form.marks?.[spec.name];
   // A field filled in since the designer last looked at the tab is drawn with a moment's highlight.
   const marked = mark ? ` filled${mark.fill > seen ? " fresh-fill" : ""}` : "";
+  const hint = (form.hints || {})[spec.name] || "";
+  const assumed = (form.assumed || []).includes(spec.name);
+  const blank = !String(values[spec.name] ?? "").trim();
+  // Under the field: its hint while it is blank, or ASSUMED while it holds a hint the designer used.
+  const note = blank && hint ? "hint" : assumed ? "assumed" : "";
+  // The app writes the hint whole: the value, what it is for, its cite and edition, and VERIFY.
+  const hintText = hint;
+  const described = [spec.hint ? `${id}-hint` : "", note ? `${id}-note` : ""].filter(Boolean).join(" ") || undefined;
   if (spec.kind === "flag") {
     return (
       <label className={`check field-flag${marked}`}>
@@ -168,10 +192,16 @@ function Field({ spec, form, values, set, seen }: { spec: FieldSpec; form: Form;
       {spec.kind === "notes" ? (
         <textarea id={id} className="input notes" rows={3} value={value} onChange={(event) => set(spec.name, event.target.value)} />
       ) : spec.kind === "choice" ? (
-        <select id={id} className="input select" value={value} onChange={(event) => set(spec.name, event.target.value)}>
+        <select
+          id={id}
+          className="input select"
+          value={value}
+          aria-describedby={described}
+          onChange={(event) => set(spec.name, event.target.value)}
+        >
           {(form.choices[spec.name] || []).map((choice) => (
             <option key={choice} value={choice}>
-              {choiceLabel(choice)}
+              {choice ? choiceLabel(choice) : "—"}
             </option>
           ))}
         </select>
@@ -181,7 +211,7 @@ function Field({ spec, form, values, set, seen }: { spec: FieldSpec; form: Form;
             id={id}
             className="input"
             value={value}
-            aria-describedby={spec.hint ? `${id}-hint` : undefined}
+            aria-describedby={described}
             onChange={(event) => set(spec.name, event.target.value)}
             spellCheck={false}
           />
@@ -197,6 +227,34 @@ function Field({ spec, form, values, set, seen }: { spec: FieldSpec; form: Form;
           {spec.hint}
         </span>
       ) : null}
+      {note === "hint" ? (
+        <span id={`${id}-note`} className="field-note hint-note small dim">
+          hint: {hintText}
+        </span>
+      ) : null}
+      {note === "assumed" ? (
+        <span id={`${id}-note`} className="field-note small dim" title="A hint you used. It is recorded ASSUMED, not as a design value.">
+          <span className="tag">ASSUMED</span>
+          <span className="visually-hidden">a hint you used</span>
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+/** Fill this group's blank fields with their hints. The app records each one ASSUMED. */
+function UseHints({ names, onAccept }: { names: string[]; onAccept: AcceptHints }) {
+  if (!names.length) return null;
+  return (
+    <div className="hint-row">
+      <button
+        type="button"
+        className="button on-card"
+        onClick={() => onAccept(names)}
+        title="Fill the blank fields in this group with their hints. Each is recorded ASSUMED, not a design value."
+      >
+        Use hints ({names.length})
+      </button>
     </div>
   );
 }
@@ -291,6 +349,7 @@ export function Inputs({
   set,
   runNote,
   onRun,
+  onAcceptHints,
   onAddSegment,
   onRemoveSegment,
   seen = 0,
@@ -300,6 +359,8 @@ export function Inputs({
   set: SetField;
   /** The newest fill the designer has seen on this tab; a newer one is highlighted. */
   seen?: number;
+  /** Accept the hints of these blank fields. The app fills them and records each ASSUMED. */
+  onAcceptHints: AcceptHints;
   /** Said beside Run zone when the form has moved past the run the Results tab shows. */
   runNote: string;
   onRun: () => void;
@@ -311,12 +372,20 @@ export function Inputs({
       <div className="pane-scroll">
         <div className="inputs-columns">
           <div className="inputs-column">
+            {hinted([...GROUPS.flatMap((group) => group.fields), ...PIPE_FIELDS], form, values).length ? (
+              <p className="small dim hints-note">
+                Every field starts blank. Some show a hint: a value the content pack pins, with its cite and edition,
+                to VERIFY. A hint is not an input until you use it. A hint you use is recorded ASSUMED, not as a design
+                value, and an edition you take from a hint is still not pinned until you type it.
+              </p>
+            ) : null}
             {GROUPS.map((group) => (
               <section key={group.id} className="group" aria-labelledby={`group-${group.id}`}>
                 <h3 id={`group-${group.id}`} className="group-title">
                   {group.title}
                 </h3>
                 <Fields fields={group.fields} form={form} values={values} set={set} seen={seen} />
+                <UseHints names={hintable(group.fields, form, values)} onAccept={onAcceptHints} />
                 {group.note ? <p className="small faint group-note">{group.note}</p> : null}
               </section>
             ))}
@@ -328,6 +397,7 @@ export function Inputs({
                 {form.marks?.segments ? <FromChat id="f-segments" mark={form.marks.segments} /> : null}
               </h3>
               <Fields fields={PIPE_FIELDS} form={form} values={values} set={set} seen={seen} />
+              <UseHints names={hintable(PIPE_FIELDS, form, values)} onAccept={onAcceptHints} />
               <div
                 id="f-segments"
                 tabIndex={-1}
