@@ -400,5 +400,72 @@ class SectionCheckUsageTests(unittest.TestCase):
             loop.destroy()
 
 
+class IdentityTests(unittest.TestCase):
+    """The calc-code identity and the content fingerprint say what the content is, not which system wrote the
+    files. The report's Windows seed carried the tag's kernel with CRLF line endings and so another identity
+    than the same commit on Linux, and a calculation whose identity differs from the installed pack's is out
+    of date."""
+
+    FOLDERS = ("skills", "roles", "modes", "corpus", "specs", "calcs")
+
+    def _copy(self, endings: bytes) -> Path:
+        """The content folders copied to a new root with every text file's line endings rewritten."""
+        root = Path(tempfile.mkdtemp(prefix="fpfa-acceptance-pack-"))
+        for folder in self.FOLDERS:
+            for path in sorted((REPO / folder).rglob("*")):
+                if not path.is_file() or "__pycache__" in path.parts or path.suffix in (".pyc", ".pyo"):
+                    continue
+                data = path.read_bytes()
+                if b"\0" not in data:
+                    data = data.replace(b"\r\n", b"\n").replace(b"\n", endings)
+                target = root / path.relative_to(REPO)
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(data)
+        return root
+
+    def test_the_same_content_with_other_line_endings_has_the_same_identity(self):
+        from fpfa.calc_tools import calc_identity, content_fingerprint
+
+        windows = self._copy(b"\r\n")
+        kernel = (windows / "calcs" / "fp" / "formulas.py").read_bytes()
+        self.assertIn(b"\r\n", kernel, "the copy really is a CRLF copy")
+        self.assertNotEqual(kernel, (REPO / "calcs" / "fp" / "formulas.py").read_bytes().replace(b"\r\n", b"\n"))
+        self.assertEqual(calc_identity(windows), calc_identity(REPO))
+        self.assertEqual(content_fingerprint(windows), content_fingerprint(REPO))
+
+    def test_a_change_to_the_code_or_the_content_still_changes_it(self):
+        from fpfa.calc_tools import calc_identity, content_fingerprint
+
+        # Each copy is changed before its identity is first read: the identity is cached by folder for the
+        # life of the process, which is right for an installed pack and would hide the change here.
+        changed = self._copy(b"\n")
+        kernel = changed / "calcs" / "fp" / "di_zone.py"
+        kernel.write_bytes(kernel.read_bytes() + b"\n# one more line\n")
+        other = self._copy(b"\n")
+        skill = sorted((other / "skills").rglob("SKILL.md"))[0]
+        skill.write_bytes(skill.read_bytes() + b"\nOne more sentence.\n")
+        self.assertNotEqual(calc_identity(changed), calc_identity(REPO))
+        self.assertNotEqual(content_fingerprint(changed), content_fingerprint(REPO))
+        self.assertEqual(calc_identity(other), calc_identity(REPO), "a skill is not calc code")
+        self.assertNotEqual(content_fingerprint(other), content_fingerprint(REPO))
+
+    def test_a_calculation_run_on_a_crlf_copy_is_current_on_the_lf_one(self):
+        """The case that would have bitten: a job run on the bundled seed, read after a content update."""
+        from fpfa.calc_tools import ToolSession
+        from fpfa.coherence import analyze
+
+        record = _record()
+        di, basis = _seed_inputs(record)
+        windows = self._copy(b"\r\n")
+        on_seed = ToolSession(windows, record=record, project_id="job1", agent="tool-plan")
+        on_seed.execute("zone_trapped_volume", {"segments": di["segments"], "length_basis": "center_to_center",
+                                                "fittings_percent": None, "trim_gal": None})
+        after_update = ToolSession(REPO, record=record, project_id="job1", agent="tool-plan")
+        self.assertEqual(after_update.calc_identity, on_seed.calc_identity)
+        analysis = analyze(record.snapshot("job1"))
+        self.assertEqual([item["state"] for item in analysis["calcs"].values()], ["current"])
+        self.assertFalse(analysis["code_changed"])
+
+
 if __name__ == "__main__":
     unittest.main()

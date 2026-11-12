@@ -991,12 +991,29 @@ def _govern_delivery_exemption(formulas, screen: dict, args: dict) -> dict:
 _IDENTITY_CACHE: dict[str, str] = {}
 
 
+def _identity_bytes(data: bytes) -> bytes:
+    """A file's bytes as an identity hashes them: its line endings do not count.
+
+    A checkout on Windows holds a text file with CRLF endings where the same
+    commit on Linux holds LF, and the bundled seed is built on one and a
+    content pack on the other. It is the same code and the same content. An
+    identity that differed between them would mark every recorded calculation
+    out of date after a content update that changed nothing, and would make a
+    fingerprint read on one machine useless on another. A file that holds a
+    NUL byte is binary and is hashed as it is.
+    """
+    if b"\0" in data:
+        return data
+    return data.replace(b"\r\n", b"\n")
+
+
 def calc_identity(content_root: Path) -> str:
     """Short hash of the calc kernel files under the content root.
 
-    calcs/fp/*.py and calcs/fa/lib/*.py, by path and bytes. Any change to the
-    code that produces a figure changes this value, and with it the replay
-    key, so a pack update computes fresh instead of replaying.
+    calcs/fp/*.py and calcs/fa/lib/*.py, by path and content, line endings
+    aside (_identity_bytes). Any change to the code that produces a figure
+    changes this value, and with it the replay key, so a pack update computes
+    fresh instead of replaying.
     """
     root = Path(content_root).resolve()
     key = str(root)
@@ -1010,7 +1027,7 @@ def calc_identity(content_root: Path) -> str:
     for path in files:
         try:
             digest.update(path.relative_to(root).as_posix().encode("utf-8"))
-            digest.update(path.read_bytes())
+            digest.update(_identity_bytes(path.read_bytes()))
         except OSError:
             continue
     value = digest.hexdigest()[:16]
@@ -1026,8 +1043,9 @@ def content_fingerprint(content_root: Path) -> str:
     """Short hash of everything a model or a calc reads from the content pack.
 
     Every file under skills, roles, modes, corpus, specs, and calcs, by path
-    and bytes. Two installs with the same fingerprint are working from the
-    same content, whatever version label either carries. It is the identity
+    and content, line endings aside (_identity_bytes). Two installs with the
+    same fingerprint are working from the same content, whatever version
+    label either carries and whichever system each was built on. It is the identity
     an evaluation report and an export print, so a result can be tied to the
     exact content that produced it.
     """
@@ -1045,7 +1063,7 @@ def content_fingerprint(content_root: Path) -> str:
                 continue
             try:
                 digest.update(path.relative_to(root).as_posix().encode("utf-8"))
-                digest.update(path.read_bytes())
+                digest.update(_identity_bytes(path.read_bytes()))
             except OSError:
                 continue
     value = digest.hexdigest()[:16]
