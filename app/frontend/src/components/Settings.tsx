@@ -1,6 +1,6 @@
 /**
  * Settings: Appearance (the five colour schemes and Reduce motion), the
- * Anthropic API key, the content pack, and About with the license.
+ * Anthropic API key, the content pack, app updates, and About with the license.
  */
 import { useState } from "react";
 import type { AppInfo, SchemeInfo, Settings as SettingsState } from "../types";
@@ -127,7 +127,7 @@ export function SettingsDialog({
             disabled={settings.checking_content}
             onClick={() => void act("content-check", { feed })}
           >
-            {settings.checking_content ? "Checking…" : "Check for updates"}
+            {settings.checking_content ? "Checking…" : "Check for content updates"}
           </button>
           <span className="dim small" role="status">
             {settings.content_line}
@@ -161,9 +161,40 @@ export function SettingsDialog({
 
       <section className="panel">
         <h3 className="display">About {app.name}</h3>
-        <p className="dim small">
-          {app.name} {app.version}. {app.copyright}.
-        </p>
+        <div className="app-update-row">
+          <div>
+            <div className="app-update-name">{app.name} <span className="app-version">{app.version}</span></div>
+            <p className="dim small">Desktop application</p>
+          </div>
+          <button
+            type="button"
+            className="button side app-update-check"
+            disabled={settings.app_update.status === "checking"}
+            onClick={() => void act("app-check")}
+          >
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+              <path d="M20 7v5h-5M4 17v-5h5" />
+              <path d="M6.1 7a7 7 0 0 1 11.5-1L20 9M4 15l2.4 3A7 7 0 0 0 18 17" />
+            </svg>
+            {settings.app_update.status === "checking" ? "Checking…" : "Check for updates"}
+          </button>
+        </div>
+        <p className="dim small app-update-status" role="status" aria-live="polite">{settings.app_update.message}</p>
+        <p className="faint small">App updates are separate from the content pack above.</p>
+        {settings.app_update.status === "available" && settings.app_update.download_url ? (
+          <div className="app-update-download">
+            <a className="button accent" href={settings.app_update.download_url} target="_blank" rel="noopener noreferrer">
+              Download update
+              <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M6 3H3v10h10v-3M8 2h6v6M7 9l7-7" />
+              </svg>
+            </a>
+            <p className="dim small">Opens the download page. Install when you’re ready.</p>
+          </div>
+        ) : null}
+        <div className="app-update-license">
+          <p className="faint small">{app.copyright}.</p>
+        </div>
         <p className="faint small">
           {app.license_summary} {app.use_notice}
         </p>
