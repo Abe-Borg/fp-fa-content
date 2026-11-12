@@ -27,7 +27,7 @@ from fpfa import theme as palette
 from fpfa.about import APP_NAME, APP_TAGLINE, version_text
 from fpfa.desk import ANOTHER_WINDOW_TEXT, Desk, InstanceLockError, Shell
 from fpfa.paths import data_dir, write_config
-from fpfa.record import RecordDamaged, move_aside
+from fpfa.record import RecordDamaged, RecordUnavailable, move_aside
 from fpfa.web.server import WindowServer
 
 WINDOW_SIZE = (1280, 800)
@@ -166,6 +166,17 @@ def damaged_record_question(damaged: RecordDamaged) -> str:
         f"{APP_NAME} has not changed it. Move it aside and start with a new, empty record? The damaged file is "
         "kept in the same folder, renamed, never deleted, so the jobs in it can still be recovered. Choose No to "
         "close and restore the file from a backup first."
+    )
+
+
+def unavailable_record_text(unavailable: RecordUnavailable) -> str:
+    """What the designer is told when the project record cannot be got to. Nothing is offered: it may be whole."""
+    return (
+        f"{APP_NAME} did not open: the project record could not be opened.\n{unavailable.path}\n"
+        f"({unavailable.detail})\n\n{APP_NAME} has not changed it, and this does not say the file is damaged: "
+        "SQLite could not get to it. If another program has it open, such as a backup or sync tool or a database "
+        f"viewer, close that program and start {APP_NAME} again. If the folder cannot be written or the disk is "
+        "full, fix that first."
     )
 
 
@@ -312,6 +323,10 @@ def main(argv: list[str] | None = None) -> None:
         sys.exit(1)
     except RecordDamaged as damaged:
         desk = open_with_new_record(damaged, shell, move=args.move_damaged_record)
+    except RecordUnavailable as unavailable:
+        # Locked, unwritable, or a full disk: not damage, so there is nothing to move aside, flag or no flag.
+        _show_error(unavailable_record_text(unavailable))
+        sys.exit(1)
 
     if args.demo and args.quit and not args.screenshot_dir:
         # The packaged smoke test: the sample and its tool plan, no window.

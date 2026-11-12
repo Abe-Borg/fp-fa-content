@@ -81,7 +81,15 @@ from fpfa.modes_loader import DEFAULT_MODE, MODE_SLUGS, list_modes, normalize_mo
 from fpfa.paths import content_root, data_dir, is_content_pack, read_config, write_config
 from fpfa.projects import delete_project, list_projects, load_project, new_project, save_project
 from fpfa.checker import check_line, coverage, export_reason
-from fpfa.record import ANSWERED_ON_PANEL, BASIS_LABELS, INTERRUPTED_NOTE, Record, RecordDamaged, RecordError
+from fpfa.record import (
+    ANSWERED_ON_PANEL,
+    BASIS_LABELS,
+    INTERRUPTED_NOTE,
+    Record,
+    RecordDamaged,
+    RecordError,
+    RecordUnavailable,
+)
 from fpfa.spec_docx import DRAFT_SECTION, write_docx
 from fpfa.team import check_record, latest_check, team_summary
 from fpfa.team_panel import recovery_text, team_view
@@ -773,9 +781,10 @@ class Desk:
         # The project record. Calc tools and record tools write to it by job id.
         try:
             self.record = Record()
-        except RecordDamaged:
-            # No window opens on a record SQLite cannot read. The data directory is let go, so the launcher
-            # can open the next desk once the file is moved aside (fpfa.web.shell).
+        except (RecordDamaged, RecordUnavailable):
+            # No window opens on a record SQLite cannot read, or cannot get to. The data directory is let go,
+            # so the next desk can open on it once a damaged file is moved aside or a locked one is let go
+            # (fpfa.web.shell).
             self.jobs.close()
             self.instance_lock.release()
             raise

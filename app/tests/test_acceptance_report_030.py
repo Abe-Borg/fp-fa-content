@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import sys
 import unittest
+from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -327,6 +328,34 @@ class UnitConversionTests(unittest.TestCase):
         self.assertEqual({cls for _number, cls in quantities.in_value({"value": 0.2994, "unit": "gpm/ft²"})}, {None})
         # A kernel output that names its unit once for several figures is not a pair, and reads as before.
         self.assertIn(("4", None), quantities.in_value({"unit": "pct_obs_per_ft", "sh": 4.0, "sc_max": 1.0}))
+
+    def test_the_figure_a_conversion_was_given_backs_only_its_own_unit(self):
+        """A review of 0.3.2 found the convert_units row's own inputs held the given figure with no unit, so
+        after 1695.8 L/min was converted, "1695.8 gpm" was found by the reply audit and held by the trace check."""
+        from fpfa import checker, quantities
+        from fpfa.calc_tools import ToolSession
+        from fpfa.reply_audit import audit
+
+        record = _record()
+        _seed_inputs(record)
+        session = ToolSession(REPO, record=record, project_id="job1", agent="fp-sprinkler")
+        session.execute("convert_units", {"value": 1695.8, "from_unit": "L/min", "to_unit": "gpm"})
+        row = next(row for row in record.calcs("job1") if row["tool"] == "convert_units")
+        self.assertEqual(row["inputs"]["from_unit"], "L/min", "the inputs are recorded as the model passed them")
+        held = checker._calc_quantities(row["outputs"], row["inputs"])
+        self.assertFalse(quantities.has("1695.8", "gpm", held))
+        self.assertTrue(quantities.has("1695.8", "L/min", held))
+        self.assertTrue(quantities.has("448.0", "gpm", held))
+        snapshot = record.snapshot("job1")
+        self.assertEqual(audit("The sprinkler demand is 1695.8 gpm.", snapshot)["unfound"], ["1695.8 gpm"])
+        self.assertEqual(audit("The sprinkler demand is 1695.8 L/min, 448 gpm.", snapshot)["unfound"], [])
+        # The unit is read as the conversion read it, whatever the spelling, and each kind keeps its own class.
+        for spelling, cls in (("litres/min", "lpm"), ("kpa", "kpa"), ("in", "in"), ("MPa", "mpa"), ("sq m", "m2")):
+            self.assertEqual(quantities.in_value({"value": 12, "from_unit": spelling, "to_unit": "gpm"}, strings=False),
+                             {("12", cls)}, spelling)
+        # gpm/ft² is a compound, which the module leaves with no class, as before.
+        self.assertEqual(quantities.in_value({"value": 0.2, "from_unit": "gpm/ft2", "to_unit": "mm/min"}, strings=False),
+                         {("0.2", None)})
 
 
 class CheckerReasonTests(unittest.TestCase):
@@ -737,6 +766,75 @@ class DamagedRecordTests(unittest.TestCase):
             self.assertTrue(lock.acquire(), "the next window can open on this data directory")
         finally:
             lock.release()
+
+    def test_a_locked_record_is_not_called_damaged(self):
+        """A review of 0.3.2 found a whole record that another connection had locked was reported as damaged, so
+        the launcher offered to move it aside and start an empty one. Only SQLite's word on the file's contents
+        makes it damaged; "database is locked" says nothing about them."""
+        import tempfile
+
+        from fpfa.record import Record, RecordDamaged, RecordUnavailable
+
+        path = Path(tempfile.mkdtemp(prefix="fpfa-locked-")) / "fpfa.db"
+        Record(path).ensure_project("job1", "Kept")
+        before = path.read_bytes()
+        with _locked(path):
+            with self.assertRaises(RecordUnavailable) as caught:
+                Record(path)
+        self.assertNotIsInstance(caught.exception, RecordDamaged)
+        self.assertEqual(caught.exception.path, path)
+        self.assertIn("locked", caught.exception.detail)
+        self.assertEqual(path.read_bytes(), before, "nothing is written to a record that could not be opened")
+        self.assertEqual(Record(path).project_row("job1")["name"], "Kept", "once let go it opens as it was")
+
+    def test_the_launcher_does_not_offer_to_move_a_locked_record(self):
+        from unittest.mock import patch
+
+        from fpfa.instance_lock import LOCK_NAME, InstanceLock
+        from fpfa.paths import data_dir
+        from fpfa.record import Record
+        from fpfa.web import shell as launcher
+        from test_prototype import _isolate_data
+
+        _isolate_data()
+        path = data_dir() / "fpfa.db"
+        Record(path).ensure_project("job1", "Kept")
+        before = path.read_bytes()
+        said = []
+        with _locked(path), patch.object(launcher, "_show_error", said.append), \
+                patch.object(launcher, "_confirm", side_effect=AssertionError("nothing is asked")), \
+                patch.object(launcher, "move_aside", side_effect=AssertionError("nothing is moved")):
+            with self.assertRaises(SystemExit) as stopped:
+                launcher.main(["--serve", launcher.DAMAGED_FLAG])
+        self.assertEqual(stopped.exception.code, 1)
+        self.assertIn(str(path), said[0])
+        self.assertIn("database is locked", said[0])
+        self.assertIn("does not say the file is damaged", said[0])
+        self.assertNotIn(launcher.DAMAGED_FLAG, said[0])
+        self.assertEqual(path.read_bytes(), before)
+        self.assertEqual(sorted(item.name for item in path.parent.iterdir() if item.name.startswith("fpfa.db.")), [])
+        lock = InstanceLock(data_dir() / LOCK_NAME)
+        try:
+            self.assertTrue(lock.acquire(), "the next window can open on this data directory")
+        finally:
+            lock.release()
+
+
+@contextmanager
+def _locked(path: Path):
+    """Another connection holding an exclusive lock on a record. The record waits 10 s for a lock; a test does not."""
+    import sqlite3
+    from unittest.mock import patch
+
+    holder = sqlite3.connect(path, isolation_level=None)
+    holder.execute("BEGIN EXCLUSIVE")
+    connect = sqlite3.connect
+    try:
+        with patch("fpfa.record.sqlite3.connect", lambda *args, **kwargs: connect(*args, **{**kwargs, "timeout": 0.1})):
+            yield
+    finally:
+        holder.execute("ROLLBACK")
+        holder.close()
 
 
 class LiveTeamTests(unittest.TestCase):

@@ -289,6 +289,33 @@ class RecordDamaged(RuntimeError):
         self.detail = detail
 
 
+class RecordUnavailable(RuntimeError):
+    """The project record could not be opened for a reason that says nothing about what is in it.
+
+    Another program holds a lock on it, the file or its folder cannot be
+    opened or written, the disk is full, or the disk reported an error.
+    Nothing was written to the file, and it is never offered to be moved
+    aside: it may be whole. path is the file, and detail what SQLite said.
+    """
+
+    def __init__(self, path: Path | str, detail: str):
+        super().__init__(f"The project record at {path} could not be opened: {detail}")
+        self.path = Path(path)
+        self.detail = detail
+
+
+# SQLite's result codes for a file whose contents are damaged (SQLITE_CORRUPT) and for one that is not a
+# database (SQLITE_NOTADB). Every other error opening a record, "database is locked" among them, is about
+# getting to the file, not about what is in it.
+_DAMAGE_CODES = frozenset({11, 26})
+
+
+def _says_damaged(exc: sqlite3.DatabaseError) -> bool:
+    """Whether an error opening a record says the file itself is damaged. An extended code keeps its primary one."""
+    code = getattr(exc, "sqlite_errorcode", None)
+    return isinstance(code, int) and (code & 0xFF) in _DAMAGE_CODES
+
+
 def _damage(conn: sqlite3.Connection) -> str:
     """What SQLite's quick check finds wrong with an open database. "" when it finds nothing."""
     rows = conn.execute("PRAGMA quick_check").fetchall()
@@ -419,7 +446,11 @@ class Record:
                         (str(SCHEMA_VERSION),),
                     )
             except sqlite3.DatabaseError as exc:
-                raise RecordDamaged(self.path, str(exc)) from exc
+                # Only what SQLite says of the file's contents makes it damaged. A record another program has
+                # locked, or one that cannot be opened or written, is not offered to be moved aside.
+                if _says_damaged(exc):
+                    raise RecordDamaged(self.path, str(exc)) from exc
+                raise RecordUnavailable(self.path, str(exc)) from exc
             finally:
                 # Closed here, not left to the collector: on Windows an open handle keeps the file from being
                 # moved aside.
