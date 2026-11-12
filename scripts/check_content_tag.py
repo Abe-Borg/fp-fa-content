@@ -2,15 +2,20 @@
 """Refuse to publish a content-v* tag unless its commit is on main and the repository's owner pushed it.
 
 .github/workflows/content-pack.yml runs this first, before anything is tested, built, or published, after
-fetching main into refs/remotes/origin/main. Any finding fails the publish job:
+fetching main into refs/remotes/origin/main and writing the tags of the content packs already published (the
+repository's content-v* GitHub releases, drafts left out) to a file, one per line. Any finding fails the publish job:
 
   * the tag is not named like content-v0.6.0;
   * the tag's commit is not on main (an ancestor of main's tip, or the tip itself). A tag pushed on a branch
     that was never merged, or on a commit main no longer holds, publishes nothing;
-  * the tag was pushed by someone other than the repository's owner, when both names are given.
+  * the tag's version is not above every content pack already published, so the feed never goes back a
+    version. Only a published release sets that floor: a tag this check refused never got a release, so a
+    refused content-v9999.0 blocks nothing. The same tag published before (a rerun) is not its own floor;
+  * the tag was pushed by someone other than the repository's owner. The owner, the account that pushed, and
+    the published list are all required: a check that is not told them refuses to run.
 
-It reads git and nothing else. It does not decide what a pack holds; the strip scan and the builder do that.
-Exit status is 0 when the tag may publish and 1 otherwise.
+It reads git and the list it is given. It does not decide what a pack holds; the strip scan and the builder do
+that. Exit status is 0 when the tag may publish and 1 otherwise.
 """
 
 from __future__ import annotations
@@ -24,15 +29,39 @@ from pathlib import Path
 TAG = re.compile(r"^content-v\d+(?:\.\d+)+$")
 
 
+def _version(tag: str) -> tuple[int, ...] | None:
+    """The numbers of a content tag's version, or None for a tag not named like content-v0.6.0."""
+    if not TAG.match(tag or ""):
+        return None
+    return tuple(int(part) for part in tag[len("content-v"):].split("."))
+
+
 def _git(cwd: Path, *args: str) -> subprocess.CompletedProcess:
     return subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, check=False)
 
 
-def tag_problems(tag: str, main_ref: str, *, actor: str = "", owner: str = "", cwd: Path | None = None) -> list[str]:
-    """What stops this tag from publishing. Empty when it may."""
+def _highest_published(published, tag: str) -> tuple[tuple[int, ...], str] | None:
+    """The highest content pack already published, other than this tag: the version a new one must be above.
+
+    published is the tags of the content-v* releases. A name not like content-v0.6.0 is not a content pack.
+    """
+    best = None
+    for name in published:
+        name = str(name or "").strip()
+        numbers = _version(name)
+        if name == tag or numbers is None:
+            continue
+        if best is None or numbers > best[0]:
+            best = (numbers, name)
+    return best
+
+
+def tag_problems(tag: str, main_ref: str, *, actor: str, owner: str, published, cwd: Path | None = None) -> list[str]:
+    """What stops this tag from publishing. Empty when it may. published is the tags of the packs already out."""
     where = Path(cwd) if cwd is not None else Path.cwd()
     found: list[str] = []
-    if not TAG.match(tag or ""):
+    mine = _version(tag)
+    if mine is None:
         found.append(f"{tag!r} is not a content tag. A content tag looks like content-v0.6.0.")
     commit = _git(where, "rev-parse", "--verify", "--quiet", f"refs/tags/{tag}^{{commit}}")
     tip = _git(where, "rev-parse", "--verify", "--quiet", f"{main_ref}^{{commit}}")
@@ -47,7 +76,14 @@ def tag_problems(tag: str, main_ref: str, *, actor: str = "", owner: str = "", c
             found.append(f"The tag {tag} points at {sha}, which is not on main. A content pack is published only from main.")
         elif ancestor.returncode != 0:
             found.append(f"git could not compare {sha} with main: {ancestor.stderr.strip()[:200]}")
-    if owner and actor != owner:
+    if mine is not None:
+        highest = _highest_published(published, tag)
+        if highest is not None and mine <= highest[0]:
+            found.append(f"The tag {tag} is not above {highest[1]}, which is already published. A content pack is "
+                         "published only with a version above every earlier one, so the feed never goes back.")
+    if not owner:
+        found.append("The repository owner is not named, so the check cannot tell who may publish.")
+    elif actor != owner:
         found.append(f"The tag was pushed by {actor or 'an unnamed account'}. Only the repository owner, {owner}, publishes content.")
     return found
 
@@ -56,10 +92,17 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Refuse a content-v* tag that is not on main")
     parser.add_argument("--tag", required=True, help="The tag's name, such as content-v0.6.0")
     parser.add_argument("--main-ref", default="refs/remotes/origin/main", help="The ref that holds main's tip")
-    parser.add_argument("--actor", default="", help="The account that pushed the tag")
-    parser.add_argument("--owner", default="", help="The repository owner. When given, only that account may publish")
+    parser.add_argument("--actor", required=True, help="The account that pushed the tag")
+    parser.add_argument("--owner", required=True, help="The repository owner, the one account that may publish")
+    parser.add_argument("--published-file", required=True, type=Path,
+                        help="The tags of the content-v* releases already published, one per line (empty for none)")
     args = parser.parse_args(argv)
-    problems = tag_problems(args.tag, args.main_ref, actor=args.actor, owner=args.owner)
+    try:
+        published = args.published_file.read_text(encoding="utf-8").split()
+    except OSError as exc:
+        sys.stdout.write(f"::error::The list of published content packs cannot be read: {exc}\n")
+        return 1
+    problems = tag_problems(args.tag, args.main_ref, actor=args.actor, owner=args.owner, published=published)
     for line in problems:
         sys.stdout.write(f"::error::{line}\n")
     if problems:

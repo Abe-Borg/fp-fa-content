@@ -76,7 +76,10 @@ HEAVY_TEXT_ONLY = (
     "Do not use them to recompute a zone. "
     "Figures already in the user message govern. "
     "Scope stays wet pipe, dry pipe, and double-interlock preaction. "
-    "Do not design foam, clean agent, water mist, deluge, single-interlock, or a Canadian path."
+    "Do not design foam, clean agent, water mist, deluge, or single-interlock. "
+    # Canada is in scope only through a skill's Country gate (US | Canada), and this session cannot read a skill.
+    "A Canada job is in scope only through a skill's Country gate, which this session cannot read: do not state "
+    "a Canada pin here, and say the desktop path holds it. CAN/ULC and CEC Section 32 bodies stay NEEDS HOLD."
 )
 
 DELETE_FAILURE_NOTE = (

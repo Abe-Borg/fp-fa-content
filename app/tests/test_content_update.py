@@ -374,12 +374,17 @@ class ContentPackBuildTests(unittest.TestCase):
         fetch = text.index("+refs/heads/main:refs/remotes/origin/main")
         app_suite = text.index("(cd app && python -m unittest discover -s tests)")
         build = text.index("python3 scripts/build_content_pack.py")
-        publish = text.index("gh release")
+        publish = text.index("gh release create")
         self.assertLess(fetch, gate)
         self.assertLess(gate, app_suite)
         self.assertLess(app_suite, build)
         self.assertLess(build, publish)
         self.assertIn("--owner", text[gate:app_suite])
+        # The version floor is the published releases, read before the gate and handed to it.
+        listing = text.index("gh release list --exclude-drafts")
+        self.assertLess(listing, gate)
+        self.assertIn("--published-file", text[gate:app_suite])
+        self.assertIn("shell: bash", text[:gate])
         self.assertIn("fetch-depth: 0", text)
         # The kernel reproduce check stays a hand run.
         self.assertNotIn("FP_KERNEL_DIR:", text)
@@ -417,29 +422,85 @@ class ContentPackBuildTests(unittest.TestCase):
         (repo / "a.txt").write_text("three\n", encoding="utf-8")
         git("commit", "-q", "-am", "three")
 
-        self.assertEqual(gate.tag_problems("content-v0.6.0", "refs/heads/main", cwd=repo), [])
-        self.assertEqual(
-            gate.tag_problems("content-v0.6.0", "refs/heads/main", actor="owner", owner="owner", cwd=repo), []
-        )
-        side = gate.tag_problems("content-v0.6.1", "refs/heads/main", cwd=repo)
+        who = {"actor": "owner", "owner": "owner", "cwd": repo, "published": []}
+        self.assertEqual(gate.tag_problems("content-v0.6.0", "refs/heads/main", **who), [])
+        side = gate.tag_problems("content-v0.6.1", "refs/heads/main", **who)
         self.assertEqual(len(side), 1)
         self.assertIn("not on main", side[0])
-        self.assertTrue(any("not a content tag" in line for line in gate.tag_problems("content-beta", "refs/heads/main", cwd=repo)))
-        other = gate.tag_problems("content-v0.6.0", "refs/heads/main", actor="someone", owner="owner", cwd=repo)
+        self.assertTrue(any("not a content tag" in line for line in gate.tag_problems("content-beta", "refs/heads/main", **who)))
+        other = gate.tag_problems("content-v0.6.0", "refs/heads/main", actor="someone", owner="owner", cwd=repo,
+                                  published=[])
         self.assertTrue(any("Only the repository owner" in line for line in other))
-        missing = gate.tag_problems("content-v0.6.0", "refs/remotes/origin/main", cwd=repo)
+        unnamed = gate.tag_problems("content-v0.6.0", "refs/heads/main", actor="owner", owner="", cwd=repo,
+                                    published=[])
+        self.assertTrue(any("owner is not named" in line for line in unnamed))
+        missing = gate.tag_problems("content-v0.6.0", "refs/remotes/origin/main", **who)
         self.assertTrue(any("Fetch main" in line for line in missing))
+        listed = repo.parent / f"{repo.name}-published.txt"
+        listed.write_text("", encoding="utf-8")
+        names = ["--actor", "owner", "--owner", "owner", "--published-file", str(listed)]
         proc = subprocess.run(
-            [sys.executable, str(spec_path), "--tag", "content-v0.6.1", "--main-ref", "refs/heads/main"],
+            [sys.executable, str(spec_path), "--tag", "content-v0.6.1", "--main-ref", "refs/heads/main", *names],
             cwd=repo, capture_output=True, text=True, check=False,
         )
         self.assertEqual(proc.returncode, 1)
         self.assertIn("::error::", proc.stdout)
         proc = subprocess.run(
-            [sys.executable, str(spec_path), "--tag", "content-v0.6.0", "--main-ref", "refs/heads/main"],
+            [sys.executable, str(spec_path), "--tag", "content-v0.6.0", "--main-ref", "refs/heads/main", *names],
             cwd=repo, capture_output=True, text=True, check=False,
         )
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        # The owner, the account that pushed, and the published list are required: without them the guard does not run.
+        proc = subprocess.run(
+            [sys.executable, str(spec_path), "--tag", "content-v0.6.0", "--main-ref", "refs/heads/main"],
+            cwd=repo, capture_output=True, text=True, check=False,
+        )
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn("--actor", proc.stderr)
+        self.assertIn("--published-file", proc.stderr)
+        proc = subprocess.run(
+            [sys.executable, str(spec_path), "--tag", "content-v0.6.0", "--main-ref", "refs/heads/main",
+             "--actor", "owner", "--owner", "owner", "--published-file", str(repo / "no-such-list.txt")],
+            cwd=repo, capture_output=True, text=True, check=False,
+        )
+        self.assertEqual(proc.returncode, 1, "a list that cannot be read publishes nothing")
+        self.assertIn("cannot be read", proc.stdout)
+
+        # A version not above the latest published content pack is refused, so the feed never goes back.
+        git("tag", "content-v0.5.9")
+        older = gate.tag_problems("content-v0.5.9", "refs/heads/main", **{**who, "published": ["content-v0.6.0"]})
+        self.assertEqual(older, ["The tag content-v0.5.9 is not above content-v0.6.0, which is already published. A "
+                                 "content pack is published only with a version above every earlier one, so the feed "
+                                 "never goes back."])
+        self.assertEqual(gate.tag_problems("content-v0.6.0", "refs/heads/main",
+                                           **{**who, "published": ["content-v0.6.0"]}), [],
+                         "a rerun of the tag that published is not its own floor")
+        git("tag", "content-v0.7.0")
+        self.assertEqual(gate.tag_problems("content-v0.7.0", "refs/heads/main",
+                                           **{**who, "published": ["content-v0.5.0", "content-v0.6.0", "app-v0.3.2"]}), [])
+        git("tag", "content-v0.6.5")
+        self.assertTrue(any("is not above content-v0.7.0" in line for line in gate.tag_problems(
+            "content-v0.6.5", "refs/heads/main", **{**who, "published": ["content-v0.6.0", "content-v0.7.0"]})))
+        # Only a release sets the floor. A refused tag got none: a content-v9999.0 that someone else pushed on a main
+        # commit, and the side branch's content-v0.6.1, are tags here but not releases, so they block nothing.
+        git("tag", "content-v9999.0")
+        self.assertTrue(any("Only the repository owner" in line for line in gate.tag_problems(
+            "content-v9999.0", "refs/heads/main", **{**who, "actor": "someone"})))
+        git("tag", "content-v0.8.0")
+        self.assertEqual(gate.tag_problems("content-v0.8.0", "refs/heads/main",
+                                           **{**who, "published": ["content-v0.6.0", "content-v0.7.0"]}), [])
+        listed.write_text("content-v0.6.0\ncontent-v0.7.0\n", encoding="utf-8")
+        proc = subprocess.run(
+            [sys.executable, str(spec_path), "--tag", "content-v0.8.0", "--main-ref", "refs/heads/main", *names],
+            cwd=repo, capture_output=True, text=True, check=False,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        proc = subprocess.run(
+            [sys.executable, str(spec_path), "--tag", "content-v0.6.5", "--main-ref", "refs/heads/main", *names],
+            cwd=repo, capture_output=True, text=True, check=False,
+        )
+        self.assertEqual(proc.returncode, 1)
+        self.assertIn("is not above content-v0.7.0", proc.stdout)
 
 
 class ContentUpdateTests(unittest.TestCase):
@@ -765,6 +826,30 @@ class ContentUpdateTests(unittest.TestCase):
             self.assertFalse((installed / "pack.json").exists())
             (seed / "pack.json").write_bytes(seed_marker("0.6.0"))
             self.assertEqual(content_root(), seed.resolve())
+
+    def test_an_unversioned_or_non_numeric_install_does_not_beat_a_numbered_seed(self):
+        from fpfa.paths import content_root, data_dir, write_config
+
+        parent, seed = self._frozen_seed("0.6.0")
+        for label, version in (("unversioned", None), ("non-numeric", "beta"), ("bundled seed label", "bundled seed")):
+            with self.subTest(label=label):
+                folder = data_dir() / "content-packs" / f"probe-{label.replace(' ', '-')}"
+                write_tree(folder, {"skills/example/SKILL.md": f"{label}\n"})
+                write_config({"content_root": str(folder.resolve()), "content_version": version or ""})
+                with self._frozen(parent):
+                    self.assertEqual(content_root(), seed.resolve())
+        # A folder the designer chose inside the install folder is theirs: it stays.
+        chosen = data_dir() / "content-packs" / "chosen"
+        write_tree(chosen, {"skills/example/SKILL.md": "chosen\n"})
+        write_config({"content_root": str(chosen.resolve()), "content_version": "custom"})
+        with self._frozen(parent):
+            self.assertEqual(content_root(), chosen.resolve())
+        # With a seed that has no number (a source checkout), an unversioned install is not passed over.
+        unnumbered_parent, _unnumbered = self._frozen_seed(None)
+        folder = data_dir() / "content-packs" / "probe-unversioned"
+        write_config({"content_root": str(folder.resolve()), "content_version": ""})
+        with self._frozen(unnumbered_parent):
+            self.assertEqual(content_root(), folder.resolve())
 
     def test_a_folder_the_designer_chose_is_not_passed_over_for_the_seed(self):
         from fpfa.content_update import remember_selected_root
