@@ -355,12 +355,12 @@ Q_2_3 = (2/3) * V_gal # gpm
 | `preaction-releasing-c-and-e-soo` | **Names** 30/60 clocks; DI simultaneous vs sequential words in SOO; does **not** prove fill | **Proves** delivery or marks `unresolved`/`handoff` unproved |
 | `itm-design-for-testability` | Writes **30 s + remote-end** into CD spec / features; does **not** run fill | Supplies the prove-side criterion status |
 | `commissioning-ist-acceptance-packet` | **Owns witnessed** test script / IST baseline | Names measured-test method when elected; does not witness |
-| `nitrogen-inerting-and-c-factor-gate` | Medium air vs N₂, generator vs cylinders, C=100 vs earned 120, **30-minute FILL** | Only whether the elected QOD is listed for that medium |
+| `nitrogen-inerting-and-c-factor-gate` | Medium air vs N₂, generator vs cylinders, C=100 (no nitrogen C credit), **30-minute FILL** | Only whether the elected QOD is listed for that medium |
 | `preaction-el-el-trim-election` | Valve-room **trim SKU** / El/El hardware | Pass: valve family + QOD model + need for anti-flood / Accelo-Check / solenoid / CoilKeeper as a **function**, not a part table |
 
 Emit rows:
 
-- `HAND OFF — nitrogen-inerting-and-c-factor-gate: medium air vs N₂, generator vs cylinders, C=100 vs earned 120, 30-minute FILL (compressor half). This Skill only asked whether the elected QOD is listed for that medium.`
+- `HAND OFF — nitrogen-inerting-and-c-factor-gate: medium air vs N₂, generator vs cylinders, C=100 (no nitrogen C credit), 30-minute FILL (compressor half). This Skill only asked whether the elected QOD is listed for that medium.`
 - `HAND OFF — preaction-el-el-trim-election. Do not write a trim schedule or SKU list here.`
 - `HAND OFF — preaction-releasing-c-and-e-soo: DI simultaneous vs sequential; low air is alarm-only on SI (comparison) and supervisory only on DI, where the trip input is P, the pressure drop from sprinkler operation. Peer named clocks; this Skill proves or marks unproved. Do not rewrite the matrix.`
 - `HAND OFF — itm-design-for-testability: 30 s + remote design-pressure criterion into CD; this Skill does not write the interval table.`

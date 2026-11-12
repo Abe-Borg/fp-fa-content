@@ -33,7 +33,13 @@ def _sources():
             yield path
 
 
+# The release zip leaves calcs/fp/draft/ out (scripts/build_content_pack.py), so the tests that need the
+# draft's files skip in an installed pack. In the repository the folder is there and they run.
+_NEEDS_DRAFT = unittest.skipUnless(DRAFT.is_dir(), "calcs/fp/draft/ is held out of a built pack")
+
+
 class DraftHeldTests(unittest.TestCase):
+    @_NEEDS_DRAFT
     def test_draft_files_are_present_and_say_held(self):
         text = (DRAFT / (MODULE + ".py")).read_text(encoding="utf-8")
         self.assertIn('STATUS = "DRAFT, HELD, NOT WIRED"', text)
@@ -56,9 +62,11 @@ class DraftHeldTests(unittest.TestCase):
             self.assertNotIn("el_pn", text.lower())
             self.assertNotIn("valve_release", text)
 
+    @_NEEDS_DRAFT
     def test_draft_directory_is_not_a_package(self):
         self.assertFalse((DRAFT / "__init__.py").exists())
 
+    @_NEEDS_DRAFT
     def test_draft_own_tests_pass_in_their_own_process(self):
         done = subprocess.run(
             [sys.executable, "-m", "unittest", "discover", "-s", str(DRAFT), "-p", "test_*.py"],

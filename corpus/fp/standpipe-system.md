@@ -16,7 +16,7 @@ The company residual at the most remote 2-1/2 in. outlet is 100 psi. A federal s
 
 A federal specification also splits who carries the flow: below 75 ft the fire department supplies a manual standpipe through the fire-department connection, and an on-site pump in a combination system is sized for the sprinkler demand; at 75 ft and above the pump includes the standpipe demand. That split is the specification, not §905. On an automatic standpipe, feed the simultaneous sprinkler and standpipe demand into `pump-and-supply.md`. On a manual standpipe, do not put the standpipe gallons on the building pump, and still confirm the supply can deliver the minimum standpipe flow. Calculate only the demands that can run together (`hydraulic-method.md`).
 
-Company hydraulics stay on the C-factors in `hydraulic-method.md`. A federal standpipe specification's C = 120 for steel is that specification. Do not use it to raise a dry or double-interlock calculation off C = 100.
+Company hydraulics stay on the C-factors in `hydraulic-method.md`. A federal standpipe specification's C = 120 for steel is that specification. Do not use it to raise any company calculation, including the standpipe, off C = 100.
 
 ## Pressure and the connection
 
