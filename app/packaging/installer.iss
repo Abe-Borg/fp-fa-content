@@ -23,7 +23,7 @@
 ; terms. app/tests/test_branding.py pins all of this.
 
 #ifndef MyAppVersion
-  #define MyAppVersion "0.3.2"
+  #define MyAppVersion "0.3.3"
 #endif
 
 #define MyAppName "+Cynosure"
