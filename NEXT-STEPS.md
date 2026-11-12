@@ -10,6 +10,48 @@ Sizes: **S** is under about 50 lines of application code plus a test, **M** is 5
 
 ---
 
+## 0. Status: items 1 to 6 are done, as version 0.3.1
+
+Added 2026-11-12, after the owner's answer to question 1 ("fix first as 0.3.1, start with items 1 to 6") and with two of the report's evidence files in hand. Everything below this section is the plan as first written; this section says what became of it.
+
+| # | Defect | What was done | Held by |
+| --- | --- | --- | --- |
+| 1 | BUG-006 | A cut-off checker reply ends the check and changes no finding; it is a `check_incomplete` event with its usage and is never the latest check. The request asks for 16,000 tokens and keeps the stop reason. A record goes eight claims to a request. A claim a finished reply skips is "No verdict" and goes back to not checked. A finding may rest on a decision, and a support id on no table is said in the tool result | `test_acceptance_report.UnfinishedCheckTests` (9) |
+| 2 | BUG-005 | A calculation whose cites name another edition than the job states carries EDITION NOT RECONCILED, before a rerun and after one, in the draft, the coverage gaps, the run's flags, `/status`, the lead's block, and the Team tab | `EditionHoldTests` (5) |
+| 3 | BUG-003, N-3 | A supported finding is in the first group only when the application matched a figure or the releasing record's expression in it; otherwise it is in a new fifth group. The figure rule reads every known unit by class. A fact a contributor wrote is a RECORDED FACT, not a project input | `TraceGuardTests` (7) |
+| 4 | BUG-002 | `di_trip_to_water` and `nitrogen_gate` run on the takeoff's own zone total | `test_hardening`, `test_a_rounded_volume_cannot_carry_the_trip_time_across_its_limit` |
+| 5 | N-1 | The calc-code identity and the content fingerprint hash a file with its line endings set aside | `IdentityTests` (3) |
+| 6 | BUG-010 | The Section 21 13 19 claim check closes on a `section_check` event with its usage, counted in the cost report, blocked export or failed request alike | `SectionCheckUsageTests` (4) |
+
+**What the two evidence files settled.**
+
+- `truncated-checker-proof.json` is BUG-006 exactly as inferred: `stop_reason` `max_tokens`, 4,000 output tokens of which 4,000 were thinking, and an empty `content` list. It adds one figure the plan did not have: that one check carried 30,046 input tokens for about sixteen findings. That is why the fix splits the record into requests of eight and does not only raise the ceiling. The tests replay this reply.
+- `section-export-assessment.json` answers item 7 (N-2). The tester's own reading of the 1-of-12 result is that the cite "flattens tool figures into unlabeled number bag, so checker refuses to infer quantity roles", and that it was not a truncation. That is the cause proposed in section 3, now on the tester's evidence and not only on a reading of `claim_check._package_source`. So item 7 is no longer "find out why": it is application work, to build the Section cites from each record's named outputs the way the trace check does. It is **not** done here; it was not among items 1 to 6.
+
+**Where the work departs from the plan as written, and the defaults taken on questions that were not answered.** Each is one constant or one small function, and each is yours to reverse.
+
+1. *Question 2, an unfinished check and the Design Basis.* The export waits, as it does when no check has run. That is the rule `CLAUDE.md` already had ("a current trace check"), so no gate was changed. The plan's alternative, exporting with the findings marked not checked, would change that rule and is still yours to choose.
+2. *A cut-off reply keeps nothing.* The plan's test said "k judged, the rest untouched". Implemented instead: a cut-off reply writes no verdict at all, because a check speaks for the findings it saw or for none, and half of one beside half of an older one would read as a single check. A reply that **finished** and skipped a claim is different: the check is complete and that one claim goes back to not checked.
+3. *Question 3, the new group's name.* It is "Trace-consistent with an identified row, on the checker's reading alone" (`checker.TIER_TITLE`). Reword it as you like; the tests hold only that no title reads as verification.
+4. *The wrong release statements are kept out of the first group, not rejected.* "Releases on detection alone" with a checker that approves it now lands in the new group with the reason that only the checker's reading stands behind it. A true statement in other words lands there too: the application cannot tell them apart. Rejecting the false one needs new wording rules, which the pack lint carries a copy of. That proposal is written up for the content team in `docs/content-provenance.md`, section 2b-1, with the gallons constant and the 2022 edition body.
+5. *Question 9, `.gitattributes`.* Not added. The hash was made insensitive, which closes the defect by itself and does not touch your Windows working tree. Pinning line endings is still open.
+6. *The edition hold is a row-level hold.* It does not move a finding to the engineer's group, because most findings on a held calculation (a trip time against the insurer's screen, say) do not turn on the edition. It is not staleness either. And the application still passes no edition to the kernel: whether it should, for 2019, is the mixed question in section 3.
+7. *The gas fill is included in item 4*, as planned, and it changed one existing test's fixture: a specialist's gas-fill call with the volume rounded and the plan's own pressure and time is now the plan's row, so that test's exploratory calculation became a what-if on the fill time.
+
+**Limits found while doing it, not fixed.**
+
+- The first group's test is what the application matched, not what is true. A finding that quotes the releasing record's expression and then contradicts it in the same sentence would still be in the first group with an approving checker, as a finding with a correct figure and a wrong conclusion always could.
+- "600 gal/hr" is still read as 600 gal: one of the eight original units followed by a slash is taken as that unit. Only a ratio that starts with a unit the application does not know gets a class of its own.
+- A number written in words is read only before one of the eight original units, and "one and two minutes" is not read at all.
+- A record made on a Windows build under 0.2.0 or 0.3.0 holds the CRLF identity and will read as out of date once under 0.3.1. It would in any case: the kernel changed between those versions.
+- The scripted evaluation's probe check is two requests now, since it covers eleven findings.
+
+**Suites at the head of this work**, on Linux, Python 3.13.18: `calcs/fp` 262 pass (1 skipped), `calcs/fa` 88 pass (13 skipped), `app/frontend` 29 pass, `app` 540 tests, 539 pass and the same one environment error as before (`pywebview` does not install in this container). Both browser tests ran. The page was rebuilt and the README's pictures retaken from the scripted scenario.
+
+**Still not done by anyone:** nothing in 0.3.1 has run on Windows or against the live model. Items 7 to 10 of the list below are open. Section 5 is unchanged except that the line-ending step is now a written step in `docs/acceptance-tests.md` (Test A, step 2a).
+
+---
+
 ## 1. Prioritized fix list
 
 Ordered by what I would do first. Items 1 to 6 should land before a 0.3.x build goes to Windows or to a second live run, because the retest would otherwise find them again.
