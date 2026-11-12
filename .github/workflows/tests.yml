@@ -52,5 +52,5 @@ jobs:
 
       - name: app
         working-directory: app
-        # The two browser tests in test_web.py need Playwright and are skipped where it is not installed.
+        # The browser tests in test_web.py need Playwright and are skipped where it is not installed.
         run: python -m unittest discover -s tests

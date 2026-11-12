@@ -128,6 +128,7 @@ Automated half, already passed: `app/tests/test_usage.py` proves the events, the
 | Retries with the API's retry-after, the effort field off by default | Tested against a fake transport | `test_desk_team.py`, `test_streaming.py` |
 | Kill and relaunch, the instance lock, sleep and wake as a clock gap | Tested, with a real process kill | `test_recovery.py` |
 | The window's page: menus, thread, the job panel and its three tabs, the form, the figures of a run, and the Team tab with an answer typed into it | Tested in Chromium on Linux | `test_web.py` (`e2e.mjs`, `e2e_team.mjs`) |
+| The screenshot tool for looking at the window: it shoots the scheme the app serves at the device scale asked for, and stops with nothing written when asked for another scheme | Tested in Chromium on Linux. Its argument checks need only Node.js | `test_web.py`, `ScreenshotToolTests` (`shoot.mjs`) |
 | The Results tab's figures held to the tool output and to the narrative, label for label; the window's layout remembered between runs | Tested | `test_results_panel.py`, `frontend/tests/layout.test.ts` |
 | A stale, replaced, or basis-free finding cannot keep an old figure current in a reply; a figure is matched with its unit | Tested on written replies | `test_hardening.py` |
 | The size exemption on the recorded row, the narrative, the tile, and both documents is the zone-total answer; a pipe-only screen gives none | Tested, including the 475 gal pipe and 505.5 gal zone case | `test_hardening.py`, `test_prototype.py` |
@@ -174,7 +175,7 @@ Automated half, already passed: `app/tests/test_usage.py` proves the events, the
 | Any check of the engineering basis against NFPA 13, NFPA 72, FM DS 5-32, or a manufacturer's listing; any qualified engineer's review | **Not done** | `docs/releasing-basis.md`, section 8 |
 | The skipped tests: 13 `calcs/fa` code-quote tests (no code text in the repository) and the FP kernel reproduce check (needs the kernel source folder) | **Skipped** in every run here | `calcs/fa`, `calcs/fp/test_kernel_reproduce.py` |
 | The held electric/pneumatic draft under `calcs/fp/draft/` | **Not run** by these suites, imported by nothing | held work |
-| The test workflow on GitHub (`.github/workflows/tests.yml`) | Ran and passed on the pull request that added it, on Python 3.12. It skips the two browser tests: the runner has no Playwright | new in this milestone |
+| The test workflow on GitHub (`.github/workflows/tests.yml`) | Ran and passed on the pull request that added it, on Python 3.12. It skips the browser tests, which need Playwright: the runner has none | new in this milestone |
 | The Windows installer, WebView2 window, Credential Manager, sleep and hibernate on real hardware | **Unrun** | Tests A, C, D, E above |
 | The pictures in the README | Taken from the simulated scenario | `docs/screenshots/` |
 
