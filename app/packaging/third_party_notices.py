@@ -33,6 +33,8 @@ What is listed.
   WebView2 runtime itself is part of Windows and is not bundled.
 * The npm packages whose code is in the page, from fpfa/web/static/licenses.json,
   which the page's build (app/frontend/vite.config.ts) writes from node_modules.
+  That build fails on a module in the bundle that is neither an npm package's nor
+  one of the page's own sources, so no other module ships unlisted.
 
 It is strict. A listed package with no license text, an interpreter without
 its license file, a WebView2 SDK without its text, or a page bundle whose
