@@ -123,7 +123,7 @@ Automated half, already passed: `app/tests/test_usage.py` proves the events, the
 | The figures in a reply looked up on the record | Tested on written replies | `test_desk_team.py` |
 | Retries with the API's retry-after, the effort field off by default | Tested against a fake transport | `test_desk_team.py`, `test_streaming.py` |
 | Kill and relaunch, the instance lock, sleep and wake as a clock gap | Tested, with a real process kill | `test_recovery.py` |
-| The window's page: menus, thread, the job panel and its three tabs, the form, the figures of a run, and the Team tab with an answer typed into it | Tested in Chromium on Linux | `test_web.py` (`e2e.mjs`, `e2e_team.mjs`) |
+| The window's page: menus, thread, the job panel and its three tabs, the form, the figures of a run, and the Team tab with an answer typed into it; on the Team tab, the sentence of what kind of checking this is read whole with its row closed, from where the other cards' text starts, and the row opened from the keyboard to the kinds of assurance | Tested in Chromium on Linux | `test_web.py` (`e2e.mjs`, `e2e_team.mjs`) |
 | The Results tab's figures held to the tool output and to the narrative, label for label; the window's layout remembered between runs | Tested | `test_results_panel.py`, `frontend/tests/layout.test.ts` |
 | A stale, replaced, or basis-free finding cannot keep an old figure current in a reply; a figure is matched with its unit | Tested on written replies | `test_hardening.py` |
 | The size exemption on the recorded row, the narrative, the tile, and both documents is the zone-total answer; a pipe-only screen gives none | Tested, including the 475 gal pipe and 505.5 gal zone case | `test_hardening.py`, `test_prototype.py` |

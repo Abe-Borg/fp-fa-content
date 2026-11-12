@@ -386,10 +386,10 @@ export function TeamPanel({
             {team.ladder.length ? (
               <section className="team-block" id="team-assurance">
                 <h3 className="section-label">WHAT KIND OF CHECKING THIS IS</h3>
-                <div className="card">
-                  <details className="exchange">
+                <div className="card ladder">
+                  <details className="assurance">
                     <summary>
-                      <span className="exchange-brief">
+                      <span className="assurance-brief">
                         The trace check is a consistency check on the team's own record. Two kinds of assurance were not
                         performed.
                       </span>
