@@ -767,5 +767,69 @@ class LiveTeamTests(unittest.TestCase):
             root.destroy()
 
 
+class TextContrastTests(unittest.TestCase):
+    """F-005. Small secondary text read --ink-faint, 2.7 to 4.6:1. Error, warning, and link text was as low as 3.2:1."""
+
+    # What takes a colour and is not text a reader needs: a separator dot, an icon or a glyph that a word beside it
+    # repeats, and the wordmark. They keep their tokens.
+    DECORATION = {".line-row .sep", ".card-title svg", ".welcome-card:hover .card-title svg", ".star", ".wordmark .plus",
+                  ".new-chat svg", ".tone-accent .glyph", ".tone-ok .glyph", ".tone-err .glyph", ".tone-warn .glyph",
+                  ".step.done .step-mark", ".step.doing .step-mark", ".step.blocked .step-mark"}
+
+    def _rules(self):
+        import re
+
+        css = (APP_DIR / "frontend" / "src" / "styles.css").read_text(encoding="utf-8")
+        css = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
+        for match in re.finditer(r"([^{}]+)\{([^{}]*)\}", css):
+            colour = re.search(r"(?<![-\w])color:\s*([^;]+);", match.group(2))
+            if colour:
+                for selector in match.group(1).split(","):
+                    yield " ".join(selector.split()), colour.group(1).strip()
+
+    def _resolve(self, value, colors):
+        import re
+
+        from fpfa.shapes import mix
+
+        plain = re.fullmatch(r"var\(--([\w-]+)\)", value)
+        if plain:
+            return plain.group(1).replace("-", "_"), colors[plain.group(1).replace("-", "_")]
+        mixed = re.fullmatch(r"color-mix\(in srgb, var\(--([\w-]+)\) (\d+)%, var\(--([\w-]+)\)\)", value)
+        if mixed:
+            first, share, second = mixed.group(1).replace("-", "_"), int(mixed.group(2)), mixed.group(3).replace("-", "_")
+            return first, mix(colors[first], colors[second], share / 100.0)
+        return None, None
+
+    def test_every_rule_that_colours_text_reads_at_4_5_to_1_in_every_scheme(self):
+        from fpfa import theme
+        from fpfa.shapes import contrast
+
+        checked = 0
+        for selector, value in self._rules():
+            if selector in self.DECORATION or "disabled" in selector:
+                # The text of a control that is turned off is exempt (WCAG 2.2, 1.4.3, inactive components).
+                continue
+            for scheme in theme.SCHEMES.values():
+                token, colour = self._resolve(value, scheme.colors)
+                if colour is None:
+                    break  # currentColor, inherit, transparent mixes: the colour of what is around it.
+                if token == "on_accent":
+                    # Text on the accent, not on a surface. Warm Clay's white on terracotta is 3.1:1, below 4.5:1
+                    # for a button label: the accent is a brand colour, an open decision for the owner (NEXT-STEPS.md).
+                    continue
+                surfaces = ("paper",) if token.startswith("paper") else ("bg", "surface", "raised")
+                for surface in surfaces:
+                    ratio = contrast(colour, scheme.colors[surface])
+                    self.assertGreaterEqual(ratio, 4.5, (selector, value, scheme.id, surface, round(ratio, 2)))
+                checked += 1
+        self.assertGreater(checked, 100)
+
+    def test_the_faint_ink_colours_no_text_a_reader_needs(self):
+        for selector, value in self._rules():
+            if "--ink-faint" in value:
+                self.assertIn(selector, self.DECORATION, selector)
+
+
 if __name__ == "__main__":
     unittest.main()
