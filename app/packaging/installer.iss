@@ -1,7 +1,7 @@
 ; Windows setup for +Cynosure. Inno Setup 6.3 or newer (x64compatible).
 ; Compile with build_installer.ps1, or:
 ;
-;   ISCC /DMyAppVersion=0.3.1 installer.iss
+;   ISCC /DMyAppVersion=0.3.2 installer.iss
 ;
 ; Source is the PyInstaller folder next to this script, ..\dist\Cynosure\,
 ; from build_app.ps1. Output is ..\dist\Cynosure-Setup-<version>.exe.
@@ -23,7 +23,7 @@
 ; terms. app/tests/test_branding.py pins all of this.
 
 #ifndef MyAppVersion
-  #define MyAppVersion "0.3.1"
+  #define MyAppVersion "0.3.2"
 #endif
 
 #define MyAppName "+Cynosure"

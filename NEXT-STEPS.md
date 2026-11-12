@@ -52,6 +52,52 @@ Added 2026-11-12, after the owner's answer to question 1 ("fix first as 0.3.1, s
 
 ---
 
+## 0b. Version 0.3.2: the app-v0.3.0 acceptance report
+
+Added 2026-11-12. A second acceptance run (the "+Cynosure app test report", 2026-11-11, by another party) tested 0.3.0 at `04196bd` from source in Chromium on Linux, and found ten defects and a list of known gaps. Its verdict was NO-GO for acceptance under its regimen. `main` was then 0.3.1, which had closed two of the ten. Each finding was checked against 0.3.1 before anything changed, with the report's own evidence files where it had them: the checker diagnostic replay, the SI-unit records and reply, the missing-input reply, the corruption runs, and the contrast measurements. The owner then took the recommendations below as decisions.
+
+| Finding | Report's severity | At 0.3.1 | What 0.3.2 does | Held by |
+| --- | --- | --- | --- | --- |
+| F-001 a density or area of 0 runs | S1 | Open; the plan and the form also put 40 psig, 30 min, and 0 in place of a blank or a 0 | A zone run refuses a 0 where it means nothing and a blank it needs, naming each by the form's label; the form keeps what was typed; the lead cannot record a 0 density. The kernel still accepts a 0 in `density_area` (a content proposal) | `test_acceptance_report_030.ZoneInputTests` (7) |
+| F-002 a cut-off check read as "Not supported" | S1 | **Fixed in 0.3.1** (`a6e94a3`) | Its parser read only "N. Verdict" exactly, and since 0.3.1 a line it misread sends the finding back to not checked. It now reads case, bold, "1)", and list markers. Stop is heard between a check's requests | `CheckerReasonTests` (5); 0.3.1's `UnfinishedCheckTests` |
+| F-003 Team tab still during a turn | S2 | Open | Read again at most every two seconds while a job on the open job works | `LiveTeamTests` (1) |
+| F-004 damaged record, traceback | S2 | Open; reproduced on all three of the report's damaged copies | Named, left as it was, moved aside only on a yes, never deleted; `--move-damaged-record` | `DamagedRecordTests` (4) |
+| F-005 secondary text below 4.5:1 | S3 | Open, and wider: error, warning, and link text too | Secondary text is `--ink-dim`; status-coloured text is mixed toward the ink; a test reads every text colour in every scheme | `TextContrastTests` (2) |
+| F-006 a claim the screen does not depend on its assumed times | S2, live | The tool returned the fill time alone (28.1 s, inside 30 s) | The delivery tile prints it and the margin beside the verdict. The rule a team should keep is content and is proposed to the content team | `FillTimeTileTests` (1) |
+| F-007 the checker's reasons thrown away | S2 | Open | Kept as the checker's reading, apart from the application's, on the Team tab, in the Design Basis, and to the lead; the reply text kept for an audit | `CheckerReasonTests` |
+| F-008 SI figures run as US ones | S1, live | Open; nothing could convert | `fpfa.units` and the `convert_units` tool, recorded; `set_input` with a unit keeps both figures; the designer's SI figure is refused in a US field; the reply audit reads SI figures | `UnitConversionTests` (8) |
+| F-009 paused instead of an assumed screen | S2, live | The lead's rule told it to stop when the system type was unknown | The owner's ruling, in the lead's rule 4: go on with labeled assumptions; stop only for a takeoff with no pipe data | `MissingInputPolicyTests` (1) |
+| F-010 export check missing from `/usage` | S1 | **Fixed in 0.3.1** (`007ef80`) | Unchanged | 0.3.1's `SectionCheckUsageTests` |
+| LIV-R2 spend cap retried five times | known gap | Open | Never sent again; the API's words say when access resumes | `ApiClientTests` (6) |
+| LIV-R5 a wait Stop could not end | known gap | Open | The wait is on the job's cancel event | `ApiClientTests` |
+| LIV-U2 request ids not kept | known gap | Open | Every request's id and workspace kept on the job and counted in the report | `ApiClientTests` |
+| Time on the model counted twice | observation | Open | A check inside a turn is counted once | `ApiClientTests` |
+
+**Decisions the owner took (2026-11-12).** Each was the recommendation in the review:
+
+1. Missing inputs (F-009): go on with stated, labeled assumptions; the one stop is a takeoff with no pipe data at all.
+2. A damaged record (F-004): ask, and move it aside on a yes, never deleted.
+3. SI figures (F-008): converted through the chat and the tools now; whether the Inputs form takes SI is a later decision.
+4. A blank the run needs (area increase, hose, supervisory fill, fill time): stop and name the field.
+5. The faint, error, and link text colours change in all five schemes.
+6. The content items go to `docs/content-provenance.md`, section 2b-2, for the content team.
+7. Stopping a request in flight (an abort of the lead's stream on Stop) was not done. On reflection it would not have shortened the report's measured 18.5 s stop, which waited on a specialist's request, and those are not streamed. The wait to send a refused request again, the case that could hang for 30 s, is now cancellable.
+
+**Limits found while doing it, not fixed.**
+
+- Warm Clay's white text on its terracotta accent is 3.1:1 (2.6:1 on hover), below 4.5:1 for a button label. It is the brand colour: an open item for the owner (`docs/prototype-plan.md`, section 12, item 4a). The contrast test leaves text on the accent out and says so.
+- The SI guard catches the figure the designer gave. A figure the model remembers in SI from elsewhere (FM's 8 mm/min beside 0.2 gpm/ft², say) is not caught by it; the trace check and the reply audit, which now read SI units, are the guard there.
+- `convert_units` rows are not tied to the project inputs, as `fp_calc` rows are not, and a status block lists them as ones it cannot reconcile after an input change.
+- The Windows message box that asks about a damaged record has not been seen on Windows.
+
+**Content proposals** (`docs/content-provenance.md`, 2b-2): `density_area` to require a density and an area greater than 0; a rule that a claim about what a result depends on rests on a what-if run; one ruling on the NAC thin margin against the regimen; the kernels to return the spare ampere-hours and the hydrant deficit; the blind-claim-check skill's reply line to match the QA role's.
+
+**Still open from section 1 below, and not taken up here:** items 7 (whether the Section 21 13 19 export can open with the live checker: the 0.3.0 run's EXP-02 saw the gate block again), 8 (the evaluation's collaboration checks: the 0.3.0 run's REG-C3 and BLK-C1 reproduced the same gap), 9 (the Design Basis table layout), 10 (the pipe-only "passes"), and 11 (the gallons constant; the 0.3.0 run's own arithmetic used 231 in³ and saw the 0.1 gal differences it predicts).
+
+**Not done by anyone:** nothing in 0.3.2 has run on Windows or against the live model. F-006, F-008, and F-009 are live findings; 0.3.2 gives the application's side of each, and only a live rerun can say whether the model now does what the instructions and the tools allow.
+
+---
+
 ## 1. Prioritized fix list
 
 Ordered by what I would do first. Items 1 to 6 should land before a 0.3.x build goes to Windows or to a second live run, because the retest would otherwise find them again.
