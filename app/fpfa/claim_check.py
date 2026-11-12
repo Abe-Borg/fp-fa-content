@@ -74,9 +74,21 @@ _TOKEN = re.compile(
     re.IGNORECASE,
 )
 _NUMBERED = re.compile(r"(?m)^(?P<n>\d+)\.\s+(?P<body>\S.*?)\s*$")
+# One verdict line, as the QA role asks for it and as a model writes it anyway: in any case, in bold or code
+# marks, behind a list marker, numbered "1." or "1)". "1. **Supported**" and "1. Not Supported" are verdicts;
+# a line that names none of the three is not one, and a claim with no such line has no verdict.
 _VERDICT_LINE = re.compile(
-    r"(?m)^\s*(?P<n>\d+)\.\s*(?P<word>Not supported|Source not found|Supported)\b"
+    r"(?im)^[ \t]*(?:[-*•][ \t]+)?[*_`]*[ \t]*(?P<n>\d+)[ \t]*[.):][ \t]*[*_`]*[ \t]*"
+    r"(?P<word>not[ \t]+supported|unsupported|source[ \t]+not[ \t]+found|supported)\b[*_`]*[ \t]*[.:;,]?"
+    r"(?P<rest>[^\n]*)$"
 )
+_WORDS = {"not supported": "Not supported", "unsupported": "Not supported",
+          "source not found": "Source not found", "supported": "Supported"}
+_QUOTED = re.compile(r'"([^"\n]*)"|“([^”\n]*)”')
+# What the checker said on a line beyond its verdict, kept to these lengths: it is the checker's reading, for
+# the finding's author and the engineer, and never a verdict of its own.
+CHECKER_CITE_LIMIT = 300
+CHECKER_REASON_LIMIT = 400
 _KEY_RE = re.compile(r"sk-ant-[A-Za-z0-9_\-]+")
 
 
@@ -280,7 +292,8 @@ def _from_model(packet: dict, model_text: str, stop_reason: str = "") -> dict:
     supported: a reply that was cut off, or that skipped a claim, said nothing
     about it. The export stays blocked either way, and the reason says which.
     """
-    words = _verdict_words(model_text)
+    said = verdict_rows(model_text)
+    words = {number: row["word"] for number, row in said.items()}
     claims = numbered_bodies(packet["claims"])
     sources = numbered_bodies(packet["sources"])
     rows = []
@@ -303,6 +316,9 @@ def _from_model(packet: dict, model_text: str, stop_reason: str = "") -> dict:
             "n": number,
             "verdict": word,
             "cite": source.replace('"', "'"),
+            # What the checker wrote beyond its verdict, kept apart from the cite the application built.
+            "checker_cite": (said.get(number) or {}).get("cite", ""),
+            "checker_reason": (said.get(number) or {}).get("reason", ""),
         })
     verdict = _render(rows)
     supported = bool(rows) and all(row["verdict"] == VERDICT_SUPPORTED for row in rows)
@@ -368,18 +384,64 @@ def _shell(packet: dict, *, verdict: str, rows: list[dict], checker: str) -> dic
 
 
 def _render(rows: list[dict]) -> str:
+    """The verdict file: one line per claim, the cite the application built, and the checker's reason."""
     lines = [
         f'{row["n"]}. {row["verdict"]}. Cite: "{row["cite"]}"'
+        + (f' (checker: {row["checker_reason"]})' if row.get("checker_reason") else "")
         for row in rows
     ]
     return "\n".join(lines)
 
 
 def _verdict_words(text: str) -> dict[int, str]:
-    found: dict[int, str] = {}
+    """By claim number, the verdict the checker wrote. A claim it wrote no verdict line for has no entry."""
+    return {number: row["word"] for number, row in verdict_rows(text).items()}
+
+
+def verdict_rows(text: str) -> dict[int, dict]:
+    """By claim number: {"word", "cite", "reason"}, what the checker wrote on its verdict line.
+
+    word is the verdict. cite is the passage the checker quoted, and reason
+    the explanation it gave after it, in brackets, after "Reason:", or after a
+    dash. Both are the checker's own words and may be empty. A number given
+    twice keeps its first line.
+    """
+    found: dict[int, dict] = {}
     for match in _VERDICT_LINE.finditer(text or ""):
-        found[int(match.group("n"))] = match.group("word")
+        number = int(match.group("n"))
+        if number in found:
+            continue
+        word = _WORDS[" ".join(match.group("word").lower().split())]
+        cite, reason = _cite_and_reason(match.group("rest"))
+        found[number] = {"word": word, "cite": cite, "reason": reason}
     return found
+
+
+def _cite_and_reason(rest: str) -> tuple[str, str]:
+    """The checker's quoted cite and its reason, from what follows the verdict on one line."""
+    rest = (rest or "").strip().strip("*_`").strip()
+    reason = ""
+    labelled = re.search(r"(?i)\breason\s*:\s*(.+)$", rest)
+    if labelled:
+        reason, rest = labelled.group(1), rest[:labelled.start()]
+    body = re.sub(r"(?i)^cite\s*:\s*", "", rest).strip()
+    quotes = list(_QUOTED.finditer(body))
+    if quotes:
+        cite = " / ".join(match.group(1) or match.group(2) or "" for match in quotes)
+        tail = body[quotes[-1].end():]
+    else:
+        cut = re.search(r"\s(?:\(|[—–]|-\s)", body)
+        cite, tail = (body[:cut.start()], body[cut.start():]) if cut else (body, "")
+    if not reason:
+        bracket = re.search(r"\((.*)\)\s*[.;]?\s*$", tail)
+        dash = re.match(r"\s*(?:[—–]|-)\s*(.+)$", tail)
+        reason = bracket.group(1) if bracket else (dash.group(1) if dash else "")
+    return _clip(cite.strip(" .;"), CHECKER_CITE_LIMIT), _clip(reason.strip(" .;"), CHECKER_REASON_LIMIT)
+
+
+def _clip(text: str, limit: int) -> str:
+    text = " ".join(str(text or "").split())
+    return text if len(text) <= limit else text[: limit - 1] + "…"
 
 
 def ask(create: Callable[..., Any], system: str, user_text: str) -> dict:

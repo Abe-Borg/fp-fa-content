@@ -27,6 +27,7 @@ REPO = APP_DIR.parent
 if str(APP_DIR) not in sys.path:
     sys.path.insert(0, str(APP_DIR))
 
+from test_acceptance_report import _claim_lines, _findings, _planned, _reply  # noqa: E402
 from test_coherence import _run_plan, _seed_inputs  # noqa: E402
 from test_team import _record  # noqa: E402
 from test_team_protocol import Play, call, say, use  # noqa: E402
@@ -324,6 +325,100 @@ class UnitConversionTests(unittest.TestCase):
         self.assertEqual({cls for _number, cls in quantities.in_value({"value": 0.2994, "unit": "gpm/ft²"})}, {None})
         # A kernel output that names its unit once for several figures is not a pair, and reads as before.
         self.assertIn(("4", None), quantities.in_value({"unit": "pct_obs_per_ft", "sh": 4.0, "sc_max": 1.0}))
+
+
+class CheckerReasonTests(unittest.TestCase):
+    """F-007, and the parser under it. The checker's reasons were thrown away, so a specialist revising a
+    finding the check did not support could not tell why. And a verdict line in bold, or "Not Supported",
+    was read as no verdict at all."""
+
+    def _check(self, record, answer, **options):
+        from fpfa import checker
+
+        def create(**kwargs):
+            return _reply(answer(_claim_lines(kwargs)))
+
+        return checker.check_record(REPO, record, "job1", create, **options)
+
+    def test_the_checkers_reason_is_kept_apart_from_the_applications(self):
+        from fpfa import checker, team_panel
+
+        record, calcs = _planned()
+        _findings(record, calcs, 4)
+        # The live reply's own form (checker-parser-diagnostic.json): the verdict, the quoted cite, the reason.
+        outcome = self._check(record, lambda lines: "\n".join(
+            f'{n}. Not supported. Cite: "zone_gal=281.346" (marker {n}: the cite does not state statement {n})'
+            for n, _text in lines))
+        for row in outcome["rows"]:
+            self.assertEqual(row["checker_reason"], f"marker {row['n']}: the cite does not state statement {row['n']}")
+            self.assertEqual(row["checker_cite"], "zone_gal=281.346")
+            self.assertEqual(row["reason"], "", "the application's own reason stays its own")
+        self.assertIn("Checker: marker 1:", outcome["verdict"])
+        snapshot = record.snapshot("job1")
+        why = [line for item in team_panel.finding_rows(snapshot) for line in item["why"]]
+        self.assertIn(f"{checker.CHECKER_SAID}: marker 2: the cite does not state statement 2. "
+                      'It quoted: "zone_gal=281.346".', why)
+        event = record.latest_event("job1", checker.CHECK_EVENT)["payload"]
+        self.assertIn("marker 4", event["replies"][0]["text"], "the reply is kept for an audit of the check")
+
+    def test_a_reason_the_checker_did_not_give_is_said_and_not_made_up(self):
+        from fpfa import checker
+
+        record, calcs = _planned()
+        finding = _findings(record, calcs, 1)[0]
+        self._check(record, lambda lines: "1. Not supported.")
+        reasons = checker.assurance(record.snapshot("job1"))[finding["id"]]["reasons"]
+        self.assertIn(checker.CHECKER_SAID_NOTHING, reasons)
+        # A check made before the reasons were kept says nothing about them either way.
+        old = checker.assurance(record.snapshot("job1"), {"rows": [{"finding_id": finding["id"], "reason": ""}]})
+        self.assertNotIn(checker.CHECKER_SAID_NOTHING, old[finding["id"]]["reasons"])
+
+    def test_a_verdict_line_in_any_common_form_is_read(self):
+        record, calcs = _planned()
+        _findings(record, calcs, 6)
+        forms = ["1. **Supported**. Cite: \"x\"", "2. Not Supported. Cite: \"x\" (it lacks y)",
+                 "3) Supported", "- 4. Supported. Cite: \"x\"", "`5. SUPPORTED. Cite: \"x\"`",
+                 "6. Unsupported. Cite: \"x\" Reason: no figure"]
+        outcome = self._check(record, lambda lines: "\n".join(forms))
+        verdicts = [row["verdict"] for row in outcome["rows"]]
+        self.assertEqual(verdicts, ["Supported", "Not supported", "Supported", "Supported", "Supported", "Not supported"])
+        self.assertEqual(outcome["rows"][5]["checker_reason"], "no figure")
+
+    def test_stop_is_heard_between_the_checks_requests(self):
+        import threading
+
+        from fpfa import checker
+        from fpfa.claude_client import TurnCancelled
+
+        record, calcs = _planned()
+        _findings(record, calcs, checker.CLAIMS_PER_REQUEST + 2)
+        stop = threading.Event()
+        asked = []
+
+        def answer(lines):
+            asked.append(len(lines))
+            stop.set()  # The designer presses Stop while the first request is out.
+            return "\n".join(f"{n}. Supported." for n, _text in lines)
+
+        with self.assertRaises(TurnCancelled):
+            self._check(record, answer, cancel=stop)
+        self.assertEqual(asked, [checker.CLAIMS_PER_REQUEST], "the second request was never sent")
+        failed = record.latest_event("job1", checker.CHECK_FAILED_EVENT)["payload"]
+        self.assertTrue(failed["cancelled"])
+        self.assertEqual(failed["usage"]["rounds"], 1, "the request that ran was billed and is kept")
+        self.assertIsNone(record.latest_event("job1", checker.CHECK_EVENT), "nothing was judged")
+        self.assertEqual({row["status"] for row in record.findings("job1")}, {"open"})
+
+    def test_the_section_check_keeps_the_reason_too(self):
+        from fpfa import claim_check
+
+        packet = {"claims": "1. NFPA 13-2025 §8.2.3 requires the trim.\n2. Exported narrative (no code section) requires 281.3 gal.",
+                  "sources": "1. PACKAGE ASSERTION. elect_di_trim: family El/El\n2. PACKAGE ASSERTION. zone_gal 281.3",
+                  "claim_count": 2, "draft_token": "t"}
+        outcome = claim_check._from_model(packet, '1. Not supported. Cite: "family El/El" (it names no section)\n'
+                                                  '2. Supported. Cite: "zone_gal 281.3" (the figure is stated)')
+        self.assertEqual(outcome["rows"][0]["checker_reason"], "it names no section")
+        self.assertIn("(checker: it names no section)", outcome["verdict"])
 
 
 if __name__ == "__main__":

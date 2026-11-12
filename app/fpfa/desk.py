@@ -1757,10 +1757,15 @@ class Desk:
                     text = "Cancelled before the trace check started. No model call was made."
                     self.jobs.mark(job_id, "cancelled", text)
                 else:
-                    outcome = check_record(content_root(), self.record, origin_id, AnthropicMessages(key).create)
+                    # Stop is heard between the check's requests, as between a turn's rounds.
+                    outcome = check_record(content_root(), self.record, origin_id, AnthropicMessages(key).create,
+                                           cancel=cancel)
                     text = outcome.get("status_line") or "Trace check ran."
                     if outcome.get("verdict"):
                         text += "\n" + outcome["verdict"]
+            except TurnCancelled as exc:
+                text = f"Cancelled. {exc} No finding was changed, and what was already asked is on the usage report."
+                self.jobs.mark(job_id, "cancelled", text)
             except Exception as exc:
                 text = safe_error(exc)
                 self.jobs.mark(job_id, "error", text)

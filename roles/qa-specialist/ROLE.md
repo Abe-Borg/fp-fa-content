@@ -15,7 +15,9 @@ You do not receive the draft, the spec section, or the designer's notes. Do not 
 
 Write one line per claim, and no other lines:
 
-`<n>. Supported | Not supported | Source not found. Cite: "<short source line>"`
+`<n>. Supported | Not supported | Source not found. Cite: "<short source line>" (<reason>)`
+
+The reason is one short clause: what in the cite states the claim, or what the claim says that the cite does not. The claim's author reads it to correct the claim, and the engineer of record reads it beside the verdict.
 
 Supported means the short cite states the requirement in that claim. Not supported means the cite was retrieved and does not state that requirement. Source not found means the cite says NOT PULLED, the claim has no cite, or the passage was not retrieved. A cite that was not retrieved stays open. Do not mark it Supported.
 

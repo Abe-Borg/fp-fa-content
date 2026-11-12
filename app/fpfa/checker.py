@@ -76,6 +76,11 @@ CHECK_INCOMPLETE_EVENT = "check_incomplete"
 # then loses one batch's claims, not the whole check's.
 CLAIMS_PER_REQUEST = 8
 NO_VERDICT_REASON = "the checker returned no verdict for this claim; it stays not checked"
+# The checker's own reply text, kept on the check's event for whoever audits it later, up to this much a request.
+REPLY_KEEP_CHARS = 12000
+# How the checker's explanation is introduced wherever a reader sees it: it is the model's reading, not a source.
+CHECKER_SAID = "The checker's reason (the same AI model, a second pass)"
+CHECKER_SAID_NOTHING = "The checker gave no reason."
 
 TIER_SOURCE = "source"
 TIER_CHECKER = "checker"
@@ -485,8 +490,20 @@ def _clip(text: str, limit: int) -> str:
     return text if len(text) <= limit else text[: limit - 1] + "…"
 
 
-def check_record(content_root: Path, record: Record, project_id: str, create: Callable[..., Any]) -> dict:
-    """The trace check over the record. Verdicts are written back onto the findings."""
+def check_record(content_root: Path, record: Record, project_id: str, create: Callable[..., Any], *,
+                 cancel: Any = None) -> dict:
+    """The trace check over the record. Verdicts are written back onto the findings.
+
+    cancel is the job's threading.Event. The check stops before its next
+    request when it is set, like a tool loop before its next round: what was
+    already asked was billed and is kept on a check_failed event, and nothing
+    is judged.
+
+    What the checker wrote beside each verdict, the passage it quoted and its
+    reason, is kept on the row as its reading (checker_cite, checker_reason),
+    apart from the application's own reason. Its reply text is kept on the
+    event (replies) for an audit of the check.
+    """
     claim_check = _claim_check()
     started = time.time()
     packet = build_record_packet(record, project_id, content_root)
@@ -499,23 +516,31 @@ def check_record(content_root: Path, record: Record, project_id: str, create: Ca
         }
         record.log_event(project_id, CHECK_EVENT, outcome, agent=CHECKER_ROLE)
         return outcome
-    from fpfa.claude_client import attach_usage, empty_usage, incomplete_notice, safe_error
+    from fpfa.claude_client import TurnCancelled, attach_usage, empty_usage, incomplete_notice, safe_error
 
     system = claim_check.checker_system(content_root)
     usage = empty_usage()
     # By claim number: what the checker said. A claim it said nothing about has no entry, and no entry is
     # never read as a verdict.
     words: dict[int, str] = {}
+    # By claim number: the checker's quoted passage and its reason, beside the verdict.
+    readings: dict[int, dict] = {}
+    replies: list[dict] = []
     cut_off: dict | None = None
     try:
-        for batch in _batches(packet["meta"]):
+        for index, batch in enumerate(_batches(packet["meta"]), start=1):
+            if cancel is not None and cancel.is_set():
+                raise TurnCancelled("Cancelled by the designer before the next trace-check request.")
             reply = claim_check.ask(create, system, _batch_request(claim_check, batch))
             for field, value in reply["usage"].items():
                 usage[field] = int(usage.get(field, 0)) + int(value or 0)
-            said_here = claim_check._verdict_words(reply["text"])
+            replies.append({"request": index, "claims": [item["n"] for item in batch],
+                            "stop_reason": reply["stop_reason"], "text": reply["text"][:REPLY_KEEP_CHARS]})
+            said_here = claim_check.verdict_rows(reply["text"])
             for position, item in enumerate(batch, start=1):
                 if position in said_here:
-                    words[item["n"]] = said_here[position]
+                    words[item["n"]] = said_here[position]["word"]
+                    readings[item["n"]] = said_here[position]
             silent = [item["n"] for item in batch
                       if item["n"] not in words and _without_checker(claim_check, item) is None]
             if silent and (incomplete_notice(reply["stop_reason"]) or not reply["text"].strip()):
@@ -534,10 +559,11 @@ def check_record(content_root: Path, record: Record, project_id: str, create: Ca
             record.log_event(project_id, CHECK_FAILED_EVENT, {
                 "failed": not cancelled, "cancelled": cancelled, "error": safe_error(exc)[:400], "usage": spent,
                 "claim_count": packet["claim_count"], "seconds": round(time.time() - started, 1),
+                "replies": replies,
             }, agent=CHECKER_ROLE)
         raise
     if cut_off is not None:
-        return _incomplete(record, project_id, packet, usage, cut_off, words, started, claim_check)
+        return _incomplete(record, project_id, packet, usage, cut_off, words, started, claim_check, replies)
     rows: list[dict] = []
     # Where the application's own rules set aside what the checker said. A checker that approves a claim
     # the rules catch is a checker to distrust on the claims no rule covers.
@@ -582,10 +608,13 @@ def check_record(content_root: Path, record: Record, project_id: str, create: Ca
                 # them by the application. Only the checker's word connects the two.
                 basis = BASIS_CHECKER
                 reason = CHECKER_ONLY_REASON
+        reading = readings.get(item["n"]) or {}
         rows.append({
             "n": item["n"], "finding_id": item["finding_id"], "verdict": verdict,
             "cite": item["cite"].replace('"', "'"), "basis": basis, "held_by_app": matched,
             "sources": item["sources"], "reason": reason,
+            # The checker's reading, never a source: what it quoted and why it said what it said.
+            "checker_cite": reading.get("cite", ""), "checker_reason": reading.get("reason", ""),
         })
         # A finding the checker said nothing about goes back to "open", which is where it started: an
         # earlier check's verdict must not stand in for this one's silence.
@@ -639,8 +668,10 @@ def check_record(content_root: Path, record: Record, project_id: str, create: Ca
         "content": dict(snapshot_context(record, project_id)),
         "verdict": "\n".join(
             f'{row["n"]}. {row["verdict"]}. Cite: "{_clip(row["cite"], 320)}"' + (f" ({row['reason']})" if row["reason"] else "")
+            + (f" Checker: {row['checker_reason']}" if row["checker_reason"] else "")
             for row in rows
         ),
+        "replies": replies,
     }
     record.log_event(project_id, CHECK_EVENT, outcome, agent=CHECKER_ROLE)
     return outcome
@@ -699,7 +730,7 @@ def _without_checker(claim_check, item: dict) -> tuple[str, str] | None:
 
 
 def _incomplete(record: Record, project_id: str, packet: dict, usage: dict, cut_off: dict, words: dict,
-                started: float, claim_check) -> dict:
+                started: float, claim_check, replies: list[dict] | None = None) -> dict:
     """Close a trace check whose reply was cut off. Nothing is written to a finding.
 
     The check speaks for the findings it saw or for none of them: a verdict
@@ -721,7 +752,7 @@ def _incomplete(record: Record, project_id: str, packet: dict, usage: dict, cut_
         "incomplete": True, "usage": usage, "seconds": round(time.time() - started, 1), "rows": [],
         "all_supported": False, "claim_count": count, "unjudged": waiting, "cut_off_at": list(cut_off.get("claims") or []),
         "stop_reason": stop_reason, "token": packet["token"], "status_line": status_line, "block_reason": status_line,
-        "checked_against_standard": False,
+        "checked_against_standard": False, "replies": list(replies or []),
     }
     record.log_event(project_id, CHECK_INCOMPLETE_EVENT, outcome, agent=CHECKER_ROLE)
     return outcome
@@ -875,9 +906,11 @@ def assurance(snapshot: dict | None, check: dict | None = None) -> dict[str, dic
         elif verdict == "Not supported":
             tier = TIER_OPEN
             reasons.append("The trace check did not support it" + (f": {seen['reason']}" if seen.get("reason") else "") + ".")
+            reasons.extend(_checker_reading(seen))
         elif verdict == "Source not found":
             tier = TIER_OPEN
             reasons.append("No source on the record" + (f": {seen['reason']}" if seen.get("reason") else "") + ".")
+            reasons.extend(_checker_reading(seen))
         elif verdict == "Supported":
             basis = seen.get("basis") or BASIS_AUTHOR
             if basis == BASIS_SOURCE and "held_by_app" not in seen:
@@ -919,6 +952,21 @@ def assurance(snapshot: dict | None, check: dict | None = None) -> dict[str, dic
             "agreed_by": sorted(set(agreements.get(ident) or [])),
         }
     return out
+
+
+def _checker_reading(seen: dict) -> list[str]:
+    """What the checker gave as its reason for a finding it did not support, as a reader sees it.
+
+    A check made before the application kept the checker's words has nothing
+    to say here. One made since says either the reason or that there was none.
+    """
+    if "checker_reason" not in seen:
+        return []
+    reason = str(seen.get("checker_reason") or "").strip()
+    if not reason:
+        return [CHECKER_SAID_NOTHING]
+    quoted = str(seen.get("checker_cite") or "").strip()
+    return [f"{CHECKER_SAID}: {reason.rstrip('.')}." + (f' It quoted: "{quoted}".' if quoted else "")]
 
 
 def tier_counts(snapshot: dict | None) -> dict[str, int]:
