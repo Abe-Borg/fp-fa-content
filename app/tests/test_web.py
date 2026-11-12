@@ -410,6 +410,19 @@ class BuiltPageTests(unittest.TestCase):
             self.assertGreater(len(item["text"]), 200, item["name"])
             self.assertIn("Permission is hereby granted", item["text"], item["name"])
 
+    def test_vites_modulepreload_polyfill_is_not_in_the_page_while_licenses_json_lists_no_vite(self):
+        """The polyfill is Vite's own code (MIT), and the page's build turns it off (build.modulePreload).
+
+        It is what reads a link's relList; nothing else in the page does. The build itself fails on any
+        module it cannot attribute (app/frontend/tests/licenses.test.ts); this reads the page that ships.
+        """
+        index = (STATIC / "index.html").read_text(encoding="utf-8")
+        bundle = "".join((STATIC / name).read_text(encoding="utf-8")
+                         for name in re.findall(r'src="/(assets/[^"]+\.js)"', index))
+        names = {item["name"] for item in json.loads((STATIC / "licenses.json").read_text(encoding="utf-8"))["packages"]}
+        if "vite" not in names:
+            self.assertNotIn("relList", bundle, "Vite's modulepreload polyfill is in the page, and licenses.json lists no vite")
+
     def test_the_menus_are_in_the_page(self):
         index = (STATIC / "index.html").read_text(encoding="utf-8")
         bundle = "".join((STATIC / name).read_text(encoding="utf-8")
