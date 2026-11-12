@@ -85,7 +85,7 @@ from fpfa.record import ANSWERED_ON_PANEL, BASIS_LABELS, INTERRUPTED_NOTE, Recor
 from fpfa.spec_docx import DRAFT_SECTION, write_docx
 from fpfa.team import check_record, latest_check, team_summary
 from fpfa.team_panel import recovery_text, team_view
-from fpfa.usage_report import report_text
+from fpfa.usage_report import REQUESTS_EVENT, report_text
 from fpfa.workflow import (
     NARRATION_CANCELLED,
     form_assumption_lines,
@@ -465,6 +465,21 @@ _TEAM_ACTIVITY = {
     "withdraw_finding": "withdrawing a finding",
 }
 _LISTING_TOOLS = frozenset({"list_skills", "list_roles", "list_modes"})
+
+
+def _model_client(key: str, cancel: Any = None):
+    """A model client for one job, with the job's cancel event on it, so Stop also ends a wait to send again.
+
+    The event goes on as an attribute, as on_retry does: the client is built
+    with its key alone, the way every stand-in for it is built too.
+    """
+    client = AnthropicMessages(key)
+    if cancel is not None:
+        try:
+            client.cancel = cancel
+        except Exception:
+            pass
+    return client
 
 
 def describe_activity(event: dict) -> str | None:
@@ -1751,15 +1766,17 @@ class Desk:
 
         def work(job_id: str) -> None:
             cancel = self._cancel_event(job_id)
+            client = None
             try:
                 if cancel.is_set():
                     # Cancelled while it waited in the queue. No model call, no verdicts written.
                     text = "Cancelled before the trace check started. No model call was made."
                     self.jobs.mark(job_id, "cancelled", text)
                 else:
-                    # Stop is heard between the check's requests, as between a turn's rounds.
-                    outcome = check_record(content_root(), self.record, origin_id, AnthropicMessages(key).create,
-                                           cancel=cancel)
+                    # Stop is heard between the check's requests, as between a turn's rounds, and in a wait
+                    # to send a refused request again.
+                    client = _model_client(key, cancel)
+                    outcome = check_record(content_root(), self.record, origin_id, client.create, cancel=cancel)
                     text = outcome.get("status_line") or "Trace check ran."
                     if outcome.get("verdict"):
                         text += "\n" + outcome["verdict"]
@@ -1771,6 +1788,7 @@ class Desk:
                 self.jobs.mark(job_id, "error", text)
             finally:
                 self._cancel_events.pop(job_id, None)
+                self._note_client(origin_id, client)
             self.queue.put(lambda oid=origin_id, body=text, jid=job_id: self._finish_chat(oid, body, job_id=jid))
 
         job = self.jobs.submit(
@@ -2149,9 +2167,11 @@ class Desk:
 
         def work(job_id: str) -> None:
             cancel = self._cancel_event(job_id)
+            made: list = []
 
             def narrator(system, user_text, tools, execute):
-                client = AnthropicMessages(key)
+                client = _model_client(key, cancel)
+                made.append(client)
                 return run_tool_loop(
                     client.create,
                     system=system,
@@ -2183,6 +2203,8 @@ class Desk:
                 self.jobs.mark(job_id, "error", error)
             finally:
                 self._cancel_events.pop(job_id, None)
+                for client in made:
+                    self._note_client(origin_id, client)
             self.queue.put(
                 lambda oid=origin_id, res=result, err=error, jid=job_id: self._finish_run(
                     oid, res, err, job_id=jid
@@ -2266,9 +2288,11 @@ class Desk:
 
         def work(job_id: str) -> None:
             cancel = self._cancel_event(job_id)
+            made: list = []
 
             def narrator(system, user_text, tools, execute):
-                client = AnthropicMessages(key)
+                client = _model_client(key, cancel)
+                made.append(client)
                 return run_tool_loop(
                     client.create,
                     system=system,
@@ -2301,6 +2325,8 @@ class Desk:
                 self.jobs.mark(job_id, "error", error)
             finally:
                 self._cancel_events.pop(job_id, None)
+                for client in made:
+                    self._note_client(origin_id, client)
             self.queue.put(
                 lambda oid=origin_id, res=result, err=error, jid=job_id: self._finish_bess(
                     oid, res, err, job_id=jid
@@ -2773,21 +2799,25 @@ class Desk:
         key = self._api_key()
 
         def work(job_id: str) -> None:
+            client = _model_client(key, self._cancel_event(job_id)) if key else None
             try:
-                if key:
-                    outcome = judge_recorded(content_root(), packet, AnthropicMessages(key).create,
-                                             self.record, origin_id)
+                if client is not None:
+                    outcome = judge_recorded(content_root(), packet, client.create, self.record, origin_id)
                 else:
                     outcome = unanswered(packet)
             except Exception as exc:
                 message = safe_error(exc)
                 self.jobs.mark(job_id, "error", message)
+                self._cancel_events.pop(job_id, None)
+                self._note_client(origin_id, client)
                 self.queue.put(
                     lambda oid=origin_id, err=message, jid=job_id, offer=offer_export: self._finish_claim(
                         oid, None, err, jid, offer
                     )
                 )
                 return
+            self._cancel_events.pop(job_id, None)
+            self._note_client(origin_id, client)
             self.queue.put(
                 lambda oid=origin_id, found=outcome, jid=job_id, offer=offer_export, snap=snapshot: self._finish_claim(
                     oid, found, None, jid, offer, snap
@@ -2805,13 +2835,18 @@ class Desk:
 
     def _claim_outcome(self, create, result=None) -> dict:
         packet = build_packet(result if result is not None else self.project["last_run"])
+        client = None
         if create is None:
             key = self._api_key()
             if not key:
                 return unanswered(packet)
-            create = AnthropicMessages(key).create
+            client = AnthropicMessages(key)
+            create = client.create
         self._open_record(self.project)
-        return judge_recorded(content_root(), packet, create, self.record, self.project["id"])
+        try:
+            return judge_recorded(content_root(), packet, create, self.record, self.project["id"])
+        finally:
+            self._note_client(self.project["id"], client)
 
     def _store_claim(self, project: dict, outcome: dict, job_id: str | None) -> None:
         stored = dict(outcome)
@@ -3161,7 +3196,8 @@ class Desk:
             made = None
             try:
                 pack = content_root()
-                client = AnthropicMessages(key)
+                # The job's cancel ends a wait to send a refused request again, as well as the loop.
+                client = _model_client(key, cancel)
                 # The reply streams into the thread as it is written. A client with no
                 # streaming call answers whole, and the page eases that in instead.
                 on_event, observe = self._stream_listener(job_id)
@@ -3193,7 +3229,7 @@ class Desk:
                 self.jobs.mark(job_id, "error", safe_error(exc))
             finally:
                 self._cancel_events.pop(job_id, None)
-                self._note_retries(origin_id, made)
+                self._note_client(origin_id, made)
             self.queue.put(
                 lambda oid=origin_id, answer=reply, jid=job_id, tokens=used: self._finish_chat(
                     oid, answer, job_id=jid, usage=tokens
@@ -3208,6 +3244,23 @@ class Desk:
             work=work,
         )
         self.status.set(f"Asking {MODEL_ID}… {job.heading()}")
+
+    def _note_client(self, project_id: str, client: Any) -> None:
+        """Put on the record what a job's model client did: requests sent again, and every request's id.
+
+        Runs on the worker when the job ends, whatever ended it. The ids are the
+        API's request-id and the workspace it billed (claude_client.requests): what
+        the provider's support asks for, and how a bill is matched to this job.
+        """
+        if client is None or not project_id:
+            return
+        self._note_retries(project_id, client)
+        try:
+            log = list(getattr(client, "requests", None) or [])
+            if log:
+                self.record.log_event(project_id, REQUESTS_EVENT, {"requests": log, "count": len(log)}, agent="app")
+        except Exception:
+            pass
 
     def _note_retries(self, project_id: str, client: Any) -> None:
         """Put on the record how many requests a turn had to send again. Runs on the worker.

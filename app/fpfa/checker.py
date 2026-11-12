@@ -491,7 +491,7 @@ def _clip(text: str, limit: int) -> str:
 
 
 def check_record(content_root: Path, record: Record, project_id: str, create: Callable[..., Any], *,
-                 cancel: Any = None) -> dict:
+                 cancel: Any = None, within_turn: bool = False) -> dict:
     """The trace check over the record. Verdicts are written back onto the findings.
 
     cancel is the job's threading.Event. The check stops before its next
@@ -503,6 +503,10 @@ def check_record(content_root: Path, record: Record, project_id: str, create: Ca
     reason, is kept on the row as its reading (checker_cite, checker_reason),
     apart from the application's own reason. Its reply text is kept on the
     event (replies) for an audit of the check.
+
+    within_turn marks a check the lead ran inside its turn: the cost report
+    counts its tokens, which the turn leaves out, and not its time, which is
+    inside the turn's.
     """
     claim_check = _claim_check()
     started = time.time()
@@ -559,11 +563,12 @@ def check_record(content_root: Path, record: Record, project_id: str, create: Ca
             record.log_event(project_id, CHECK_FAILED_EVENT, {
                 "failed": not cancelled, "cancelled": cancelled, "error": safe_error(exc)[:400], "usage": spent,
                 "claim_count": packet["claim_count"], "seconds": round(time.time() - started, 1),
-                "replies": replies,
+                "replies": replies, "within_turn": within_turn,
             }, agent=CHECKER_ROLE)
         raise
     if cut_off is not None:
-        return _incomplete(record, project_id, packet, usage, cut_off, words, started, claim_check, replies)
+        return _incomplete(record, project_id, packet, usage, cut_off, words, started, claim_check, replies,
+                           within_turn)
     rows: list[dict] = []
     # Where the application's own rules set aside what the checker said. A checker that approves a claim
     # the rules catch is a checker to distrust on the claims no rule covers.
@@ -672,6 +677,7 @@ def check_record(content_root: Path, record: Record, project_id: str, create: Ca
             for row in rows
         ),
         "replies": replies,
+        "within_turn": within_turn,
     }
     record.log_event(project_id, CHECK_EVENT, outcome, agent=CHECKER_ROLE)
     return outcome
@@ -730,7 +736,7 @@ def _without_checker(claim_check, item: dict) -> tuple[str, str] | None:
 
 
 def _incomplete(record: Record, project_id: str, packet: dict, usage: dict, cut_off: dict, words: dict,
-                started: float, claim_check, replies: list[dict] | None = None) -> dict:
+                started: float, claim_check, replies: list[dict] | None = None, within_turn: bool = False) -> dict:
     """Close a trace check whose reply was cut off. Nothing is written to a finding.
 
     The check speaks for the findings it saw or for none of them: a verdict
@@ -752,7 +758,7 @@ def _incomplete(record: Record, project_id: str, packet: dict, usage: dict, cut_
         "incomplete": True, "usage": usage, "seconds": round(time.time() - started, 1), "rows": [],
         "all_supported": False, "claim_count": count, "unjudged": waiting, "cut_off_at": list(cut_off.get("claims") or []),
         "stop_reason": stop_reason, "token": packet["token"], "status_line": status_line, "block_reason": status_line,
-        "checked_against_standard": False, "replies": list(replies or []),
+        "checked_against_standard": False, "replies": list(replies or []), "within_turn": within_turn,
     }
     record.log_event(project_id, CHECK_INCOMPLETE_EVENT, outcome, agent=CHECKER_ROLE)
     return outcome

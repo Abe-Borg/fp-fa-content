@@ -21,6 +21,7 @@ import json
 import sys
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 APP_DIR = Path(__file__).resolve().parents[1]
 REPO = APP_DIR.parent
@@ -419,6 +420,195 @@ class CheckerReasonTests(unittest.TestCase):
                                                   '2. Supported. Cite: "zone_gal 281.3" (the figure is stated)')
         self.assertEqual(outcome["rows"][0]["checker_reason"], "it names no section")
         self.assertIn("(checker: it names no section)", outcome["verdict"])
+
+
+class _ApiError(Exception):
+    """An API error as the SDK raises it: a status, the error code and message from the body, the request id."""
+
+    def __init__(self, status, *, code=None, message="", retry_after=None, request_id=None):
+        super().__init__(f"Error code: {status} - {message}")
+        self.status_code = status
+        self.error_code = code
+        self.api_message = message
+        self.request_id = request_id
+        self.workspace_id = "wrkspc_test"
+        headers = {"retry-after": retry_after} if retry_after is not None else {}
+        self.response = SimpleNamespace(headers=headers)
+
+
+def _fake_client(outcomes):
+    """An AnthropicMessages whose requests return or raise the outcomes in order. Never reaches the network."""
+    from fpfa.claude_client import AnthropicMessages
+
+    client = AnthropicMessages("sk-ant-test-not-sent")
+    queue = list(outcomes)
+
+    class Messages:
+        calls = 0
+
+        def create(self, **_kwargs):
+            Messages.calls += 1
+            item = queue.pop(0) if queue else SimpleNamespace(content=[])
+            if isinstance(item, BaseException):
+                raise item
+            return item
+
+    client._client = SimpleNamespace(messages=Messages())
+    return client, Messages
+
+
+class ApiClientTests(unittest.TestCase):
+    """The known gaps LIV-R2, LIV-R5, and LIV-U2, and the time on the model the report could not use.
+
+    No request leaves the machine: the provider is a stand-in that raises the errors the API documents.
+    """
+
+    def test_the_monthly_spend_cap_is_not_sent_again(self):
+        from unittest.mock import patch
+
+        from fpfa.claude_client import SpendLimitReached
+
+        said = ("You have reached your API usage limits: your organization has crossed its monthly API usage threshold, "
+                "set based on your organization's API tier. You will regain access on 2026-12-01 at 00:00 UTC.")
+        client, messages = _fake_client([_ApiError(429, code="enforced_spend_limit_reached", message=said,
+                                                   request_id="req_cap")])
+        with patch("fpfa.claude_client.time.sleep") as sleep:
+            with self.assertRaises(SpendLimitReached) as caught:
+                client.create(max_tokens=8, messages=[])
+        self.assertEqual(messages.calls, 1, "the report's scripted cap was sent five times")
+        sleep.assert_not_called()
+        self.assertIn("monthly API spend cap", str(caught.exception))
+        self.assertIn("You will regain access on 2026-12-01", str(caught.exception))
+        self.assertEqual(caught.exception.request_id, "req_cap")
+        # The same 429 told by the body the SDK kept, and a plain rate limit, which is still sent again.
+        body_only = _ApiError(429, message=said)
+        body_only.error_code = None
+        body_only.body = {"error": {"type": "rate_limit_error", "message": said,
+                                    "details": {"error_code": "enforced_spend_limit_reached"}}}
+        client, messages = _fake_client([body_only])
+        with self.assertRaises(SpendLimitReached):
+            client.create(max_tokens=8, messages=[])
+        client, messages = _fake_client([_ApiError(429, retry_after="3")])
+        with patch("fpfa.claude_client.time.sleep") as sleep:
+            client.create(max_tokens=8, messages=[])
+        self.assertEqual((messages.calls, [item.args[0] for item in sleep.call_args_list]), (2, [3.0]))
+
+    def test_a_spend_limit_the_owner_set_and_a_billing_problem_stop_in_plain_words(self):
+        from fpfa.claude_client import SpendLimitReached
+
+        for error, words in (
+            (_ApiError(400, message="You have reached your specified workspace API usage limits. You will regain "
+                                    "access on 2026-12-01 at 00:00 UTC."), "spend limit set on the organization"),
+            (_ApiError(402, message="Your payment method was declined."), "billing problem (402)"),
+        ):
+            client, messages = _fake_client([error])
+            with self.assertRaises(SpendLimitReached) as caught:
+                client.create(max_tokens=8, messages=[])
+            self.assertEqual(messages.calls, 1)
+            self.assertIn(words, str(caught.exception))
+
+    def test_a_retry_after_is_waited_out_whole_or_not_at_all(self):
+        from unittest.mock import patch
+
+        from fpfa.claude_client import RETRY_AFTER_MAX, RetryWaitTooLong
+
+        client, messages = _fake_client([_ApiError(429, retry_after="90")])
+        with patch("fpfa.claude_client.time.sleep") as sleep:
+            client.create(max_tokens=8, messages=[])
+        self.assertEqual([item.args[0] for item in sleep.call_args_list], [90.0], "not clipped to 30 s")
+        client, messages = _fake_client([_ApiError(429, retry_after=str(int(RETRY_AFTER_MAX) + 480))])
+        with patch("fpfa.claude_client.time.sleep") as sleep:
+            with self.assertRaises(RetryWaitTooLong) as caught:
+                client.create(max_tokens=8, messages=[])
+        sleep.assert_not_called()
+        self.assertEqual(messages.calls, 1)
+        self.assertIn(f"{int(RETRY_AFTER_MAX) + 480} s", str(caught.exception))
+
+    def test_stop_ends_a_wait_to_send_again(self):
+        import threading
+        import time
+
+        from fpfa.claude_client import TurnCancelled, run_tool_loop
+
+        client, messages = _fake_client([_ApiError(529, retry_after="25")])
+        client.cancel = threading.Event()
+        threading.Timer(0.2, client.cancel.set).start()
+        started = time.monotonic()
+        with self.assertRaises(TurnCancelled):
+            client.create(max_tokens=8, messages=[])
+        self.assertLess(time.monotonic() - started, 5.0, "the 25 s wait ended when Stop was pressed")
+        self.assertEqual(messages.calls, 1)
+        # A cancel heard in such a wait carries the rounds of the loop that ran before it.
+        replies = [SimpleNamespace(stop_reason="end_turn", content=[], usage=SimpleNamespace(
+            input_tokens=10, output_tokens=5, cache_read_input_tokens=0, cache_creation_input_tokens=0))]
+
+        def create(**_kwargs):
+            if replies:
+                return SimpleNamespace(stop_reason="tool_use", usage=replies.pop(0).usage,
+                                       content=[SimpleNamespace(type="tool_use", id="t1", name="noop", input={})])
+            raise TurnCancelled("Cancelled by the designer while waiting to send a refused request again.")
+
+        with self.assertRaises(TurnCancelled) as caught:
+            run_tool_loop(create, system="s", user_text="u", tools=[], execute=lambda name, args: {})
+        self.assertEqual(caught.exception.usage["rounds"], 1)
+
+    def test_every_request_id_is_kept_and_written_to_the_job(self):
+        from unittest.mock import patch
+
+        from fpfa.desk import Desk
+        from fpfa.usage_report import REQUESTS_EVENT, report_text
+
+        answered = SimpleNamespace(content=[], _request_id="req_ok", _workspace_id="wrkspc_dc")
+        client, _messages = _fake_client([_ApiError(529, request_id="req_busy"), answered])
+        with patch("fpfa.claude_client.time.sleep"):
+            client.create(max_tokens=8, messages=[])
+        self.assertEqual([(item["id"], item["status"]) for item in client.requests], [("req_busy", 529), ("req_ok", "ok")])
+        self.assertEqual(client.requests[1]["workspace"], "wrkspc_dc")
+
+        # A streamed reply's id is the stream's: its final message carries none of its own.
+        class Stream:
+            request_id = "req_streamed"
+            workspace_id = "wrkspc_dc"
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_exc):
+                return False
+
+            def __iter__(self):
+                return iter(())
+
+            def get_final_message(self):
+                return SimpleNamespace(content=[])
+
+        client._client = SimpleNamespace(messages=SimpleNamespace(stream=lambda **_kwargs: Stream()))
+        client.streaming(lambda _event: None)(max_tokens=8, messages=[])
+        self.assertEqual(client.requests[-1]["id"], "req_streamed")
+
+        record = _record()
+        record.ensure_project("job1", "Ids")
+        record.log_event("job1", "turn", {"usage": {"rounds": 3, "input_tokens": 10, "output_tokens": 5}}, agent="lead")
+        desk = SimpleNamespace(record=record, _note_retries=lambda *_args: None)
+        Desk._note_client(desk, "job1", client)
+        event = record.latest_event("job1", REQUESTS_EVENT)["payload"]
+        self.assertEqual(event["count"], 3)
+        text = report_text(record, "job1")
+        self.assertIn("Request ids: 3 on the record", text)
+        self.assertIn("billed to workspace wrkspc_dc", text)
+
+    def test_a_check_inside_a_turn_is_counted_once_for_time(self):
+        from fpfa.usage_report import job_seconds, job_totals, usage_events
+
+        record = _record()
+        record.ensure_project("job1", "Timed")
+        use_row = {"rounds": 1, "input_tokens": 100, "output_tokens": 10}
+        record.log_event("job1", "turn", {"usage": use_row, "checks": 1, "seconds": 100.0}, agent="lead")
+        record.log_event("job1", "record_check", {"usage": use_row, "seconds": 20.0, "within_turn": True}, agent="qa-specialist")
+        record.log_event("job1", "record_check", {"usage": use_row, "seconds": 10.0}, agent="qa-specialist")
+        rows = usage_events(record, "job1")
+        self.assertEqual(job_seconds(rows), 110.0, "the report's CHAT-01 read 10 min 18 s for a 9 min 06 s wait")
+        self.assertEqual(job_totals(rows)["input_tokens"], 300, "the check's tokens are still counted")
 
 
 if __name__ == "__main__":

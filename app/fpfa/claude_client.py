@@ -38,10 +38,25 @@ a few scalars, and the API keeps validating them.
 
 Retries. A rate limit, an overload, a timeout, or a dropped connection is
 sent again, up to RETRY_ATTEMPTS attempts in all. The wait is the API's
-retry-after when it names one, capped at RETRY_AFTER_CAP so a cancel is
-never far away, and otherwise RETRY_WAITS. on_retry, when set, hears each
+retry-after when it names one, and otherwise RETRY_WAITS. A retry-after is
+waited out whole, since the API says an earlier attempt fails; one longer
+than RETRY_AFTER_MAX is not waited at all, and the request stops with how
+long the API asked for. The wait is on the job's cancel event when the
+client has one, so Stop ends it at once. on_retry, when set, hears each
 wait so the window can say why nothing is moving. A long team turn makes
 dozens of requests, and one refused request must not lose the turn.
+
+A spend limit is not a rate limit. The usage tier's monthly spend cap is a
+429 marked enforced_spend_limit_reached with no retry-after, and it fails
+until the next month; a spend limit the owner set on the organization or a
+workspace is a 400; a billing problem is a 402. None of them is sent again:
+the request stops at once with SpendLimitReached, in plain words, with the
+API's own message, which says when access resumes.
+
+Request ids. Every response carries the API's request-id, and the
+anthropic-workspace-id of the workspace it was billed to. The client keeps
+both for each request it sent, answered or refused (requests), and the
+window writes them to the job's record when the job ends.
 
 Effort. FPFA_EFFORT, or the effort argument, adds output_config.effort to
 every request this client sends, on both paths alike. It is unset by
@@ -64,8 +79,18 @@ MODEL_ID = "claude-opus-5-5"
 RETRY_ATTEMPTS = 5
 # Seconds before the second, third, fourth, and fifth attempt when the API names no wait.
 RETRY_WAITS = (2.0, 4.0, 8.0, 16.0)
-# The longest the API's own retry-after is obeyed. A cancel is honoured between attempts.
-RETRY_AFTER_CAP = 30.0
+# The longest retry-after the client waits out by itself. A longer one stops the request with the API's wait in
+# the message: the API says an attempt before it fails, so waiting less would only spend an attempt.
+RETRY_AFTER_MAX = 120.0
+# The tier's monthly spend cap: a 429 that is not a rate limit. error.details.error_code says which it is.
+SPEND_CAP_CODE = "enforced_spend_limit_reached"
+# A spend limit the owner set: a 400 whose message the API documents as starting with one of these.
+_SPEND_LIMIT_PREFIXES = (
+    "You have reached your specified API usage limits",
+    "You have reached your specified workspace API usage limits",
+)
+# The most request ids one client keeps. A team turn makes dozens; this bounds a runaway one.
+REQUEST_LOG_LIMIT = 500
 EFFORTS = ("low", "medium", "high", "xhigh", "max")
 EFFORT_ENV = "FPFA_EFFORT"
 # One breakpoint on the system block caches tools plus system. The same
@@ -105,6 +130,19 @@ class RequestTooLarge(RuntimeError):
 
 class TurnCancelled(RuntimeError):
     """The designer cancelled the job. The loop stopped before its next model round."""
+
+
+class SpendLimitReached(RuntimeError):
+    """The API refused the request because a spend limit or a billing problem stops it. It was not sent again."""
+
+    def __init__(self, message: str, *, status_code: int | None = None, request_id: str | None = None):
+        super().__init__(message)
+        self.status_code = status_code
+        self.request_id = request_id
+
+
+class RetryWaitTooLong(RuntimeError):
+    """The API asked for a longer wait before another attempt than the client waits out by itself."""
 
 
 def safe_error(exc: BaseException) -> str:
@@ -220,9 +258,18 @@ def incomplete_notice(stop_reason: str | None) -> str:
 def retry_wait(exc: BaseException, attempt: int) -> float:
     """Seconds before the next attempt. attempt counts the failures so far, starting at 0.
 
-    The API's retry-after header wins when it gives a number of seconds, up
-    to RETRY_AFTER_CAP. Without one the wait doubles from RETRY_WAITS.
+    The API's retry-after header wins when it gives a number of seconds, whole:
+    an attempt before it fails. Without one the wait doubles from RETRY_WAITS.
+    The caller decides whether a long one is waited out (RETRY_AFTER_MAX).
     """
+    named = _named_wait(exc)
+    if named is not None:
+        return named
+    return RETRY_WAITS[min(max(attempt, 0), len(RETRY_WAITS) - 1)]
+
+
+def _named_wait(exc: BaseException) -> float | None:
+    """The API's retry-after in seconds, or None when the response names none."""
     headers = getattr(getattr(exc, "response", None), "headers", None)
     named = None
     if headers is not None:
@@ -230,12 +277,56 @@ def retry_wait(exc: BaseException, attempt: int) -> float:
             named = headers.get("retry-after")
         except Exception:
             named = None
-    if named not in (None, ""):
-        try:
-            return max(0.0, min(float(named), RETRY_AFTER_CAP))
-        except (TypeError, ValueError):
-            pass
-    return RETRY_WAITS[min(max(attempt, 0), len(RETRY_WAITS) - 1)]
+    if named in (None, ""):
+        return None
+    try:
+        return max(0.0, float(named))
+    except (TypeError, ValueError):
+        return None
+
+
+def _error_code(exc: BaseException) -> str:
+    """error.details.error_code from the API's error body: the SDK's own field, or the body it kept."""
+    code = getattr(exc, "error_code", None)
+    if isinstance(code, str) and code:
+        return code
+    body = getattr(exc, "body", None)
+    error = body.get("error") if isinstance(body, dict) else None
+    details = error.get("details") if isinstance(error, dict) else None
+    found = details.get("error_code") if isinstance(details, dict) else None
+    return found if isinstance(found, str) else ""
+
+
+def _api_message(exc: BaseException) -> str:
+    """error.message from the API's error body, or "" when there is none."""
+    message = getattr(exc, "api_message", None)
+    if isinstance(message, str) and message:
+        return message
+    body = getattr(exc, "body", None)
+    error = body.get("error") if isinstance(body, dict) else None
+    return str(error.get("message") or "") if isinstance(error, dict) else ""
+
+
+def spend_stop(exc: BaseException) -> str:
+    """Why sending this request again cannot help: a spend cap, a spend limit, or a billing problem. Else "".
+
+    The tier's monthly cap is told from a rate limit by its error code, never
+    by its wording. A spend limit the owner set is a 400 the API documents by
+    the start of its message; a 400 is not sent again in any case, so the
+    message only says plainly what happened.
+    """
+    status = getattr(exc, "status_code", None)
+    said = _api_message(exc)
+    tail = f" The API said: {said}" if said else ""
+    if status == 429 and _error_code(exc) == SPEND_CAP_CODE:
+        return ("The organization has reached its usage tier's monthly API spend cap. The API refuses every request "
+                "until access resumes, so the application did not send this one again." + tail)
+    if status == 400 and said.startswith(_SPEND_LIMIT_PREFIXES):
+        return ("A spend limit set on the organization, or on the workspace of this API key, has been reached. The "
+                "API refuses requests until the limit is raised or access resumes." + tail)
+    if status == 402:
+        return "The API reports a billing problem (402). Check the payment details in the Claude Console." + tail
+    return ""
 
 
 def configured_effort(value: str | None = None) -> str:
@@ -324,11 +415,10 @@ def run_tool_loop(
                 tools=tools,
                 messages=messages,
             )
-        except TurnCancelled:
-            raise
         except Exception as exc:
-            # The rounds before this one were billed. The caller records them with the failure. The request
-            # that failed returned no usage: whether any part of it was billed is not known here.
+            # The rounds before this one were billed. The caller records them with the failure, or with the
+            # cancel when the designer stopped the job during a wait to send it again. The request that failed
+            # returned no usage: whether any part of it was billed is not known here.
             attach_usage(exc, usage)
             raise
         add_usage(usage, getattr(response, "usage", None))
@@ -415,16 +505,21 @@ class AnthropicMessages:
     """Thin wrapper so the loop and the UI share one client."""
 
     def __init__(self, api_key: str, model: str = MODEL_ID, *, effort: str | None = None,
-                 on_retry: Callable[[dict], Any] | None = None):
+                 on_retry: Callable[[dict], Any] | None = None, cancel: Any = None):
         import anthropic
 
         self.model = model
         self.effort = configured_effort(effort)
         # Hears {"type": "retry", "attempt", "of", "wait_s", "status"} before each wait.
         self.on_retry = on_retry
+        # The job's threading.Event. A wait before another attempt ends at once when it is set.
+        self.cancel = cancel
         # Requests sent again after a failure, since this client was made. A failed attempt reports no
         # usage, so nothing here can say what it cost; the count is what can be said.
         self.retries = 0
+        # Every request this client sent that the API answered or refused with an id: {"id", "workspace",
+        # "status", "at"}. Quoted to the provider's support, and how a bill is matched to a job.
+        self.requests: list[dict] = []
         # Retries live in create() so a 429 or 529 is visible and bounded.
         self._client = anthropic.Anthropic(api_key=api_key, timeout=300.0, max_retries=0)
 
@@ -458,14 +553,37 @@ class AnthropicMessages:
             kwargs["output_config"] = config
         return kwargs
 
+    def _note(self, request_id: Any, workspace_id: Any, status: Any) -> None:
+        """Keep the API's id for one request. A response with none (a test's stand-in) keeps nothing."""
+        if not isinstance(request_id, str) or not request_id or len(self.requests) >= REQUEST_LOG_LIMIT:
+            return
+        self.requests.append({
+            "id": request_id, "workspace": workspace_id if isinstance(workspace_id, str) else "",
+            "status": status, "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        })
+
+    def _wait(self, seconds: float) -> None:
+        """Wait before another attempt. On the job's cancel event when there is one, so Stop ends the wait."""
+        if self.cancel is None:
+            time.sleep(seconds)
+            return
+        if self.cancel.wait(seconds):
+            raise TurnCancelled("Cancelled by the designer while waiting to send a refused request again.")
+
     def _send(self, kwargs: dict, on_event: Callable[[dict], Any] | None = None):
         """Send one request, with the bounded retry. on_event turns the call into a stream."""
         for attempt in range(RETRY_ATTEMPTS):
             try:
                 if on_event is None:
-                    return self._client.messages.create(**kwargs)
+                    response = self._client.messages.create(**kwargs)
+                    self._note(getattr(response, "_request_id", None), getattr(response, "_workspace_id", None), "ok")
+                    return response
                 return self._stream(kwargs, on_event)
+            except TurnCancelled:
+                raise
             except Exception as exc:
+                self._note(getattr(exc, "request_id", None), getattr(exc, "workspace_id", None),
+                           getattr(exc, "status_code", None) or type(exc).__name__)
                 # Checked before the transient retry so a size rejection is never resent.
                 if request_too_large(exc):
                     raise RequestTooLarge(
@@ -476,19 +594,30 @@ class AnthropicMessages:
                         "the question or start a new job so fewer earlier turns are included. "
                         "API response: " + safe_error(exc)
                     ) from exc
+                stop = spend_stop(exc)
+                if stop:
+                    # Sending it again cannot help, and the turn should say why in plain words.
+                    raise SpendLimitReached(stop, status_code=getattr(exc, "status_code", None),
+                                            request_id=getattr(exc, "request_id", None)) from exc
                 if attempt == RETRY_ATTEMPTS - 1 or not _transient_api_error(exc):
                     raise
+                wait = retry_wait(exc, attempt)
+                if wait > RETRY_AFTER_MAX:
+                    raise RetryWaitTooLong(
+                        f"The API asked for {wait:.0f} s before another attempt, longer than the application waits by "
+                        f"itself ({RETRY_AFTER_MAX:.0f} s). Nothing was sent again. Try again after that. "
+                        + safe_error(exc)
+                    ) from exc
                 # The words of the failed attempt are not the reply. The listener drops them.
                 _tell(on_event, {"type": "reset"})
                 self.retries += 1
-                wait = retry_wait(exc, attempt)
                 _tell(self.on_retry, {
                     "type": "retry", "attempt": attempt + 2, "of": RETRY_ATTEMPTS, "wait_s": wait,
                     "status": getattr(exc, "status_code", None),
                 })
                 _log.warning("request failed (%s); attempt %d of %d in %.0f s",
                              type(exc).__name__, attempt + 2, RETRY_ATTEMPTS, wait)
-                time.sleep(wait)
+                self._wait(wait)
         raise RuntimeError("Claude request was not sent")
 
     def _stream(self, kwargs: dict, on_event: Callable[[dict], Any]):
@@ -508,7 +637,10 @@ class AnthropicMessages:
                         text = getattr(delta, "text", "") or ""
                         if text:
                             _tell(on_event, {"type": "text", "text": text})
-            return stream.get_final_message()
+            message = stream.get_final_message()
+            # The final message of a stream carries no request id of its own; the stream's response does.
+            self._note(getattr(stream, "request_id", None), getattr(stream, "workspace_id", None), "ok")
+            return message
 
     def create(self, **kwargs):
         return self._send(self._prepare(kwargs))

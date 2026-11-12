@@ -890,7 +890,8 @@ class TeamSession:
             from fpfa.checker import check_record
 
             try:
-                outcome = check_record(self.root, self.record, self.project_id, self.create, cancel=self.cancel)
+                outcome = check_record(self.root, self.record, self.project_id, self.create, cancel=self.cancel,
+                                       within_turn=True)
             except TurnCancelled:
                 raise
             except Exception as exc:
