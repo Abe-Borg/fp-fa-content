@@ -2,7 +2,7 @@
 
 Written 2026-11-12 against `REPORT.md` (run CYN020-20261111, target `app-v0.2.0`, commit `24cebb48`). This is a plan. No code, test, or content file was changed to produce it.
 
-**Read this first.** The report tested 0.2.0. `main` is 0.3.0, twelve commits later, and the hardening milestone in it landed about three and a half hours before the test run began. Four of the ten defects are already fixed or gone at HEAD. Six are still there, and I found four more things the report did not raise. Everything below is judged against HEAD (`10fdd37`), with what was true at the tested commit stated beside it.
+**Read this first.** The report tested 0.2.0. `main` is 0.3.0, twelve commits later, and the hardening milestone in it landed about three and a half hours before the test run began. Of the ten defects, three are fixed or gone at HEAD (BUG-001, 004, 008), three are partly fixed and still open (BUG-002, 003, 007), and four are unchanged (BUG-005, 006, 009, 010). I found five more things the report did not raise (N-1 to N-5). Everything below is judged against HEAD (`10fdd37`), with what was true at the tested commit stated beside it.
 
 How each finding was checked: I extracted the tested tree next to HEAD and ran the report's reproduction steps against both, with no model. Where an agent takes part it is a script written in advance, so those results show what the application does, not what the live model does. Nothing here was run on Windows, nothing was sent to the live model, and no standard was opened. Section 8 is the full account.
 
@@ -125,6 +125,7 @@ I rebuilt the report's seven cases, added three, and ran them with a stand-in ch
 | 99 Ah cited to 99 ft | Supported | **Supported, top tier** |
 | Mine: 600 gpm cited to "600 lpm" | Supported | **Supported, top tier** |
 | Mine: 450 gal cited to "450 feet of hose" | Supported | Not supported |
+| Mine, true control: 900 ft cited to a 900 ft fact | Supported | Supported |
 
 Root causes at HEAD, each separate:
 
@@ -144,7 +145,7 @@ Why High for the release half: the releasing statement is the one sentence in th
 - *App.* In `_cite_for`: only the zone inputs and the five basis fields are "PROJECT INPUT". Any other fact is shown as a recorded fact with who wrote it and its label, counts as author-only when the finding's author wrote it, and goes through the echo rule.
 - *Mixed.* For a finding that cites a `releasing_truth_table` row and speaks about what releases, require the row's own expression (`releasing.releasing_logic(...)["expression"]`) in the text, or it stays on the checker's reading alone. Extending the wording detector to single-leg and either-or statements is the other route. The pack lint carries a copy of those rules and `CLAUDE.md` says to change both together, so that part goes to the Grok team before it is written.
 
-**Smallest test.** One table-driven test in `test_hardening.AssuranceTests` with `yes_to_everything`: the nine rows above. No false row may come back Supported with basis `source`; the true control must stay there.
+**Smallest test.** One table-driven test in `test_hardening.AssuranceTests` with `yes_to_everything`: the ten rows above. No false row may come back Supported with basis `source`; the two true controls must stay there.
 
 ### BUG-004. A failed specialist lost the usage of a response that had finished
 
@@ -387,7 +388,7 @@ None, as before. No standard was opened by the report, by the hardening mileston
 14. *That 0.3.0 existed.* Nothing in the report tells a reader its target was one version behind `main` on the day it ran.
 15. *What effort the live results are tied to.* It says effort was unset. On Opus 5.5 that is medium. The checker running out of room at 4,000 tokens is partly a product of that; at another effort it moves, it does not go away.
 
-**Confirmed, for balance.** The cost arithmetic is right: I recomputed $18.429381 from its four token totals at its rates, and $0.0694958 for the Section check. Its DH-1 and DH-2 figures are the application's figures. BUG-001, 004, and 008 reproduce on the tested tree exactly as written. Its separation of live behaviour from scripted controls is careful throughout, and the six defects still open at HEAD are all real.
+**Confirmed, for balance.** The cost arithmetic is right: I recomputed $18.429381 from its four token totals at its rates, and $0.0694958 for the Section check. Its DH-1 and DH-2 figures are the application's figures. BUG-001, 004, and 008 reproduce on the tested tree exactly as written. Its separation of live behaviour from scripted controls is careful throughout, and the seven defects still open at HEAD are all real.
 
 ---
 
@@ -395,7 +396,7 @@ None, as before. No standard was opened by the report, by the hardening mileston
 
 Decisions that are yours, in the order they block work.
 
-1. **Target and order.** I propose the fixes go on `main` as 0.3.1, items 1 to 6 first, and the Windows and live retests run on that build, not on 0.3.0. The alternative is to retest 0.3.0 now, which costs a live run to re-find six things already reproduced offline. Which do you want?
+1. **Target and order.** I propose the fixes go on `main` as 0.3.1, items 1 to 6 first, and the Windows and live retests run on that build, not on 0.3.0. The alternative is to retest 0.3.0 now, which costs a live run to re-find seven things already reproduced offline. Which do you want?
 2. **An incomplete trace check and the Design Basis.** `CLAUDE.md` says both exports keep a current trace check as their gate, and also that a Design Basis with work missing is never blocked for that. When the check cannot finish: does the export wait, or does it go out with those findings under "Stated by a specialist, not checked" and a line at its head saying the check was incomplete? I lean to the second, with batching to make it rare.
 3. **A label for "supported on the checker's reading alone".** The BUG-003 fix needs a standing between the top group and "its author's own cite only". Is a fifth group acceptable, and do you want to word it? No tier may read as verification.
 4. **Editions.** Which editions do your jobs declare today: 2019, 2022, 2025? If 2022 is common, do you want the Grok team asked for a 2022 body in the kernel's gate, or is a standing hold on 2022 jobs acceptable for now?
