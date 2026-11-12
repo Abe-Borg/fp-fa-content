@@ -89,7 +89,16 @@ def zone_figures(tools: dict[str, Any]) -> list[dict]:
 
     if "t_total_s" in trip:
         passes = bool(trip.get("passes_screen"))
-        lines = [screen_limit_assumption_text(trip), SCREEN_NOTE]
+        lines = []
+        if "t_fill_s" in trip:
+            # The tool's own part of t_total that is the water alone, and its margin, beside the verdict: the
+            # acceptance run's team called a screen independent of its assumed times when the fill time alone
+            # was inside the limit (F-006). Printed as the tool returned them; nothing is worked out here.
+            lines.append(f"Fill time alone, 60·V/Q: {fmt1(trip['t_fill_s'])} s ({CALCULATED}). The detection, "
+                         "releasing, and exhaust times on the inputs are added to it.")
+        if "margin_s" in trip and "limit_s" in trip:
+            lines.append(f"Margin to the {fmt1(trip['limit_s'])} s limit: {fmt1(trip['margin_s'])} s.")
+        lines += [screen_limit_assumption_text(trip), SCREEN_NOTE]
         figures.append(_figure(
             "t_total", "Delivery screen, t_total", fmt1(trip["t_total_s"]), "s", label=CALCULATED,
             tone="ok" if passes else "warn",

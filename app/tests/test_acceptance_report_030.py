@@ -831,5 +831,42 @@ class TextContrastTests(unittest.TestCase):
                 self.assertIn(selector, self.DECORATION, selector)
 
 
+class FillTimeTileTests(unittest.TestCase):
+    """F-006. The live team said the failing screen did not depend on its assumed times. The tool had returned
+    the fill time alone, 28.1 s, inside the 30 s limit; it is now beside the verdict, as the tool returned it."""
+
+    def test_the_delivery_tile_shows_the_fill_time_alone_and_the_margin(self):
+        from fpfa.calc_tools import ToolSession
+        from fpfa.results_panel import zone_figures
+        from fpfa.workflow import fmt1, run_tool_plan
+
+        tools, _sent = run_tool_plan(ToolSession(REPO), _sample_di(), {"insurer": "FM"})
+        trip = tools["di_trip_to_water"]
+        tile = next(item for item in zone_figures(tools) if item["key"] == "t_total")
+        self.assertIn(f"Fill time alone, 60·V/Q: {fmt1(trip['t_fill_s'])} s (calculated). The detection, releasing, "
+                      "and exhaust times on the inputs are added to it.", tile["lines"])
+        self.assertIn(f"Margin to the {fmt1(trip['limit_s'])} s limit: {fmt1(trip['margin_s'])} s.", tile["lines"])
+        # DH-1: the water alone is inside the limit; the screen fails on the times added to it.
+        self.assertLess(trip["t_fill_s"], trip["limit_s"])
+        self.assertFalse(trip["passes_screen"])
+
+
+class MissingInputPolicyTests(unittest.TestCase):
+    """F-009. The owner's ruling (2026-11-12): a request the designer says to answer from what they gave goes on
+    with stated, labeled assumptions; the one stop is a takeoff with no pipe data at all. The live behaviour can
+    only be seen on a live run; this holds the lead's instructions to the ruling."""
+
+    def test_the_lead_is_told_the_one_case_that_stops_the_work(self):
+        text = (REPO / "roles" / "lead" / "ROLE.md").read_text(encoding="utf-8")
+        rule = text.split("4. Ask only what blocks the work", 1)[1].split("\n\n", 1)[0]
+        self.assertIn("stop only when no stated assumption can stand in for what is missing", rule)
+        self.assertIn("there is no pipe data at all", rule)
+        self.assertIn('"that\'s all I have"', rule)
+        for assumed in ("an unconfirmed system type", "the hazard", "a density and a design area", "the hose"):
+            self.assertIn(assumed, rule)
+        self.assertIn("goes to the engineer of record", rule)
+        self.assertNotIn("the system type is unknown), ask", rule, "an unknown system type no longer stops the work")
+
+
 if __name__ == "__main__":
     unittest.main()
