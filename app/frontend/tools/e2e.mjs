@@ -72,15 +72,8 @@ try {
   check("Esc closes the menu", (await page.$(".menu")) === null);
   check("closing puts the keys back on the button", await page.evaluate(() => document.activeElement?.getAttribute("aria-label") === "More"));
 
-  // Mode, from the keyboard: Down opens it.
-  await page.focus("button[aria-label=Mode]");
-  await page.keyboard.press("ArrowDown");
-  await page.waitForSelector(".menu");
-  const modes = await page.$$eval(".menu .menu-label", (nodes) => nodes.map((node) => node.textContent));
-  check("the Mode menu lists the modes", ["Brainstorm", "Calculator", "Synthesis", "Mixed"].every((mode) => modes.includes(mode)), JSON.stringify(modes));
-  await page.click(".menu-item:has-text('Calculator')");
-  await page.waitForFunction(() => document.querySelector("button[aria-label=Mode]")?.textContent?.includes("calculator"));
-  check("choosing a mode shows it on the button", true);
+  // The app picks how a reply is written; the composer has no Mode menu.
+  check("the composer has no Mode button", (await page.$("button[aria-label=Mode]")) === null);
 
   // The job panel: its three tabs sit in the top bar and work from the keyboard.
   await page.focus("#tab-results");

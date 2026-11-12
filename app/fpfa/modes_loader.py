@@ -3,6 +3,11 @@
 Same idea as roles/<slug>/ROLE.md. The application lists these files and
 returns one file when the model calls read_mode. It does not copy the mode
 text into Python.
+
+The designer does not choose a mode. The application picks one for each
+path: a typed question gets CHAT_MODE, and a zone narration or the
+explosion-control starter gets NARRATION_MODE, the mode written for a draft
+after a tool plan.
 """
 
 from __future__ import annotations
@@ -12,6 +17,8 @@ from pathlib import Path
 from fpfa.skills_loader import frontmatter
 
 DEFAULT_MODE = "mixed"
+CHAT_MODE = DEFAULT_MODE
+NARRATION_MODE = "synthesis"
 MODE_SLUGS = (
     "brainstorm",
     "calculator",

@@ -260,7 +260,6 @@ export interface State {
   projects: { id: string; name: string }[];
   open: { id: string; name: string } | null;
   title: string;
-  mode: { slug: string; choices: string[] };
   narrate: boolean;
   activity: ActivityRow[];
   pending: { label: string; detail: string } | null;

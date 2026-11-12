@@ -1242,7 +1242,7 @@ body.resizing {
   background: var(--raised-hover);
 }
 
-/* The composer: the words, then one row inside the box for Mode and Send. */
+/* The composer: the words, then one row inside the box for Send (and Stop while a job runs). */
 .chips {
   display: flex;
   flex-wrap: wrap;
