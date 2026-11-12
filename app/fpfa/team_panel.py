@@ -332,7 +332,10 @@ def team_view(snapshot: dict | None, *, export_reason: str | None = None,
         # The same agents with what each had recorded when it stopped, and what asking again repeats.
         "partial": [status.partial_text(row) for row in digest["interrupted"]],
         "retry_line": status.RETRY_LINE if digest["interrupted"] or digest["interrupted_jobs"] else "",
-        "unchecked": [f"{row['tool']} by {row['by'] or 'the app'}: {row['note']}" for row in digest["unchecked"]],
+        # The page prints each of these after "Not reconciled by the app:". An edition the calculations cite
+        # and the job does not state is one of them, said once for the tools that share it.
+        "unchecked": [f"{row['tool']} by {row['by'] or 'the app'}: {row['note']}" for row in digest["unchecked"]]
+        + list(digest.get("edition_lines") or []),
         "export": digest["export"],
         "not_standard": checker.NOT_STANDARD,
         # What a design basis exported now would be missing, and the kinds of assurance with the two never performed.

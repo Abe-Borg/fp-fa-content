@@ -1032,6 +1032,9 @@ def coverage(snapshot: dict | None) -> dict:
         count = len(digest["unchecked"])
         gaps.append(f"{count} calculation{'s' if count != 1 else ''} the application cannot reconcile after an "
                     "input change: the tool is not tied to the project inputs. Check by hand or run again.")
+    for line in digest.get("edition_lines") or []:
+        # The cites of a calculation name another edition of a standard than the job states.
+        gaps.append(line)
     if digest["stale"]:
         count = len(digest["stale"])
         gaps.append(f"{count} row{'s' if count != 1 else ''} on the record {'are' if count != 1 else 'is'} out of date.")

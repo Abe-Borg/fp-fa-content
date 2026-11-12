@@ -380,8 +380,10 @@ class CallBasisTests(unittest.TestCase):
         snapshot = record.snapshot("job1")
         analysis = analyze(snapshot)
         self.assertEqual(analysis["calcs"][takeoff["record_id"]]["state"], "alternative")
+        # The job states NFPA 13 2025, which is the edition this calculation's cites carry: no edition gap.
         self.assertEqual(analysis["calcs"][trip["record_id"]],
-                         {"state": "alternative", "reasons": [], "note": carried, "tracked": True, "unchecked": ""})
+                         {"state": "alternative", "reasons": [], "note": carried, "tracked": True, "unchecked": "",
+                          "edition_gaps": [], "edition_hold": ""})
         self.assertEqual(analysis["calcs"][nitrogen["record_id"]]["state"], "alternative")
         # The finding on the derived trip time is named as resting on another case, to the lead and on the panel.
         self.assertEqual(analysis["findings"][finding["id"]]["state"], "current")

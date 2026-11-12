@@ -646,5 +646,145 @@ class TraceGuardTests(unittest.TestCase):
             "6 true rows of 32; the 4 in. cross main is 160 ft; 24 VDC; 7 Ah")], ["4 in.", "160 ft", "24 VDC", "7 Ah"])
 
 
+class EditionHoldTests(unittest.TestCase):
+    """BUG-005. The job states one edition of a standard and a calculation's own cites name another.
+
+    Nothing here says whether the rule reads the same in both. The test is
+    that the application stops calling such a row "follows the project
+    inputs", says what the two labels are, and leaves applicability open,
+    before a rerun and after one.
+    """
+
+    HOLD = ("EDITION NOT RECONCILED. This calculation's cites are NFPA 13-2025 and the job states NFPA 13-2022. "
+            "Whether the rule and the section apply in the edition the job states was not resolved here. "
+            "The engineer of record confirms it.")
+    LINE = ("EDITION NOT RECONCILED. The dry_delivery_screen, di_trip_to_water, hose_duration cites are NFPA 13-2025 "
+            "and the job states NFPA 13-2022. Whether the rule and the section apply in the edition the job states was "
+            "not resolved here. The engineer of record confirms it.")
+    CITING = {"dry_delivery_screen", "di_trip_to_water", "hose_duration"}
+
+    def _seeded(self):
+        record = _record()
+        di, basis = _seed_inputs(record)
+        result = _run_plan(record, di, basis)
+        return record, di, basis, result
+
+    def _export(self, record) -> dict[str, str]:
+        """The Design Basis as written: its whole text, and each calculation row's standing by tool."""
+        from test_design_basis import _docx_text
+
+        from fpfa.design_basis_docx import write_design_basis
+
+        path = Path(tempfile.mkdtemp(prefix="fpfa-acceptance-")) / "basis.docx"
+        write_design_basis(path, {"id": "job1", "name": "Sample"}, record.snapshot("job1"), content_root=REPO)
+        text = _docx_text(path)
+        standing = {}
+        for line in text.splitlines():
+            cells = [cell.strip() for cell in line.split(" | ")]
+            if len(cells) == 7 and cells[1] == "tool-plan":
+                standing[cells[0]] = cells[5]
+        return {"text": text, **standing}
+
+    def test_a_job_on_the_edition_the_calculations_cite_has_no_hold(self):
+        from fpfa import checker
+        from fpfa.coherence import analyze
+
+        record, _di, _basis, result = self._seeded()
+        analysis = analyze(record.snapshot("job1"))
+        self.assertEqual(analysis["edition_holds"], [])
+        self.assertFalse([flag for flag in result["flags"] if "EDITION" in flag])
+        written = self._export(record)
+        self.assertEqual(written["dry_delivery_screen"], "follows the project inputs")
+        self.assertNotIn("EDITION NOT RECONCILED", written["text"])
+        self.assertFalse([gap for gap in checker.coverage(record.snapshot("job1"))["gaps"] if "EDITION" in gap])
+
+    def test_another_edition_is_held_before_a_rerun_and_after_one(self):
+        from test_coherence import _change
+
+        from fpfa import checker, status
+        from fpfa.coherence import analyze
+
+        record, di, basis, _result = self._seeded()
+        _change(record, "nfpa_13", "2022")
+        for stage in ("before a rerun", "after a rerun"):
+            if stage == "after a rerun":
+                again = _run_plan(record, di, dict(basis, nfpa_13="2022"))
+                self.assertEqual(again["flags"][0], self.LINE, "the run says it first, ahead of the cites it qualifies")
+                self.assertEqual(again["warnings"], [])
+            snapshot = record.snapshot("job1")
+            analysis = analyze(snapshot)
+            calcs = {row["id"]: row for row in record.calcs("job1")}
+            self.assertEqual({calcs[ident]["tool"] for ident in analysis["edition_holds"]}, self.CITING, stage)
+            self.assertEqual(analysis["stale"]["calcs"], [], "the figures are not out of date; the cite is unresolved")
+            self.assertEqual({analysis["calcs"][ident]["edition_hold"] for ident in analysis["edition_holds"]}, {self.HOLD})
+            written = self._export(record)
+            for tool in self.CITING:
+                self.assertEqual(written[tool], self.HOLD + " Its figures follow the zone inputs.", f"{tool}, {stage}")
+            self.assertEqual(written["zone_trapped_volume"], "follows the project inputs", "a row that cites no edition")
+            self.assertIn("INCOMPLETE DRAFT", written["text"])
+            self.assertIn(self.LINE, written["text"])
+            found = checker.coverage(snapshot)
+            self.assertFalse(found["complete"])
+            self.assertIn(self.LINE, found["gaps"])
+            self.assertEqual(checker.export_reason(snapshot), "", "the draft is exported, and says what is unresolved")
+            digest = status.build(snapshot)
+            self.assertEqual(digest["edition_lines"], [self.LINE])
+            said = status.designer_text(digest, coverage=found["gaps"])
+            self.assertEqual(said.count(self.LINE), 1, "said once, under its own heading, not again as a coverage gap")
+            self.assertIn("**Edition not reconciled**", said)
+            self.assertIn("Running the zone again does not change this", said)
+            self.assertIn("- " + self.LINE, checker.coverage_lines(snapshot), "the lead's status block carries it")
+
+    def test_the_hold_clears_when_the_job_states_the_edition_the_cites_carry(self):
+        from test_coherence import _change
+
+        from fpfa.coherence import analyze
+        from fpfa.team_panel import team_view
+
+        record, _di, _basis, _result = self._seeded()
+        _change(record, "nfpa_13", "2022")
+        self.assertIn(self.LINE, team_view(record.snapshot("job1"))["unchecked"])
+        _change(record, "nfpa_13", "2025")
+        self.assertEqual(analyze(record.snapshot("job1"))["edition_holds"], [])
+        self.assertEqual(team_view(record.snapshot("job1"))["unchecked"], [])
+        self.assertEqual(self._export(record)["dry_delivery_screen"], "follows the project inputs")
+
+    def test_what_is_compared_and_what_is_not(self):
+        from fpfa.coherence import cited_editions, edition_gaps, edition_hold_text, stated_edition
+
+        outputs = {"nfpa_basis": "NFPA 13-2025 s8.3.2.3.1.1 (a paraphrase)", "edition": 2025,
+                   "note": "see NFPA 72-2025 for the releasing panel", "rows": [{"cite": "NFPA 13-2025 Table 8.2.4.3.2"}]}
+        self.assertEqual(cited_editions(outputs), {"NFPA 13": ["2025"], "NFPA 72": ["2025"]})
+        self.assertEqual(cited_editions({"zone_gal": 281.3, "flags": ["no cite here"]}), {})
+        self.assertEqual((stated_edition("2022"), stated_edition("NFPA 13-2022"), stated_edition(2022)), ("2022", "2022", "2022"))
+        self.assertIsNone(stated_edition("2019 or 2022"))
+        self.assertIsNone(stated_edition(""))
+        # The same edition, however the field writes it: no gap.
+        self.assertEqual(edition_gaps(outputs, {"nfpa_13": "NFPA 13-2025", "nfpa_72": "2025"}), [])
+        # A field that is not on the job at all is not compared. A blank one, or one that names two years, is.
+        self.assertEqual(edition_gaps(outputs, {}), [])
+        self.assertEqual([gap["job"] for gap in edition_gaps(outputs, {"nfpa_13": "", "nfpa_72": "2025"})],
+                         ["the job states no NFPA 13 edition"])
+        self.assertEqual([gap["job"] for gap in edition_gaps(outputs, {"nfpa_13": "2019 or 2022", "nfpa_72": "2025"})],
+                         ['the job\'s NFPA 13 edition reads "2019 or 2022", which does not name one edition'])
+        both = edition_gaps(outputs, {"nfpa_13": "2022", "nfpa_72": "2022"})
+        self.assertEqual([gap["cited"] for gap in both], ["NFPA 13-2025", "NFPA 72-2025"])
+        text = edition_hold_text(both)
+        self.assertTrue(text.startswith("EDITION NOT RECONCILED. "))
+        # It leaves the question open. It never says the rule applies, or that it does not.
+        self.assertNotRegex(text.lower(), r"\bsame\b|equivalent|identical|does not apply|verified|complies")
+        self.assertEqual(edition_hold_text([]), "")
+
+    def test_a_record_with_no_basis_on_it_is_not_judged(self):
+        from fpfa.calc_tools import ToolSession
+        from fpfa.coherence import analyze
+
+        record = _record()
+        record.ensure_project("job1", "Bare")
+        session = ToolSession(REPO, record=record, project_id="job1", agent="fp-sprinkler")
+        session.execute("hose_duration", {"hazard": "ordinary", "supervised": True})
+        self.assertEqual(analyze(record.snapshot("job1"))["edition_holds"], [])
+
+
 if __name__ == "__main__":
     unittest.main()

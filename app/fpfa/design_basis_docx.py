@@ -455,8 +455,13 @@ def write_design_basis(
     if current_calcs:
         def standing_of(row: dict) -> str:
             item = analysis["calcs"][row["id"]]
+            hold = item.get("edition_hold") or ""
             if item["state"] == coherence.ALTERNATIVE:
-                return f"ALTERNATIVE: ran on {item['note']}. Not the design case."
+                return f"ALTERNATIVE: ran on {item['note']}. Not the design case." + (f" {hold}" if hold else "")
+            if hold:
+                # The figures follow the zone inputs. The cite does not follow the edition the job states,
+                # so the row is never called "follows the project inputs" while that stands.
+                return hold + (" Its figures follow the zone inputs." if item.get("tracked") else "")
             if item.get("tracked"):
                 return "follows the project inputs"
             if item.get("unchecked"):

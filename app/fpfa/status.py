@@ -80,6 +80,23 @@ def input_rows(snapshot: dict | None) -> list[dict]:
     return rows
 
 
+def _edition_lines(analysis: dict, calcs: dict[str, dict]) -> list[str]:
+    """One sentence for each edition a job's calculations cite and the job does not state, naming the tools."""
+    grouped: dict[tuple[str, str], list[str]] = {}
+    for ident in analysis.get("edition_holds") or []:
+        if ident not in calcs:
+            continue
+        for gap in analysis["calcs"][ident].get("edition_gaps") or []:
+            tools = grouped.setdefault((gap["cited"], gap["job"]), [])
+            if calcs[ident]["tool"] not in tools:
+                tools.append(calcs[ident]["tool"])
+    lines = []
+    for (cited, job), tools in grouped.items():
+        cites = "cites are" if len(tools) > 1 else "cite is"
+        lines.append(f"{coherence.EDITION_HOLD}. The {', '.join(tools)} {cites} {cited} and {job}. {coherence.EDITION_OPEN}")
+    return lines
+
+
 def build(snapshot: dict | None, *, export_reason: str | None = None) -> dict:
     """The digest. export_reason is the export gate's answer when the caller has it ("" means ready)."""
     snap = snapshot or {}
@@ -193,6 +210,12 @@ def build(snapshot: dict | None, *, export_reason: str | None = None) -> dict:
         "unchecked": [{"id": ident, "tool": calcs[ident]["tool"], "by": calcs[ident].get("agent") or "",
                        "note": analysis["calcs"][ident]["unchecked"]}
                       for ident in analysis.get("unchecked") or [] if ident in cited],
+        # Calculations whose cites name another edition of a standard than the job states: the rows, and
+        # one sentence for the tools that share a gap. Every view prints the sentences as they are.
+        "edition_holds": [{"id": ident, "tool": calcs[ident]["tool"], "by": calcs[ident].get("agent") or "",
+                           "note": analysis["calcs"][ident]["edition_hold"]}
+                          for ident in analysis.get("edition_holds") or [] if ident in calcs],
+        "edition_lines": _edition_lines(analysis, calcs),
         "interrupted_jobs": [{"id": row["id"], "kind": row.get("kind"), "title": _short(row.get("title"), 80)}
                              for row in interrupted_jobs],
         "export": {"ready": export_reason == "", "reason": export_reason or ""} if export_reason is not None else None,
@@ -431,6 +454,14 @@ def designer_text(digest: dict, check_line: str = "", name: str = "", *, coverag
         lines.append("**The application cannot reconcile these**")
         for row in digest["unchecked"]:
             lines.append(f"- {row['tool']} by {row['by'] or 'the app'}: {row['note']}")
+    if digest.get("edition_lines"):
+        lines.append("")
+        lines.append("**Edition not reconciled**")
+        for line in digest["edition_lines"]:
+            lines.append(f"- {line}")
+        lines.append("Running the zone again does not change this: the calculation is not told the job's edition.")
+        # The same lines are coverage gaps. Said once, here.
+        coverage = [gap for gap in coverage or [] if gap not in digest["edition_lines"]] or None
     if digest["interrupted"] or digest["interrupted_jobs"]:
         lines.append("")
         lines.append("**Interrupted or failed**")
