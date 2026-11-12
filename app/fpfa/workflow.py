@@ -12,7 +12,7 @@ import math
 from pathlib import Path
 from typing import Any, Callable
 
-from fpfa import coherence
+from fpfa import coherence, inputs
 from fpfa.calc_tools import REQUIRED_DI_TOOLS, SCHEMAS, ToolSession
 from fpfa.claude_client import MODEL_ID, TurnCancelled, incomplete_notice, safe_error
 from fpfa.everyday import EVERYDAY_ROLE, SPECIALIST_ROLES, assemble_system
@@ -84,6 +84,14 @@ def _float(value: Any, label: str) -> float:
 
 
 def validate_di(di: dict) -> None:
+    """Refuse a zone run its tools cannot make on what the form holds, naming every problem at once.
+
+    A blank stays blank here as everywhere: the run does not put a 0 or a
+    starting value in its place, and a 0 is not replaced either. A fill
+    flow, a density, a base area, a supervisory fill, and a fill time must be
+    greater than 0. An area increase and a hose allowance may be 0, which says
+    none on purpose, but not blank (inputs.POSITIVE, inputs.NOT_BLANK).
+    """
     segments = di.get("segments") or []
     if not isinstance(segments, list) or not segments:
         raise ValueError("Add at least one pipe segment.")
@@ -92,8 +100,10 @@ def validate_di(di: dict) -> None:
             raise ValueError(f"Segment {index} needs a length in feet.")
         if _blank(segment.get("d_in")) and _blank(segment.get("nps")):
             raise ValueError(f"Segment {index} needs a nominal size or an inside diameter.")
-    if _float(di.get("q_fill_gpm"), "Fill flow") <= 0:
-        raise ValueError("Fill flow must be greater than 0 gpm.")
+    problems = [problem for problem in (inputs.run_problem(name, di.get(name))
+                                        for name in inputs.POSITIVE + tuple(inputs.NOT_BLANK)) if problem]
+    if problems:
+        raise ValueError(" ".join(problems))
 
 
 def _opt_float(value: Any, label: str) -> float | None:
@@ -156,17 +166,18 @@ def run_tool_plan(session: ToolSession, di: dict, basis: dict) -> tuple[dict[str
         "hazard": di.get("hazard") or "ordinary",
         "supervised": bool(di.get("supervised")),
     })
+    # The form's own values, as validate_di accepted them. A 0 stays 0 and nothing blank reaches here.
     density = call("density_area", {
         "density_gpm_ft2": di.get("density_gpm_ft2"),
         "base_area_ft2": di.get("base_area_ft2"),
-        "area_increase": di.get("area_increase") or 0,
-        "hose_gpm": di.get("hose_gpm") or 0,
+        "area_increase": di.get("area_increase"),
+        "hose_gpm": di.get("hose_gpm"),
         "duration_min": hose["duration_min"],
     })
     nitrogen = call("nitrogen_gate", {
         "v_gal": volume["zone_gal"],
-        "p_psig": di.get("supervisory_psig") or 40,
-        "t_min": di.get("fill_minutes") or 30,
+        "p_psig": di.get("supervisory_psig"),
+        "t_min": di.get("fill_minutes"),
     })
     trim = call("elect_di_trim", {
         "system_type": di.get("system_type") or "di",

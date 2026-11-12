@@ -86,7 +86,10 @@ REQUEUED_NOTE = "Re-queued after a relaunch. The receiver was interrupted before
 INTERRUPTED_NOTE = "Interrupted. The app was not running when this job would have ended. Run it again; recorded calcs replay."
 
 # Tools whose outputs are calculation records. Content and record tools are not.
+# A unit conversion is recorded like a calculation, so a converted figure has a row to cite (fpfa.units).
+CONVERT_TOOL = "convert_units"
 CALC_TOOLS = frozenset({
+    CONVERT_TOOL,
     "resolve_pipe_id",
     "zone_trapped_volume",
     "dry_delivery_screen",
@@ -273,6 +276,76 @@ class RecordError(ValueError):
     """A row the record refuses. The message says which field."""
 
 
+class RecordDamaged(RuntimeError):
+    """The project record's file is not a database SQLite can read, or SQLite finds it damaged.
+
+    Raised when the record is opened. Nothing was written to the file. path is
+    the file, and detail what SQLite said about it.
+    """
+
+    def __init__(self, path: Path | str, detail: str):
+        super().__init__(f"The project record at {path} is damaged: {detail}")
+        self.path = Path(path)
+        self.detail = detail
+
+
+class RecordUnavailable(RuntimeError):
+    """The project record could not be opened for a reason that says nothing about what is in it.
+
+    Another program holds a lock on it, the file or its folder cannot be
+    opened or written, the disk is full, or the disk reported an error.
+    Nothing was written to the file, and it is never offered to be moved
+    aside: it may be whole. path is the file, and detail what SQLite said.
+    """
+
+    def __init__(self, path: Path | str, detail: str):
+        super().__init__(f"The project record at {path} could not be opened: {detail}")
+        self.path = Path(path)
+        self.detail = detail
+
+
+# SQLite's result codes for a file whose contents are damaged (SQLITE_CORRUPT) and for one that is not a
+# database (SQLITE_NOTADB). Every other error opening a record, "database is locked" among them, is about
+# getting to the file, not about what is in it.
+_DAMAGE_CODES = frozenset({11, 26})
+
+
+def _says_damaged(exc: sqlite3.DatabaseError) -> bool:
+    """Whether an error opening a record says the file itself is damaged. An extended code keeps its primary one."""
+    code = getattr(exc, "sqlite_errorcode", None)
+    return isinstance(code, int) and (code & 0xFF) in _DAMAGE_CODES
+
+
+def _damage(conn: sqlite3.Connection) -> str:
+    """What SQLite's quick check finds wrong with an open database. "" when it finds nothing."""
+    rows = conn.execute("PRAGMA quick_check").fetchall()
+    found = [str(row[0]) for row in rows if str(row[0]).strip().lower() != "ok"]
+    return "; ".join(found[:3])
+
+
+def move_aside(path: Path | str) -> Path:
+    """Rename a damaged record, and the journal SQLite keeps beside it, so a new one can start. Never deletes.
+
+    The file becomes <name>.damaged-<UTC date and time> in the same folder,
+    where the jobs in it can still be recovered. Returns its new path. Raises
+    OSError when it cannot be moved, for instance while another program has
+    it open, and then nothing has moved.
+    """
+    path = Path(path)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    target = path.with_name(f"{path.name}.damaged-{stamp}")
+    count = 1
+    while target.exists():
+        target = path.with_name(f"{path.name}.damaged-{stamp}-{count}")
+        count += 1
+    path.replace(target)
+    for suffix in ("-journal", "-wal", "-shm"):
+        side = path.with_name(path.name + suffix)
+        if side.exists():
+            side.replace(target.with_name(target.name + suffix))
+    return target
+
+
 def now_text() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
@@ -357,13 +430,32 @@ class Record:
         # A snapshot carries it so the record can be read against the code that would run today.
         self.context: dict = {}
         with _WRITE_LOCK:
-            with self._connect() as conn:
-                conn.executescript(_SCHEMA)
-                _add_missing_columns(conn)
-                conn.execute(
-                    "INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', ?)",
-                    (str(SCHEMA_VERSION),),
-                )
+            conn = None
+            try:
+                conn = self._connect()
+                # A file SQLite cannot read, or one it finds damaged, is said to be so before anything is
+                # written to it. The window does not open on it (fpfa.web.shell asks what to do).
+                problem = _damage(conn)
+                if problem:
+                    raise RecordDamaged(self.path, problem)
+                with conn:
+                    conn.executescript(_SCHEMA)
+                    _add_missing_columns(conn)
+                    conn.execute(
+                        "INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', ?)",
+                        (str(SCHEMA_VERSION),),
+                    )
+            except sqlite3.DatabaseError as exc:
+                # Only what SQLite says of the file's contents makes it damaged. A record another program has
+                # locked, or one that cannot be opened or written, is not offered to be moved aside.
+                if _says_damaged(exc):
+                    raise RecordDamaged(self.path, str(exc)) from exc
+                raise RecordUnavailable(self.path, str(exc)) from exc
+            finally:
+                # Closed here, not left to the collector: on Windows an open handle keeps the file from being
+                # moved aside.
+                if conn is not None:
+                    conn.close()
 
     def set_context(self, **values: Any) -> None:
         """Say what is installed now: calc_identity, content_version, content_fingerprint. Empty values are ignored."""

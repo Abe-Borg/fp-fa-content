@@ -81,11 +81,19 @@ from fpfa.modes_loader import DEFAULT_MODE, MODE_SLUGS, list_modes, normalize_mo
 from fpfa.paths import content_root, data_dir, is_content_pack, read_config, write_config
 from fpfa.projects import delete_project, list_projects, load_project, new_project, save_project
 from fpfa.checker import check_line, coverage, export_reason
-from fpfa.record import ANSWERED_ON_PANEL, BASIS_LABELS, INTERRUPTED_NOTE, Record, RecordError
+from fpfa.record import (
+    ANSWERED_ON_PANEL,
+    BASIS_LABELS,
+    INTERRUPTED_NOTE,
+    Record,
+    RecordDamaged,
+    RecordError,
+    RecordUnavailable,
+)
 from fpfa.spec_docx import DRAFT_SECTION, write_docx
 from fpfa.team import check_record, latest_check, team_summary
 from fpfa.team_panel import recovery_text, team_view
-from fpfa.usage_report import report_text
+from fpfa.usage_report import REQUESTS_EVENT, report_text
 from fpfa.workflow import (
     NARRATION_CANCELLED,
     form_assumption_lines,
@@ -467,6 +475,25 @@ _TEAM_ACTIVITY = {
 _LISTING_TOOLS = frozenset({"list_skills", "list_roles", "list_modes"})
 
 
+# The least time between two reads of the Team tab while a job works on the open job.
+TEAM_REFRESH_SECONDS = 2.0
+
+
+def _model_client(key: str, cancel: Any = None):
+    """A model client for one job, with the job's cancel event on it, so Stop also ends a wait to send again.
+
+    The event goes on as an attribute, as on_retry does: the client is built
+    with its key alone, the way every stand-in for it is built too.
+    """
+    client = AnthropicMessages(key)
+    if cancel is not None:
+        try:
+            client.cancel = cancel
+        except Exception:
+            pass
+    return client
+
+
 def describe_activity(event: dict) -> str | None:
     """A few plain words for the working line, from one tool-loop event. None leaves the line as it is.
 
@@ -693,6 +720,10 @@ class Desk:
         self.project_rows: list[dict] = []
         self.activity_rows: list[dict] = []
         self.team: dict = team_view(None)
+        # The Team tab follows the record while a job on the open job works: a tool that finished marks it
+        # due, and pump() reads it again at most every TEAM_REFRESH_SECONDS (_refresh_team_when_due).
+        self._team_due = False
+        self._team_read_at = 0.0
         self.results_text = NO_RUN_TEXT
         # The same run as the Results tab draws it: figures, labels, flags (fpfa.results_panel).
         self.results_view: dict = results_panel.empty_view()
@@ -748,7 +779,15 @@ class Desk:
         self._apply_mode(DEFAULT_MODE)
         self.jobs = JobInbox(worker_count=2, on_change=self._on_jobs_changed)
         # The project record. Calc tools and record tools write to it by job id.
-        self.record = Record()
+        try:
+            self.record = Record()
+        except (RecordDamaged, RecordUnavailable):
+            # No window opens on a record SQLite cannot read, or cannot get to. The data directory is let go,
+            # so the next desk can open on it once a damaged file is moved aside or a locked one is let go
+            # (fpfa.web.shell).
+            self.jobs.close()
+            self.instance_lock.release()
+            raise
         # Cancel flags for running jobs, by job id. Set from Stop or the Team tab.
         self._cancel_events: dict[str, threading.Event] = {}
         # Last (status, error) each job was written to the record with. Desk thread only.
@@ -826,6 +865,7 @@ class Desk:
             except Exception as exc:
                 self.status.set("Update failed. " + safe_error(exc))
         self._drain_stream_events()
+        self._refresh_team_when_due()
         return ran
 
     # The old window's poll. Kept as a name for the tests and the server loop.
@@ -1028,8 +1068,10 @@ class Desk:
             "supervised": bool(self.supervised.get()),
             "density_gpm_ft2": num(self.density.get()),
             "base_area_ft2": num(self.base_area.get()),
-            "area_increase": num(self.area_increase.get()) or 0,
-            "hose_gpm": num(self.hose.get()) or 0,
+            # What the designer typed, a 0 as 0 and a blank as blank. The run names a blank it needs
+            # (workflow.validate_di); nothing here fills one in.
+            "area_increase": num(self.area_increase.get()),
+            "hose_gpm": num(self.hose.get()),
             "q_fill_gpm": num(self.q_fill.get()),
             "t_detect_s": num(self.t_detect.get()) or 0,
             "t_release_s": num(self.t_release.get()) or 0,
@@ -1047,8 +1089,8 @@ class Desk:
             ),
             "fittings_percent": _blank_to_none(self.fittings.get()),
             "trim_gal": _blank_to_none(self.trim_gal.get()),
-            "supervisory_psig": num(self.supervisory_psig.get()) or 40,
-            "fill_minutes": num(self.fill_minutes.get()) or 30,
+            "supervisory_psig": num(self.supervisory_psig.get()),
+            "fill_minutes": num(self.fill_minutes.get()),
             "segments": segments,
         }
 
@@ -1087,8 +1129,10 @@ class Desk:
         self.length_label.set(next((name for name, value in LENGTHS if value == length_code), "Center to center"))
         self.fittings.set(text(di.get("fittings_percent")))
         self.trim_gal.set(text(di.get("trim_gal")))
-        self.supervisory_psig.set(text(di.get("supervisory_psig"), "40"))
-        self.fill_minutes.set(text(di.get("fill_minutes"), "30"))
+        # A job saved before these fields existed starts from the form's own starting values. A blank the
+        # designer saved stays blank.
+        self.supervisory_psig.set(text(di.get("supervisory_psig"), "") if "supervisory_psig" in di else "40")
+        self.fill_minutes.set(text(di.get("fill_minutes"), "") if "fill_minutes" in di else "30")
         self.segments = []
         for segment in di.get("segments") or []:
             self._insert_segment(segment, loaded=False)
@@ -1499,8 +1543,21 @@ class Desk:
             for job in self.jobs.snapshot()
         )
 
+    def _refresh_team_when_due(self) -> None:
+        """Read the Team tab again while a job works on it: when a tool finished, at most every few seconds.
+
+        A team turn runs for minutes, and the specialists write the plan's steps,
+        their findings, and what passed between them to the record as they go.
+        The tab showed none of it until the turn ended. Desk thread only.
+        """
+        if not self._team_due or time.monotonic() - self._team_read_at < TEAM_REFRESH_SECONDS:
+            return
+        self._refresh_team()
+
     def _refresh_team(self) -> None:
         """Read the Team tab and the sidebar roster from the record. Cheap; called after every job."""
+        self._team_due = False
+        self._team_read_at = time.monotonic()
         project_id = (self.project or {}).get("id") if self.project else None
         snapshot = None
         if project_id:
@@ -1747,21 +1804,29 @@ class Desk:
 
         def work(job_id: str) -> None:
             cancel = self._cancel_event(job_id)
+            client = None
             try:
                 if cancel.is_set():
                     # Cancelled while it waited in the queue. No model call, no verdicts written.
                     text = "Cancelled before the trace check started. No model call was made."
                     self.jobs.mark(job_id, "cancelled", text)
                 else:
-                    outcome = check_record(content_root(), self.record, origin_id, AnthropicMessages(key).create)
+                    # Stop is heard between the check's requests, as between a turn's rounds, and in a wait
+                    # to send a refused request again.
+                    client = _model_client(key, cancel)
+                    outcome = check_record(content_root(), self.record, origin_id, client.create, cancel=cancel)
                     text = outcome.get("status_line") or "Trace check ran."
                     if outcome.get("verdict"):
                         text += "\n" + outcome["verdict"]
+            except TurnCancelled as exc:
+                text = f"Cancelled. {exc} No finding was changed, and what was already asked is on the usage report."
+                self.jobs.mark(job_id, "cancelled", text)
             except Exception as exc:
                 text = safe_error(exc)
                 self.jobs.mark(job_id, "error", text)
             finally:
                 self._cancel_events.pop(job_id, None)
+                self._note_client(origin_id, client)
             self.queue.put(lambda oid=origin_id, body=text, jid=job_id: self._finish_chat(oid, body, job_id=jid))
 
         job = self.jobs.submit(
@@ -2140,9 +2205,11 @@ class Desk:
 
         def work(job_id: str) -> None:
             cancel = self._cancel_event(job_id)
+            made: list = []
 
             def narrator(system, user_text, tools, execute):
-                client = AnthropicMessages(key)
+                client = _model_client(key, cancel)
+                made.append(client)
                 return run_tool_loop(
                     client.create,
                     system=system,
@@ -2174,6 +2241,8 @@ class Desk:
                 self.jobs.mark(job_id, "error", error)
             finally:
                 self._cancel_events.pop(job_id, None)
+                for client in made:
+                    self._note_client(origin_id, client)
             self.queue.put(
                 lambda oid=origin_id, res=result, err=error, jid=job_id: self._finish_run(
                     oid, res, err, job_id=jid
@@ -2257,9 +2326,11 @@ class Desk:
 
         def work(job_id: str) -> None:
             cancel = self._cancel_event(job_id)
+            made: list = []
 
             def narrator(system, user_text, tools, execute):
-                client = AnthropicMessages(key)
+                client = _model_client(key, cancel)
+                made.append(client)
                 return run_tool_loop(
                     client.create,
                     system=system,
@@ -2292,6 +2363,8 @@ class Desk:
                 self.jobs.mark(job_id, "error", error)
             finally:
                 self._cancel_events.pop(job_id, None)
+                for client in made:
+                    self._note_client(origin_id, client)
             self.queue.put(
                 lambda oid=origin_id, res=result, err=error, jid=job_id: self._finish_bess(
                     oid, res, err, job_id=jid
@@ -2764,21 +2837,25 @@ class Desk:
         key = self._api_key()
 
         def work(job_id: str) -> None:
+            client = _model_client(key, self._cancel_event(job_id)) if key else None
             try:
-                if key:
-                    outcome = judge_recorded(content_root(), packet, AnthropicMessages(key).create,
-                                             self.record, origin_id)
+                if client is not None:
+                    outcome = judge_recorded(content_root(), packet, client.create, self.record, origin_id)
                 else:
                     outcome = unanswered(packet)
             except Exception as exc:
                 message = safe_error(exc)
                 self.jobs.mark(job_id, "error", message)
+                self._cancel_events.pop(job_id, None)
+                self._note_client(origin_id, client)
                 self.queue.put(
                     lambda oid=origin_id, err=message, jid=job_id, offer=offer_export: self._finish_claim(
                         oid, None, err, jid, offer
                     )
                 )
                 return
+            self._cancel_events.pop(job_id, None)
+            self._note_client(origin_id, client)
             self.queue.put(
                 lambda oid=origin_id, found=outcome, jid=job_id, offer=offer_export, snap=snapshot: self._finish_claim(
                     oid, found, None, jid, offer, snap
@@ -2796,13 +2873,18 @@ class Desk:
 
     def _claim_outcome(self, create, result=None) -> dict:
         packet = build_packet(result if result is not None else self.project["last_run"])
+        client = None
         if create is None:
             key = self._api_key()
             if not key:
                 return unanswered(packet)
-            create = AnthropicMessages(key).create
+            client = AnthropicMessages(key)
+            create = client.create
         self._open_record(self.project)
-        return judge_recorded(content_root(), packet, create, self.record, self.project["id"])
+        try:
+            return judge_recorded(content_root(), packet, create, self.record, self.project["id"])
+        finally:
+            self._note_client(self.project["id"], client)
 
     def _store_claim(self, project: dict, outcome: dict, job_id: str | None) -> None:
         stored = dict(outcome)
@@ -2961,6 +3043,8 @@ class Desk:
                 depth["tools"] += 1
             elif kind == "tool_end":
                 depth["tools"] = max(0, depth["tools"] - 1)
+                # Any agent's tool may have written the record: a finding, a step, a review, a calculation.
+                inbox.put((job_id, {"type": "record_changed"}))
             elif kind == "round" and not depth["tools"] and not event.get("agent"):
                 # A new round of the lead. If it writes text, that text is the reply
                 # and replaces what an earlier round wrote, as the tool loop keeps it.
@@ -2986,6 +3070,10 @@ class Desk:
             if job is None:
                 continue
             kind = event.get("type")
+            if kind == "record_changed":
+                if job.project_id == (self.project or {}).get("id"):
+                    self._team_due = True
+                continue
             if kind == "activity":
                 if self._activity.get(job_id) != event.get("text"):
                     self._activity[job_id] = event.get("text") or ""
@@ -3152,7 +3240,8 @@ class Desk:
             made = None
             try:
                 pack = content_root()
-                client = AnthropicMessages(key)
+                # The job's cancel ends a wait to send a refused request again, as well as the loop.
+                client = _model_client(key, cancel)
                 # The reply streams into the thread as it is written. A client with no
                 # streaming call answers whole, and the page eases that in instead.
                 on_event, observe = self._stream_listener(job_id)
@@ -3184,7 +3273,7 @@ class Desk:
                 self.jobs.mark(job_id, "error", safe_error(exc))
             finally:
                 self._cancel_events.pop(job_id, None)
-                self._note_retries(origin_id, made)
+                self._note_client(origin_id, made)
             self.queue.put(
                 lambda oid=origin_id, answer=reply, jid=job_id, tokens=used: self._finish_chat(
                     oid, answer, job_id=jid, usage=tokens
@@ -3199,6 +3288,23 @@ class Desk:
             work=work,
         )
         self.status.set(f"Asking {MODEL_ID}… {job.heading()}")
+
+    def _note_client(self, project_id: str, client: Any) -> None:
+        """Put on the record what a job's model client did: requests sent again, and every request's id.
+
+        Runs on the worker when the job ends, whatever ended it. The ids are the
+        API's request-id and the workspace it billed (claude_client.requests): what
+        the provider's support asks for, and how a bill is matched to this job.
+        """
+        if client is None or not project_id:
+            return
+        self._note_retries(project_id, client)
+        try:
+            log = list(getattr(client, "requests", None) or [])
+            if log:
+                self.record.log_event(project_id, REQUESTS_EVENT, {"requests": log, "count": len(log)}, agent="app")
+        except Exception:
+            pass
 
     def _note_retries(self, project_id: str, client: Any) -> None:
         """Put on the record how many requests a turn had to send again. Runs on the worker.

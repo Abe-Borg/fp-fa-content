@@ -13,6 +13,14 @@ Time. A turn, a delegation, a consult, and a trace check each record how
 long they took on the wall clock (seconds). The report prints it beside
 the tokens and sums the counted kinds, so a run can be judged on time as
 well as cost. A delegation's time is inside its turn's, like its tokens.
+A trace check the lead ran inside a turn is counted for its tokens, which
+the turn's total leaves out, but not for its time, which the turn's time
+already holds (within_turn): the sum is how long the designer waited.
+
+Request ids. The window writes every request's API request-id, and the
+workspace it was billed to, on an api_requests event when a job ends. The
+report counts them and names the workspaces, so a bill in the Console can
+be matched to a job and a request quoted to the provider's support.
 
 Failures. A delegation, a consult, a lead turn, or a trace check that
 ended on an error still writes its event, marked failed, with the usage of
@@ -49,6 +57,7 @@ USAGE_KINDS = ("turn", "narration", "record_check", "check_failed", "check_incom
                "delegation", "consult")
 COUNTED_KINDS = ("turn", "narration", "record_check", "check_failed", "check_incomplete", "section_check")
 RETRY_EVENT = "api_retry"
+REQUESTS_EVENT = "api_requests"
 UNKNOWN_LINE = (
     "A request that fails returns no usage. If the API billed any part of one, it is not in this total."
 )
@@ -111,7 +120,7 @@ def usage_events(record: Any, project_id: str) -> list[dict]:
             "counted": event["kind"] in COUNTED_KINDS,
         }
         for key in ("specialist", "delegations", "checks", "cancelled", "source", "stop_reason", "seconds", "from", "to",
-                    "failed", "error", "failed_inside"):
+                    "failed", "error", "failed_inside", "within_turn"):
             if key in payload:
                 row[key] = payload[key]
         rows.append(row)
@@ -137,6 +146,16 @@ def retries(record: Any, project_id: str) -> int:
     return total
 
 
+def request_log(record: Any, project_id: str) -> list[dict]:
+    """Every request id on the job, oldest first: {"id", "workspace", "status", "at"}."""
+    found: list[dict] = []
+    for event in record.events_by_kind(project_id, (REQUESTS_EVENT,)):
+        for item in (event.get("payload") or {}).get("requests") or []:
+            if isinstance(item, dict) and item.get("id"):
+                found.append(item)
+    return found
+
+
 def job_totals(rows: list[dict]) -> dict:
     total: dict = {}
     for row in rows:
@@ -146,10 +165,13 @@ def job_totals(rows: list[dict]) -> dict:
 
 
 def job_seconds(rows: list[dict]) -> float:
-    """Wall-clock seconds over the counted contexts that recorded a time. Older rows recorded none."""
+    """Wall-clock seconds over the counted contexts that recorded a time. Older rows recorded none.
+
+    A trace check run inside a turn is not added: its time is inside the turn's.
+    """
     total = 0.0
     for row in rows:
-        if row.get("counted"):
+        if row.get("counted") and not row.get("within_turn"):
             try:
                 total += float(row.get("seconds") or 0)
             except (TypeError, ValueError):
@@ -239,7 +261,14 @@ def report_text(record: Any, project_id: str, rates: dict | None = None, *, name
     lines.append(f"Job total over {len(counted)} model context{'s' if len(counted) != 1 else ''}: {_tokens(total)}")
     spent = clock(job_seconds(rows))
     if spent:
-        lines.append(f"Time on the model: {spent}, summed over the turns and checks that recorded one.")
+        lines.append(f"Time on the model: {spent}, the wall time of the turns, narrations, and checks that recorded "
+                     "one. A check the lead ran inside a turn is counted once, in its turn.")
+    requests = request_log(record, project_id)
+    if requests:
+        workspaces = sorted({str(item.get("workspace") or "") for item in requests} - {""})
+        lines.append(f"Request ids: {len(requests)} on the record, the API's request-id for each request the "
+                     "application sent" + (f"; billed to workspace {', '.join(workspaces)}" if workspaces else "")
+                     + ". Quote one to the provider's support; match the workspace in the Console.")
     lines.append(
         f"Estimated cost ${money['total']:.4f}: input ${money['input']:.4f}, cache write ${money['cache_write']:.4f}, "
         f"cache read ${money['cache_read']:.4f}, output ${money['output']:.4f}."

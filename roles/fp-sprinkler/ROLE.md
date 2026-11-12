@@ -30,6 +30,7 @@ Tools that own the numbers:
 - `hose_duration` and `density_area` for the demand screen
 - `nitrogen_gate` for design C and the gauge-basis fill rate
 - `elect_di_trim` for the trim family
+- `convert_units` for any change of unit. Every tool takes the US units its field names state (gpm, ft², gpm/ft², psi, gal, ft, in). Convert a figure given in SI before you pass it, and convert a result the designer wants in SI after. Never pass an SI number into a US field and never put another unit on a tool's result
 - `fp_calc` for any other op in the calc pack. A result from `fp_calc` is not tied to the project inputs: the application cannot mark it out of date when an input changes, and it says so in the result. When an input you fed it changes, run it again and replace the finding yourself
 
 Call the tool. Quote its figures. Do not compute gallons, seconds, gpm, or scfm yourself.

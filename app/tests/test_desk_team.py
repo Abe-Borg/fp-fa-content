@@ -428,11 +428,13 @@ class RetryTests(unittest.TestCase):
             exc.response = SimpleNamespace(headers={"retry-after": retry_after})
         return exc
 
-    def test_the_wait_is_the_apis_when_it_names_one_and_is_capped(self):
-        from fpfa.claude_client import RETRY_AFTER_CAP, RETRY_WAITS, retry_wait
+    def test_the_wait_is_the_apis_when_it_names_one(self):
+        from fpfa.claude_client import RETRY_WAITS, retry_wait
 
         self.assertEqual(retry_wait(self._error(429, "7"), 0), 7.0)
-        self.assertEqual(retry_wait(self._error(429, "600"), 0), RETRY_AFTER_CAP)
+        # Whole: the API says an attempt before its retry-after fails. A wait longer than the client waits out
+        # by itself stops the request instead (test_acceptance_report_030.ApiClientTests).
+        self.assertEqual(retry_wait(self._error(429, "600"), 0), 600.0)
         self.assertEqual(retry_wait(self._error(429, "soon"), 1), RETRY_WAITS[1])
         self.assertEqual([retry_wait(self._error(529), n) for n in range(6)], [2.0, 4.0, 8.0, 16.0, 16.0, 16.0])
         self.assertEqual(retry_wait(RuntimeError("no response at all"), 0), 2.0)
@@ -508,7 +510,7 @@ class UsageTimeTests(unittest.TestCase):
         self.assertIn("  21 s   (inside the turn above, not added)", text)
         self.assertIn("  3 min 08 s", text)
         self.assertIn("trace check", text)
-        self.assertIn("Time on the model: 3 min 20 s, summed over the turns and checks that recorded one.", text)
+        self.assertIn("Time on the model: 3 min 20 s, the wall time of the turns, narrations, and checks that recorded one.", text)
         self.assertIn("Job total over 3 model contexts", text)
 
 

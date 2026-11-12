@@ -27,6 +27,7 @@ from fpfa import theme as palette
 from fpfa.about import APP_NAME, APP_TAGLINE, version_text
 from fpfa.desk import ANOTHER_WINDOW_TEXT, Desk, InstanceLockError, Shell
 from fpfa.paths import data_dir, write_config
+from fpfa.record import RecordDamaged, RecordUnavailable, move_aside
 from fpfa.web.server import WindowServer
 
 WINDOW_SIZE = (1280, 800)
@@ -135,6 +136,79 @@ def _show_error(text: str) -> None:
     sys.stderr.write(text + "\n")
 
 
+def _confirm(text: str) -> bool:
+    """A yes or no before any window exists. Windows asks in a message box with No as the default; a source
+    run asks in its terminal. Where nothing can ask, the answer is no."""
+    if sys.platform == "win32":
+        try:
+            import ctypes
+
+            # MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2. IDYES is 6.
+            return ctypes.windll.user32.MessageBoxW(0, text, APP_NAME, 0x04 | 0x30 | 0x100) == 6
+        except Exception:
+            pass
+    sys.stderr.write(text + "\n")
+    if sys.stdin is not None and sys.stdin.isatty():
+        try:
+            return input("Move it aside and start a new record? [y/N] ").strip().lower() in ("y", "yes")
+        except EOFError:
+            return False
+    return False
+
+
+DAMAGED_FLAG = "--move-damaged-record"
+
+
+def damaged_record_question(damaged: RecordDamaged) -> str:
+    """What the designer is told, and asked, when the project record cannot be read."""
+    return (
+        f"The project record cannot be opened. SQLite reports it is damaged:\n{damaged.path}\n({damaged.detail})\n\n"
+        f"{APP_NAME} has not changed it. Move it aside and start with a new, empty record? The damaged file is "
+        "kept in the same folder, renamed, never deleted, so the jobs in it can still be recovered. Choose No to "
+        "close and restore the file from a backup first."
+    )
+
+
+def unavailable_record_text(unavailable: RecordUnavailable) -> str:
+    """What the designer is told when the project record cannot be got to. Nothing is offered: it may be whole."""
+    return (
+        f"{APP_NAME} did not open: the project record could not be opened.\n{unavailable.path}\n"
+        f"({unavailable.detail})\n\n{APP_NAME} has not changed it, and this does not say the file is damaged: "
+        "SQLite could not get to it. If another program has it open, such as a backup or sync tool or a database "
+        f"viewer, close that program and start {APP_NAME} again. If the folder cannot be written or the disk is "
+        "full, fix that first."
+    )
+
+
+def open_with_new_record(damaged: RecordDamaged, shell: Shell, *, move: bool = False) -> Desk:
+    """A damaged project record: say so, and move it aside for a new one only when the designer agrees.
+
+    move is the designer's yes given ahead, by --move-damaged-record. Without a
+    yes the process ends with the reason, and the file is as it was.
+    """
+    if not (move or _confirm(damaged_record_question(damaged))):
+        _show_error(
+            f"{APP_NAME} did not open, and the project record was not changed: {damaged.path}. Restore it from a "
+            f"backup, or start again with {DAMAGED_FLAG} to move it aside and begin a new, empty record."
+        )
+        sys.exit(1)
+    try:
+        moved = move_aside(damaged.path)
+    except OSError as exc:
+        _show_error(
+            f"The damaged project record could not be moved aside ({exc}). Close any program that has it open, or "
+            f"move it out of {damaged.path.parent} yourself, and start {APP_NAME} again."
+        )
+        sys.exit(1)
+    desk = Desk(shell=shell)
+    desk.notify(
+        "Project record",
+        f"The project record could not be read, so it was moved aside to {moved}. This is a new, empty record. "
+        "The jobs in the old one are still in that file.",
+    )
+    return desk
+
+
 def take_screenshots(url: str, folder: Path) -> list[Path]:
     """The demo's pictures: the thread, the Inputs tab, and the Results tab, through the frontend's Playwright tool."""
     tool = FRONTEND / "tools" / "shoot.mjs"
@@ -210,6 +284,10 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--eval-job", default="", help="With --live-eval, the sample job to run: dh1 or dh2. Default dh1")
     parser.add_argument("--effort", default="", help="With --live-eval, the model's effort for the run. Default: the model's own")
     parser.add_argument("--eval-steps", default="", help="With --live-eval, the steps to run, comma-separated. Default: all")
+    parser.add_argument(
+        DAMAGED_FLAG, action="store_true",
+        help="If the project record is damaged, move it aside (renamed, never deleted) and start a new one without asking",
+    )
     args = parser.parse_args(argv)
     if args.theme:
         os.environ["FPFA_THEME"] = args.theme
@@ -242,6 +320,12 @@ def main(argv: list[str] | None = None) -> None:
         desk = Desk(shell=shell)
     except InstanceLockError:
         _show_error(ANOTHER_WINDOW_TEXT)
+        sys.exit(1)
+    except RecordDamaged as damaged:
+        desk = open_with_new_record(damaged, shell, move=args.move_damaged_record)
+    except RecordUnavailable as unavailable:
+        # Locked, unwritable, or a full disk: not damage, so there is nothing to move aside, flag or no flag.
+        _show_error(unavailable_record_text(unavailable))
         sys.exit(1)
 
     if args.demo and args.quit and not args.screenshot_dir:

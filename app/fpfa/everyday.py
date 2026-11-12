@@ -12,7 +12,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
-from fpfa.calc_tools import SCHEMAS, ToolSession
+from fpfa.calc_tools import SCHEMAS, ToolSession, designer_words
 from fpfa.claude_client import TurnCancelled, incomplete_notice, run_tool_loop
 from fpfa.modes_loader import list_modes, normalize_mode, read_mode
 from fpfa.record import TURN_START, Record
@@ -172,7 +172,18 @@ def _task_total(lead_usage: dict | None, team_usage: dict | None) -> dict:
     return total
 
 
-def run_everyday(
+def run_everyday(content_root: Path, create: Callable[..., Any], user_text: str, **options: Any) -> dict:
+    """One everyday turn (_run_everyday), with the designer's SI figures held for its length.
+
+    A calc tool any agent calls in the turn refuses one of those figures in
+    a field that takes US units (calc_tools.si_figure_problem): the figure
+    goes through convert_units first.
+    """
+    with designer_words(user_text):
+        return _run_everyday(content_root, create, user_text, **options)
+
+
+def _run_everyday(
     content_root: Path,
     create: Callable[..., Any],
     user_text: str,

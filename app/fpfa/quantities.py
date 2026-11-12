@@ -25,6 +25,15 @@ A unit written as a ratio that the module does not know (gal/hr, psi/ft)
 gets a class of its own from its spelling. It is not "no unit": 600 of
 something per hour does not back 600 gpm.
 
+A figure stored as {"value": ..., "unit": ...}, the way a unit conversion
+records its given and its result, has the class of that unit. So does the
+figure a conversion was asked to convert, {"value": ..., "from_unit": ...}
+on a convert_units row's inputs: held with no class, 1695.8 converted from
+L/min would back "1695.8 gpm". Either unit is read as fpfa.units reads it.
+The reply audit reads the eight units and the SI flow, area, volume,
+pressure, and density units (reply_figures), so a figure a reply gives in
+L/min has to be on the record in L/min.
+
 The rule, in holds(): a figure with a class is found where the same number
 is held with the same class, or with no class at all. It is not found where
 the number is held only with a different class. So a length never backs a
@@ -65,7 +74,11 @@ _FAMILIES: dict[str, tuple[str, ...]] = {
     "kw": ("kW",), "mw": ("MW",), "kva": ("kVA",),
     "hz": ("Hz",), "db": ("dB", "dBA"), "degf": ("°F",), "degc": ("°C",),
     "l": ("L",), "lpm": ("lpm", "LPM", "L/min", "l/min"),
-    "kpa": ("kPa",), "bar": ("bar",), "cfm": ("cfm", "CFM"),
+    # The SI units a metric job gives its figures in (fpfa.units converts them). Each is its own class, so
+    # 139 m² is not backed by 139 ft², and 12.2 mm/min is a density, not a length.
+    "m2": ("m2", "m²", "sq m", "sqm"), "m3": ("m3", "m³"), "m3h": ("m3/h", "m³/h", "m3/hr", "m³/hr"),
+    "lps": ("L/s", "l/s"), "mmmin": ("mm/min", "L/min/m2", "L/min/m²", "lpm/m2", "lpm/m²"),
+    "kpa": ("kPa",), "pa": ("Pa",), "mpa": ("MPa",), "bar": ("bar",), "cfm": ("cfm", "CFM"),
     "h": ("hours", "hour", "hr"), "d": ("days", "day"), "y": ("years", "year"),
     "count": ("rows", "row", "zones", "zone", "sprinklers", "sprinkler", "heads", "head", "detectors", "detector"),
     "ohm": ("ohms", "ohm"), "awg": ("AWG",), "cd": ("cd",),
@@ -299,6 +312,20 @@ def in_value(value: Any, name: str | None = None, *, prose: Any = None, strings:
             elif strings:
                 found.update(in_text(prose(item) if prose is not None else item))
         elif isinstance(item, dict):
+            unit_key = _pair_unit_key(item)
+            if unit_key is not None:
+                # A figure stored with its unit beside it ({"value": 1695.8, "unit": "L/min"}, as a unit
+                # conversion records its given and its result) has the class of that unit. So does the figure
+                # a conversion was asked to convert ({"value": 1695.8, "from_unit": "L/min", ...}, a
+                # convert_units row's inputs): held with no class, it would back the same number in any unit.
+                # A unit this module does not class, such as gpm/ft², leaves it with none, the way a compound
+                # field name does.
+                cls = _stored_class(item[unit_key])
+                found.update((form, cls) for form in _forms(float(item["value"]), loose))
+                for inner, child in item.items():
+                    if inner not in ("value", unit_key):
+                        walk(child, str(inner))
+                return
             for inner, child in item.items():
                 # A list of rows keeps the class of the field each number is in; a bare list keeps its own name's.
                 walk(child, str(inner))
@@ -308,6 +335,69 @@ def in_value(value: Any, name: str | None = None, *, prose: Any = None, strings:
 
     walk(value, name)
     return found
+
+
+# The keys that name the unit of a dict's one "value": a figure stored with its unit, and a conversion's request
+# (the figure it was given and the unit it was given in; "to_unit" is the result's unit, not this figure's).
+_PAIR_UNIT_KEYS = ("unit", "from_unit")
+
+
+def _pair_unit_key(item: dict) -> str | None:
+    """The key holding the unit of a dict that is one figure: a numeric "value" and a unit string beside it.
+
+    None for any other dict.
+    """
+    value = item.get("value")
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(float(value)):
+        return None
+    return next((key for key in _PAIR_UNIT_KEYS if isinstance(item.get(key), str)), None)
+
+
+def _stored_class(unit: str) -> str | None:
+    """The class of a unit kept in a field of its own beside its figure.
+
+    The spelling is read the way fpfa.units reads a conversion's units, so
+    "litres/min", "kpa", and "in" are classed as the L/min, kPa, and inches
+    the conversion records. Alone in a unit field, "in" can only be inches;
+    in a sentence it needs its full stop. A spelling fpfa.units does not
+    convert is classed as unit_class() classes it.
+    """
+    from fpfa import units  # units imports this module. Imported late to keep the cycle open.
+
+    try:
+        recorded = units.unit(unit)
+    except units.UnitError:
+        return unit_class(unit)
+    return "in" if recorded.key == "in" else unit_class(recorded.display)
+
+
+# The SI units the reply audit reads besides the eight: flow, area, volume, pressure, and a sprinkler density.
+# A metric job's reply carries them, and a figure in one of them is as much a computed figure as one in gpm.
+_REPLY_SI = ("lpm", "lps", "m3h", "m2", "l", "m3", "kpa", "bar", "mmmin")
+_REPLY_SI_FIGURE = re.compile(
+    r"(?<![\w.§-])" + _NUMBER + r"\s*("
+    + "|".join(re.escape(item) for item in sorted(
+        (spelling for cls in _REPLY_SI for spelling in _FAMILIES[cls]), key=len, reverse=True))
+    + r")(?![\w²³/])"
+)
+
+
+def reply_figures(text: str | None) -> list[tuple[str, str]]:
+    """The figures the reply audit looks up: (number, the unit as written), in the order they stand.
+
+    The eight units of FIGURE, and the SI units of _REPLY_SI. A length, an
+    inch, an hour, or a count in a reply is narrative ("a 6 in. main", "two
+    zones") and is not read, as before.
+    """
+    found: list[tuple[int, str, str]] = []
+    taken: set[int] = set()
+    for match in FIGURE.finditer(text or ""):
+        found.append((match.start(1), normal(match.group(1)), match.group(2).lower()))
+        taken.add(match.start(1))
+    for match in _REPLY_SI_FIGURE.finditer(text or ""):
+        if match.start(1) not in taken:
+            found.append((match.start(1), normal(match.group(1)), match.group(2)))
+    return [(number, unit) for _position, number, unit in sorted(found)]
 
 
 def holds(number: str, cls: str | None, have: set[Quantity]) -> bool:

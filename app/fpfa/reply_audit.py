@@ -51,7 +51,7 @@ import json
 from typing import Any
 
 from fpfa import coherence, inputs, quantities
-from fpfa.checker import _figures_with_units, _normal, _strip_cites
+from fpfa.checker import _normal, _strip_cites
 from fpfa.releasing import release_wording_hits
 
 AUDIT_EVENT = "reply_audit"
@@ -176,7 +176,9 @@ def audit(
     (flagged_before) or the record now holds it only on out-of-date rows.
     """
     wording = [sentence for _line, sentence in release_wording_hits(reply or "")]
-    figures = _figures_with_units(reply or "")
+    # The eight units and the SI flow, area, volume, pressure, and density units: a figure a reply gives in L/min
+    # has to be on the record in L/min, as one in gpm has to be in gpm (quantities.reply_figures).
+    figures = quantities.reply_figures(_strip_cites(reply or ""))
     if not figures:
         return {"figures": 0, "unfound": [], "stale": [], "wording": wording}
     current, old = record_numbers(snapshot)
