@@ -420,6 +420,36 @@ def verdict_rows(text: str) -> dict[int, dict]:
 # The QA role's own line after the verdict (roles/qa-specialist/ROLE.md): Cite: "<short source line>" (<reason>).
 _ROLE_CITE = re.compile(r'(?i)^cite\s*:\s*(?P<open>["“])(?P<body>.*)$')
 _CLOSE = {'"': '"', "“": "”"}
+# Read from the end of a line, the mark that closes a quoted passage, and the one that opens it.
+_OPEN_BACKWARD = {'"': '"', "”": "“"}
+# What the role's form shows where the reason goes: copied as it stands, it is no reason.
+_NO_REASON = frozenset({"", "<reason>", "reason"})
+
+
+def _reason_open(body: str, quotes: bool) -> int | None:
+    """Where the bracketed clause that closes body opens, matched bracket for bracket from the end. None if it does not.
+
+    With quotes, a bracket inside a quoted passage is not counted, so a reason
+    that quotes "item b)" or “see (a” is read whole. Without, every bracket
+    counts, which reads a reason holding a lone inch mark (a 5" pipe).
+    """
+    depth = 0
+    inside = ""  # the quote mark that opens the passage the scan is in, read from the end
+    for index in range(len(body) - 1, -1, -1):
+        char = body[index]
+        if quotes and inside:
+            if char == inside:
+                inside = ""
+            continue
+        if quotes and char in _OPEN_BACKWARD:
+            inside = _OPEN_BACKWARD[char]
+        elif char == ")":
+            depth += 1
+        elif char == "(":
+            depth -= 1
+            if depth == 0:
+                return index
+    return None
 
 
 def _role_form(rest: str) -> tuple[str, str] | None:
@@ -428,7 +458,9 @@ def _role_form(rest: str) -> tuple[str, str] | None:
     The line is read from both ends: the reason is the bracketed clause that
     closes the line, matched bracket for bracket, and the cite is everything
     between the opening quote and the quote just before it. So a reason that
-    quotes the claim, or a cite that holds a quote or a bracket, is read whole.
+    quotes the claim, brackets and all, or a cite that holds a quote or a
+    bracket, is read whole. A line with no reason is the cite and an empty
+    reason, as is a reason that is only the role's own placeholder.
     """
     found = _ROLE_CITE.match(rest)
     if not found:
@@ -437,23 +469,20 @@ def _role_form(rest: str) -> tuple[str, str] | None:
     close = _CLOSE[found.group("open")]
     reason = ""
     if body.endswith(")"):
-        depth = 0
-        for index in range(len(body) - 1, -1, -1):
-            char = body[index]
-            if char == ")":
-                depth += 1
-            elif char == "(":
-                depth -= 1
-                if depth == 0:
-                    break
+        for quotes in (True, False):
+            index = _reason_open(body, quotes)
+            if index is None:
+                continue
+            head = body[:index].rstrip()
+            if head.endswith(close):
+                reason, body = body[index + 1:-1], head
+                break
         else:
             return None
-        head = body[:index].rstrip()
-        if not head.endswith(close):
-            return None
-        reason, body = body[index + 1:-1], head
     if not body.endswith(close):
         return None
+    if reason.strip().lower() in _NO_REASON:
+        reason = ""
     return body[: -len(close)], reason
 
 

@@ -409,6 +409,47 @@ class CheckerReasonTests(unittest.TestCase):
         # With the reason left off, the verdict and the cite still read, and no reason is made up.
         self.assertEqual(verdict_rows('3. Supported. Cite: "x"'), {3: {"word": "Supported", "cite": "x", "reason": ""}})
 
+    def test_a_bracket_inside_a_quoted_reason_and_a_missing_reason(self):
+        """The owner's review of 2026-11-12 (follow-up): a ")" or "(" inside a passage the reason quotes put the
+        reason's quote into the cite and lost the reason; a reason left off, empty, or copied as the role's own
+        placeholder is no reason, and the record shows that the checker gave none."""
+        from fpfa import checker
+        from fpfa.claim_check import verdict_rows
+
+        def read(line):
+            return verdict_rows(line)[1]
+
+        for line, cite, reason in (
+            # A closing bracket inside a quoted passage, in straight quotes and in curly ones.
+            ('1. Not supported. Cite: "Table 19.2.3.1.1" (the claim quotes "item b)" which the cite does not state)',
+             "Table 19.2.3.1.1", 'the claim quotes "item b)" which the cite does not state'),
+            ('1. Not supported. Cite: “Table X” (the claim quotes “b)” only)', "Table X", "the claim quotes “b)” only"),
+            ('1. Supported. Cite: "PACKAGE ASSERTION: t = 42 s" (states "42 s)" as the claim does)',
+             "PACKAGE ASSERTION: t = 42 s", 'states "42 s)" as the claim does'),
+            # An opening bracket inside a quoted passage.
+            ('1. Not supported. Cite: "Table 19.2.3.1.1" (the claim says “see (a” but the cite has no such item)',
+             "Table 19.2.3.1.1", "the claim says “see (a” but the cite has no such item"),
+            # Brackets in both the cite and a quoted passage of the reason.
+            ('1. Not supported. Cite: "Table X (dry)" (the claim says "1,500 ft² (wet)", the cite says dry)',
+             "Table X (dry)", 'the claim says "1,500 ft² (wet)", the cite says dry'),
+            # A lone inch mark is not a quote: the plain reading still takes the reason.
+            ('1. Supported. Cite: "a 5 in. pipe" (the cite says 5" pipe)', "a 5 in. pipe", 'the cite says 5" pipe'),
+            # No reason: left off, after a full stop, empty brackets, or the role's own placeholder.
+            ('1. Supported. Cite: "Table 19.2.3.1.1"', "Table 19.2.3.1.1", ""),
+            ('1. Supported. Cite: "Table 19.2.3.1.1".', "Table 19.2.3.1.1", ""),
+            ('1. Supported. Cite: "Table 19.2.3.1.1" ()', "Table 19.2.3.1.1", ""),
+            ('1. Supported. Cite: "Table 19.2.3.1.1" (<reason>)', "Table 19.2.3.1.1", ""),
+            # A cite that ends in a bracket of its own, with no reason after it.
+            ('1. Source not found. Cite: "NOT PULLED (NFPA 13-2025 s8.2.7.3)"', "NOT PULLED (NFPA 13-2025 s8.2.7.3)", ""),
+        ):
+            with self.subTest(line=line):
+                found = read(line)
+                self.assertEqual((found["cite"], found["reason"]), (cite, reason))
+        # A missing reason reaches the reader as the checker giving none, never as a reason made up for it.
+        self.assertEqual(checker._checker_reading({"checker_reason": read('1. Not supported. Cite: "x" ()')["reason"],
+                                                   "checker_cite": "x"}),
+                         [checker.CHECKER_SAID_NOTHING])
+
     def test_the_checkers_reason_is_kept_apart_from_the_applications(self):
         from fpfa import checker, team_panel
 
