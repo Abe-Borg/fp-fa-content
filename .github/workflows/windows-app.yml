@@ -213,7 +213,7 @@ jobs:
           - Cynosure-Setup-$version.exe is the Inno Setup installer. It shows the license and installs after you accept it.
           - Cynosure-windows-$version.zip is the portable folder. Unpack it and run Cynosure.exe.
 
-          License: PolyForm Shield License 1.0.0. Both assets carry LICENSE.txt and THIRD-PARTY-NOTICES.txt.
+          License: Proprietary License Notice. All rights reserved; use and redistribution require separate written permission, subject to applicable law and existing applicable licenses. Installer acceptance grants no permission to use the app. Third-party components retain their own licenses. Both assets carry LICENSE.txt and THIRD-PARTY-NOTICES.txt.
 
           No MSI.
 
