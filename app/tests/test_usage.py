@@ -346,7 +346,7 @@ class UsageWindowTests(unittest.TestCase):
         self.assertIn("+Cynosure", about)
         self.assertIn("Record schema 4", about)
         # The About box says what the license allows and that the output is a draft.
-        self.assertIn("PolyForm Shield License 1.0.0", about)
+        self.assertIn("Proprietary License Notice", about)
         self.assertIn("engineer of record", about)
 
 

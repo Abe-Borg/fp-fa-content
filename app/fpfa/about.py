@@ -28,12 +28,13 @@ APP_STRAPLINE = "FP/FA design assistant"
 APP_AUTHOR = "Abraham Borg"
 COPYRIGHT = "Copyright (c) 2026 Abraham Borg"
 PROJECT_URL = "https://github.com/Abe-Borg/fp-fa-content"
-LICENSE_NAME = "PolyForm Shield License 1.0.0"
-LICENSE_URL = "https://polyformproject.org/licenses/shield/1.0.0"
-# One plain sentence on what the license allows. The agreement itself governs.
+LICENSE_NAME = "Proprietary License Notice"
+LICENSE_URL = f"{PROJECT_URL}/blob/main/LICENSE"
+# Brief permission summary. The full notice and any separate agreement govern.
 LICENSE_SUMMARY = (
-    f"{APP_NAME} is source-available under the {LICENSE_NAME}. You may use it for any purpose, "
-    f"including commercial work, except to provide a product that competes with {APP_NAME}."
+    f"{APP_NAME} is proprietary under the {LICENSE_NAME}. All rights reserved. "
+    "Use, copying, modification, and redistribution require separate written permission from Abraham Borg, "
+    "except where applicable law or an existing applicable license permits them."
 )
 # What every designer should know before relying on a figure from the app.
 USE_NOTICE = (
@@ -128,7 +129,7 @@ def license_text() -> str:
     found = read_document(LICENSE_FILE)
     if found:
         return found
-    return f"{LICENSE_NAME}\n{LICENSE_URL}\n\nRequired Notice: {COPYRIGHT} ({PROJECT_URL})\n"
+    return f"{LICENSE_NAME}\n{LICENSE_URL}\n\n{COPYRIGHT}. All rights reserved.\n\n{LICENSE_SUMMARY}\n"
 
 
 def notices_text() -> str:

@@ -150,34 +150,37 @@ class NameTests(unittest.TestCase):
 
 
 class LicenseTests(unittest.TestCase):
-    def test_the_license_file_is_polyform_shield_naming_the_app(self):
+    def test_the_license_reserves_original_rights_and_preserves_third_party_and_existing_rights(self):
         raw = LICENSE.read_bytes()
         # Inno Setup shows a text license as ANSI or UTF-8. Plain ASCII reads the same either way.
         self.assertTrue(raw.isascii(), "LICENSE holds a non-ASCII character; an older Inno Setup would garble it")
         self.assertFalse(raw.lstrip().startswith(b"{\\rtf"))
         text = raw.decode("ascii")
         lines = text.splitlines()
-        self.assertEqual(lines[0], "# PolyForm Shield License 1.0.0")
-        self.assertIn("<https://polyformproject.org/licenses/shield/1.0.0>", lines)
-        self.assertIn(
-            "Required Notice: Copyright (c) 2026 Abraham Borg (https://github.com/Abe-Borg/fp-fa-content)", lines
-        )
-        business = next(line for line in lines if line.startswith("Licensor Line of Business:"))
-        self.assertIn("+Cynosure", business)
-        for heading in ("## Acceptance", "## Copyright License", "## Distribution License", "## Notices",
-                        "## Noncompete", "## No Liability", "## Definitions"):
+        self.assertEqual(lines[0], "# +Cynosure Proprietary License Notice")
+        self.assertIn("Copyright (c) 2026 Abraham Borg. All rights reserved.", lines)
+        for heading in ("## Scope", "## No License Granted", "## Third-Party Materials",
+                        "## Existing Rights and Separate Agreements", "## No Warranty",
+                        "## Limitation of Liability", "## Engineering Use"):
             self.assertIn(heading, lines)
-        self.assertIn("the software comes as is, without any warranty or condition", text)
+        prose = " ".join(text.split())
+        self.assertIn("No license or permission to use, run, copy, modify", prose)
+        self.assertIn("require separate written permission from Abraham Borg", prose)
+        self.assertIn("does not replace those licenses", prose)
+        self.assertIn("does not revoke rights already granted", prose)
+        self.assertIn("WITHOUT WARRANTY", prose)
+        self.assertIn("APPLICABLE LAW PROHIBITS", prose)
 
     def test_every_surface_states_the_same_license(self):
         from fpfa import about
 
-        self.assertEqual(about.LICENSE_NAME, "PolyForm Shield License 1.0.0")
-        self.assertEqual(about.LICENSE_URL, "https://polyformproject.org/licenses/shield/1.0.0")
+        self.assertEqual(about.LICENSE_NAME, "Proprietary License Notice")
+        self.assertEqual(about.LICENSE_URL, f"{about.PROJECT_URL}/blob/main/LICENSE")
         self.assertEqual(about.COPYRIGHT, "Copyright (c) 2026 Abraham Borg")
         self.assertEqual(about.license_text(), LICENSE.read_text(encoding="ascii"))
         self.assertIn(about.LICENSE_NAME, about.LICENSE_SUMMARY)
-        self.assertIn("except to provide a product that competes with +Cynosure", about.LICENSE_SUMMARY)
+        self.assertIn("All rights reserved", about.LICENSE_SUMMARY)
+        self.assertIn("require separate written permission", about.LICENSE_SUMMARY)
         self.assertIn("draft for the engineer of record", about.USE_NOTICE)
         shown = about.about_text(REPO, Path("/data"))
         for part in (about.COPYRIGHT, about.LICENSE_SUMMARY, about.USE_NOTICE, "Record schema"):
@@ -185,10 +188,10 @@ class LicenseTests(unittest.TestCase):
         self.assertEqual(_iss_define("MyAppCopyright"), about.COPYRIGHT)
         readme = (REPO / "README.md").read_text(encoding="utf-8")
         self.assertIn("## License", readme)
-        self.assertIn("[PolyForm Shield License 1.0.0](LICENSE)", readme)
+        self.assertIn("[Proprietary License Notice](LICENSE)", readme)
         self.assertIn(about.COPYRIGHT.replace("Copyright (c) ", ""), readme)
         workflow = (REPO / ".github" / "workflows" / "windows-app.yml").read_text(encoding="utf-8")
-        self.assertIn("PolyForm Shield License 1.0.0", workflow)
+        self.assertIn("Proprietary License Notice", workflow)
 
     def test_the_installer_names_the_author_as_publisher(self):
         # The app is its author's own. The publisher Windows shows under Apps is the name on
@@ -221,8 +224,9 @@ class LicenseTests(unittest.TestCase):
         label = _iss_value("LicenseLabel3")
         self.assertEqual(len(label), 1)
         self.assertTrue(label[0].isascii())
-        self.assertIn("PolyForm Shield License 1.0.0", label[0])
-        self.assertIn("except to provide a product that competes with {#MyAppName}", label[0])
+        self.assertIn("Proprietary License Notice", label[0])
+        self.assertIn("require separate written permission", label[0])
+        self.assertIn("Accepting this notice does not grant permission", label[0])
         self.assertIn("without warranty", label[0])
         self.assertIn("draft for the engineer of record", label[0])
         self.assertIn("the agreement below governs", label[0])

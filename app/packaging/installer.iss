@@ -79,7 +79,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 ; license surface: a change of license changes it with LICENSE, the README,
 ; and fpfa/about.py (app/tests/test_branding.py pins them together). Keep it
 ; ASCII and on one line; %n is Inno Setup's line break.
-LicenseLabel3={#MyAppName} is source-available under the PolyForm Shield License 1.0.0. In short: you may use it for any purpose, including commercial work, except to provide a product that competes with {#MyAppName}. It comes as is, without warranty, and its output is a draft for the engineer of record to review. This is a summary; the agreement below governs.%n%nYou must accept the agreement before continuing with the installation.
+LicenseLabel3={#MyAppName} is proprietary under the Proprietary License Notice. All rights reserved. Use, copying, modification, and redistribution require separate written permission from Abraham Borg, except where applicable law or an existing applicable license permits them. Accepting this notice does not grant permission to use the app. It comes as is, without warranty, and its output is a draft for the engineer of record to review. This is a summary; the agreement below governs.%n%nYou must accept the agreement before continuing with the installation.
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
@@ -97,10 +97,8 @@ Type: files; Name: "{autodesktop}\FPFA App.lnk"
 ; The entire PyInstaller one-folder output.
 Source: "..\dist\Cynosure\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 ; The license terms, installed beside the app from the repository's LICENSE.
-; Named .txt so a double-click opens it in Notepad. The license's Notices
-; clause asks that anyone who gets a copy of the software also gets these
-; terms and the Required Notice line, and a silent install skips the license
-; page, so this copy is how such a recipient gets them.
+; Named .txt so a double-click opens it in Notepad. A silent install skips
+; the license page, so this copy still delivers the proprietary notice.
 Source: "..\..\LICENSE"; DestDir: "{app}"; DestName: "LICENSE.txt"; Flags: ignoreversion
 ; The license texts of everything the app bundles (the Python interpreter,
 ; every Python package, the WebView2 SDK inside pywebview, and the JavaScript

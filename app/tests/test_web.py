@@ -223,7 +223,7 @@ class ActionTests(ServerCase):
 
         status, body = self.request("GET", "/api/text/license")
         self.assertEqual(status, 200)
-        self.assertIn("PolyForm Shield", body["text"])
+        self.assertIn("All rights reserved", body["text"])
         self.assertIn(LICENSE_NAME.split()[0], body["text"])
         status, body = self.request("GET", "/api/text/about")
         self.assertIn("Record schema", body["text"])
